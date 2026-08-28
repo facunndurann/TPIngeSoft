@@ -1,0 +1,27 @@
+{
+  "name": "restaurant-platform",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Plataforma web de autoservicio inteligente para restaurantes (menú QR, pedidos, POS propio y pagos)",
+  "scripts": {
+    "dev:customer": "pnpm --filter customer dev",
+    "dev:admin": "pnpm --filter admin dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "db:types": "supabase gen types typescript --local > packages/shared/src/database.types.ts"
+  },
+  "devDependencies": {
+    "supabase": "^2.45.5"
+  },
+  "packageManager": "pnpm@10.34.5",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "supabase"
+    ]
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
