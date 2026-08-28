@@ -1,0 +1,185 @@
+import { useState, type FormEvent } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Plus, Trash2 } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
+import { useRestaurant } from '@/restaurant/restaurant-context'
+import { Badge, Button, ErrorText, Field, Input, Spinner, Textarea, Toggle } from '@/components/ui'
+
+export function SettingsPage() {
+  const restaurant = useRestaurant()
+  const queryClient = useQueryClient()
+  const [name, setName] = useState(restaurant.name)
+  const [description, setDescription] = useState(restaurant.description ?? '')
+  const [savedMessage, setSavedMessage] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const { error: mErr } = await supabase
+        .from('restaurants')
+        .update({ name: name.trim(), description: description.trim() || null })
+        .eq('id', restaurant.id)
+      if (mErr) throw mErr
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-restaurant'] })
+      setSavedMessage(true)
+      setTimeout(() => setSavedMessage(false), 2000)
+    },
+    onError: (e) => setError(e.message),
+  })
+
+  return (
+    <div className="mx-auto max-w-2xl space-y-5">
+      <div>
+        <h1 className="text-xl font-bold text-neutral-900">Restaurante</h1>
+        <p className="text-sm text-neutral-500">Información general y sucursales.</p>
+      </div>
+
+      <section className="space-y-4 rounded-xl border border-neutral-200 bg-white p-5">
+        <h2 className="font-semibold text-neutral-900">Información general</h2>
+        <Field label="Nombre">
+          <Input value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <Field label="Descripción">
+          <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+        </Field>
+        <p className="text-xs text-neutral-500">
+          Identificador público: <code className="rounded bg-neutral-100 px-1">{restaurant.slug}</code>
+        </p>
+        <ErrorText message={error} />
+        <div className="flex items-center gap-3">
+          <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
+            {saveMutation.isPending ? 'Guardando…' : 'Guardar'}
+          </Button>
+          {savedMessage && <span className="text-sm text-green-700">Guardado ✓</span>}
+        </div>
+      </section>
+
+      <BranchesSection restaurantId={restaurant.id} />
+    </div>
+  )
+}
+
+function BranchesSection({ restaurantId }: { restaurantId: string }) {
+  const queryClient = useQueryClient()
+  const [newName, setNewName] = useState('')
+  const [newAddress, setNewAddress] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  const { data: branches, isLoading } = useQuery({
+    queryKey: ['branches', restaurantId],
+    queryFn: async () => {
+      const { data, error: qErr } = await supabase
+        .from('branches')
+        .select('*')
+        .eq('restaurant_id', restaurantId)
+        .order('created_at')
+      if (qErr) throw qErr
+      return data
+    },
+  })
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['branches', restaurantId] })
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      const { error: mErr } = await supabase.from('branches').insert({
+        restaurant_id: restaurantId,
+        name: newName.trim(),
+        address: newAddress.trim() || null,
+      })
+      if (mErr) throw mErr
+    },
+    onSuccess: () => {
+      setNewName('')
+      setNewAddress('')
+      invalidate()
+    },
+    onError: (e) => setError(e.message),
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
+      const { error: mErr } = await supabase.from('branches').update({ is_active }).eq('id', id)
+      if (mErr) throw mErr
+    },
+    onSuccess: invalidate,
+    onError: (e) => setError(e.message),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error: mErr } = await supabase.from('branches').delete().eq('id', id)
+      if (mErr) throw mErr
+    },
+    onSuccess: invalidate,
+    onError: (e) =>
+      setError(
+        e.message.includes('violates foreign key')
+          ? 'No se puede eliminar: la sucursal tiene mesas asociadas.'
+          : e.message,
+      ),
+  })
+
+  function handleCreate(e: FormEvent) {
+    e.preventDefault()
+    if (newName.trim()) createMutation.mutate()
+  }
+
+  return (
+    <section className="space-y-4 rounded-xl border border-neutral-200 bg-white p-5">
+      <h2 className="font-semibold text-neutral-900">Sucursales</h2>
+
+      <form onSubmit={handleCreate} className="flex gap-2">
+        <Input
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          placeholder="Nombre (ej: Sucursal Centro)"
+        />
+        <Input
+          value={newAddress}
+          onChange={(e) => setNewAddress(e.target.value)}
+          placeholder="Dirección (opcional)"
+        />
+        <Button type="submit" disabled={createMutation.isPending}>
+          <Plus size={16} />
+        </Button>
+      </form>
+
+      <ErrorText message={error} />
+
+      {isLoading ? (
+        <Spinner />
+      ) : (
+        <ul className="space-y-2">
+          {branches?.map((branch) => (
+            <li
+              key={branch.id}
+              className="flex items-center gap-3 rounded-lg border border-neutral-200 px-4 py-2.5"
+            >
+              <div className="flex-1">
+                <p className="text-sm font-medium text-neutral-900">{branch.name}</p>
+                {branch.address && <p className="text-xs text-neutral-500">{branch.address}</p>}
+              </div>
+              {!branch.is_active && <Badge color="red">Inactiva</Badge>}
+              <Toggle
+                checked={branch.is_active}
+                onChange={(value) => updateMutation.mutate({ id: branch.id, is_active: value })}
+              />
+              <button
+                className="cursor-pointer p-1 text-neutral-400 hover:text-red-600"
+                onClick={() => {
+                  if (confirm(`¿Eliminar la sucursal "${branch.name}"?`)) deleteMutation.mutate(branch.id)
+                }}
+                aria-label="Eliminar"
+              >
+                <Trash2 size={15} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
