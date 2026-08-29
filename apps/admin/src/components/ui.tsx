@@ -80,10 +80,10 @@ export function Toggle({
       className="inline-flex cursor-pointer items-center gap-2"
     >
       <span
-        className={`relative h-5 w-9 rounded-full transition-colors ${checked ? 'bg-indigo-600' : 'bg-neutral-300'}`}
+        className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors ${checked ? 'bg-indigo-600' : 'bg-neutral-300'}`}
       >
         <span
-          className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${checked ? 'translate-x-4.5' : 'translate-x-0.5'}`}
+          className={`h-4 w-4 rounded-full bg-white transition-transform ${checked ? 'translate-x-4' : 'translate-x-0'}`}
         />
       </span>
       {label && <span className="text-sm text-neutral-700">{label}</span>}
