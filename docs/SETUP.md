@@ -113,3 +113,39 @@ Para usar un proyecto real de Supabase en lugar del local:
 | Login demo no funciona | El seed no está aplicado: `pnpm supabase db reset`. |
 | Cambié el schema y el frontend no tipa | Regenerar tipos: `pnpm db:types`. |
 | Puertos 54321-54324 ocupados | Otro proyecto Supabase local corriendo: `pnpm supabase stop --project-id <otro>` o cambiar puertos en `supabase/config.toml`. |
+
+
+## 5. Probar la app comensal (Fase 3)
+
+Con Supabase iniciado y las variables configuradas, aplicá solo las migraciones pendientes (conserva los datos existentes):
+
+```bash
+pnpm supabase migration up --local
+pnpm dev:customer
+```
+
+La migración `20260905180000_customer_sessions.sql` incorpora `join_table_session`: autentica al participante, valida mesa/sucursal activa y crea o reutiliza la sesión abierta bajo un bloqueo de fila. También limita la lectura de participantes y sesiones a la mesa y al restaurante, y reemplaza las escrituras directas de comensales por esa función. En remoto, aplicar con `pnpm supabase db push`.
+
+Recorrido de aceptación:
+
+1. Abrir `http://localhost:5173/m/demo-burger-mesa-1`. Debe aparecer La Esquina Burger, Casa Central, Mesa 1 y su carta sin pedir login. Guardar un nombre.
+2. Abrir el mismo enlace en otro navegador o ventana privada. Ambos deben mostrar la misma sesión y los nombres actualizados. Dos pestañas del mismo navegador comparten identidad; para simular personas usar perfiles separados.
+3. Elegir Clásica: verificar que exige carne y guarnición; quitar cebolla y agregar bacon. Con vacuna, papas fritas y dos unidades, el total del seed es $19.600.
+4. Agregar al carrito, marcar para compartir, editar opciones/cantidad, recargar y eliminar. El carrito de la otra persona debe permanecer independiente.
+5. Abrir `http://localhost:5173/m/demo-nonna-mesa-1`: debe aparecer el menú italiano y un carrito independiente. Personalizar Pasta de la casa con pasta y salsa obligatorias.
+6. Probar un QR inexistente, una mesa/sucursal desactivada y una caída de conexión: deben mostrarse errores con reintento. La carta puede consultarse aunque falle el ingreso a la sesión; agregar requiere una sesión válida.
+7. Cambiar disponibilidad o precio desde admin y volver a la ventana del comensal (o esperar un minuto). El carrito debe reflejar precios vigentes y avisar selecciones inválidas.
+8. Desde Studio, cerrar la sesión (`table_sessions.status = 'closed'`). Los clientes deben bloquear nuevas incorporaciones a ese carrito y ofrecer abrir otra sesión. La nueva sesión empieza con carrito vacío.
+
+Pruebas automáticas de lógica, sin backend:
+
+```bash
+pnpm --filter customer test
+pnpm typecheck
+pnpm lint
+pnpm build
+```
+
+La autenticación del comensal usa una clave de almacenamiento independiente de la del admin. Los carritos contienen borradores locales; aún no generan pedidos ni pagos. Los nombres son opcionales al entrar (se usa «Comensal») y admiten hasta 40 caracteres.
+
+**Verificación pendiente:** el flujo integrado, las políticas RLS y las carreras de ingreso deben ejecutarse con Docker/Supabase disponibles; no pudieron verificarse en el entorno de implementación por permisos del daemon Docker.

@@ -1,7 +1,7 @@
 /**
  * Lógica de precios compartida entre la app del comensal, el admin y las
  * edge functions: precio base del producto + deltas de modificadores.
- * Se completa en la Fase 1/3 cuando exista el modelo de datos real.
+ * Los importes se suman en centavos para evitar errores de punto flotante.
  */
 
 export interface SelectedModifier {
@@ -14,6 +14,9 @@ export function calculateItemPrice(
   modifiers: SelectedModifier[],
   quantity: number,
 ): number {
-  const unitPrice = modifiers.reduce((total, m) => total + m.priceDelta, basePrice);
-  return unitPrice * quantity;
+  const unitCents = modifiers.reduce(
+    (total, m) => total + Math.round(m.priceDelta * 100),
+    Math.round(basePrice * 100),
+  );
+  return (unitCents * quantity) / 100;
 }

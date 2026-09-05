@@ -1,54 +1,14 @@
-# React + TypeScript + Vite
+# App del comensal
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React + TypeScript, mobile-first. Entrá por `/m/:qrToken` usando los QR generados por admin.
 
-Currently, two official plugins are available:
+Ver [setup y recorrido de aceptación](../../docs/SETUP.md#5-probar-la-app-comensal-fase-3).
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+```bash
+pnpm dev:customer
+pnpm --filter customer test
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+`features/menu-api.ts` carga la carta por restaurante; `features/menu.ts` valida configuraciones y calcula precios con la lógica compartida. `features/session.ts` gestiona ingreso anónimo mediante la RPC transaccional. `stores/cart.ts` persiste borradores independientes por sesión y usuario. La UI escucha participantes y cierre de sesión por Realtime y consulta cada 15 segundos como respaldo.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default tseslint.config({
-  plugins: {
-    // Add the react-x and react-dom plugins
-    'react-x': reactX,
-    'react-dom': reactDom,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended typescript rules
-    ...reactX.configs['recommended-typescript'].rules,
-    ...reactDom.configs.recommended.rules,
-  },
-})
-```
+La Fase 3 incluye carta, personalización y carrito. El envío de pedidos y la cuenta se incorporan en Fase 4.

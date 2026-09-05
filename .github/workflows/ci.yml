@@ -21,6 +21,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Customer logic tests
+        run: pnpm --filter customer test
+
       - name: Typecheck
         run: pnpm typecheck
 

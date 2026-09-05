@@ -12,8 +12,8 @@ todos:
     content: "Fase 2: panel admin con auth, mesas + QR, categorías, productos, ingredientes y modificadores"
     status: completed
   - id: customer-menu
-    content: "Fase 3: app comensal con entrada por QR, sesión compartida, menú, personalización y carrito"
-    status: pending
+    content: "Fase 3: app comensal implementada; pendiente verificar integración en Supabase local"
+    status: completed
   - id: orders
     content: "Fase 4: edge function submit-order con validación, estados, realtime y vista de cuenta"
     status: pending
@@ -209,3 +209,7 @@ RLS: lectura pública del menú por restaurante; datos de sesión accesibles sol
 1. **POS**: la plataforma tiene su propio POS integrado (tablero de comandas); los pedidos se aceptan y gestionan dentro de la plataforma, sin depender de sistemas externos. Fudo y otros quedan como adaptadores futuros.
 2. **Cierre de sesión de mesa**: automático al saldar la cuenta + cierre manual desde el POS propio.
 3. **Identificación del participante**: nombre libre al unirse a la sesión (sin registro), suficiente para atribuir consumos y dividir el pago.
+
+### Verificación de Fase 3
+
+Implementación terminada. La migración `20260905180000_customer_sessions.sql` agrega la operación atómica de ingreso por QR y restringe el acceso a sesiones y participantes. Requiere aplicarse antes de usar la app. La validación integrada contra Supabase queda pendiente por falta de acceso al daemon Docker en el entorno de implementación. El recorrido reproducible está en `docs/SETUP.md`.

@@ -918,6 +918,7 @@ export type Database = {
     }
     Functions: {
       is_restaurant_member: { Args: { rid: string }; Returns: boolean }
+      join_table_session: { Args: { qr: string; participant_name?: string }; Returns: string }
       is_session_participant: { Args: { sid: string }; Returns: boolean }
     }
     Enums: {
