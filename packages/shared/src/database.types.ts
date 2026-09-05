@@ -391,6 +391,8 @@ export type Database = {
           notes: string | null
           preparing_at: string | null
           ready_at: string | null
+          request_id: string | null
+          request_payload: Json | null
           restaurant_id: string
           session_id: string
           status: Database["public"]["Enums"]["order_status"]
@@ -406,6 +408,8 @@ export type Database = {
           notes?: string | null
           preparing_at?: string | null
           ready_at?: string | null
+          request_id?: string | null
+          request_payload?: Json | null
           restaurant_id: string
           session_id: string
           status?: Database["public"]["Enums"]["order_status"]
@@ -421,6 +425,8 @@ export type Database = {
           notes?: string | null
           preparing_at?: string | null
           ready_at?: string | null
+          request_id?: string | null
+          request_payload?: Json | null
           restaurant_id?: string
           session_id?: string
           status?: Database["public"]["Enums"]["order_status"]
@@ -434,6 +440,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "restaurants"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "session_bills"
+            referencedColumns: ["session_id"]
           },
           {
             foreignKeyName: "orders_session_id_fkey"
@@ -502,6 +515,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "restaurants"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "session_bills"
+            referencedColumns: ["session_id"]
           },
           {
             foreignKeyName: "payments_session_id_fkey"
@@ -820,6 +840,13 @@ export type Database = {
             foreignKeyName: "session_participants_session_id_fkey"
             columns: ["session_id"]
             isOneToOne: false
+            referencedRelation: "session_bills"
+            referencedColumns: ["session_id"]
+          },
+          {
+            foreignKeyName: "session_participants_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
             referencedRelation: "table_sessions"
             referencedColumns: ["id"]
           },
@@ -914,12 +941,56 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      session_bills: {
+        Row: {
+          is_settled: boolean | null
+          paid_amount: number | null
+          pending_amount: number | null
+          restaurant_id: string | null
+          session_id: string | null
+          submitted_amount: number | null
+          total_amount: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "table_sessions_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
+      dispatch_internal_order: { Args: { p_order_id: string }; Returns: string }
+      get_order_pos_type: {
+        Args: { p_order_id: string }
+        Returns: Database["public"]["Enums"]["pos_type"]
+      }
       is_restaurant_member: { Args: { rid: string }; Returns: boolean }
-      join_table_session: { Args: { qr: string; participant_name?: string }; Returns: string }
       is_session_participant: { Args: { sid: string }; Returns: boolean }
+      join_table_session: {
+        Args: { participant_name?: string; qr: string }
+        Returns: string
+      }
+      submit_order: {
+        Args: {
+          p_expected_total: number
+          p_items: Json
+          p_notes?: string
+          p_request_id: string
+          p_session_id: string
+        }
+        Returns: string
+      }
+      transition_order: {
+        Args: {
+          p_order_id: string
+          p_status: Database["public"]["Enums"]["order_status"]
+        }
+        Returns: string
+      }
     }
     Enums: {
       member_role: "owner" | "staff"

@@ -12,11 +12,11 @@ todos:
     content: "Fase 2: panel admin con auth, mesas + QR, categorías, productos, ingredientes y modificadores"
     status: completed
   - id: customer-menu
-    content: "Fase 3: app comensal implementada; pendiente verificar integración en Supabase local"
+    content: "Fase 3: app comensal implementada; ingreso concurrente y aislamiento verificados en Supabase local"
     status: completed
   - id: orders
-    content: "Fase 4: edge function submit-order con validación, estados, realtime y vista de cuenta"
-    status: pending
+    content: "Fase 4: submit-order transaccional, adaptador interno, estados, realtime y cuenta; pruebas SQL e integración local verificadas"
+    status: completed
   - id: internal-pos
     content: "Fase 5: POS propio en el admin (tablero de comandas realtime, estados de pedido, gestión de mesas/sesiones)"
     status: pending
@@ -212,4 +212,10 @@ RLS: lectura pública del menú por restaurante; datos de sesión accesibles sol
 
 ### Verificación de Fase 3
 
-Implementación terminada. La migración `20260905180000_customer_sessions.sql` agrega la operación atómica de ingreso por QR y restringe el acceso a sesiones y participantes. Requiere aplicarse antes de usar la app. La validación integrada contra Supabase queda pendiente por falta de acceso al daemon Docker en el entorno de implementación. El recorrido reproducible está en `docs/SETUP.md`.
+Implementación terminada. La migración `20260905180000_customer_sessions.sql` agrega la operación atómica de ingreso por QR y restringe el acceso a sesiones y participantes. El ingreso concurrente por QR y el aislamiento se verificaron contra Supabase local durante la Fase 4. El recorrido visual reproducible está en `docs/SETUP.md`.
+
+### Verificación de Fase 4
+
+Implementación terminada. `20260905200000_orders.sql` agrega confirmación transaccional, snapshots, idempotencia por participante y solicitud, recepción del POS interno, transiciones autorizadas y `session_bills` con RLS. `submit-order` autentica al comensal, valida el contrato compartido y despacha mediante la fábrica de adaptadores. El carrito conserva los envíos pendientes y la mesa ve pedidos y cuenta por Realtime con polling de respaldo.
+
+Se aplicó la migración al stack local y pasaron 28 pruebas HTTP/Realtime, las aserciones SQL transaccionales y 16 pruebas de lógica de frontend/Edge. Se verificaron también tipos, lint y build. Una comprobación en Chrome con viewport móvil cubrió QR, carrito, confirmación, cuenta y recuperación tras respuesta perdida y cierre de sesión, sin duplicar pedidos ni errores de consola. El recorrido completo de aceptación está en `docs/SETUP.md`. El tablero POS y la ejecución de pagos siguen en las Fases 5 y 7.

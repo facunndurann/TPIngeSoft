@@ -1,7 +1,13 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { price, selectionErrors } from '../src/features/menu'
+import { cartPrice, price, selectionErrors } from '../src/features/menu'
 import { calculateItemPrice } from '@restaurant-platform/shared'
+import { recoverPendingSession } from '../src/features/session-recovery'
+import type { PendingSubmission } from '../src/stores/cart'
+
+const memory = new Map<string, string>()
+Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: (key: string) => memory.get(key) ?? null, setItem: (key: string, value: string) => { memory.set(key, value) }, removeItem: (key: string) => { memory.delete(key) } } })
+Object.defineProperty(globalThis, 'window', { configurable: true, value: { localStorage: globalThis.localStorage } })
 
 const product = { id: 'p', category_id: 'c', is_available: true, base_price: 10.10 }
 const menu = {
@@ -18,6 +24,83 @@ test('required single-choice groups and decimal pricing', () => {
   assert.equal(calculateItemPrice(.1, [{ optionId: 'o', priceDelta: .2 }], 3), .9)
   assert.ok(selectionErrors(menu, product, { ...selection, optionIds: [] }).length)
   assert.ok(selectionErrors(menu, product, { ...selection, optionIds: ['o', 'o2'] }).length)
+  assert.equal(cartPrice(menu, [{ ...selection, productId: 'p' }, { ...selection, productId: 'p', quantity: 1 }]), 41.2)
+})
+test('an unconfirmed submission survives reload and retries with the same immutable payload', async () => {
+  const { useCart } = await import('../src/stores/cart')
+  const key = 'pending-session:user'
+  const item = { ...selection, id: 'submitted-line', productId: 'p' }
+  useCart.getState().save(key, item)
+  const submission = useCart.getState().beginSubmission(key, 'pending-session', 30.9)!
+  assert.ok(submission.input.requestId)
+  useCart.getState().save(key, { ...item, quantity: 9 })
+  useCart.getState().remove(key, item.id)
+  assert.equal(useCart.getState().carts[key][0].quantity, 3)
+  assert.deepEqual(useCart.getState().beginSubmission(key, 'pending-session', 999), submission)
+  const stored = localStorage.getItem('customer-carts')!
+  useCart.setState({ carts: {}, submissions: {} })
+  localStorage.setItem('customer-carts', stored)
+  await useCart.persist.rehydrate()
+  assert.deepEqual(useCart.getState().submissions[key], submission)
+  useCart.getState().finishSubmission(key, 'stale-response')
+  assert.ok(useCart.getState().submissions[key])
+  useCart.getState().finishSubmission(key, submission.input.requestId)
+  assert.deepEqual(useCart.getState().carts[key], [])
+  assert.equal(useCart.getState().submissions[key], undefined)
+})
+test('a definitive rejection keeps the draft and the next reviewed attempt gets a new key', async () => {
+  const { useCart } = await import('../src/stores/cart')
+  const key = 'rejected-session:user'
+  const item = { ...selection, id: 'rejected-line', productId: 'p' }
+  useCart.getState().save(key, item)
+  const first = useCart.getState().beginSubmission(key, 'rejected-session', 30.9)!
+  useCart.getState().rejectSubmission(key, first.input.requestId)
+  assert.deepEqual(useCart.getState().carts[key], [item])
+  useCart.getState().save(key, { ...item, quantity: 2 })
+  const second = useCart.getState().beginSubmission(key, 'rejected-session', 20.6)!
+  assert.notEqual(first.input.requestId, second.input.requestId)
+  assert.equal(second.input.items[0].quantity, 2)
+  useCart.getState().rejectSubmission(key, first.input.requestId)
+  assert.equal(useCart.getState().submissions[key]?.input.requestId, second.input.requestId)
+})
+test('a successful response removes only the exact submitted snapshots', async () => {
+  const { useCart } = await import('../src/stores/cart')
+  const key = 'response-session:user'
+  const item = { ...selection, id: 'response-line', productId: 'p' }
+  const unchanged = { ...item, id: 'unchanged-line' }
+  useCart.getState().save(key, item)
+  useCart.getState().save(key, unchanged)
+  const submission = useCart.getState().beginSubmission(key, 'response-session', 61.8)!
+  const changed = { ...item, quantity: 4 }
+  const added = { ...item, id: 'later-line' }
+  useCart.setState(state => ({ carts: { ...state.carts, [key]: [changed, unchanged, added] } }))
+  useCart.getState().finishSubmission(key, submission.input.requestId)
+  assert.deepEqual(useCart.getState().carts[key], [changed, added])
+})
+test('session recovery restores pending orders after closure only for the authenticated participant and QR table', async () => {
+  const previousId = '00000000-0000-4000-8000-000000000001'
+  const otherTableId = '00000000-0000-4000-8000-000000000002'
+  const otherUserId = '00000000-0000-4000-8000-000000000003'
+  const submission = (sessionId: string): PendingSubmission => ({ input: { sessionId, requestId: 'request', expectedTotal: 30.9, items: [{ ...selection, productId: 'p' }] }, snapshot: [] })
+  const submissions = {
+    [`${previousId}:me`]: submission(previousId),
+    [`${otherTableId}:me`]: submission(otherTableId),
+    [`${otherUserId}:someone-else`]: submission(otherUserId),
+    'invalid:me': submission('invalid'),
+  }
+  const restored = await recoverPendingSession('me', 'qr-table', submissions, async ids => {
+    assert.deepEqual(ids, [previousId, otherTableId])
+    return [
+      { id: otherTableId, table_id: 'other-table', session_participants: [{ user_id: 'me' }] },
+      { id: previousId, table_id: 'qr-table', session_participants: [{ user_id: 'me' }], status: 'closed' },
+    ]
+  })
+  assert.equal(restored, previousId)
+  assert.equal(await recoverPendingSession('me', 'qr-table', submissions, async () => [
+    { id: previousId, table_id: 'qr-table', session_participants: [{ user_id: 'someone-else' }] },
+  ]), undefined)
+  await assert.rejects(recoverPendingSession('me', 'qr-table', submissions, async () => { throw new Error('offline') }), /offline/)
+  assert.equal(await recoverPendingSession('new-user', 'qr-table', submissions, async () => { throw new Error('must not look up another identity') }), undefined)
 })
 test('rejects unknown, duplicated and unavailable modifiers', () => {
   for (const optionIds of [['other'], ['o', 'o']]) assert.ok(selectionErrors(menu, product, { ...selection, optionIds }).length)
@@ -42,9 +125,6 @@ test('rejects inactive categories, unavailable products and invalid quantities',
   for (const quantity of [0, -1, 1.5, 100, NaN]) assert.ok(selectionErrors(menu, product, { ...selection, quantity }).length)
 })
 test('cart edits preserve customization and isolate participants and sessions', async () => {
-  const memory = new Map<string, string>()
-  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: (key: string) => memory.get(key) ?? null, setItem: (key: string, value: string) => { memory.set(key, value) }, removeItem: (key: string) => { memory.delete(key) } } })
-  Object.defineProperty(globalThis, 'window', { configurable: true, value: { localStorage: globalThis.localStorage } })
   const { useCart } = await import('../src/stores/cart')
   const item = { ...selection, id: 'line', productId: 'p', removedIds: ['i'], isShared: true }
   useCart.getState().save('session-a:user-a', item)

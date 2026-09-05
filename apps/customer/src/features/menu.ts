@@ -29,3 +29,9 @@ export function selectionErrors(menu: Menu, product: Product, selection: Selecti
 export function price(menu: Menu, product: Product, selection: Selection) {
   return calculateItemPrice(product.base_price, menu.options.filter(o => selection.optionIds.includes(o.id)).map(o => ({ optionId: o.id, priceDelta: o.price_delta })), selection.quantity)
 }
+export function cartPrice(menu: Menu, items: (Selection & { productId: string })[]) {
+  return items.reduce((cents, item) => {
+    const product = menu.products.find(p => p.id === item.productId)
+    return cents + (product ? Math.round(price(menu, product, item) * 100) : 0)
+  }, 0) / 100
+}

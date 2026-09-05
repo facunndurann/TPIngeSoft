@@ -146,6 +146,72 @@ pnpm lint
 pnpm build
 ```
 
-La autenticación del comensal usa una clave de almacenamiento independiente de la del admin. Los carritos contienen borradores locales; aún no generan pedidos ni pagos. Los nombres son opcionales al entrar (se usa «Comensal») y admiten hasta 40 caracteres.
+La autenticación del comensal usa una clave de almacenamiento independiente de la del admin. Los carritos contienen borradores locales hasta confirmar el envío (Fase 4, abajo). Los nombres son opcionales al entrar (se usa «Comensal») y admiten hasta 40 caracteres.
 
-**Verificación pendiente:** el flujo integrado, las políticas RLS y las carreras de ingreso deben ejecutarse con Docker/Supabase disponibles; no pudieron verificarse en el entorno de implementación por permisos del daemon Docker.
+**Verificación:** el ingreso concurrente por QR, el aislamiento RLS y Realtime se probaron contra Supabase local durante la implementación de la Fase 4. El recorrido visual anterior sigue disponible para aceptación manual.
+
+## 6. Probar pedidos y cuenta (Fase 4)
+
+Con el stack local iniciado, aplicar las migraciones pendientes sin borrar datos:
+
+```bash
+pnpm supabase migration up --local
+```
+
+En terminales separadas:
+
+```bash
+pnpm dev:functions
+pnpm dev:customer
+pnpm dev:admin
+```
+
+`dev:functions` sirve `submit-order` y recarga cambios automáticamente. Usa las variables `SUPABASE_URL` y `SUPABASE_ANON_KEY` del runtime local; no requiere un archivo de secretos ni una clave de servicio. En la nube, además de `pnpm supabase db push`, desplegar con `pnpm supabase functions deploy submit-order`. El JWT del comensal se valida y se conserva al llamar a Postgres, siguiendo la [autenticación de Edge Functions de Supabase](https://supabase.com/docs/guides/functions/auth-legacy-jwt).
+
+Recorrido de aceptación:
+
+1. Abrir el QR de una mesa en dos navegadores/perfiles distintos y guardar nombres diferentes. Personalizar un plato y agregarlo al carrito, incluyendo un producto para compartir.
+2. En **Mi carrito**, elegir **Revisar pedido** y **Confirmar y enviar**. El carrito se vacía al confirmar el resultado y **Pedidos y cuenta** muestra el pedido recibido. El otro comensal debe verlo sin recargar.
+3. Enviar una segunda ronda desde cualquiera de los participantes. Debe acumularse en la misma cuenta con atribución de cada consumo y detalle de modificaciones.
+4. Cambiar un precio desde admin después de revisar el carrito y antes de confirmar. El servidor debe rechazar el total anterior, actualizar la carta y exigir una nueva revisión. No debe quedar un pedido parcial.
+5. Simular pérdida de conexión al enviar. El carrito conserva el intento y bloquea ediciones; **Reintentar el mismo envío** recupera el resultado sin duplicar el pedido, incluso tras recargar.
+6. Cambiar el nombre, precio u opciones de un producto después de pedirlo. El pedido ya enviado conserva sus snapshots.
+7. Para ver transiciones antes de que exista el tablero de Fase 5, usar la consola del navegador del **admin autenticado** en desarrollo:
+
+   ```js
+   const { supabase } = await import('/src/lib/supabase.ts')
+   await supabase.rpc('transition_order', {
+     p_order_id: '<id completo del pedido, disponible en Studio>',
+     p_status: 'in_preparation',
+   })
+   ```
+
+   Repetir con `ready` y `delivered`. Deben actualizarse ambos comensales. Solo miembros del restaurante pueden hacerlo. La secuencia es `submitted → accepted → in_preparation → ready → delivered`; `cancelled` se permite antes de entregar y elimina ese importe de la cuenta. Repetir un estado no duplica sus registros.
+
+8. Consultar **Pedidos y cuenta**: **Enviado, por confirmar** corresponde a pedidos todavía sin recepción del POS; **En cuenta** incluye los aceptados y posteriores; **Pagado** suma solo pagos aprobados; **Pendiente de pago** es la diferencia, con mínimo cero. La cuenta saldada requiere consumo positivo, saldo cero y ningún pedido esperando recepción. No se cierra automáticamente la sesión en esta fase.
+
+Pruebas reproducibles:
+
+```bash
+pnpm --filter customer test
+pnpm test:orders
+pnpm test:orders:integration
+docker exec -i supabase_db_TP psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/tests/orders.sql
+pnpm typecheck
+pnpm lint
+pnpm build
+```
+
+La suite integrada necesita el seed demo y la función activa. Usa 28 verificaciones HTTP/Realtime con fixtures propios que elimina al terminar, sin modificar los menús existentes. Crea tres usuarios Auth anónimos locales; si se proporciona `SUPABASE_SERVICE_ROLE_KEY` solo al proceso de pruebas, también los elimina. No colocar esa clave en un `.env` del frontend. Las pruebas SQL crean fixtures dentro de `BEGIN … ROLLBACK` e incluyen pagos aprobados/rechazados, sin invocar proveedores de pago.
+
+**Resultado de implementación:** migración aplicada; 28 verificaciones integradas, aserciones SQL y 16 pruebas de lógica correctas; typecheck, lint y build verificados. También se comprobó en Chrome a 390 × 844 px el flujo QR → carrito → confirmación → cuenta, sin errores de consola ni desbordamiento horizontal. Se simuló una respuesta perdida y el cierre de sesión: recargar y reintentar recuperó el pedido existente sin duplicarlo. La aceptación manual completa de todos los escenarios queda como recorrido adicional.
+
+### Cómo se confirma un pedido
+
+El contrato compartido limita cada envío a 50 ítems, cantidades de 1 a 99, opciones e ingredientes únicos y observaciones de hasta 500 caracteres. No acepta precios unitarios ni identidad del participante enviados por el cliente. El servidor obtiene la identidad de Auth y valida pertenencia, sesión abierta, mesa/sucursal activa, producto/categoría, modificadores mínimos/máximos e ingredientes removibles/disponibles.
+
+`submit_order` toma una captura consistente del menú y guarda pedido y detalles en una transacción. El `requestId` identifica el intento: el mismo contenido recupera el pedido existente, incluso después de cambiar la carta o cerrar la sesión; otro contenido con esa misma clave se rechaza. Si el importe real difiere del total revisado, se revierte todo.
+
+El adaptador interno confirma recepción mediante `dispatch_internal_order`, con estado, timestamp y log en otra transacción idempotente. Si ese paso falla, el pedido queda **enviado, por confirmar** y un reintento completa el despacho. Una integración inactiva o `fudo` devuelve un error explícito; los adaptadores externos se implementarán a futuro. Los navegadores, incluido el admin, no pueden escribir directamente precios, snapshots o estados de pedidos.
+
+La vista `session_bills` usa `security_invoker` para respetar las [políticas RLS de sus tablas](https://supabase.com/docs/guides/database/postgres/row-level-security). Agrega pedidos y pagos por separado para evitar multiplicar importes. No implementa cobros ni repartos; corresponden a la Fase 7.

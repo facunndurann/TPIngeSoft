@@ -7,8 +7,12 @@
     "dev:customer": "pnpm --filter customer dev",
     "dev:admin": "pnpm --filter admin dev",
     "build": "pnpm -r build",
-    "typecheck": "pnpm -r typecheck",
+    "typecheck": "pnpm -r typecheck && pnpm typecheck:orders",
+    "typecheck:orders": "pnpm --filter customer exec tsc --project ../../supabase/functions/tsconfig.json",
     "lint": "pnpm -r lint",
+    "test:orders": "node supabase/tests/run-unit.mjs",
+    "test:orders:integration": "node supabase/tests/orders.integration.mjs",
+    "dev:functions": "supabase functions serve submit-order",
     "db:types": "supabase gen types typescript --local > packages/shared/src/database.types.ts"
   },
   "devDependencies": {

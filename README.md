@@ -11,8 +11,8 @@ Plataforma web multi-restaurante de autoservicio: menú digital por QR de mesa, 
 | 0 | Monorepo, apps Vite, Supabase local, CI | Completa |
 | 1 | Schema de DB completo, RLS, seed demo, tipos TS | Completa |
 | 2 | Panel admin: auth, mesas + QR, categorías, productos, ingredientes, modificadores | Completa |
-| 3 | App comensal: menú, personalización, carrito, sesión compartida | Implementada (validación integrada de Supabase pendiente) |
-| 4 | Pedidos: validación server-side, estados, realtime, cuenta | Pendiente |
+| 3 | App comensal: menú, personalización, carrito, sesión compartida | Implementada; ingreso concurrente y RLS verificados en Supabase local |
+| 4 | Pedidos: validación server-side, estados, realtime, cuenta | Completa; pruebas integradas en Supabase local |
 | 5 | POS propio: tablero de comandas realtime | Pendiente |
 | 6 | Menú inteligente (LLM) | Pendiente |
 | 7 | Pagos (Mercado Pago sandbox, división) | Pendiente |
@@ -29,7 +29,7 @@ Con el stack local corriendo (ver más abajo), en el **panel admin** (`http://lo
 5. **Mesas y QR**: crear mesas por sucursal, ver/copiar/imprimir el QR único de cada una.
 6. **Restaurante**: editar información general y sucursales.
 
-La **app del comensal** está implementada (Fase 3). Aplicá la nueva migración con `pnpm supabase migration up --local` y abrí `http://localhost:5173/m/demo-burger-mesa-1` o `http://localhost:5173/m/demo-nonna-mesa-1`.
+La **app del comensal** incluye las Fases 3 y 4. Aplicá las migraciones con `pnpm supabase migration up --local`, iniciá la función con `pnpm dev:functions` y abrí `http://localhost:5173/m/demo-burger-mesa-1` o `http://localhost:5173/m/demo-nonna-mesa-1`.
 
 - Entrada automática por QR y autenticación anónima, sin formulario de login.
 - Sesión de mesa compartida, nombre editable y participantes actualizados por Realtime con respaldo por polling.
@@ -37,9 +37,12 @@ La **app del comensal** está implementada (Fase 3). Aplicá la nueva migración
 - Personalización según ingredientes removibles y reglas mín/máx de modificadores, con precio en vivo.
 - Carrito personal persistido por sesión y usuario, con edición, cantidades, eliminación y productos para compartir.
 
-Los productos del carrito todavía **no se envían**: confirmación, pedidos y cuenta corresponden a la Fase 4. El menú se actualiza cada minuto y al volver a la ventana; el carrito calcula precios estimados con esos datos. La validación autoritativa al enviar se implementará en la Fase 4.
+- Revisión y confirmación del carrito; validación transaccional de disponibilidad, personalización y precios reales. Si cambian los precios, se exige revisar y confirmar nuevamente.
+- Envíos persistidos con identificador de reintento: una respuesta perdida o dos solicitudes simultáneas no duplican el pedido.
+- Recepción mediante `InternalPosAdapter`, con estados y registro de transiciones. El tablero administrativo corresponde a la Fase 5.
+- Pedidos de toda la mesa con nombres, modificaciones y precios conservados, junto con una cuenta que distingue enviado por confirmar, en cuenta, pendiente y pagado. Realtime con respaldo por polling cada 15 segundos.
 
-La migración y el flujo integrado requieren verificación con Supabase corriendo; ver el recorrido de prueba en [docs/SETUP.md](docs/SETUP.md).
+El menú se actualiza cada minuto y al volver a la ventana. La cuenta incluye pedidos aceptados y descuenta únicamente pagos aprobados; la integración de pagos corresponde a la Fase 7. Ver el recorrido de prueba y las verificaciones ejecutadas en [docs/SETUP.md](docs/SETUP.md#6-probar-pedidos-y-cuenta-fase-4).
 
 ## Estructura del monorepo
 
@@ -52,7 +55,8 @@ packages/
 supabase/
   migrations/  Schema SQL versionado (Postgres)
   seed.sql     Datos demo: 2 restaurantes con menús distintos + usuarios admin
-  functions/   Edge functions (a partir de la Fase 4)
+  functions/   submit-order, validación de entrada y adaptadores POS
+  tests/       Pruebas de función, SQL e integración local
 ```
 
 ## Stack
@@ -80,6 +84,7 @@ pnpm supabase db reset
 # 5. Levantar las apps
 pnpm dev:admin      # Panel del restaurante -> http://localhost:5174
 pnpm dev:customer   # App del comensal     -> http://localhost:5173
+pnpm dev:functions  # submit-order         -> http://127.0.0.1:54321/functions/v1/submit-order
 ```
 
 ## Comandos útiles
@@ -88,6 +93,8 @@ pnpm dev:customer   # App del comensal     -> http://localhost:5173
 pnpm typecheck        # typecheck de todos los paquetes
 pnpm lint             # lint de todos los paquetes
 pnpm --filter customer test # reglas de personalización, precios y persistencia del carrito
+pnpm test:orders      # contrato HTTP, validación de entrada y adaptador POS (sin backend)
+pnpm test:orders:integration # 28 pruebas contra el stack local + Edge Functions
 pnpm build            # build de producción de todas las apps
 pnpm db:types         # regenerar packages/shared/src/database.types.ts desde la DB local
 pnpm supabase stop    # apagar el stack local
@@ -95,4 +102,4 @@ pnpm supabase status  # ver URLs y credenciales del stack local
 ```
 
 - **Supabase Studio** (explorar la DB visualmente): http://127.0.0.1:54323
-- El CI (GitHub Actions) corre typecheck + lint + build en cada push/PR.
+- El CI (GitHub Actions) corre pruebas de lógica del comensal y pedidos, typecheck (incluida la lógica Edge), lint y build en cada push/PR. La suite integrada se ejecuta contra Supabase local.

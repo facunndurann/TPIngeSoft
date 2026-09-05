@@ -24,6 +24,9 @@ jobs:
       - name: Customer logic tests
         run: pnpm --filter customer test
 
+      - name: Order function tests
+        run: pnpm test:orders
+
       - name: Typecheck
         run: pnpm typecheck
 

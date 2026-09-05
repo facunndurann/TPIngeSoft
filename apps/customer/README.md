@@ -2,13 +2,14 @@
 
 React + TypeScript, mobile-first. Entrá por `/m/:qrToken` usando los QR generados por admin.
 
-Ver [setup y recorrido de aceptación](../../docs/SETUP.md#5-probar-la-app-comensal-fase-3).
+Ver [setup y recorrido de aceptación](../../docs/SETUP.md#6-probar-pedidos-y-cuenta-fase-4).
 
 ```bash
 pnpm dev:customer
+pnpm dev:functions
 pnpm --filter customer test
 ```
 
-`features/menu-api.ts` carga la carta por restaurante; `features/menu.ts` valida configuraciones y calcula precios con la lógica compartida. `features/session.ts` gestiona ingreso anónimo mediante la RPC transaccional. `stores/cart.ts` persiste borradores independientes por sesión y usuario. La UI escucha participantes y cierre de sesión por Realtime y consulta cada 15 segundos como respaldo.
+`features/menu-api.ts` carga la carta por restaurante; `features/menu.ts` valida configuraciones y calcula precios con la lógica compartida. `features/session.ts` gestiona ingreso anónimo mediante la RPC transaccional y recupera sesiones con envíos pendientes. `stores/cart.ts` persiste borradores e intentos de envío independientes por sesión y usuario. La UI escucha participantes, pedidos, pagos y cierre de sesión por Realtime y consulta cada 15 segundos como respaldo.
 
-La Fase 3 incluye carta, personalización y carrito. El envío de pedidos y la cuenta se incorporan en Fase 4.
+La Fase 4 agrega revisión y envío con `CartPanel`, acceso a la Edge Function en `orders-api.ts` y pedidos/cuenta compartida en `SessionOrders`. Un precio cambiado exige revisar nuevamente; un fallo de red conserva el mismo intento para evitar pedidos duplicados. El servidor calcula y conserva precios y personalizaciones.
