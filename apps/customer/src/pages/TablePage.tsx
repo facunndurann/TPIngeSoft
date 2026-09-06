@@ -1,5 +1,12 @@
-import { useState } from 'react'
-import { useParams } from 'react-router'
+import { createContext, useContext, useEffect, useState } from 'react'
+import {
+  Link,
+  Navigate,
+  Outlet,
+  useLocation,
+  useNavigate,
+  useParams,
+} from 'react-router'
 import { ErrorMessage } from '@/components/ErrorMessage'
 import { CartPanel } from '@/features/CartPanel'
 import { MenuBrowse } from '@/features/MenuBrowse'
@@ -8,10 +15,50 @@ import { ProductEditor } from '@/features/ProductEditor'
 import { SessionOrders } from '@/features/SessionOrders'
 import { SessionPanel } from '@/features/SessionPanel'
 import { TableHeader } from '@/features/TableHeader'
-import { TableNav, type TableView } from '@/features/TableNav'
+import { TableNav } from '@/features/TableNav'
+import {
+  cartPath,
+  isMenuIndex,
+  menuPath,
+  ordersPath,
+  tableRoot,
+  tableSection,
+} from '@/features/table-paths'
 import { useTableSession } from '@/hooks/useTableSession'
 import { useCart } from '@/stores/cart'
 import type { CartItem } from '@/stores/cart'
+
+type TableSession = ReturnType<typeof useTableSession>
+type TableContextValue = {
+  token: string
+  client: TableSession['client']
+  menu: TableSession['menu']
+  session: TableSession['session']
+  sessionId?: string
+  userId?: string
+  cartKey: string
+  items: CartItem[]
+  sessionOpen: boolean
+  canEdit: boolean
+  setAnnouncement: (value: string) => void
+}
+
+const TableContext = createContext<TableContextValue | null>(null)
+
+function useTable() {
+  const value = useContext(TableContext)
+  if (!value) throw new Error('La mesa todavía no está lista.')
+  return value
+}
+
+function useTableBack(fallback: string) {
+  const navigate = useNavigate()
+  const location = useLocation()
+  return () => {
+    if (location.key === 'default') navigate(fallback, { replace: true })
+    else navigate(-1)
+  }
+}
 
 export function TableRoute() {
   const { token = '' } = useParams()
@@ -21,24 +68,21 @@ export function TableRoute() {
 function TableApp({ token }: { token: string }) {
   const { client, table, menu, joined, session, sessionId, name, setName, rename } =
     useTableSession(token)
-
-  const [category, setCategory] = useState('all')
-  const [search, setSearch] = useState('')
-  const [view, setView] = useState<TableView>('menu')
-  const [editing, setEditing] = useState<{ productId: string; item?: CartItem }>()
+  const location = useLocation()
   const [announcement, setAnnouncement] = useState('')
-
   const cart = useCart()
   const cartKey = `${sessionId ?? ''}:${joined.data?.userId ?? ''}`
   const items = cart.carts[cartKey] ?? []
   const sessionOpen = session.data?.status === 'open' && !session.isError
   const canEdit = sessionOpen && !cart.submissions[cartKey]
   const cartCount = items.reduce((total, item) => total + item.quantity, 0)
+  const section = tableSection(location.pathname)
+  const atMenu = isMenuIndex(location.pathname)
+  const total = menu.data ? cartPrice(menu.data, items) : 0
 
-  function show(next: TableView) {
-    setView(next)
-    setEditing(undefined)
-  }
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [location.pathname])
 
   if (table.isPending) {
     return (
@@ -58,109 +102,219 @@ function TableApp({ token }: { token: string }) {
   }
 
   const { restaurant, branch, table: currentTable } = table.data
-  const product = menu.data?.products.find((entry) => entry.id === editing?.productId)
-  const total = menu.data ? cartPrice(menu.data, items) : 0
 
   return (
-    <main className="shell">
-      <TableHeader
-        restaurantName={restaurant.name}
-        branchName={branch.name}
-        tableLabel={currentTable.label}
-      />
-
-      <SessionPanel
-        joined={joined}
-        session={session}
-        userId={joined.data?.userId}
-        hasPendingSubmission={!!cart.submissions[cartKey]}
-        name={name}
-        onNameChange={setName}
-        rename={rename}
-        onOpenNewSession={() => {
-          setEditing(undefined)
-          setAnnouncement('')
-          void joined.refetch()
-        }}
-      />
-
-      <TableNav view={view} cartCount={cartCount} onChange={show} />
-
-      {announcement && (
-        <p className="success-notice" role="status">
-          {announcement}
-        </p>
-      )}
-
-      {view !== 'orders' && menu.isPending && <p role="status">Cargando la carta…</p>}
-      {view !== 'orders' && menu.isError && (
-        <ErrorMessage error={menu.error} retry={() => { void menu.refetch() }} />
-      )}
-
-      {view !== 'cart' && cart.submissions[cartKey] && (
-        <div className="notice">
-          <p>Tu último envío todavía necesita confirmación.</p>
-          <button onClick={() => show('cart')}>Consultar o reintentar envío</button>
-        </div>
-      )}
-
-      {editing && product && menu.data && canEdit ? (
-        <ProductEditor
-          key={editing.item?.id ?? product.id}
-          menu={menu.data}
-          product={product}
-          initial={editing.item}
-          onClose={() => setEditing(undefined)}
-          onSave={(item) => {
-            cart.save(cartKey, item)
-            setEditing(undefined)
-            setAnnouncement(`${product.name} guardado en tu carrito`)
-          }}
+    <TableContext.Provider
+      value={{
+        token,
+        client,
+        menu,
+        session,
+        sessionId,
+        userId: joined.data?.userId,
+        cartKey,
+        items,
+        sessionOpen,
+        canEdit,
+        setAnnouncement,
+      }}
+    >
+      <main className="shell">
+        <TableHeader
+          restaurantName={restaurant.name}
+          branchName={branch.name}
+          tableLabel={currentTable.label}
         />
-      ) : view === 'menu' && menu.data ? (
-        <MenuBrowse
-          menu={menu.data}
-          category={category}
-          search={search}
-          canEdit={canEdit}
-          onCategoryChange={setCategory}
-          onSearchChange={setSearch}
-          onSelectProduct={(productId) => setEditing({ productId })}
-        />
-      ) : view === 'cart' ? (
-        <CartPanel
-          key={cartKey}
-          cartKey={cartKey}
-          sessionId={sessionId}
-          menu={menu.data}
-          canEdit={sessionOpen}
-          onEdit={(item) => setEditing({ productId: item.productId, item })}
-          refreshMenu={() => menu.refetch({ throwOnError: true })}
-          onSubmitted={() => {
-            setAnnouncement(
-              'Tu pedido fue enviado. Podés seguir su estado y consultar la cuenta de la mesa.',
-            )
-            setView('orders')
-            void client.invalidateQueries({ queryKey: ['orders', sessionId] })
-            void client.invalidateQueries({ queryKey: ['bill', sessionId] })
-          }}
-        />
-      ) : view === 'orders' ? (
-        <SessionOrders
-          sessionId={sessionId}
-          participants={session.data?.participants ?? []}
+
+        <SessionPanel
+          joined={joined}
+          session={session}
           userId={joined.data?.userId}
-          closed={session.data?.status === 'closed'}
+          hasPendingSubmission={!!cart.submissions[cartKey]}
+          name={name}
+          onNameChange={setName}
+          rename={rename}
+          onOpenNewSession={() => {
+            setAnnouncement('')
+            void joined.refetch()
+          }}
         />
-      ) : null}
 
-      {view === 'menu' && !editing && items.length > 0 && (
-        <button className="primary cart-bar" onClick={() => setView('cart')}>
-          Ver mi carrito <strong>{money(total)}</strong>
-        </button>
-      )}
+        <TableNav token={token} cartCount={cartCount} />
 
-      <footer>Disfrutá a tu ritmo · Pedí desde tu mesa</footer>
-    </main>
+        {announcement && (
+          <p className="success-notice" role="status">
+            {announcement}
+          </p>
+        )}
+
+        {section !== 'orders' && menu.isPending && <p role="status">Cargando la carta…</p>}
+        {section !== 'orders' && menu.isError && (
+          <ErrorMessage error={menu.error} retry={() => { void menu.refetch() }} />
+        )}
+
+        {section !== 'cart' && cart.submissions[cartKey] && (
+          <div className="notice">
+            <p>Tu último envío todavía necesita confirmación.</p>
+            <Link className="btn" to={cartPath(token)}>
+              Consultar o reintentar envío
+            </Link>
+          </div>
+        )}
+
+        <Outlet />
+
+        {atMenu && items.length > 0 && (
+          <Link className="primary cart-bar" to={cartPath(token)}>
+            Ver mi carrito <strong>{money(total)}</strong>
+          </Link>
+        )}
+
+        <footer>Disfrutá a tu ritmo · Pedí desde tu mesa</footer>
+      </main>
+    </TableContext.Provider>
   )
+}
+
+export function TableMenuPage() {
+  const { token, menu, canEdit } = useTable()
+  if (!menu.data) return null
+  return <MenuBrowse token={token} menu={menu.data} canEdit={canEdit} />
+}
+
+export function TableCartPage({ reviewing = false }: { reviewing?: boolean }) {
+  const { token, client, menu, sessionId, sessionOpen, cartKey, items, setAnnouncement } = useTable()
+  const pending = useCart((state) => state.submissions[cartKey])
+  const navigate = useNavigate()
+
+  if (reviewing && items.length === 0 && !pending) {
+    return <Navigate to={cartPath(token)} replace />
+  }
+
+  return (
+    <CartPanel
+      key={`${cartKey}:${reviewing ? 'review' : 'edit'}`}
+      cartKey={cartKey}
+      sessionId={sessionId}
+      menu={menu.data}
+      canEdit={sessionOpen}
+      reviewing={reviewing}
+      refreshMenu={() => menu.refetch({ throwOnError: true })}
+      onSubmitted={() => {
+        setAnnouncement(
+          'Tu pedido fue enviado. Podés seguir su estado y consultar la cuenta de la mesa.',
+        )
+        navigate(ordersPath(token), { replace: true })
+        void client.invalidateQueries({ queryKey: ['orders', sessionId] })
+        void client.invalidateQueries({ queryKey: ['bill', sessionId] })
+      }}
+    />
+  )
+}
+
+export function TableProductPage() {
+  const { token, menu, canEdit, cartKey, setAnnouncement } = useTable()
+  const { productId = '' } = useParams()
+  const location = useLocation()
+  const back = useTableBack(`${menuPath(token)}${location.search}`)
+  const cart = useCart()
+  const product = menu.data?.products.find((entry) => entry.id === productId)
+
+  if (!menu.data) return null
+  if (!product) {
+    return (
+      <section>
+        <button className="text-button" onClick={back}>
+          ← Volver
+        </button>
+        <p className="empty">No encontramos este plato.</p>
+      </section>
+    )
+  }
+
+  if (!canEdit) {
+    return (
+      <section>
+        <button className="text-button" onClick={back}>
+          ← Volver
+        </button>
+        <p className="notice">
+          Para personalizar y agregar al carrito necesitás una sesión de mesa abierta.
+        </p>
+      </section>
+    )
+  }
+
+  return (
+    <ProductEditor
+      key={product.id}
+      menu={menu.data}
+      product={product}
+      onClose={back}
+      onSave={(item) => {
+        cart.save(cartKey, item)
+        setAnnouncement(`${product.name} guardado en tu carrito`)
+        back()
+      }}
+    />
+  )
+}
+
+export function TableCartItemPage() {
+  const { token, menu, canEdit, cartKey, items, setAnnouncement } = useTable()
+  const { itemId = '' } = useParams()
+  const back = useTableBack(cartPath(token))
+  const cart = useCart()
+  const item = items.find((entry) => entry.id === itemId)
+  const product = menu.data?.products.find((entry) => entry.id === item?.productId)
+
+  if (!item) return <Navigate to={cartPath(token)} replace />
+  if (!menu.data) return null
+
+  if (!product || !canEdit) {
+    return (
+      <section>
+        <button className="text-button" onClick={back}>
+          ← Volver
+        </button>
+        <p className="notice">
+          {product
+            ? 'Para editar este plato necesitás una sesión de mesa abierta.'
+            : 'Este plato ya no está en la carta.'}
+        </p>
+      </section>
+    )
+  }
+
+  return (
+    <ProductEditor
+      key={item.id}
+      menu={menu.data}
+      product={product}
+      initial={item}
+      onClose={back}
+      onSave={(next) => {
+        cart.save(cartKey, next)
+        setAnnouncement(`${product.name} guardado en tu carrito`)
+        back()
+      }}
+    />
+  )
+}
+
+export function TableOrdersPage() {
+  const { sessionId, session, userId } = useTable()
+  return (
+    <SessionOrders
+      sessionId={sessionId}
+      participants={session.data?.participants ?? []}
+      userId={userId}
+      closed={session.data?.status === 'closed'}
+    />
+  )
+}
+
+export function TableCatchAll() {
+  const { token = '' } = useParams()
+  return <Navigate to={tableRoot(token)} replace />
 }

@@ -1,25 +1,18 @@
+import { Link, useLocation, useSearchParams } from 'react-router'
 import { matchesSearch, money } from '@/features/menu'
 import type { Menu, Product } from '@/features/menu'
+import { menuPath, parseMenuFilters, productPath } from '@/features/table-paths'
 
 type MenuBrowseProps = {
+  token: string
   menu: Menu
-  category: string
-  search: string
   canEdit: boolean
-  onCategoryChange: (id: string) => void
-  onSearchChange: (value: string) => void
-  onSelectProduct: (productId: string) => void
 }
 
-export function MenuBrowse({
-  menu,
-  category,
-  search,
-  canEdit,
-  onCategoryChange,
-  onSearchChange,
-  onSelectProduct,
-}: MenuBrowseProps) {
+export function MenuBrowse({ token, menu, canEdit }: MenuBrowseProps) {
+  const { search: locationSearch } = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const { category, search } = parseMenuFilters(searchParams)
   const visibleCategories = menu.categories.filter(
     (entry) => category === 'all' || entry.id === category,
   )
@@ -45,22 +38,28 @@ export function MenuBrowse({
           type="search"
           placeholder="Buscar en la carta…"
           value={search}
-          onChange={(event) => onSearchChange(event.target.value)}
+          onChange={(event) => {
+            const query = event.target.value
+            const next = new URLSearchParams(searchParams)
+            if (query) next.set('q', query)
+            else next.delete('q')
+            setSearchParams(next, { replace: true })
+          }}
         />
       </div>
 
       <div className="categories" aria-label="Categorías">
-        <button aria-pressed={category === 'all'} onClick={() => onCategoryChange('all')}>
+        <FilterLink to={menuPath(token, 'all', search)} active={category === 'all'}>
           Todo
-        </button>
+        </FilterLink>
         {menu.categories.map((entry) => (
-          <button
+          <FilterLink
             key={entry.id}
-            aria-pressed={category === entry.id}
-            onClick={() => onCategoryChange(entry.id)}
+            to={menuPath(token, entry.id, search)}
+            active={category === entry.id}
           >
             {entry.name}
-          </button>
+          </FilterLink>
         ))}
       </div>
 
@@ -79,7 +78,7 @@ export function MenuBrowse({
                   key={product.id}
                   product={product}
                   disabled={!product.is_available || !canEdit}
-                  onSelect={() => onSelectProduct(product.id)}
+                  to={productPath(token, product.id, locationSearch)}
                 />
               ))}
             </div>
@@ -94,17 +93,34 @@ export function MenuBrowse({
   )
 }
 
+function FilterLink({ to, active, children }: { to: string; active: boolean; children: string }) {
+  const location = useLocation()
+  const current = `${location.pathname}${location.search}`
+
+  return (
+    <Link
+      to={to}
+      aria-current={active ? 'true' : undefined}
+      onClick={(event) => {
+        if (current === to) event.preventDefault()
+      }}
+    >
+      {children}
+    </Link>
+  )
+}
+
 function ProductCard({
   product,
   disabled,
-  onSelect,
+  to,
 }: {
   product: Product
   disabled: boolean
-  onSelect: () => void
+  to: string
 }) {
-  return (
-    <button className="product-card" disabled={disabled} onClick={onSelect}>
+  const content = (
+    <>
       <div>
         <h3>{product.name}</h3>
         <p>{product.description}</p>
@@ -113,6 +129,20 @@ function ProductCard({
         {!product.is_available && <span className="unavailable">Agotado</span>}
       </div>
       {product.photo_url && <img src={product.photo_url} alt="" loading="lazy" />}
-    </button>
+    </>
+  )
+
+  if (disabled) {
+    return (
+      <button className="product-card" disabled>
+        {content}
+      </button>
+    )
+  }
+
+  return (
+    <Link className="product-card" to={to}>
+      {content}
+    </Link>
   )
 }

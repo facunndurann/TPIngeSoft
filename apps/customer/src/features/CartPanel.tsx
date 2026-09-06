@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
+import { useNavigate, useParams } from 'react-router'
 import { cartPrice, money, price, selectionErrors } from '@/features/menu'
 import type { Menu } from '@/features/menu'
 import { SubmissionError, submitOrder } from '@/features/orders-api'
+import { cartItemPath, cartPath, cartReviewPath } from '@/features/table-paths'
 import { useCart } from '@/stores/cart'
 import type { CartItem } from '@/stores/cart'
 
@@ -25,7 +27,7 @@ type CartPanelProps = {
   sessionId?: string
   menu?: Menu
   canEdit: boolean
-  onEdit: (item: CartItem) => void
+  reviewing?: boolean
   refreshMenu: () => Promise<unknown>
   onSubmitted: () => void
 }
@@ -35,10 +37,12 @@ export function CartPanel({
   sessionId,
   menu,
   canEdit,
-  onEdit,
+  reviewing = false,
   refreshMenu,
   onSubmitted,
 }: CartPanelProps) {
+  const { token = '' } = useParams()
+  const navigate = useNavigate()
   const cart = useCart()
   const items = cart.carts[cartKey] ?? []
   const pending = cart.submissions[cartKey]
@@ -50,6 +54,11 @@ export function CartPanel({
     const product = menu.products.find((entry) => entry.id === item.productId)
     return product && selectionErrors(menu, product, item).length === 0
   })
+
+  useEffect(() => {
+    if (!reviewing || !menu) return
+    setReview((current) => current ?? { signature, total })
+  }, [reviewing, menu, signature, total])
 
   const refresh = async () => {
     setNeedsMenuRefresh(true)
@@ -73,6 +82,7 @@ export function CartPanel({
       if (error instanceof SubmissionError && definitiveRejections.has(error.code)) {
         cart.rejectSubmission(cartKey, input.requestId)
         setReview(undefined)
+        if (reviewing) navigate(cartPath(token))
         await refresh()
       }
     },
@@ -82,7 +92,7 @@ export function CartPanel({
   const reviewed = review?.signature === signature && review.total === total
 
   const confirm = () => {
-    if (!sessionId || !reviewed || !validItems || !canEdit || needsMenuRefresh || send.isPending) {
+    if (!review || !sessionId || !reviewed || !validItems || !canEdit || needsMenuRefresh || send.isPending) {
       return
     }
     const submission = cart.beginSubmission(cartKey, sessionId, review.total)
@@ -107,9 +117,9 @@ export function CartPanel({
           item={item}
           menu={menu}
           editable={editable}
-          reviewing={!!review}
+          reviewing={reviewing}
           onQuantityChange={(quantity) => cart.save(cartKey, { ...item, quantity })}
-          onEdit={() => onEdit(item)}
+          onEdit={() => navigate(cartItemPath(token, item.id))}
           onRemove={() => cart.remove(cartKey, item.id)}
         />
       ))}
@@ -154,20 +164,20 @@ export function CartPanel({
                 <button onClick={() => { void refresh() }}>Actualizar carta</button>
               </div>
             )}
-            {review ? (
+            {reviewing ? (
               <div className="confirmation" aria-label="Confirmación del pedido">
                 <h3>Confirmá tu pedido</h3>
                 <p>Revisá los platos, las cantidades y los productos para compartir de arriba.</p>
                 <p>
-                  Total revisado: <strong>{money(review.total)}</strong>
+                  Total revisado: <strong>{money(review?.total ?? total)}</strong>
                 </p>
-                {!reviewed && (
+                {review && !reviewed && (
                   <p role="alert" className="notice">
                     La carta o el carrito cambiaron. Volvé a revisar el pedido antes de enviarlo.
                   </p>
                 )}
                 <div className="cart-actions">
-                  <button onClick={() => setReview(undefined)}>Volver a editar</button>
+                  <button onClick={() => navigate(cartPath(token))}>Volver a editar</button>
                   <button
                     className="primary"
                     disabled={!reviewed || !validItems || !canEdit || needsMenuRefresh || send.isPending}
@@ -183,7 +193,7 @@ export function CartPanel({
                 disabled={!validItems || !canEdit || needsMenuRefresh || send.isPending}
                 onClick={() => {
                   send.reset()
-                  setReview({ signature, total })
+                  navigate(cartReviewPath(token))
                 }}
               >
                 Revisar pedido
