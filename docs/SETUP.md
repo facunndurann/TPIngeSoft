@@ -78,7 +78,9 @@ Notas:
 
 ## 3. Supabase en la nube (deploy / demo compartida)
 
-Para usar un proyecto real de Supabase en lugar del local:
+Guía completa, desde crear la cuenta hasta Vercel y cómo publicar cambios: **[DEPLOY.md](./DEPLOY.md)**.
+
+Resumen corto para usar un proyecto real de Supabase en lugar del local:
 
 1. Crear un proyecto en [supabase.com](https://supabase.com) (plan free alcanza).
 2. Loguear la CLI y vincular el proyecto:

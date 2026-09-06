@@ -2,7 +2,8 @@
 
 Plataforma web multi-restaurante de autoservicio: menú digital por QR de mesa, personalización de platos, pedidos grupales, menú inteligente asistido por LLM, POS propio integrado y pago total o dividido con Mercado Pago.
 
-> Setup detallado de Supabase y variables de entorno: **[docs/SETUP.md](docs/SETUP.md)**
+> Setup local de Supabase y variables de entorno: **[docs/SETUP.md](docs/SETUP.md)**  
+> Deploy a la nube (Supabase + Vercel), desde cero: **[docs/DEPLOY.md](docs/DEPLOY.md)**
 
 ## Estado del proyecto
 
