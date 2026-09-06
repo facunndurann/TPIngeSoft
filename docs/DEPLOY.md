@@ -112,7 +112,9 @@ Then link this folder to the cloud project:
 pnpm supabase link --project-ref <paste-the-ref>
 ```
 
-It will ask for the **database password** from Part 1. After this, `supabase/.temp/` (gitignored) remembers the link.
+Current CLI versions often **do not** ask for the database password here. That is normal: `login` already gave the CLI an access token, which is enough to attach this folder to the project. Keep the password anyway — `pnpm supabase db push` (Part 3) may still ask for it when it opens a Postgres connection.
+
+After a successful link, `supabase/.temp/` (gitignored) stores the project ref. If the command printed something like “Finished supabase link” (or just returned with no error), you are linked.
 
 Check:
 
