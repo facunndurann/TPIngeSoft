@@ -1,9 +1,10 @@
 import { NavLink, Outlet } from 'react-router'
-import { LayoutGrid, ListTree, LogOut, QrCode, Settings, SlidersHorizontal, UtensilsCrossed } from 'lucide-react'
+import { ClipboardList, LayoutGrid, ListTree, LogOut, QrCode, Settings, SlidersHorizontal, UtensilsCrossed } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 
 const navigation = [
+  { to: '/pos', label: 'POS', icon: ClipboardList },
   { to: '/productos', label: 'Productos', icon: UtensilsCrossed },
   { to: '/categorias', label: 'Categorías', icon: ListTree },
   { to: '/modificadores', label: 'Modificadores', icon: SlidersHorizontal },

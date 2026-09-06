@@ -1,6 +1,15 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { submitOrderSchema } from '../../packages/shared/src/orders.ts'
+import {
+  canCancelOrder,
+  dayRangeUtc,
+  formatElapsed,
+  groupOrdersByColumn,
+  nextPosStatus,
+  posColumnFor,
+  posErrorCode,
+} from '../../packages/shared/src/pos.ts'
 import { createSubmitOrderHandler } from '../functions/submit-order/handler.ts'
 import { databaseError } from '../functions/_shared/errors.ts'
 import type { OrderGateway, PosOrder } from '../functions/_shared/pos/adapter.ts'
@@ -99,4 +108,37 @@ test('unsupported POS is explicit and never silently falls back to internal', as
   assert.equal(response.status, 503)
   assert.equal((await response.json()).error.code, 'POS_UNSUPPORTED')
   assert.equal(sends(), 0)
+})
+
+test('POS board groups kitchen columns, FIFO in prep/ready, and newest first otherwise', () => {
+  const orders = [
+    { id: 'd', status: 'delivered', created_at: '2026-09-05T12:00:00.000Z' },
+    { id: 'n2', status: 'accepted', created_at: '2026-09-05T12:05:00.000Z' },
+    { id: 'p-old', status: 'in_preparation', created_at: '2026-09-05T11:00:00.000Z' },
+    { id: 'p-new', status: 'in_preparation', created_at: '2026-09-05T11:30:00.000Z' },
+    { id: 'n1', status: 'submitted', created_at: '2026-09-05T12:01:00.000Z' },
+    { id: 'r', status: 'ready', created_at: '2026-09-05T10:00:00.000Z' },
+    { id: 'c', status: 'cancelled', created_at: '2026-09-05T12:00:00.000Z' },
+  ] as const
+  const grouped = groupOrdersByColumn([...orders])
+  assert.deepEqual(grouped.new.map((order) => order.id), ['n2', 'n1'])
+  assert.deepEqual(grouped.in_preparation.map((order) => order.id), ['p-old', 'p-new'])
+  assert.deepEqual(grouped.ready.map((order) => order.id), ['r'])
+  assert.deepEqual(grouped.delivered.map((order) => order.id), ['d'])
+  assert.equal(posColumnFor('cancelled'), null)
+  assert.equal(nextPosStatus.accepted, 'in_preparation')
+  assert.equal(canCancelOrder('ready'), true)
+  assert.equal(canCancelOrder('delivered'), false)
+  assert.equal(canCancelOrder('cancelled'), false)
+})
+
+test('restaurant day bounds use Argentina time and POS errors stay coded', () => {
+  assert.deepEqual(dayRangeUtc('2026-09-05'), {
+    start: '2026-09-05T03:00:00.000Z',
+    end: '2026-09-06T03:00:00.000Z',
+  })
+  assert.equal(formatElapsed('2026-09-05T12:00:00.000Z', Date.parse('2026-09-05T12:00:30.000Z')), 'Ahora')
+  assert.equal(formatElapsed('2026-09-05T12:00:00.000Z', Date.parse('2026-09-05T13:05:00.000Z')), 'Hace 1 h 5 min')
+  assert.equal(posErrorCode('FORBIDDEN'), 'FORBIDDEN')
+  assert.equal(posErrorCode('P0001: INVALID_TRANSITION'), 'INVALID_TRANSITION')
 })

@@ -963,6 +963,7 @@ export type Database = {
       }
     }
     Functions: {
+      close_table_session: { Args: { p_session_id: string }; Returns: string }
       dispatch_internal_order: { Args: { p_order_id: string }; Returns: string }
       get_order_pos_type: {
         Args: { p_order_id: string }

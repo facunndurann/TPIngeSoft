@@ -19,7 +19,7 @@ todos:
     status: completed
   - id: internal-pos
     content: "Fase 5: POS propio en el admin (tablero de comandas realtime, estados de pedido, gestión de mesas/sesiones)"
-    status: pending
+    status: completed
   - id: smart-menu
     content: "Fase 6: menú inteligente con LLM (edge function recommend) y UI de propuestas grupales"
     status: pending
@@ -33,26 +33,6 @@ isProject: false
 ---
 
 # Plataforma web de autoservicio para restaurantes
-
-## Decisión 1: Supabase (no Firebase)
-
-Para esta plataforma, **Supabase es claramente mejor**. Razones concretas:
-
-- **El modelo de datos es profundamente relacional.** Restaurante → sucursales → mesas → categorías → productos → ingredientes → grupos de modificadores → opciones → pedidos → ítems → pagos. En Postgres esto se modela natural con foreign keys y joins. En Firestore (NoSQL) habría que duplicar datos, hacer fan-out manual y las reglas de modificadores (mín/máx, incompatibilidades) serían muy difíciles de validar y consultar.
-- **Multi-tenancy con Row Level Security.** El requisito "cada restaurante administra solo sus datos" se resuelve con políticas RLS declarativas sobre las mismas tablas. En Firebase habría que replicar esa lógica en security rules mucho más frágiles.
-- **Validación transaccional del pedido.** Confirmar un pedido exige validar precios, disponibilidad y reglas de modificadores de forma atómica: Postgres + una edge function lo resuelven; Firestore no tiene transacciones relacionales de ese estilo.
-- **Todo lo demás está igualmente resuelto:** Auth (email/password para admins + *anonymous sign-in* para comensales que escanean el QR), Realtime (suscripciones Postgres para la sesión compartida de mesa y para el tablero de comandas del POS propio), Storage (fotos de platos) y Edge Functions (LLM, adaptadores POS, webhook de Mercado Pago).
-- Bonus: `supabase gen types` genera los tipos TypeScript de la DB, ideal para el stack React+TS.
-
-## Decisión 2: Monorepo único
-
-**Sí, un solo monorepo.** Con Supabase no existe un "backend" tradicional que justifique otro repo: el backend son migraciones SQL + edge functions, que la CLI de Supabase espera en una carpeta `supabase/` dentro del proyecto. Además:
-
-- Los tipos de la DB y los schemas de validación (Zod) se comparten entre las dos apps y las edge functions sin publicar paquetes.
-- Un cambio de schema + su uso en frontend queda en un solo PR, atómico.
-- Son un equipo chico con un solo producto: dos repos solo agregarían fricción de versionado.
-
-Herramienta: **pnpm workspaces** (sin Turborepo; innecesario a esta escala).
 
 ## Arquitectura general
 
@@ -218,4 +198,10 @@ Implementación terminada. La migración `20260905180000_customer_sessions.sql` 
 
 Implementación terminada. `20260905200000_orders.sql` agrega confirmación transaccional, snapshots, idempotencia por participante y solicitud, recepción del POS interno, transiciones autorizadas y `session_bills` con RLS. `submit-order` autentica al comensal, valida el contrato compartido y despacha mediante la fábrica de adaptadores. El carrito conserva los envíos pendientes y la mesa ve pedidos y cuenta por Realtime con polling de respaldo.
 
-Se aplicó la migración al stack local y pasaron 28 pruebas HTTP/Realtime, las aserciones SQL transaccionales y 16 pruebas de lógica de frontend/Edge. Se verificaron también tipos, lint y build. Una comprobación en Chrome con viewport móvil cubrió QR, carrito, confirmación, cuenta y recuperación tras respuesta perdida y cierre de sesión, sin duplicar pedidos ni errores de consola. El recorrido completo de aceptación está en `docs/SETUP.md`. El tablero POS y la ejecución de pagos siguen en las Fases 5 y 7.
+Se aplicó la migración al stack local y pasaron 28 pruebas HTTP/Realtime, las aserciones SQL transaccionales y 16 pruebas de lógica de frontend/Edge. Se verificaron también tipos, lint y build. Una comprobación en Chrome con viewport móvil cubrió QR, carrito, confirmación, cuenta y recuperación tras respuesta perdida y cierre de sesión, sin duplicar pedidos ni errores de consola. El recorrido completo de aceptación está en `docs/SETUP.md`. El tablero POS de la Fase 5 reemplaza la transición de estados por consola.
+
+### Verificación de Fase 5
+
+Implementación terminada. `20260905220000_internal_pos.sql` agrega `close_table_session` (cierre atómico e idempotente, con el mismo orden de bloqueo que el ingreso por QR) y revoca escrituras directas de sesiones. El panel admin incluye el POS propio: tablero kanban realtime (nuevo → en preparación → listo → entregado) con detalle de modificaciones, mesas activas con cuenta y cierre manual, e historial del día. Los cambios de estado siguen yendo por `transition_order`.
+
+Las aserciones SQL cubren autorización, aislamiento entre restaurantes, idempotencia, conservación de comandas al cerrar y el privilegio de escritura. La suite integrada (32 verificaciones HTTP/Realtime) incluye la consulta anidada del tablero, el cierre por RPC, la denegación a comensales y a otro restaurante, el realtime de cierre y que un nuevo escaneo abre otra sesión. También pasaron typecheck, lint, build y 18 pruebas de lógica. El recorrido de aceptación está en `docs/SETUP.md`. El cobro y el cierre automático al saldar corresponden a la Fase 7.

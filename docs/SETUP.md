@@ -176,19 +176,8 @@ Recorrido de aceptación:
 4. Cambiar un precio desde admin después de revisar el carrito y antes de confirmar. El servidor debe rechazar el total anterior, actualizar la carta y exigir una nueva revisión. No debe quedar un pedido parcial.
 5. Simular pérdida de conexión al enviar. El carrito conserva el intento y bloquea ediciones; **Reintentar el mismo envío** recupera el resultado sin duplicar el pedido, incluso tras recargar.
 6. Cambiar el nombre, precio u opciones de un producto después de pedirlo. El pedido ya enviado conserva sus snapshots.
-7. Para ver transiciones antes de que exista el tablero de Fase 5, usar la consola del navegador del **admin autenticado** en desarrollo:
-
-   ```js
-   const { supabase } = await import('/src/lib/supabase.ts')
-   await supabase.rpc('transition_order', {
-     p_order_id: '<id completo del pedido, disponible en Studio>',
-     p_status: 'in_preparation',
-   })
-   ```
-
-   Repetir con `ready` y `delivered`. Deben actualizarse ambos comensales. Solo miembros del restaurante pueden hacerlo. La secuencia es `submitted → accepted → in_preparation → ready → delivered`; `cancelled` se permite antes de entregar y elimina ese importe de la cuenta. Repetir un estado no duplica sus registros.
-
-8. Consultar **Pedidos y cuenta**: **Enviado, por confirmar** corresponde a pedidos todavía sin recepción del POS; **En cuenta** incluye los aceptados y posteriores; **Pagado** suma solo pagos aprobados; **Pendiente de pago** es la diferencia, con mínimo cero. La cuenta saldada requiere consumo positivo, saldo cero y ningún pedido esperando recepción. No se cierra automáticamente la sesión en esta fase.
+7. Avanzar el pedido desde el **POS** del admin (`http://localhost:5174/pos`): **Preparar**, **Marcar listo** y **Entregar**. Deben actualizarse ambos comensales. Solo miembros del restaurante pueden hacerlo. La secuencia es `submitted → accepted → in_preparation → ready → delivered`; `cancelled` se permite antes de entregar y elimina ese importe de la cuenta. Repetir un estado no duplica sus registros.
+8. Consultar **Pedidos y cuenta**: **Enviado, por confirmar** corresponde a pedidos todavía sin recepción del POS; **En cuenta** incluye los aceptados y posteriores; **Pagado** suma solo pagos aprobados; **Pendiente de pago** es la diferencia, con mínimo cero. La cuenta saldada requiere consumo positivo, saldo cero y ningún pedido esperando recepción. El cierre de sesión se hace desde el POS (Fase 5, abajo).
 
 Pruebas reproducibles:
 
@@ -197,12 +186,13 @@ pnpm --filter customer test
 pnpm test:orders
 pnpm test:orders:integration
 docker exec -i supabase_db_TP psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/tests/orders.sql
+docker exec -i supabase_db_TP psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/tests/pos.sql
 pnpm typecheck
 pnpm lint
 pnpm build
 ```
 
-La suite integrada necesita el seed demo y la función activa. Usa 28 verificaciones HTTP/Realtime con fixtures propios que elimina al terminar, sin modificar los menús existentes. Crea tres usuarios Auth anónimos locales; si se proporciona `SUPABASE_SERVICE_ROLE_KEY` solo al proceso de pruebas, también los elimina. No colocar esa clave en un `.env` del frontend. Las pruebas SQL crean fixtures dentro de `BEGIN … ROLLBACK` e incluyen pagos aprobados/rechazados, sin invocar proveedores de pago.
+La suite integrada necesita el seed demo y la función activa. Usa 32 verificaciones HTTP/Realtime con fixtures propios que elimina al terminar, sin modificar los menús existentes. Crea tres usuarios Auth anónimos locales; si se proporciona `SUPABASE_SERVICE_ROLE_KEY` solo al proceso de pruebas, también los elimina. No colocar esa clave en un `.env` del frontend. Las pruebas SQL crean fixtures dentro de `BEGIN … ROLLBACK` e incluyen pagos aprobados/rechazados, sin invocar proveedores de pago.
 
 **Resultado de implementación:** migración aplicada; 28 verificaciones integradas, aserciones SQL y 16 pruebas de lógica correctas; typecheck, lint y build verificados. También se comprobó en Chrome a 390 × 844 px el flujo QR → carrito → confirmación → cuenta, sin errores de consola ni desbordamiento horizontal. Se simuló una respuesta perdida y el cierre de sesión: recargar y reintentar recuperó el pedido existente sin duplicarlo. La aceptación manual completa de todos los escenarios queda como recorrido adicional.
 
@@ -215,3 +205,38 @@ El contrato compartido limita cada envío a 50 ítems, cantidades de 1 a 99, opc
 El adaptador interno confirma recepción mediante `dispatch_internal_order`, con estado, timestamp y log en otra transacción idempotente. Si ese paso falla, el pedido queda **enviado, por confirmar** y un reintento completa el despacho. Una integración inactiva o `fudo` devuelve un error explícito; los adaptadores externos se implementarán a futuro. Los navegadores, incluido el admin, no pueden escribir directamente precios, snapshots o estados de pedidos.
 
 La vista `session_bills` usa `security_invoker` para respetar las [políticas RLS de sus tablas](https://supabase.com/docs/guides/database/postgres/row-level-security). Agrega pedidos y pagos por separado para evitar multiplicar importes. No implementa cobros ni repartos; corresponden a la Fase 7.
+
+## 7. Probar el POS propio (Fase 5)
+
+Con el stack local iniciado, aplicar la migración del POS sin borrar datos:
+
+```bash
+pnpm supabase migration up --local
+```
+
+En terminales separadas: `pnpm dev:functions`, `pnpm dev:customer` y `pnpm dev:admin`. El panel abre en el POS (`http://localhost:5174/pos`).
+
+Recorrido de aceptación:
+
+1. Desde el comensal, enviar un pedido personalizado (con modificadores, ingrediente quitado y nota). En **Comandas** debe aparecer en **Nuevo** con mesa, comensal, detalle de opciones y total, sin recargar.
+2. **Aceptar** solo si quedó *enviado, por confirmar*. Si el adaptador interno ya lo recibió, usar **Preparar** → **Marcar listo** → **Entregar**. El comensal debe ver cada estado. **Cancelar** un pedido no entregado lo saca de la cuenta.
+3. En **Mesas activas**, la mesa ocupada muestra comensales, por confirmar / en cuenta / pagado / pendiente y las comandas en cocina. Las mesas sin sesión aparecen como libres.
+4. Cerrar la sesión con saldo pendiente: el diálogo advierte que el efectivo no se registra todavía. Tras cerrar, el comensal no puede enviar más pedidos en esa cuenta y puede abrir una sesión nueva. Las comandas en cocina siguen en el tablero, marcadas como sesión cerrada.
+5. Un segundo perfil en el mismo QR entra a la sesión nueva, con cuenta vacía. El historial del día conserva ambos pedidos.
+6. En **Historial**, filtrar por fecha y estado, buscar por mesa o producto y abrir el detalle con modificaciones. Un admin de otro restaurante demo no debe ver estas comandas.
+7. Verificar aislamiento: `admin@nonna.demo` no avanza ni cierra pedidos de La Esquina.
+
+Pruebas reproducibles (además de las de la sección 6):
+
+```bash
+pnpm test:orders
+pnpm test:orders:integration
+docker exec -i supabase_db_TP psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/tests/pos.sql
+pnpm typecheck
+pnpm lint
+pnpm build
+```
+
+`close_table_session` es exclusiva de miembros del restaurante, idempotente y usa el mismo orden de bloqueo mesa → sesión que el ingreso por QR. Los navegadores no pueden cambiar el estado de una sesión con un `update` directo.
+
+**Resultado de implementación:** migración aplicada; 32 verificaciones integradas (incluye consulta anidada del tablero, cierre por RPC, aislamiento y Realtime de cierre); aserciones SQL de POS y pedidos; 18 pruebas de lógica (9 de pedidos/POS + 9 del comensal); typecheck, lint y build verificados. El cobro con Mercado Pago y el cierre automático al saldar siguen en la Fase 7.
