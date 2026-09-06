@@ -1,8 +1,10 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Store } from 'lucide-react'
+import { DEFAULT_MENU_DESIGN } from '@restaurant-platform/shared'
 import { supabase } from '@/lib/supabase'
 import { Button, ErrorText, Field, Input, Spinner, Textarea } from '@/components/ui'
+import { DesignPicker } from '@/features/DesignPicker'
 import { RestaurantContext } from './restaurant-context'
 
 /**
@@ -33,6 +35,7 @@ function CreateRestaurantScreen() {
   const queryClient = useQueryClient()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  const [menuDesign, setMenuDesign] = useState(DEFAULT_MENU_DESIGN)
   const [branchName, setBranchName] = useState('Casa Central')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -54,7 +57,7 @@ function CreateRestaurantScreen() {
 
       const { data: restaurant, error: rErr } = await supabase
         .from('restaurants')
-        .insert({ name, slug, description: description || null })
+        .insert({ name, slug, description: description || null, menu_design: menuDesign })
         .select()
         .single()
       if (rErr) throw rErr
@@ -86,7 +89,7 @@ function CreateRestaurantScreen() {
 
   return (
     <main className="flex min-h-dvh items-center justify-center bg-neutral-100 p-4">
-      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-sm">
+      <div className="w-full max-w-2xl rounded-xl bg-white p-6 shadow-sm">
         <div className="mb-6 flex flex-col items-center gap-2">
           <div className="rounded-xl bg-indigo-600 p-3 text-white">
             <Store size={22} />
@@ -111,6 +114,13 @@ function CreateRestaurantScreen() {
           <Field label="Nombre de la primera sucursal">
             <Input value={branchName} onChange={(e) => setBranchName(e.target.value)} required />
           </Field>
+          <div>
+            <p className="mb-2 text-sm font-medium text-neutral-700">Diseño de la carta</p>
+            <p className="mb-3 text-xs text-neutral-500">
+              Podés cambiarlo después desde Restaurante.
+            </p>
+            <DesignPicker value={menuDesign} onChange={setMenuDesign} />
+          </div>
           <ErrorText message={error} />
           <Button type="submit" disabled={submitting} className="w-full">
             {submitting ? 'Creando…' : 'Crear restaurante'}

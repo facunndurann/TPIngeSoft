@@ -23,7 +23,10 @@ import {
   ordersPath,
   tableRoot,
   tableSection,
+  type TableSection,
 } from '@/features/table-paths'
+import { MenuDesignProvider, MenuShell } from '@/features/MenuShell'
+import { useMenuDesign } from '@/features/menu-design'
 import { useTableSession } from '@/hooks/useTableSession'
 import { useCart } from '@/stores/cart'
 import type { CartItem } from '@/stores/cart'
@@ -86,100 +89,176 @@ function TableApp({ token }: { token: string }) {
 
   if (table.isPending) {
     return (
-      <main className="shell" role="status">
+      <MenuShell role="status">
         Buscando tu mesa…
-      </main>
+      </MenuShell>
     )
   }
 
   if (table.isError) {
     return (
-      <main className="shell">
+      <MenuShell>
         <h1>No pudimos abrir esta mesa</h1>
         <ErrorMessage error={table.error} retry={() => { void table.refetch() }} />
-      </main>
+      </MenuShell>
     )
   }
 
   const { restaurant, branch, table: currentTable } = table.data
 
   return (
-    <TableContext.Provider
-      value={{
-        token,
-        client,
-        menu,
-        session,
-        sessionId,
-        userId: joined.data?.userId,
-        cartKey,
-        items,
-        sessionOpen,
-        canEdit,
-        setAnnouncement,
-      }}
-    >
-      <main className="shell">
-        <TableHeader
+    <MenuDesignProvider designId={restaurant.menu_design}>
+      <TableContext.Provider
+        value={{
+          token,
+          client,
+          menu,
+          session,
+          sessionId,
+          userId: joined.data?.userId,
+          cartKey,
+          items,
+          sessionOpen,
+          canEdit,
+          setAnnouncement,
+        }}
+      >
+        <DesignedTable
           restaurantName={restaurant.name}
           branchName={branch.name}
           tableLabel={currentTable.label}
-        />
-
-        <SessionPanel
+          token={token}
+          cartCount={cartCount}
           joined={joined}
           session={session}
           userId={joined.data?.userId}
           hasPendingSubmission={!!cart.submissions[cartKey]}
           name={name}
-          onNameChange={setName}
+          setName={setName}
           rename={rename}
-          onOpenNewSession={() => {
-            setAnnouncement('')
-            void joined.refetch()
-          }}
+          announcement={announcement}
+          setAnnouncement={setAnnouncement}
+          section={section}
+          atMenu={atMenu}
+          total={total}
         />
+      </TableContext.Provider>
+    </MenuDesignProvider>
+  )
+}
 
-        <TableNav token={token} cartCount={cartCount} />
+function DesignedTable({
+  restaurantName,
+  branchName,
+  tableLabel,
+  token,
+  cartCount,
+  joined,
+  session,
+  userId,
+  hasPendingSubmission,
+  name,
+  setName,
+  rename,
+  announcement,
+  setAnnouncement,
+  section,
+  atMenu,
+  total,
+}: {
+  restaurantName: string
+  branchName: string
+  tableLabel: string
+  token: string
+  cartCount: number
+  joined: TableSession['joined']
+  session: TableSession['session']
+  userId?: string
+  hasPendingSubmission: boolean
+  name: string
+  setName: (value: string) => void
+  rename: TableSession['rename']
+  announcement: string
+  setAnnouncement: (value: string) => void
+  section: TableSection
+  atMenu: boolean
+  total: number
+}) {
+  const { menu, cartKey, items } = useTable()
+  const { copy } = useMenuDesign()
+  const cart = useCart()
 
-        {announcement && (
-          <p className="success-notice" role="status">
-            {announcement}
-          </p>
-        )}
+  return (
+    <MenuShell>
+      <TableHeader
+        restaurantName={restaurantName}
+        branchName={branchName}
+        tableLabel={tableLabel}
+        welcome={copy.welcome}
+      />
 
-        {section !== 'orders' && menu.isPending && <p role="status">Cargando la carta…</p>}
-        {section !== 'orders' && menu.isError && (
-          <ErrorMessage error={menu.error} retry={() => { void menu.refetch() }} />
-        )}
+      <SessionPanel
+        joined={joined}
+        session={session}
+        userId={userId}
+        hasPendingSubmission={hasPendingSubmission}
+        name={name}
+        onNameChange={setName}
+        rename={rename}
+        onOpenNewSession={() => {
+          setAnnouncement('')
+          void joined.refetch()
+        }}
+      />
 
-        {section !== 'cart' && cart.submissions[cartKey] && (
-          <div className="notice">
-            <p>Tu último envío todavía necesita confirmación.</p>
-            <Link className="btn" to={cartPath(token)}>
-              Consultar o reintentar envío
-            </Link>
-          </div>
-        )}
+      <TableNav token={token} cartCount={cartCount} />
 
-        <Outlet />
+      {announcement && (
+        <p className="success-notice" role="status">
+          {announcement}
+        </p>
+      )}
 
-        {atMenu && items.length > 0 && (
-          <Link className="primary cart-bar" to={cartPath(token)}>
-            Ver mi carrito <strong>{money(total)}</strong>
+      {section !== 'orders' && menu.isPending && <p role="status">Cargando la carta…</p>}
+      {section !== 'orders' && menu.isError && (
+        <ErrorMessage error={menu.error} retry={() => { void menu.refetch() }} />
+      )}
+
+      {section !== 'cart' && cart.submissions[cartKey] && (
+        <div className="notice">
+          <p>Tu último envío todavía necesita confirmación.</p>
+          <Link className="btn" to={cartPath(token)}>
+            Consultar o reintentar envío
           </Link>
-        )}
+        </div>
+      )}
 
-        <footer>Disfrutá a tu ritmo · Pedí desde tu mesa</footer>
-      </main>
-    </TableContext.Provider>
+      <Outlet />
+
+      {atMenu && items.length > 0 && (
+        <Link className="primary cart-bar" to={cartPath(token)}>
+          Ver mi carrito <strong>{money(total)}</strong>
+        </Link>
+      )}
+
+      <footer>{copy.footer}</footer>
+    </MenuShell>
   )
 }
 
 export function TableMenuPage() {
   const { token, menu, canEdit } = useTable()
+  const { copy } = useMenuDesign()
   if (!menu.data) return null
-  return <MenuBrowse token={token} menu={menu.data} canEdit={canEdit} />
+  return (
+    <MenuBrowse
+      token={token}
+      menu={menu.data}
+      canEdit={canEdit}
+      heading={copy.menu}
+      title={copy.menuTitle}
+    />
+  )
 }
 
 export function TableCartPage({ reviewing = false }: { reviewing?: boolean }) {

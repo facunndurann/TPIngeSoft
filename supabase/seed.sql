@@ -70,8 +70,8 @@ declare
 begin
   -- ===== Restaurante 1: La Esquina Burger =====
 
-  insert into public.restaurants (name, slug, description)
-  values ('La Esquina Burger', 'esquina-burger', 'Hamburguesas artesanales y papas')
+  insert into public.restaurants (name, slug, description, menu_design)
+  values ('La Esquina Burger', 'esquina-burger', 'Hamburguesas artesanales y papas', 'brasas')
   returning id into r1;
 
   insert into public.restaurant_members (restaurant_id, user_id, role)
@@ -178,8 +178,8 @@ begin
 
   -- ===== Restaurante 2: Trattoria Nonna =====
 
-  insert into public.restaurants (name, slug, description)
-  values ('Trattoria Nonna', 'trattoria-nonna', 'Cocina italiana de la nonna')
+  insert into public.restaurants (name, slug, description, menu_design)
+  values ('Trattoria Nonna', 'trattoria-nonna', 'Cocina italiana de la nonna', 'linterna')
   returning id into r2;
 
   insert into public.restaurant_members (restaurant_id, user_id, role)

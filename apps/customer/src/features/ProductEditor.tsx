@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { money, price, productGroups, selectionErrors } from '@/features/menu'
 import type { Menu, Product } from '@/features/menu'
+import { useMenuDesign } from '@/features/menu-design'
 import type { CartItem } from '@/stores/cart'
 
 type ProductEditorProps = {
@@ -12,6 +13,7 @@ type ProductEditorProps = {
 }
 
 export function ProductEditor({ menu, product, initial, onSave, onClose }: ProductEditorProps) {
+  const { copy } = useMenuDesign()
   const [item, setItem] = useState<CartItem>(initial ?? defaultItem(menu, product))
   const errors = selectionErrors(menu, product, item)
   const ingredients = menu.ingredients.filter((ingredient) => ingredient.product_id === product.id)
@@ -24,7 +26,7 @@ export function ProductEditor({ menu, product, initial, onSave, onClose }: Produ
       {product.photo_url && (
         <img className="hero-photo" src={product.photo_url} alt={product.name} />
       )}
-      <p className="eyebrow">A TU GUSTO</p>
+      <p className="eyebrow">{copy.product}</p>
       <h1 id="product-title">{product.name}</h1>
       <p>{product.description}</p>
       <strong>{money(product.base_price)}</strong>

@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { cartPrice, price, selectionErrors } from '../src/features/menu'
-import { calculateItemPrice } from '@restaurant-platform/shared'
+import { calculateItemPrice, DEFAULT_MENU_DESIGN, menuDesignCssVars, MENU_DESIGNS, resolveMenuDesign } from '@restaurant-platform/shared'
 import { recoverPendingSession } from '../src/features/session-recovery'
 import type { PendingSubmission } from '../src/stores/cart'
 
@@ -164,4 +164,47 @@ test('cart edits preserve customization and isolate participants and sessions', 
   assert.equal(useCart.getState().carts['session-a:user-a'][0].isShared, true)
   useCart.getState().remove('session-a:user-a', 'line')
   assert.deepEqual(useCart.getState().carts['session-a:user-a'], [])
+})
+
+test('resolveMenuDesign returns catalog entries and falls back to oliva', () => {
+  assert.equal(resolveMenuDesign('oliva').id, DEFAULT_MENU_DESIGN)
+  assert.equal(resolveMenuDesign('oliva').layout, 'classic')
+  assert.equal(resolveMenuDesign('brasas').layout, 'kiosk')
+  assert.equal(resolveMenuDesign('linterna').layout, 'editorial')
+  assert.equal(resolveMenuDesign('unknown').id, DEFAULT_MENU_DESIGN)
+  assert.equal(resolveMenuDesign(null).id, DEFAULT_MENU_DESIGN)
+  assert.equal(resolveMenuDesign(undefined).id, DEFAULT_MENU_DESIGN)
+  assert.equal(MENU_DESIGNS.length, 3)
+  assert.equal(menuDesignCssVars(resolveMenuDesign('brasas').tokens)['--menu-accent'], resolveMenuDesign('brasas').tokens.accent)
+})
+
+test('MenuShell paints catalog tokens, layout and copy for each design', async () => {
+  const { createElement } = await import('react')
+  const { renderToStaticMarkup } = await import('react-dom/server')
+  const { MenuDesignProvider, MenuShell } = await import('../src/features/MenuShell')
+  const { TableHeader } = await import('../src/features/TableHeader')
+
+  for (const id of ['oliva', 'brasas', 'linterna'] as const) {
+    const design = resolveMenuDesign(id)
+    const html = renderToStaticMarkup(
+      createElement(
+        MenuDesignProvider,
+        { designId: id },
+        createElement(
+          MenuShell,
+          null,
+          createElement(TableHeader, {
+            restaurantName: 'Demo',
+            branchName: 'Casa',
+            tableLabel: 'Mesa 1',
+            welcome: design.copy.welcome,
+          }),
+        ),
+      ),
+    )
+    assert.match(html, new RegExp(`data-design="${id}"`))
+    assert.match(html, new RegExp(`data-layout="${design.layout}"`))
+    assert.match(html, new RegExp(design.tokens.bg.replace('#', '[#]')))
+    assert.match(html, new RegExp(design.copy.welcome))
+  }
 })

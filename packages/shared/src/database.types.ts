@@ -792,6 +792,7 @@ export type Database = {
           description: string | null
           id: string
           logo_url: string | null
+          menu_design: string
           name: string
           slug: string
         }
@@ -800,6 +801,7 @@ export type Database = {
           description?: string | null
           id?: string
           logo_url?: string | null
+          menu_design?: string
           name: string
           slug: string
         }
@@ -808,6 +810,7 @@ export type Database = {
           description?: string | null
           id?: string
           logo_url?: string | null
+          menu_design?: string
           name?: string
           slug?: string
         }

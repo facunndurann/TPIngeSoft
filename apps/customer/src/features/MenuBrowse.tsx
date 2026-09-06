@@ -7,9 +7,11 @@ type MenuBrowseProps = {
   token: string
   menu: Menu
   canEdit: boolean
+  heading: string
+  title: string
 }
 
-export function MenuBrowse({ token, menu, canEdit }: MenuBrowseProps) {
+export function MenuBrowse({ token, menu, canEdit, heading, title }: MenuBrowseProps) {
   const { search: locationSearch } = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const { category, search } = parseMenuFilters(searchParams)
@@ -27,8 +29,8 @@ export function MenuBrowse({ token, menu, canEdit }: MenuBrowseProps) {
     <>
       <div className="menu-heading">
         <div>
-          <p className="eyebrow">HECHO PARA DISFRUTAR</p>
-          <h2>¿Qué te gustaría pedir?</h2>
+          <p className="eyebrow">{heading}</p>
+          <h2>{title}</h2>
         </div>
         <label className="sr-only" htmlFor="search">
           Buscar platos
