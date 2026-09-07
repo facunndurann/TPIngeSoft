@@ -59,7 +59,6 @@ export function ProductsPage() {
     onError: (e) => setError(e.message),
   })
 
-  const categoryName = (id: string) => categories?.find((c) => c.id === id)?.name ?? '—'
   const visible = products?.filter((p) => categoryFilter === 'all' || p.category_id === categoryFilter)
 
   return (
