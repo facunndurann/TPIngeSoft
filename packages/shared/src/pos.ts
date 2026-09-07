@@ -71,7 +71,10 @@ export function sortColumnOrders<T extends { created_at: string }>(
   orders: T[],
 ): T[] {
   const copy = [...orders]
-  return copy.sort((a, b) => a.created_at.localeCompare(b.created_at))
+  const fifo = columnId === 'in_preparation' || columnId === 'ready'
+  return copy.sort((a, b) => fifo
+    ? a.created_at.localeCompare(b.created_at)
+    : b.created_at.localeCompare(a.created_at))
 }
 
 export function groupOrdersByColumn<T extends { status: OrderStatus; created_at: string }>(
