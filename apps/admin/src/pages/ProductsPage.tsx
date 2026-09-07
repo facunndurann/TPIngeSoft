@@ -100,57 +100,82 @@ export function ProductsPage() {
       ) : !visible?.length ? (
         <EmptyState message="No hay productos en esta vista. Creá uno con “Nuevo producto”." />
       ) : (
-        <ul className="space-y-2">
-          {visible.map((product) => (
-            <li
-              key={product.id}
-              className="flex items-center gap-3 rounded-xl border border-neutral-200 bg-white p-3"
-            >
-              {product.photo_url ? (
-                <img
-                  src={product.photo_url}
-                  alt={product.name}
-                  className="h-14 w-14 rounded-lg object-cover"
-                />
-              ) : (
-                <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-neutral-100 text-neutral-400">
-                  <ImageOff size={18} />
-                </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <p className="truncate text-sm font-medium text-neutral-900">{product.name}</p>
-                  {!product.is_available && <Badge color="red">Sin stock</Badge>}
-                </div>
-                <p className="text-xs text-neutral-500">
-                  {categoryName(product.category_id)} · {formatPrice(product.base_price)}
-                </p>
+        <div className="space-y-8">
+          {categories?.filter((category) => categoryFilter === 'all' || categoryFilter === category.id).map((category) => {
+            const categoryProducts = visible.filter((p) => p.category_id === category.id)
+            if (categoryProducts.length === 0) return null
+
+            return (
+              <div key={category.id}>
+                <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-neutral-400">
+                  {category.name}
+                </h2>
+                <ul className="space-y-2">
+                  {categoryProducts.map((product) => (
+                    <li
+                      key={product.id}
+                      className="flex items-center gap-3 rounded-xl border border-neutral-200 bg-white p-3"
+                    >
+                      {product.photo_url ? (
+                        product.photo_url.match(/\.(mp4|webm|ogg|mov)$/i) ? (
+                          <video
+                            src={product.photo_url}
+                            className="h-14 w-14 rounded-lg object-cover bg-black"
+                            autoPlay
+                            muted
+                            loop
+                            playsInline
+                          />
+                        ) : (
+                          <img
+                            src={product.photo_url}
+                            alt={product.name}
+                            className="h-14 w-14 rounded-lg object-cover"
+                          />
+                        )
+                      ) : (
+                        <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-neutral-100 text-neutral-400">
+                          <ImageOff size={18} />
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="truncate text-sm font-medium text-neutral-900">{product.name}</p>
+                          {!product.is_available && <Badge color="red">Sin stock</Badge>}
+                        </div>
+                        <p className="text-xs text-neutral-500">
+                          {formatPrice(product.base_price)}
+                        </p>
+                      </div>
+                      <Toggle
+                        checked={product.is_available}
+                        onChange={(value) =>
+                          availabilityMutation.mutate({ id: product.id, is_available: value })
+                        }
+                      />
+                      <Link
+                        to={`/productos/${product.id}`}
+                        className="p-1 text-neutral-400 hover:text-neutral-700"
+                        aria-label="Editar"
+                      >
+                        <Pencil size={15} />
+                      </Link>
+                      <button
+                        className="cursor-pointer p-1 text-neutral-400 hover:text-red-600"
+                        onClick={() => {
+                          if (confirm(`¿Eliminar "${product.name}"?`)) deleteMutation.mutate(product.id)
+                        }}
+                        aria-label="Eliminar"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <Toggle
-                checked={product.is_available}
-                onChange={(value) =>
-                  availabilityMutation.mutate({ id: product.id, is_available: value })
-                }
-              />
-              <Link
-                to={`/productos/${product.id}`}
-                className="p-1 text-neutral-400 hover:text-neutral-700"
-                aria-label="Editar"
-              >
-                <Pencil size={15} />
-              </Link>
-              <button
-                className="cursor-pointer p-1 text-neutral-400 hover:text-red-600"
-                onClick={() => {
-                  if (confirm(`¿Eliminar "${product.name}"?`)) deleteMutation.mutate(product.id)
-                }}
-                aria-label="Eliminar"
-              >
-                <Trash2 size={15} />
-              </button>
-            </li>
-          ))}
-        </ul>
+            )
+          })}
+        </div>
       )}
     </div>
   )

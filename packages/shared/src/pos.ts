@@ -18,11 +18,23 @@ export const nextPosStatus: Partial<Record<OrderStatus, OrderStatus>> = {
   ready: 'delivered',
 }
 
+export const prevPosStatus: Partial<Record<OrderStatus, OrderStatus>> = {
+  in_preparation: 'accepted',
+  ready: 'in_preparation',
+  delivered: 'ready',
+}
+
 export const posAdvanceLabels: Partial<Record<OrderStatus, string>> = {
   submitted: 'Aceptar',
   accepted: 'Preparar',
   in_preparation: 'Marcar listo',
   ready: 'Entregar',
+}
+
+export const posRevertLabels: Partial<Record<OrderStatus, string>> = {
+  in_preparation: 'Volver a nuevo',
+  ready: 'Volver a preparar',
+  delivered: 'Volver a listo',
 }
 
 const POS_ERROR_CODES = [
@@ -59,10 +71,7 @@ export function sortColumnOrders<T extends { created_at: string }>(
   orders: T[],
 ): T[] {
   const copy = [...orders]
-  const fifo = columnId === 'in_preparation' || columnId === 'ready'
-  return copy.sort((a, b) => fifo
-    ? a.created_at.localeCompare(b.created_at)
-    : b.created_at.localeCompare(a.created_at))
+  return copy.sort((a, b) => a.created_at.localeCompare(b.created_at))
 }
 
 export function groupOrdersByColumn<T extends { status: OrderStatus; created_at: string }>(

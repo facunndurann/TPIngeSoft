@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { UtensilsCrossed } from 'lucide-react'
+import { UtensilsCrossed, Store } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { Button, ErrorText, Field, Input } from '@/components/ui'
 
@@ -33,7 +33,7 @@ export function LoginPage() {
       <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-sm">
         <div className="mb-6 flex flex-col items-center gap-2">
           <div className="rounded-xl bg-indigo-600 p-3 text-white">
-            <UtensilsCrossed size={22} />
+            {mode === 'login' ? <UtensilsCrossed size={22} /> : <Store size={22} />}
           </div>
           <h1 className="text-xl font-bold text-neutral-900">Panel del restaurante</h1>
           <p className="text-sm text-neutral-500">

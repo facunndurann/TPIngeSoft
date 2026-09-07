@@ -2,11 +2,14 @@ import {
   canCancelOrder,
   formatElapsed,
   nextPosStatus,
+  prevPosStatus,
   orderStatusLabels,
   posAdvanceLabels,
+  posRevertLabels,
 } from '@restaurant-platform/shared'
 import { formatPrice } from '@/lib/format'
 import { Badge, Button } from '@/components/ui'
+import { Undo2 } from 'lucide-react'
 import type { PosOrder, PosOrderItem } from './types'
 
 function participantName(order: PosOrder, participantId: string | null) {
@@ -21,6 +24,7 @@ export function OrderTicket({
   error,
   onAdvance,
   onCancel,
+  onRevert,
 }: {
   order: PosOrder
   now: number
@@ -28,15 +32,19 @@ export function OrderTicket({
   error: string | null
   onAdvance: () => void
   onCancel: () => void
+  onRevert: () => void
 }) {
   const next = nextPosStatus[order.status]
   const advanceLabel = posAdvanceLabels[order.status]
+  const prev = prevPosStatus[order.status]
+  const revertLabel = posRevertLabels[order.status]
+
   const table = order.table_sessions.tables
   const branch = table.branch?.name
   const submitter = participantName(order, order.submitted_by)
 
   return (
-    <article className="rounded-xl border border-neutral-200 bg-white p-3 shadow-sm">
+    <article className="rounded-xl border border-neutral-200 bg-white p-3 shadow-sm flex flex-col">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-neutral-900">{table.label}</p>
@@ -76,15 +84,22 @@ export function OrderTicket({
 
       {error && <p className="mt-2 text-xs text-red-700">{error}</p>}
 
-      <div className="mt-3 flex gap-2">
-        {next && advanceLabel && (
-          <Button className="flex-1" disabled={busy} onClick={onAdvance}>
-            {busy ? 'Actualizando…' : advanceLabel}
-          </Button>
-        )}
-        {canCancelOrder(order.status) && (
-          <Button variant="danger" disabled={busy} onClick={onCancel}>
-            Cancelar
+      <div className="mt-auto pt-3 flex flex-col gap-2">
+        <div className="flex gap-2 w-full">
+          {next && advanceLabel && (
+            <Button className="flex-1" disabled={busy} onClick={onAdvance}>
+              {busy ? 'Actualizando…' : advanceLabel}
+            </Button>
+          )}
+          {canCancelOrder(order.status) && (
+            <Button variant="danger" disabled={busy} onClick={onCancel}>
+              Cancelar
+            </Button>
+          )}
+        </div>
+        {prev && revertLabel && (
+          <Button variant="ghost" className="w-full text-xs opacity-75 hover:opacity-100" disabled={busy} onClick={onRevert}>
+            <Undo2 size={12} /> {revertLabel}
           </Button>
         )}
       </div>

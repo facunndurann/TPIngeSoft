@@ -130,7 +130,26 @@ function ProductCard({
         <strong>{money(product.base_price)}</strong>
         {!product.is_available && <span className="unavailable">Agotado</span>}
       </div>
-      {product.photo_url && <img src={product.photo_url} alt="" loading="lazy" />}
+      {product.photo_url && (
+        product.photo_url.match(/\.(mp4|webm|ogg|mov)$/i) ? (
+          <div style={{ position: 'relative', flexShrink: 0, width: '100px', height: '100px' }}>
+            <video
+              src={product.photo_url}
+              preload="metadata"
+              muted
+              playsInline
+              style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '12px', backgroundColor: 'black' }}
+            />
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: '12px' }}>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="white" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="5 3 19 12 5 21 5 3" />
+              </svg>
+            </div>
+          </div>
+        ) : (
+          <img src={product.photo_url} alt="" loading="lazy" />
+        )
+      )}
     </>
   )
 

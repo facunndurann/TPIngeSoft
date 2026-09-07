@@ -5,6 +5,7 @@ import {
   groupOrdersByColumn,
   localDateKey,
   nextPosStatus,
+  prevPosStatus,
   posBoardColumns,
 } from '@restaurant-platform/shared'
 import { supabase } from '@/lib/supabase'
@@ -141,6 +142,7 @@ export function CommandBoard() {
                   )}
                   {orders.map((order) => {
                     const next = nextPosStatus[order.status]
+                    const prev = prevPosStatus[order.status]
                     return (
                       <OrderTicket
                         key={order.id}
@@ -152,6 +154,9 @@ export function CommandBoard() {
                           if (next) transition.mutate({ orderId: order.id, status: next })
                         }}
                         onCancel={() => confirmCancel(order)}
+                        onRevert={() => {
+                          if (prev) transition.mutate({ orderId: order.id, status: prev })
+                        }}
                       />
                     )
                   })}

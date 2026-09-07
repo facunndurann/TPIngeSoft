@@ -318,23 +318,50 @@ export function ProductEditPage() {
       </section>
 
       <section className="space-y-3 rounded-xl border border-neutral-200 bg-white p-5">
-        <h2 className="font-semibold text-neutral-900">Fotografía</h2>
+        <h2 className="font-semibold text-neutral-900">Fotografía o video</h2>
         <div className="flex items-center gap-4">
           {(photoFile || photoUrl) && (
-            <img
-              src={photoFile ? URL.createObjectURL(photoFile) : photoUrl!}
-              alt="Vista previa"
-              className="h-24 w-24 rounded-lg object-cover"
-            />
+            (() => {
+              const src = photoFile ? URL.createObjectURL(photoFile) : photoUrl!
+              const isVideo = photoFile 
+                ? photoFile.type.startsWith('video/') 
+                : src.match(/\.(mp4|webm|ogg|mov)$/i)
+              
+              return isVideo ? (
+                <video
+                  src={src}
+                  className="h-24 w-24 rounded-lg object-cover bg-black"
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                />
+              ) : (
+                <img
+                  src={src}
+                  alt="Vista previa"
+                  className="h-24 w-24 rounded-lg object-cover"
+                />
+              )
+            })()
           )}
           <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-neutral-300 px-4 py-3 text-sm text-neutral-600 hover:bg-neutral-50">
             <Upload size={16} />
-            {photoUrl || photoFile ? 'Cambiar foto' : 'Subir foto'}
+            {photoUrl || photoFile ? 'Cambiar archivo' : 'Subir archivo'}
             <input
               type="file"
-              accept="image/*"
+              accept="image/*,video/*"
               className="hidden"
-              onChange={(e) => setPhotoFile(e.target.files?.[0] ?? null)}
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file && file.size > 7 * 1024 * 1024) {
+                  setError('El archivo es muy pesado. El límite es 7 MB para garantizar que la carta cargue rápido y no consuma los datos de tus clientes.')
+                  e.target.value = ''
+                  return
+                }
+                setError(null)
+                setPhotoFile(file ?? null)
+              }}
             />
           </label>
         </div>

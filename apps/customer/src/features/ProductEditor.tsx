@@ -24,7 +24,17 @@ export function ProductEditor({ menu, product, initial, onSave, onClose }: Produ
         ← Volver
       </button>
       {product.photo_url && (
-        <img className="hero-photo" src={product.photo_url} alt={product.name} />
+        product.photo_url.match(/\.(mp4|webm|ogg|mov)$/i) ? (
+          <video
+            className="hero-photo bg-black object-cover"
+            src={product.photo_url}
+            controls
+            preload="metadata"
+            playsInline
+          />
+        ) : (
+          <img className="hero-photo" src={product.photo_url} alt={product.name} />
+        )
       )}
       <p className="eyebrow">{copy.product}</p>
       <h1 id="product-title">{product.name}</h1>
