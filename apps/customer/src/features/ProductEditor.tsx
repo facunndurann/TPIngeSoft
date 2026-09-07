@@ -15,26 +15,64 @@ type ProductEditorProps = {
 export function ProductEditor({ menu, product, initial, onSave, onClose }: ProductEditorProps) {
   const { copy } = useMenuDesign()
   const [item, setItem] = useState<CartItem>(initial ?? defaultItem(menu, product))
+  const [mediaIndex, setMediaIndex] = useState(0)
   const errors = selectionErrors(menu, product, item)
   const ingredients = menu.ingredients.filter((ingredient) => ingredient.product_id === product.id)
+  const mediaUrls = product.photo_url ? product.photo_url.split(',') : []
+  const currentMedia = mediaUrls[mediaIndex]
 
   return (
     <section className="editor" aria-labelledby="product-title">
       <button className="text-button" onClick={onClose}>
         ← Volver
       </button>
-      {product.photo_url && (
-        product.photo_url.match(/\.(mp4|webm|ogg|mov)$/i) ? (
-          <video
-            className="hero-photo bg-black object-cover"
-            src={product.photo_url}
-            controls
-            preload="metadata"
-            playsInline
-          />
-        ) : (
-          <img className="hero-photo" src={product.photo_url} alt={product.name} />
-        )
+      {currentMedia && (
+        <div className="relative mb-6 rounded-lg overflow-hidden" style={{ minHeight: '240px' }}>
+          {currentMedia.match(/\.(mp4|webm|ogg|mov)$/i) ? (
+            <video
+              className="hero-photo bg-black object-cover m-0 w-full"
+              src={currentMedia + "#t=0.001"}
+              controls
+              preload="metadata"
+              playsInline
+            />
+          ) : (
+            <img className="hero-photo m-0 w-full" src={currentMedia} alt={product.name} />
+          )}
+          {mediaUrls.length > 1 && (
+            <>
+              <button 
+                type="button"
+                className="carousel-btn prev"
+                style={{ width: 36, height: 36, fontSize: 24, left: 10 }}
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setMediaIndex((i) => (i === 0 ? mediaUrls.length - 1 : i - 1))
+                }}
+              >
+                ‹
+              </button>
+              <button 
+                type="button"
+                className="carousel-btn next"
+                style={{ width: 36, height: 36, fontSize: 24, right: 10 }}
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setMediaIndex((i) => (i === mediaUrls.length - 1 ? 0 : i + 1))
+                }}
+              >
+                ›
+              </button>
+              <div className="carousel-dots" style={{ bottom: 12 }}>
+                {mediaUrls.map((_, i) => (
+                  <span key={i} className={`dot ${i === mediaIndex ? 'active' : ''}`} style={{ width: 8, height: 8 }} />
+                ))}
+              </div>
+            </>
+          )}
+        </div>
       )}
       <p className="eyebrow">{copy.product}</p>
       <h1 id="product-title">{product.name}</h1>

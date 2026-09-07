@@ -110,7 +110,7 @@ export function ActiveTables() {
                         {asAmount(bill?.pending_amount) > 0 ? 'Pendiente' : 'Sin saldo'}
                       </Badge>
                     </div>
-                    <p className="truncate text-xs text-neutral-500">
+                    <p className="text-xs text-neutral-500 break-words">
                       {session.session_participants.map((participant) => participant.display_name).join(' · ')
                         || 'Sin nombres'}
                     </p>

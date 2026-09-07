@@ -138,6 +138,11 @@ export function CartPanel({
           total={pending.input.expectedTotal}
           sending={send.isPending}
           onRetry={() => send.mutate(pending.input)}
+          onCancel={() => {
+            cart.rejectSubmission(cartKey, pending.input.requestId)
+            setReview(undefined)
+            navigate(cartPath(token))
+          }}
         />
       ) : (
         items.length > 0 && (
@@ -288,11 +293,13 @@ function PendingSubmission({
   total,
   sending,
   onRetry,
+  onCancel,
 }: {
   itemCount: number
   total: number
   sending: boolean
   onRetry: () => void
+  onCancel: () => void
 }) {
   return (
     <div className="confirmation" aria-live="polite">
@@ -304,9 +311,14 @@ function PendingSubmission({
         Conservamos este envío y bloqueamos su edición hasta conocer el resultado. Podés
         reintentarlo sin duplicar el pedido.
       </p>
-      <button className="primary wide" disabled={sending} onClick={onRetry}>
-        {sending ? 'Confirmando envío…' : 'Reintentar el mismo envío'}
-      </button>
+      <div className="cart-actions" style={{ marginTop: '16px' }}>
+        <button onClick={onCancel} disabled={sending}>
+          Cancelar y editar
+        </button>
+        <button className="primary" disabled={sending} onClick={onRetry}>
+          {sending ? 'Confirmando…' : 'Reintentar'}
+        </button>
+      </div>
     </div>
   )
 }

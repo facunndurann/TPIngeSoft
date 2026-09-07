@@ -94,9 +94,11 @@ export function Toggle({
 export function Badge({
   children,
   color = 'neutral',
+  className = '',
 }: {
   children: ReactNode
   color?: 'neutral' | 'green' | 'red' | 'indigo' | 'amber'
+  className?: string
 }) {
   const colors = {
     neutral: 'bg-neutral-100 text-neutral-700',
@@ -106,7 +108,7 @@ export function Badge({
     amber: 'bg-amber-100 text-amber-800',
   }
   return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${colors[color]}`}>
+    <span className={`inline-flex items-center justify-center text-center rounded-xl px-2 py-1 text-[11px] leading-tight font-medium ${colors[color]} ${className}`}>
       {children}
     </span>
   )

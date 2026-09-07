@@ -46,14 +46,14 @@ export function OrderTicket({
   return (
     <article className="rounded-xl border border-neutral-200 bg-white p-3 shadow-sm flex flex-col">
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-neutral-900">{table.label}</p>
-          <p className="truncate text-xs text-neutral-500">
+        <div className="flex-1">
+          <p className="text-sm font-semibold text-neutral-900 break-words">{table.label}</p>
+          <p className="text-xs text-neutral-500 break-words">
             {branch ? `${branch} · ` : ''}
             {submitter} · {formatElapsed(order.created_at, now)}
           </p>
         </div>
-        <Badge color={order.status === 'submitted' ? 'amber' : 'indigo'}>
+        <Badge color={order.status === 'submitted' ? 'amber' : 'indigo'} className="max-w-[85px] shrink-0">
           {orderStatusLabels[order.status]}
         </Badge>
       </div>

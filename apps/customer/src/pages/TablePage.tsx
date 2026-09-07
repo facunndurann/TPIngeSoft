@@ -213,11 +213,15 @@ function DesignedTable({
 
       <TableNav token={token} cartCount={cartCount} />
 
-      {announcement && (
-        <p className="success-notice" role="status">
-          {announcement}
-        </p>
-      )}
+      <div className="toast-container">
+        {announcement && (
+          <Toast
+            key={announcement}
+            message={announcement}
+            onClose={() => setAnnouncement('')}
+          />
+        )}
+      </div>
 
       {section !== 'orders' && menu.isPending && <p role="status">Cargando la carta…</p>}
       {section !== 'orders' && menu.isError && (
@@ -396,4 +400,22 @@ export function TableOrdersPage() {
 export function TableCatchAll() {
   const { token = '' } = useParams()
   return <Navigate to={tableRoot(token)} replace />
+}
+
+function Toast({ message, onClose }: { message: string; onClose: () => void }) {
+  const [hiding, setHiding] = useState(false)
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setHiding(true)
+      setTimeout(onClose, 300)
+    }, 3000)
+    return () => clearTimeout(timer)
+  }, [onClose])
+
+  return (
+    <div className={`toast ${hiding ? 'hiding' : ''}`} role="status">
+      {message}
+    </div>
+  )
 }

@@ -35,8 +35,8 @@ export function ProductEditPage() {
   const [foodInfo, setFoodInfo] = useState('')
   const [dietaryTags, setDietaryTags] = useState<string[]>([])
   const [isAvailable, setIsAvailable] = useState(true)
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null)
-  const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [mediaUrls, setMediaUrls] = useState<string[]>([])
+  const [mediaFiles, setMediaFiles] = useState<File[]>([])
   const [ingredients, setIngredients] = useState<IngredientDraft[]>([])
   const [removedIngredientIds, setRemovedIngredientIds] = useState<string[]>([])
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([])
@@ -93,7 +93,8 @@ export function ProductEditPage() {
     setFoodInfo(existing.food_info ?? '')
     setDietaryTags(existing.dietary_tags)
     setIsAvailable(existing.is_available)
-    setPhotoUrl(existing.photo_url)
+    setMediaUrls(existing.photo_url ? existing.photo_url.split(',') : [])
+    setMediaFiles([])
     setIngredients(
       [...existing.product_ingredients]
         .sort((a, b) => a.sort_order - b.sort_order)
@@ -139,16 +140,18 @@ export function ProductEditPage() {
     setSaving(true)
     try {
       // 1. Foto: subir si hay archivo nuevo
-      let finalPhotoUrl = photoUrl
-      if (photoFile) {
-        const extension = photoFile.name.split('.').pop() ?? 'jpg'
+      const uploadedUrls: string[] = []
+      for (const file of mediaFiles) {
+        const extension = file.name.split('.').pop() ?? 'jpg'
         const path = `${restaurant.id}/${crypto.randomUUID()}.${extension}`
         const { error: upErr } = await supabase.storage
           .from('product-images')
-          .upload(path, photoFile)
+          .upload(path, file)
         if (upErr) throw upErr
-        finalPhotoUrl = supabase.storage.from('product-images').getPublicUrl(path).data.publicUrl
+        uploadedUrls.push(supabase.storage.from('product-images').getPublicUrl(path).data.publicUrl)
       }
+      
+      const finalPhotoUrl = [...mediaUrls, ...uploadedUrls].join(',') || null
 
       // 2. Producto
       const productData = {
@@ -318,52 +321,81 @@ export function ProductEditPage() {
       </section>
 
       <section className="space-y-3 rounded-xl border border-neutral-200 bg-white p-5">
-        <h2 className="font-semibold text-neutral-900">Fotografía o video</h2>
-        <div className="flex items-center gap-4">
-          {(photoFile || photoUrl) && (
-            (() => {
-              const src = photoFile ? URL.createObjectURL(photoFile) : photoUrl!
-              const isVideo = photoFile 
-                ? photoFile.type.startsWith('video/') 
-                : src.match(/\.(mp4|webm|ogg|mov)$/i)
-              
-              return isVideo ? (
-                <video
-                  src={src}
-                  className="h-24 w-24 rounded-lg object-cover bg-black"
-                  autoPlay
-                  muted
-                  loop
-                  playsInline
-                />
-              ) : (
-                <img
-                  src={src}
-                  alt="Vista previa"
-                  className="h-24 w-24 rounded-lg object-cover"
-                />
-              )
-            })()
-          )}
-          <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-neutral-300 px-4 py-3 text-sm text-neutral-600 hover:bg-neutral-50">
-            <Upload size={16} />
-            {photoUrl || photoFile ? 'Cambiar archivo' : 'Subir archivo'}
-            <input
-              type="file"
-              accept="image/*,video/*"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0]
-                if (file && file.size > 7 * 1024 * 1024) {
-                  setError('El archivo es muy pesado. El límite es 7 MB para garantizar que la carta cargue rápido y no consuma los datos de tus clientes.')
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold text-neutral-900">Fotografía o video (máx 3)</h2>
+        </div>
+        <div className="flex flex-wrap items-center gap-4">
+          {[...mediaUrls, ...mediaFiles].map((media, index) => {
+            const isFile = media instanceof File
+            const src = isFile ? URL.createObjectURL(media) : (media as string)
+            const isVideo = isFile 
+              ? media.type.startsWith('video/') 
+              : src.match(/\.(mp4|webm|ogg|mov)$/i)
+            
+            return (
+              <div key={index} className="relative group">
+                {isVideo ? (
+                  <video
+                    src={src + "#t=0.001"}
+                    className="h-24 w-24 rounded-lg object-cover bg-black"
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                  />
+                ) : (
+                  <img
+                    src={src}
+                    alt={`Vista previa ${index + 1}`}
+                    className="h-24 w-24 rounded-lg object-cover"
+                  />
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isFile) {
+                      setMediaFiles(files => files.filter(f => f !== media))
+                    } else {
+                      setMediaUrls(urls => urls.filter(u => u !== media))
+                    }
+                  }}
+                  className="absolute -top-2 -right-2 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full bg-red-500 text-white shadow-sm hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                  aria-label="Quitar archivo"
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            )
+          })}
+          
+          {(mediaUrls.length + mediaFiles.length) < 3 && (
+            <label className="flex h-24 w-24 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-neutral-300 bg-neutral-50 text-neutral-500 hover:bg-neutral-100">
+              <Upload size={20} />
+              <span className="text-xs font-medium">Subir</span>
+              <input
+                type="file"
+                accept="image/*,video/*"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  const files = Array.from(e.target.files ?? [])
+                  const remainingSlots = 3 - (mediaUrls.length + mediaFiles.length)
+                  const filesToAdd = files.slice(0, remainingSlots)
+                  
+                  const oversized = filesToAdd.find(f => f.size > 7 * 1024 * 1024)
+                  if (oversized) {
+                    setError('Un archivo es muy pesado. El límite es 7 MB para garantizar que la carta cargue rápido.')
+                    e.target.value = ''
+                    return
+                  }
+                  
+                  setError(null)
+                  setMediaFiles(prev => [...prev, ...filesToAdd])
                   e.target.value = ''
-                  return
-                }
-                setError(null)
-                setPhotoFile(file ?? null)
-              }}
-            />
-          </label>
+                }}
+              />
+            </label>
+          )}
         </div>
       </section>
 

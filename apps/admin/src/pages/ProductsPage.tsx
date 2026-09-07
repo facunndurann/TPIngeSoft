@@ -116,22 +116,25 @@ export function ProductsPage() {
                       className="flex items-center gap-3 rounded-xl border border-neutral-200 bg-white p-3"
                     >
                       {product.photo_url ? (
-                        product.photo_url.match(/\.(mp4|webm|ogg|mov)$/i) ? (
-                          <video
-                            src={product.photo_url}
-                            className="h-14 w-14 rounded-lg object-cover bg-black"
-                            autoPlay
-                            muted
-                            loop
-                            playsInline
-                          />
-                        ) : (
-                          <img
-                            src={product.photo_url}
-                            alt={product.name}
-                            className="h-14 w-14 rounded-lg object-cover"
-                          />
-                        )
+                        (() => {
+                          const firstUrl = product.photo_url.split(',')[0]
+                          return firstUrl.match(/\.(mp4|webm|ogg|mov)$/i) ? (
+                            <video
+                              src={firstUrl + "#t=0.001"}
+                              className="h-14 w-14 rounded-lg object-cover bg-black flex-shrink-0"
+                              autoPlay
+                              muted
+                              loop
+                              playsInline
+                            />
+                          ) : (
+                            <img
+                              src={firstUrl}
+                              alt={product.name}
+                              className="h-14 w-14 rounded-lg object-cover flex-shrink-0"
+                            />
+                          )
+                        })()
                       ) : (
                         <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-neutral-100 text-neutral-400">
                           <ImageOff size={18} />
