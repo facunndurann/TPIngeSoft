@@ -1,538 +1,359 @@
-# Sprint 2 - Guia secuencial para integrantes y agentes IA
-
-Este documento es el punto de entrada operativo para continuar el repo sin perder contexto. Esta pensado para que cualquier integrante del equipo, o su agente IA, pueda leerlo y ejecutar pasos en orden.
-
-## 0. Contexto rapido
-
-Producto: plataforma web multi-restaurante de autoservicio por QR para consultar menu, personalizar platos, hacer pedidos grupales, operar comandas en POS propio y pagar total o dividido.
-
-Documentos fuente que hay que leer antes de tocar codigo:
-
-1. `README.md`
-2. `docs/plataforma_autoservicio_restaurantes.plan.md`
-3. `docs/SETUP.md`
-4. `docs/DEPLOY.md`
-5. `Plataforma_Restaurantes.pdf`
-
-Estado actual del repo:
-
-- Fase 0 completa: monorepo, apps Vite, Supabase local y CI.
-- Fase 1 completa: schema, RLS, seed y tipos.
-- Fase 2 completa: panel admin con auth, mesas, QR, categorias, productos, ingredientes y modificadores.
-- Fase 3 completa: app comensal, menu, personalizacion, carrito y sesion compartida.
-- Fase 4 completa: pedidos, validacion server-side, estados, realtime y cuenta.
-- Fase 5 completa: POS propio en admin, tablero realtime, mesas activas, cierre manual e historial.
-- Fase 6 pendiente: menu inteligente con LLM.
-- Fase 7 pendiente: pagos con Mercado Pago sandbox y division de cuenta.
-- Fase 8 pendiente: pulido, disponibilidad en cascada, UX mobile, documentacion y demo.
-
-Sprint 2 debe completar las fases pendientes sin romper lo ya validado.
-
-## 1. Reglas de trabajo
-
-1. Trabajar siempre desde la raiz del repo.
-2. Crear una rama por bloque, por ejemplo `sprint2/smart-menu`, `sprint2/payments` o `sprint2/polish`.
-3. Antes de editar, revisar los archivos involucrados y respetar patrones existentes.
-4. No cambiar migraciones ya aplicadas salvo que sea imprescindible. Para cambios de DB, crear una nueva migracion en `supabase/migrations/`.
-5. No hardcodear datos de un restaurante demo. Todo debe funcionar para cualquier restaurante.
-6. Mantener separadas estas responsabilidades:
-   - customer: experiencia del comensal.
-   - admin: panel, POS y configuracion.
-   - shared: contratos, tipos, schemas y calculos reutilizables.
-   - supabase/functions: logica sensible de servidor.
-   - supabase/migrations: schema, RLS, RPCs y vistas.
-7. Todo flujo sensible debe validar en servidor. El navegador nunca decide precios finales, permisos, disponibilidad ni pagos aprobados.
-8. Cada bloque termina con pruebas y una nota breve en README o docs si cambia el flujo.
-
-Comandos base:
-
-```bash
-pnpm install
-pnpm supabase start
-pnpm supabase db reset
-pnpm dev:functions
-pnpm dev:customer
-pnpm dev:admin
-```
-
-Verificacion minima antes de abrir PR:
-
-```bash
-pnpm --filter customer test
-pnpm test:orders
-pnpm typecheck
-pnpm lint
-pnpm build
-```
-
-Si el bloque toca DB/POS/pedidos, agregar:
-
-```bash
-pnpm test:orders:integration
-docker exec -i supabase_db_TP psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/tests/orders.sql
-docker exec -i supabase_db_TP psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/tests/pos.sql
-```
-
-## 2. Orden obligatorio del Sprint 2
-
-Ejecutar los bloques en este orden. No empezar un bloque que dependa de otro hasta que el anterior compile y tenga pruebas basicas pasando.
-
-1. Preparacion y auditoria.
-2. Menu inteligente: contratos y datos.
-3. Menu inteligente: edge function `recommend`.
-4. Menu inteligente: UI en customer.
-5. Pagos: schema, estados y contratos.
-6. Pagos: funciones Supabase y Mercado Pago sandbox.
-7. Pagos: UI de pago total/dividido.
-8. Pulido: disponibilidad en cascada, errores, responsive y demo.
-9. Documentacion final y recorrido de aceptacion.
-
-## 3. Bloque 1 - Preparacion y auditoria
-
-Objetivo: confirmar que el entorno local esta sano antes de sumar funcionalidad.
-
-Pasos:
-
-1. Leer los documentos fuente listados en la seccion 0.
-2. Correr `pnpm install`.
-3. Levantar Supabase con `pnpm supabase start`.
-4. Resetear datos locales con `pnpm supabase db reset`.
-5. Correr:
-
-```bash
-pnpm --filter customer test
-pnpm test:orders
-pnpm typecheck
-pnpm lint
-pnpm build
-```
-
-6. Registrar en la PR cualquier falla previa al cambio. No mezclar arreglos ajenos al bloque salvo que impidan avanzar.
-
-Criterio de listo:
-
-- El proyecto compila antes de implementar Sprint 2.
-- El agente conoce las rutas principales:
-  - `apps/customer/src/features`
-  - `apps/admin/src/features`
-  - `packages/shared/src`
-  - `supabase/functions`
-  - `supabase/migrations`
-  - `supabase/tests`
-
-## 4. Bloque 2 - Menu inteligente: contratos y datos
-
-Objetivo: definir un contrato compartido para pedir recomendaciones sin que el LLM pueda inventar productos, precios ni modificadores.
-
-Archivos probables:
-
-- `packages/shared/src/schemas.ts`
-- `packages/shared/src/pricing.ts`
-- `packages/shared/src/index.ts`
-- `packages/shared/src/database.types.ts`
-- Nueva migracion si hace falta persistir preferencias, logs o resultados.
-
-Pasos:
-
-1. Definir el input del recomendador:
-   - `sessionId`
-   - cantidad de personas
-   - presupuesto total o por persona
-   - preferencias de comida
-   - restricciones alimentarias
-   - alergias o ingredientes a evitar
-   - intencion de compartir
-   - notas libres acotadas
-2. Definir el output esperado:
-   - 3 propuestas: economica, variada y para compartir.
-   - items con `productId`, cantidad, modificadores permitidos, ingredientes removidos permitidos y motivo breve.
-   - total estimado y total por persona.
-3. Crear schemas Zod compartidos para input/output.
-4. Asegurar que el output no acepte nombres libres como fuente de verdad. Debe referenciar IDs existentes.
-5. Si se persisten logs, crear tabla con RLS segura. No guardar datos sensibles innecesarios.
-6. Exportar los schemas desde `packages/shared/src/index.ts`.
-
-Criterio de listo:
-
-- Hay schemas compartidos.
-- Los tipos impiden outputs ambiguos.
-- No se agrego logica especifica para restaurantes demo.
-
-## 5. Bloque 3 - Menu inteligente: edge function `recommend`
-
-Objetivo: crear una Edge Function que use el menu real disponible, consulte un LLM y valide estrictamente la respuesta contra la DB.
-
-Archivos probables:
-
-- `supabase/functions/recommend/index.ts`
-- `supabase/functions/recommend/handler.ts`
-- `supabase/functions/_shared/errors.ts`
-- `supabase/functions/_shared`
-- `supabase/functions/deno.json`
-- `package.json`
-
-Pasos:
-
-1. Crear la funcion `recommend` siguiendo el estilo de `submit-order`.
-2. Autenticar al comensal con JWT.
-3. Validar que el usuario pertenece a la sesion de mesa.
-4. Leer solo menu disponible del restaurante/sucursal de la sesion:
-   - productos activos
-   - categorias activas
-   - ingredientes disponibles
-   - modificadores y opciones disponibles
-   - precios reales
-5. Construir un JSON compacto para el LLM.
-6. Pedir exactamente 3 propuestas con salida JSON estructurada.
-7. Validar respuesta contra Zod y contra DB:
-   - IDs existentes
-   - producto disponible
-   - reglas min/max de modificadores
-   - ingredientes removibles
-   - presupuesto
-   - precios calculados por servidor
-8. Si una propuesta no valida, descartarla o reintentar una vez.
-9. Devolver propuestas normalizadas, nunca texto crudo del LLM como fuente de verdad.
-10. Agregar tests unitarios del handler cuando sea posible.
-
-Variables esperadas:
-
-```bash
-OPENAI_API_KEY=<solo en entorno de funcion>
-```
-
-Notas:
-
-- No colocar claves en `.env` de frontend.
-- En local, usar secretos de Supabase o variables del proceso de `functions serve`.
-- Si no hay clave LLM, la funcion debe devolver error claro y la UI debe permitir seguir usando menu tradicional.
-
-Criterio de listo:
-
-- La funcion compila con `pnpm typecheck`.
-- Rechaza productos inventados.
-- Rechaza modificaciones no permitidas.
-- Nunca reemplaza el menu tradicional.
-
-## 6. Bloque 4 - Menu inteligente: UI en customer
-
-Objetivo: sumar una experiencia asistida en la app del comensal que termine en carrito editable.
-
-Archivos probables:
-
-- `apps/customer/src/features/MenuShell.tsx`
-- `apps/customer/src/features/MenuBrowse.tsx`
-- `apps/customer/src/features/CartPanel.tsx`
-- Nuevos archivos bajo `apps/customer/src/features/smart-menu`
-- `apps/customer/src/features/orders-api.ts` o archivo API nuevo.
-- `apps/customer/src/stores/cart.ts`
-
-Pasos:
-
-1. Agregar entrada visible desde la experiencia de mesa, sin bloquear el menu tradicional.
-2. Crear wizard mobile-first:
-   - cantidad de personas
-   - presupuesto
-   - preferencias
-   - restricciones
-   - compartir si/no
-3. Llamar a `recommend`.
-4. Mostrar 3 propuestas comparables:
-   - economica
-   - variada
-   - para compartir
-5. Permitir revisar cada propuesta antes de agregar.
-6. Convertir items recomendados a items de carrito usando las mismas reglas existentes.
-7. Permitir editar, quitar o personalizar productos despues de aceptar propuesta.
-8. Manejar errores:
-   - sin clave LLM
-   - sin productos disponibles
-   - presupuesto imposible
-   - respuesta invalida
-   - sesion cerrada
-9. Agregar pruebas de transformacion recomendacion -> carrito si existe patron de tests.
-
-Criterio de listo:
-
-- Un comensal puede pedir recomendaciones y agregarlas al carrito.
-- El carrito sigue editable.
-- La UI no impide navegar el menu tradicional.
-- Funciona en viewport movil.
-
-## 7. Bloque 5 - Pagos: schema, estados y contratos
-
-Objetivo: completar el modelo de pagos para total y division sin mezclar pedido, cuenta y pago.
-
-Archivos probables:
-
-- Nueva migracion en `supabase/migrations/`
-- `packages/shared/src/schemas.ts`
-- `packages/shared/src/orders.ts`
-- `packages/shared/src/pricing.ts`
-- `supabase/tests/orders.sql`
-- `supabase/tests/pos.sql`
-
-Pasos:
-
-1. Auditar tabla `payments` existente y vista `session_bills`.
-2. Definir modos de pago:
-   - total de la cuenta
-   - mi consumo
-   - partes iguales
-   - monto custom
-3. Crear contratos compartidos para iniciar pago.
-4. Crear o ajustar RPCs/vistas para calcular monto en servidor.
-5. Asegurar RLS:
-   - participantes ven pagos de su sesion.
-   - admins ven pagos de su restaurante.
-   - nadie aprueba pagos desde navegador.
-6. Definir estados:
-   - `pending`
-   - `approved`
-   - `rejected`
-   - `cancelled`
-   - `expired`
-7. Asegurar que la cuenta se salda solo con pagos `approved`.
-8. Definir cierre automatico de sesion cuando:
-   - hay consumo positivo
-   - saldo pendiente es cero
-   - no hay pedidos por confirmar
-   - no hay pedidos activos que deban bloquear cierre, si asi queda definido por el equipo
-
-Criterio de listo:
-
-- El monto se calcula en DB/servidor.
-- El cliente no puede modificar el saldo.
-- Las pruebas SQL cubren saldos, pagos aprobados/rechazados y aislamiento.
-
-## 8. Bloque 6 - Pagos: funciones Supabase y Mercado Pago sandbox
-
-Objetivo: integrar Mercado Pago sin acoplar la logica del dominio al proveedor.
-
-Archivos probables:
-
-- `supabase/functions/create-payment/index.ts`
-- `supabase/functions/create-payment/handler.ts`
-- `supabase/functions/mp-webhook/index.ts`
-- `supabase/functions/mp-webhook/handler.ts`
-- `supabase/functions/_shared`
-- `docs/SETUP.md`
-- `docs/DEPLOY.md`
-
-Pasos:
-
-1. Crear `create-payment`.
-2. Autenticar al participante.
-3. Recibir modo de pago y parametros minimos.
-4. Calcular monto server-side.
-5. Crear preferencia en Mercado Pago sandbox.
-6. Persistir pago `pending` con referencia externa.
-7. Devolver URL/ID de checkout.
-8. Crear `mp-webhook`.
-9. Verificar firma o mecanismo recomendado por Mercado Pago.
-10. Consultar el pago al proveedor si el webhook trae solo notificacion.
-11. Actualizar pago segun estado real.
-12. Si queda saldo cero, cerrar sesion automaticamente mediante RPC segura.
-13. Agregar logs suficientes para depurar sin exponer secretos.
-
-Variables esperadas:
-
-```bash
-MP_ACCESS_TOKEN=<sandbox access token>
-MP_WEBHOOK_SECRET=<si aplica al mecanismo elegido>
-PUBLIC_CUSTOMER_URL=<url app customer>
-```
-
-Criterio de listo:
-
-- Se puede crear una preferencia sandbox.
-- El webhook actualiza estado.
-- Un pago rechazado no descuenta saldo.
-- Un pago aprobado descuenta saldo.
-- La sesion puede cerrarse automaticamente cuando corresponde.
-
-## 9. Bloque 7 - Pagos: UI de pago total/dividido
-
-Objetivo: permitir que la mesa pague desde la app del comensal viendo claramente consumo, pendiente y division.
-
-Archivos probables:
-
-- `apps/customer/src/features/SessionOrders.tsx`
-- `apps/customer/src/features/SessionPanel.tsx`
-- Nuevos archivos bajo `apps/customer/src/features/payments`
-- `apps/customer/src/features/orders-api.ts` o API nueva.
-
-Pasos:
-
-1. Agregar accion de pagar desde "Pedidos y cuenta".
-2. Mostrar:
-   - total consumido
-   - pagado
-   - pendiente
-   - pedidos por participante
-   - productos compartidos
-3. Ofrecer modos:
-   - pagar todo
-   - pagar mi consumo
-   - dividir partes iguales
-   - monto custom
-4. Antes de crear checkout, mostrar resumen confirmable.
-5. Llamar a `create-payment`.
-6. Redirigir a Mercado Pago sandbox o abrir checkout segun integracion elegida.
-7. Al volver, refrescar cuenta.
-8. Mostrar estados pendientes/aprobados/rechazados.
-9. Si la sesion se cierra por pago completo, bloquear nuevos pedidos y ofrecer iniciar nueva sesion al reescanear.
-
-Criterio de listo:
-
-- El comensal entiende que esta pagando.
-- Los montos coinciden con `session_bills`.
-- No se puede pagar una sesion cerrada.
-- No se puede pagar mas que el saldo pendiente salvo decision explicita del equipo.
-
-## 10. Bloque 8 - Pulido funcional y UX
-
-Objetivo: cerrar deuda visible y reforzar demo.
-
-Prioridades:
-
-1. Disponibilidad en cascada:
-   - producto no disponible no aparece para pedir.
-   - modificador no disponible no se puede elegir.
-   - ingrediente agotado invalida o avisa segun corresponda.
-   - recomendador no usa nada no disponible.
-2. Estados de error claros:
-   - sesion cerrada
-   - producto cambio de precio
-   - modificador ya no disponible
-   - fallo de Edge Function
-   - fallo de pago
-3. Mobile:
-   - revisar QR -> menu -> producto -> carrito -> pedido -> cuenta -> pago.
-   - evitar textos cortados y overflow horizontal.
-4. Admin:
-   - POS sigue actualizando realtime.
-   - mesas activas reflejan pagos.
-   - historial no se contamina entre restaurantes.
-5. Accesibilidad basica:
-   - botones con labels claros.
-   - foco visible.
-   - formularios con errores legibles.
-
-Criterio de listo:
-
-- Demo completa sin errores de consola importantes.
-- No hay overflow horizontal en mobile.
-- La experiencia tradicional sigue funcionando aunque fallen LLM o pagos.
-
-## 11. Bloque 9 - Documentacion final
-
-Objetivo: dejar instrucciones para que otro equipo pueda correr, probar y presentar Sprint 2.
-
-Actualizar:
-
-1. `README.md`
-   - estado de fases 6, 7 y 8.
-   - que se puede probar hoy.
-   - comandos nuevos.
-2. `docs/SETUP.md`
-   - como configurar `OPENAI_API_KEY`.
-   - como configurar Mercado Pago sandbox.
-   - recorrido de aceptacion de menu inteligente.
-   - recorrido de aceptacion de pagos.
-3. `docs/DEPLOY.md`
-   - secrets de Supabase Functions.
-   - deploy de funciones nuevas.
-   - variables de Vercel si aparecen.
-4. Este `sprint2.md`
-   - marcar bloques completados o anotar decisiones importantes.
-
-Criterio de listo:
-
-- Un integrante nuevo puede levantar el proyecto y ejecutar la demo siguiendo docs.
-- Las variables sensibles estan documentadas pero no commiteadas.
-- Quedan claros los pendientes reales.
-
-## 12. Checklist final del Sprint 2
-
-Antes de mergear el sprint completo:
+# Sprint 2 - Historias de Jira
+
+Fuente: Jira, proyecto `MI` ("Menu Interactivo"), sprint `MI Sprint 2`.
+
+Este sprint no apunta a menu inteligente. El alcance real esta dividido en dos bloques:
+
+1. Beeper digital y modalidad auto-servicio.
+2. Gestion de pagos, pedido de cuenta y division de cuenta.
+
+## Historias incluidas
+
+### Beeper / Auto-servicio
+
+- `MI-16` - Como comensal, quiero ver en mi celular el estado en vivo de mi pedido y recibir alertas del beeper digital, para saber cuando acercarme a retirar mi comida sin esperar de pie. `5 pts`
+- `MI-20` - Como administrador del restaurante, quiero habilitar o deshabilitar la modalidad "Beeper / Auto-servicio" por local o sector, para adaptar el sistema al modelo operativo de mi negocio. `3 pts`
+- `MI-17` - Como personal de cocina/barra, quiero marcar un pedido como "Listo para retirar" con un clic, para hacer sonar el beeper en el celular del comensal y despejar la barra. `3 pts`
+- `MI-18` - Como personal de mostrador/barra, quiero reenviar la alerta sonora del beeper a pedidos demorados, para evitar que la comida se enfrie en el mostrador. `2 pts`
+- `MI-19` - Como personal de mostrador, quiero confirmar la entrega del pedido verificando el numero de orden, para cerrar el ciclo de la comanda y apagar la alerta en el cliente. `2 pts`
+
+### Gestion de pagos
+
+- `MI-38` - Como comensal, quiero pedir la cuenta desde la aplicacion, para avisarle al restaurante que ya estoy listo para pagar. `3 pts`
+- `MI-40` - Como comensal, quiero pagar desde el celular con un medio electronico, para cerrar la cuenta sin depender de un mozo. `8 pts`
+- `MI-41` - Como comensal, quiero que la cuenta se pueda dividir por cantidad de personas, para repartir el total en partes iguales. `5 pts`
+- `MI-42` - Como comensal, quiero dividir la cuenta por items seleccionados, para que cada persona pague solo lo que consumio. `8 pts`
+- `MI-43` - Como comensal, quiero dividir la cuenta con un porcentaje o ratio arbitrario, para repartir el total de manera flexible segun lo acordado por la mesa. `5 pts`
+- `MI-46` - Como comensal, quiero poder pedir que venga un mozo a cobrarme, para pagar en forma presencial si no quiero hacerlo por celular. `3 pts`
+- `MI-47` - Como mozo, quiero ver las mesas que solicitaron cobro presencial, para acercarme a cobrar sin perder pedidos. `5 pts`
+- `MI-48` - Como administrador, quiero definir que medios de pago estan habilitados por local, para ofrecer solo las opciones compatibles con mi operacion. `3 pts`
+- `MI-49` - Como administrador, quiero registrar el estado de los pagos y su relacion con la cuenta de la mesa, para saber que esta saldado y que sigue pendiente. `5 pts`
+
+## Orden sugerido de implementacion
+
+1. Configuracion operativa por local/sector:
+   - `MI-20`: activar/desactivar modo Beeper / Auto-servicio.
+   - `MI-48`: definir medios de pago habilitados por local.
+2. Beeper digital:
+   - `MI-17`: accion del personal para marcar "Listo para retirar".
+   - `MI-16`: alerta visual/sonora/vibracion en el celular del comensal.
+   - `MI-18`: re-llamado para pedidos demorados.
+   - `MI-19`: confirmacion de entrega y apagado de alerta.
+3. Pedido de cuenta y cobro presencial:
+   - `MI-38`: pedir la cuenta desde customer.
+   - `MI-46`: pedir que venga un mozo a cobrar.
+   - `MI-47`: vista del mozo/admin con mesas que solicitaron cobro presencial.
+4. Pagos electronicos:
+   - `MI-49`: registrar pagos y relacionarlos con cuenta/sesion.
+   - `MI-40`: pagar desde el celular.
+5. Division de cuenta:
+   - `MI-41`: division por cantidad de personas.
+   - `MI-42`: division por items seleccionados.
+   - `MI-43`: division por porcentaje o ratio arbitrario.
+
+## 1. Configuracion de Beeper / Auto-servicio (`MI-20`)
+
+Objetivo: permitir que el admin active o desactive el modo auto-servicio por local o sector.
+
+Hacer:
+
+1. Agregar configuracion para modo `Beeper / Auto-servicio`.
+2. Exponerla en el panel admin, probablemente en configuracion del restaurante/sucursal.
+3. Hacer que customer y POS lean esa configuracion.
+4. Si esta activo:
+   - mostrar numero de retiro/comanda al comensal.
+   - activar ciclo de alertas cuando el pedido este listo.
+5. Si esta desactivado:
+   - mantener flujo tradicional de servicio a mesa.
+   - no disparar beeper ni avisos de retiro.
+
+Criterios de aceptacion de Jira:
+
+- Si el admin activa "Modo Auto-servicio / Beeper", la webapp del comensal asigna un numero de retiro visible y activa avisos sonoros/visuales.
+- Si esta desactivado, el sistema opera en modo servicio a mesa tradicional.
+
+## 2. Estado en vivo y alerta de beeper (`MI-16`)
+
+Objetivo: que el comensal vea el estado en vivo del pedido y reciba alerta cuando este listo.
+
+Hacer:
+
+1. Reusar el realtime existente de pedidos.
+2. Mostrar estado claro del pedido en customer.
+3. Cuando el pedido pase a "Listo para retirar" o equivalente:
+   - mostrar alerta visual llamativa.
+   - reproducir sonido continuo o intermitente.
+   - activar vibracion si el navegador lo permite.
+   - mostrar numero de comanda/retiro y punto de retiro.
+4. Agregar accion "Entendido / Voy a retirar".
+5. Al confirmar:
+   - silenciar sonido.
+   - dejar visible numero de comanda y punto de retiro.
+6. Evaluar notificacion del navegador si la pestaña esta en segundo plano.
+
+Criterios de aceptacion de Jira:
+
+- Al pasar a "Listo para retirar", el celular muestra alerta visual, reproduce tono y vibra.
+- Al presionar "Entendido / Voy a retirar", se silencia y muestra numero de comanda y punto de retiro.
+- Si la pantalla esta bloqueada o cambia de pestaña, debe recibir push o aviso del navegador.
+
+## 3. Marcar pedido como listo (`MI-17`)
+
+Objetivo: que cocina/barra pueda llamar al comensal con un clic.
+
+Hacer:
+
+1. En POS/admin, agregar accion "Llamar comensal" o "Listo para retirar".
+2. Al presionar, cambiar el estado del pedido a "Esperando retiro" o equivalente.
+3. Disparar evento realtime que active el beeper en customer.
+4. Mostrar contador de minutos desde que se llamo al comensal.
+
+Criterios de aceptacion de Jira:
+
+- Al presionar "Llamar Comensal / Listo", el pedido cambia a "Esperando Retiro".
+- El comensal recibe alerta en tiempo real.
+- El panel muestra contador con minutos transcurridos desde la llamada.
+
+## 4. Re-llamar pedido demorado (`MI-18`)
+
+Objetivo: permitir reactivar la alerta cuando un pedido listo no fue retirado.
+
+Hacer:
+
+1. Detectar pedidos en "Esperando retiro" hace mas de X minutos.
+2. Mostrar accion "Re-llamar" en POS/admin.
+3. Al presionar, volver a disparar sonido/vibracion/alerta en customer.
+4. Registrar cantidad de re-llamados del pedido.
+5. Mostrar ese conteo en el panel para auditoria.
+
+Criterios de aceptacion de Jira:
+
+- Si un pedido lleva mas de X minutos en "Esperando Retiro", el personal puede presionar "Re-llamar".
+- El celular del comensal vuelve a sonar y vibrar.
+- El sistema registra la cantidad de re-llamados.
+
+## 5. Confirmar entrega (`MI-19`)
+
+Objetivo: cerrar el ciclo de retiro verificando el numero de orden.
+
+Hacer:
+
+1. Mostrar numero de orden/comanda en customer.
+2. En POS/admin, permitir confirmar entrega.
+3. Idealmente pedir o mostrar verificacion del numero de orden antes de entregar.
+4. Al entregar:
+   - archivar o mover la comanda al estado final.
+   - apagar alerta en customer.
+   - mostrar mensaje final tipo "Buen provecho".
+
+Criterios de aceptacion de Jira:
+
+- Al presionar "Entregado", el pedido se archiva en KDS/POS.
+- La pantalla del comensal pasa a estado final.
+- Se desactiva sonido, vibracion o bloqueo visual de alerta.
+
+## 6. Pedir la cuenta (`MI-38`)
+
+Objetivo: que el comensal avise desde la app que quiere pagar.
+
+Hacer:
+
+1. Agregar accion "Pedir cuenta" en la vista de pedidos/cuenta.
+2. Registrar la solicitud asociada a la sesion de mesa.
+3. Reflejar esa solicitud en admin/POS o mesas activas.
+4. Evitar solicitudes duplicadas innecesarias.
+5. Mostrar estado al comensal: cuenta solicitada / esperando confirmacion / listo para pagar.
+
+Criterio de aceptacion:
+
+- El restaurante ve que la mesa pidio la cuenta.
+- El comensal ve que su solicitud fue registrada.
+
+## 7. Cobro presencial (`MI-46`, `MI-47`)
+
+Objetivo: permitir que el comensal pida pagar presencialmente y que el mozo vea esas mesas.
+
+Hacer:
+
+1. En customer, agregar opcion "Que venga un mozo a cobrarme".
+2. Registrar la solicitud con sesion, mesa, restaurante y timestamp.
+3. Mostrar confirmacion al comensal.
+4. En admin/POS, agregar vista o indicador de mesas que pidieron cobro presencial.
+5. Permitir marcar la solicitud como atendida.
+
+Criterio de aceptacion:
+
+- El comensal puede pedir cobro presencial.
+- El mozo/admin ve la mesa en una lista clara.
+- La solicitud no se mezcla con pedidos de comida ni con pagos electronicos.
+
+## 8. Medios de pago habilitados (`MI-48`)
+
+Objetivo: que el admin configure que formas de pago ofrece cada local.
+
+Hacer:
+
+1. Agregar configuracion de medios de pago por local/sucursal.
+2. Opciones minimas:
+   - electronico desde celular.
+   - presencial / mozo.
+   - efectivo o externo si aplica.
+3. Customer debe mostrar solo las opciones habilitadas.
+4. Admin debe poder cambiar esta configuracion.
+
+Criterio de aceptacion:
+
+- Cada local ofrece solo los medios de pago configurados.
+- Customer no muestra opciones deshabilitadas.
+
+## 9. Registro de pagos y relacion con cuenta (`MI-49`)
+
+Objetivo: saber que parte de la cuenta esta saldada y que sigue pendiente.
+
+Hacer:
+
+1. Revisar tabla/vista actual de `payments` y `session_bills`.
+2. Registrar pagos con:
+   - sesion de mesa.
+   - participante si corresponde.
+   - monto.
+   - estado.
+   - metodo.
+   - modo de division.
+   - referencia externa si hay proveedor.
+3. Hacer que la cuenta compute:
+   - total consumido.
+   - total pagado aprobado.
+   - pendiente.
+4. Asegurar que pagos rechazados o pendientes no descuenten saldo.
+5. Mostrar estado de pagos en admin y customer.
+
+Criterio de aceptacion:
+
+- Admin puede saber que esta saldado y que sigue pendiente.
+- La cuenta se calcula con pagos aprobados.
+
+## 10. Pago electronico desde el celular (`MI-40`)
+
+Objetivo: permitir pagar la cuenta con un medio electronico.
+
+Hacer:
+
+1. Crear flujo de pago desde customer.
+2. Calcular monto del lado servidor.
+3. Crear pago pendiente.
+4. Integrar proveedor sandbox si corresponde al alcance tecnico actual.
+5. Actualizar estado del pago cuando se aprueba/rechaza.
+6. Refrescar cuenta al volver del pago.
+
+Criterio de aceptacion:
+
+- El comensal puede iniciar un pago electronico.
+- El pago aprobado impacta en la cuenta.
+- El pago rechazado no salda nada.
+
+## 11. Division por cantidad de personas (`MI-41`)
+
+Objetivo: repartir el total en partes iguales.
+
+Hacer:
+
+1. En customer, ofrecer "Dividir en partes iguales".
+2. Permitir ingresar cantidad de personas.
+3. Calcular monto por persona.
+4. Registrar pagos parciales contra la misma sesion.
+5. Mostrar pendiente restante.
+
+Criterio de aceptacion:
+
+- La app calcula la parte correspondiente.
+- Varios pagos parciales reducen el saldo de la cuenta.
+
+## 12. Division por items (`MI-42`)
+
+Objetivo: que cada persona pague items concretos de la cuenta.
+
+Hacer:
+
+1. Mostrar pedidos/items de la sesion.
+2. Permitir seleccionar items o porciones de items compartidos si el modelo lo permite.
+3. Calcular subtotal de lo seleccionado.
+4. Crear pago por ese subtotal.
+5. Marcar o representar items ya cubiertos para evitar confusion.
+
+Criterio de aceptacion:
+
+- El comensal puede elegir que items paga.
+- El monto coincide con los items seleccionados.
+- La cuenta muestra que queda pendiente.
+
+## 13. Division por porcentaje o ratio (`MI-43`)
+
+Objetivo: permitir reparto flexible acordado por la mesa.
+
+Hacer:
+
+1. Agregar modo "Porcentaje / ratio".
+2. Permitir definir porcentaje o proporcion.
+3. Validar que el monto no exceda el saldo pendiente.
+4. Crear pago por el monto calculado.
+5. Mostrar resumen antes de confirmar.
+
+Criterio de aceptacion:
+
+- El comensal puede pagar una proporcion custom del total.
+- La app muestra claramente cuanto paga y cuanto queda pendiente.
+
+## Checklist final
+
+Comandos sugeridos:
 
 ```bash
 pnpm --filter customer test
 pnpm test:orders
 pnpm test:orders:integration
-docker exec -i supabase_db_TP psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/tests/orders.sql
-docker exec -i supabase_db_TP psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/tests/pos.sql
 pnpm typecheck
 pnpm lint
 pnpm build
+```
+
+Si se tocaron funciones SQL, RLS, pagos, pedidos o POS:
+
+```bash
+docker exec -i supabase_db_TP psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/tests/orders.sql
+docker exec -i supabase_db_TP psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/tests/pos.sql
 ```
 
 Recorrido manual minimo:
 
-1. Admin entra con `admin@esquina.demo` / `demo1234`.
-2. Comensal abre `http://localhost:5173/m/demo-burger-mesa-1`.
-3. Entra otro comensal en ventana privada.
-4. Ambos ven la misma sesion.
-5. Uno usa menu inteligente y agrega propuesta al carrito.
-6. Edita un item recomendado.
-7. Confirma pedido.
-8. Admin ve comanda en POS.
-9. Admin avanza estados hasta entregado.
-10. Comensal ve cuenta.
-11. Comensal inicia pago sandbox.
-12. Webhook aprueba pago o se simula aprobacion controlada.
-13. Cuenta queda saldada.
-14. Sesion se cierra o queda lista para cierre segun regla final.
-15. Otro restaurante demo no ve ni modifica la sesion.
+1. Activar modo Beeper / Auto-servicio desde admin.
+2. Entrar a una mesa desde customer.
+3. Enviar un pedido.
+4. Marcarlo como listo desde POS.
+5. Ver alerta en customer.
+6. Silenciar con "Entendido / Voy a retirar".
+7. Re-llamar desde POS.
+8. Confirmar entrega.
+9. Pedir la cuenta desde customer.
+10. Pedir cobro presencial y verlo en admin.
+11. Configurar medios de pago habilitados.
+12. Registrar o ejecutar pago electronico.
+13. Probar division en partes iguales.
+14. Probar division por items.
+15. Probar division por porcentaje/ratio.
+16. Verificar pendiente y pagado en customer y admin.
 
-## 13. Guia para agentes IA
+## Nota para agentes IA
 
-Cuando un agente IA tome una tarea:
-
-1. Leer este archivo completo.
-2. Leer los documentos fuente de la seccion 0.
-3. Identificar el bloque asignado.
-4. Revisar codigo existente antes de proponer cambios.
-5. Hacer cambios pequenos y coherentes con patrones actuales.
-6. Agregar o ajustar tests en el mismo bloque.
-7. Ejecutar la verificacion correspondiente.
-8. Reportar:
-   - archivos tocados
-   - comportamiento agregado
-   - pruebas ejecutadas
-   - riesgos o pendientes
-
-Formato recomendado de cierre para cada agente:
+Cuando un agente tome una historia, que cierre su trabajo con:
 
 ```md
-### Resultado bloque X
+### Resultado
+- Jira:
 - Archivos modificados:
-- Flujo implementado:
+- Que se implemento:
 - Pruebas ejecutadas:
-- Pendientes:
-- Notas para el siguiente bloque:
+- Pendientes o riesgos:
 ```
 
-## 14. Riesgos principales
-
-1. LLM inventando productos: se mitiga validando IDs y reglas contra DB.
-2. Pagos duplicados: se mitiga con idempotencia y referencias externas unicas.
-3. Cliente manipulando montos: se mitiga calculando todo en servidor.
-4. RLS incompleta: se mitiga con tests SQL por restaurante/sesion.
-5. Mezclar cierre de sesion con pago: se mitiga manteniendo separados pedidos, cuenta, pagos y sesion.
-6. Romper POS existente: se mitiga corriendo tests de pedidos/POS y recorrido manual.
-7. Dependencia dura de Mercado Pago u OpenAI: se mitiga aislando proveedores en functions/adaptadores.
-
-## 15. Definicion de terminado
-
-Sprint 2 se considera terminado cuando:
-
-- El menu inteligente genera 3 propuestas validas usando solo menu real disponible.
-- Las propuestas pueden agregarse al carrito y editarse.
-- La mesa puede pagar total o dividido con Mercado Pago sandbox.
-- Los pagos aprobados impactan la cuenta; rechazados no.
-- La sesion puede cerrarse al saldar o desde POS segun regla documentada.
-- El menu tradicional, carrito, pedidos y POS siguen funcionando.
-- README, SETUP y DEPLOY explican como correr y demostrar todo.
-- La checklist automatica y el recorrido manual pasan.
+Prioridad: implementar las historias de `MI Sprint 2` tal como estan en Jira. No agregar menu inteligente en este sprint salvo que Jira cambie.
