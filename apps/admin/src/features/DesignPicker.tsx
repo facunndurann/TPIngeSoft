@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react'
+import { useState } from 'react'
 import { Maximize2 } from 'lucide-react'
 import { MENU_DESIGNS, menuDesignCssVars, resolveMenuDesign } from '@restaurant-platform/shared'
 import { Modal } from '@/components/ui'
@@ -32,7 +32,7 @@ export function DesignPicker({ value, onChange }: DesignPickerProps) {
                   : 'border-neutral-200 hover:border-neutral-300'
               }`}
             >
-              <div className="p-2.5 relative" style={menuDesignCssVars(design.tokens) as CSSProperties}>
+              <div className="p-2.5 relative" style={menuDesignCssVars(design.tokens)}>
                 <div
                   className="rounded-lg p-3 relative overflow-hidden"
                   style={{
@@ -102,7 +102,7 @@ function MenuPreview({ design }: { design: MenuDesign }) {
   return (
     <div 
       className="rounded-xl overflow-hidden border border-neutral-200 mt-2"
-      style={menuDesignCssVars(design.tokens) as CSSProperties}
+      style={menuDesignCssVars(design.tokens)}
     >
       <div 
         className="p-5 sm:p-8"

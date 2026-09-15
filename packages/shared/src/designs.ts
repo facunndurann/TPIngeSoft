@@ -199,7 +199,10 @@ export function resolveMenuDesign(id: string | null | undefined): MenuDesign {
   return (id && designsById.get(id)) || designsById.get(DEFAULT_MENU_DESIGN)!
 }
 
-const tokenVarNames: Record<keyof MenuDesignTokens, string> = {
+/** Variables CSS de un diseño, listas para la prop `style` de React. */
+export type MenuDesignCssVars = Record<`--menu-${string}`, string>
+
+const tokenVarNames: Record<keyof MenuDesignTokens, keyof MenuDesignCssVars> = {
   bg: '--menu-bg',
   text: '--menu-text',
   accent: '--menu-accent',
@@ -231,8 +234,8 @@ const tokenVarNames: Record<keyof MenuDesignTokens, string> = {
   shadow: '--menu-shadow',
 }
 
-export function menuDesignCssVars(tokens: MenuDesignTokens): Record<string, string> {
-  const vars: Record<string, string> = {}
+export function menuDesignCssVars(tokens: MenuDesignTokens): MenuDesignCssVars {
+  const vars: MenuDesignCssVars = {}
   for (const key of Object.keys(tokenVarNames) as (keyof MenuDesignTokens)[]) {
     vars[tokenVarNames[key]] = tokens[key]
   }

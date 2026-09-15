@@ -1,6 +1,7 @@
 import { Link, useLocation, useSearchParams } from 'react-router'
 import { productMedia } from '@restaurant-platform/shared'
 import { MediaCarousel } from '@/features/MediaCarousel'
+import { useMenuDesign } from '@/features/menu-design'
 import { matchesSearch, money } from '@/features/menu'
 import type { Menu, Product } from '@/features/menu'
 import { menuPath, parseMenuFilters, productPath } from '@/features/table-paths'
@@ -9,11 +10,10 @@ type MenuBrowseProps = {
   token: string
   menu: Menu
   canEdit: boolean
-  heading: string
-  title: string
 }
 
-export function MenuBrowse({ token, menu, canEdit, heading, title }: MenuBrowseProps) {
+export function MenuBrowse({ token, menu, canEdit }: MenuBrowseProps) {
+  const { copy } = useMenuDesign()
   const { search: locationSearch } = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const { category, search } = parseMenuFilters(searchParams)
@@ -31,8 +31,8 @@ export function MenuBrowse({ token, menu, canEdit, heading, title }: MenuBrowseP
     <>
       <div className="menu-heading">
         <div>
-          <p className="eyebrow">{heading}</p>
-          <h2>{title}</h2>
+          <p className="eyebrow">{copy.menu}</p>
+          <h2>{copy.menuTitle}</h2>
         </div>
         <label className="sr-only" htmlFor="search">
           Buscar platos

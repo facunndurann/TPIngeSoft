@@ -190,15 +190,17 @@ test('resolveMenuDesign returns catalog entries and falls back to oliva', () => 
 test('MenuShell paints catalog tokens, layout and copy for each design', async () => {
   const { createElement } = await import('react')
   const { renderToStaticMarkup } = await import('react-dom/server')
-  const { MenuDesignProvider, MenuShell } = await import('../src/features/MenuShell')
+  const { MenuShell } = await import('../src/features/MenuShell')
+  const { MenuDesignContext } = await import('../src/features/menu-design')
   const { TableHeader } = await import('../src/features/TableHeader')
 
   for (const id of ['oliva', 'brasas', 'linterna'] as const) {
     const design = resolveMenuDesign(id)
+    // TableHeader no recibe el texto por props: tiene que leerlo del contexto.
     const html = renderToStaticMarkup(
       createElement(
-        MenuDesignProvider,
-        { designId: id },
+        MenuDesignContext,
+        { value: design },
         createElement(
           MenuShell,
           null,
@@ -206,7 +208,6 @@ test('MenuShell paints catalog tokens, layout and copy for each design', async (
             restaurantName: 'Demo',
             branchName: 'Casa',
             tableLabel: 'Mesa 1',
-            welcome: design.copy.welcome,
           }),
         ),
       ),

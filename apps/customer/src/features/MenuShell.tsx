@@ -1,16 +1,6 @@
 import type { ReactNode } from 'react'
-import { resolveMenuDesign } from '@restaurant-platform/shared'
-import { MenuDesignContext, menuShellStyle, useMenuDesign } from '@/features/menu-design'
-
-export function MenuDesignProvider({
-  designId,
-  children,
-}: {
-  designId?: string | null
-  children: ReactNode
-}) {
-  return <MenuDesignContext value={resolveMenuDesign(designId)}>{children}</MenuDesignContext>
-}
+import { menuDesignCssVars } from '@restaurant-platform/shared'
+import { useMenuDesign } from '@/features/menu-design'
 
 export function MenuShell({
   children,
@@ -27,7 +17,7 @@ export function MenuShell({
       className={className ? `shell ${className}` : 'shell'}
       data-design={design.id}
       data-layout={design.layout}
-      style={menuShellStyle(design)}
+      style={menuDesignCssVars(design.tokens)}
       role={role}
     >
       {children}
