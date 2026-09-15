@@ -385,7 +385,39 @@ try {
       assert.ok(order[timestamp], `${timestamp} is recorded`)
     }
     const terminal = await admin.rpc('transition_order', { p_order_id: orderId, p_status: 'cancelled' })
-    assert.ok(terminal.error, 'Delivered orders are terminal')
+    assert.ok(terminal.error, 'Delivered orders cannot be cancelled')
+  })
+  await check('orders step back one stage at a time and timestamps follow the current path', async () => {
+    const transition = (status) => admin.rpc('transition_order', { p_order_id: orderId, p_status: status })
+    const current = async () => (await rows(peer, 'orders', 'id', orderId))[0]
+    const delivered = await current()
+
+    assert.ok((await transition('in_preparation')).error, 'Reverting cannot skip stages')
+
+    unwrap(await transition('ready'), 'Revert to ready')
+    let order = await current()
+    assert.equal(order.status, 'ready')
+    assert.equal(order.delivered_at, null, 'Reverting clears later stages')
+    assert.equal(order.ready_at, delivered.ready_at, 'Reverting keeps the target stage timestamp')
+
+    unwrap(await transition('in_preparation'), 'Revert to in_preparation')
+    order = await current()
+    assert.equal(order.ready_at, null)
+    assert.equal(order.preparing_at, delivered.preparing_at, 'Preparation does not restart')
+
+    unwrap(await transition('accepted'), 'Revert to accepted')
+    order = await current()
+    assert.equal(order.preparing_at, null)
+    assert.ok((await transition('submitted')).error, 'Accepted orders cannot return to submitted')
+    await assertBill(peer, sessionId, { submitted_amount: 0, total_amount: 3800 }) // revertir no saca el pedido de la cuenta
+
+    // Volver a entregarlo deja el pedido como lo esperan los checks siguientes.
+    for (const [status, timestamp] of [['in_preparation', 'preparing_at'], ['ready', 'ready_at'], ['delivered', 'delivered_at']]) {
+      unwrap(await transition(status), `Advance again to ${status}`)
+      order = await current()
+      assert.equal(order.status, status)
+      assert.ok(order[timestamp], `${timestamp} is stamped again`)
+    }
   })
   await check('Realtime delivers status changes and does not leak cross-restaurant orders', async () => {
     await waitForEvent(peerEvents, (event) => event.new.id === orderId && event.new.status === 'delivered')

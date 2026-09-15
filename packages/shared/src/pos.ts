@@ -11,30 +11,44 @@ export const posBoardColumns = [
 
 export type PosBoardColumnId = (typeof posBoardColumns)[number]['id']
 
-export const nextPosStatus: Partial<Record<OrderStatus, OrderStatus>> = {
-  submitted: 'accepted',
-  accepted: 'in_preparation',
-  in_preparation: 'ready',
-  ready: 'delivered',
+export type PosStep = { to: OrderStatus; label: string }
+
+export type PosOrderActions = {
+  advance?: PosStep
+  revert?: PosStep
+  cancel?: PosStep
 }
 
-export const prevPosStatus: Partial<Record<OrderStatus, OrderStatus>> = {
-  in_preparation: 'accepted',
-  ready: 'in_preparation',
-  delivered: 'ready',
-}
+const cancel: PosStep = { to: 'cancelled', label: 'Cancelar' }
 
-export const posAdvanceLabels: Partial<Record<OrderStatus, string>> = {
-  submitted: 'Aceptar',
-  accepted: 'Preparar',
-  in_preparation: 'Marcar listo',
-  ready: 'Entregar',
-}
-
-export const posRevertLabels: Partial<Record<OrderStatus, string>> = {
-  in_preparation: 'Volver a nuevo',
-  ready: 'Volver a preparar',
-  delivered: 'Volver a listo',
+/**
+ * Máquina de estados de pedidos del POS: qué acciones ofrece cada estado.
+ * `transition_order` (SQL) acepta exactamente estos pares desde → hacia;
+ * supabase/tests/edge.test.ts falla si las dos listas se desincronizan.
+ */
+export const posActions: Record<OrderStatus, PosOrderActions> = {
+  submitted: {
+    advance: { to: 'accepted', label: 'Aceptar' },
+    cancel,
+  },
+  accepted: {
+    advance: { to: 'in_preparation', label: 'Preparar' },
+    cancel,
+  },
+  in_preparation: {
+    advance: { to: 'ready', label: 'Marcar listo' },
+    revert: { to: 'accepted', label: 'Volver a nuevo' },
+    cancel,
+  },
+  ready: {
+    advance: { to: 'delivered', label: 'Entregar' },
+    revert: { to: 'in_preparation', label: 'Volver a preparar' },
+    cancel,
+  },
+  delivered: {
+    revert: { to: 'ready', label: 'Volver a listo' },
+  },
+  cancelled: {},
 }
 
 const POS_ERROR_CODES = [
@@ -50,13 +64,9 @@ const POS_ERROR_CODES = [
 
 export type PosErrorCode = (typeof POS_ERROR_CODES)[number]
 
-export function canCancelOrder(status: OrderStatus): boolean {
-  return status !== 'delivered' && status !== 'cancelled'
-}
-
+/** Un pedido sigue siendo comanda de cocina mientras todavía puede avanzar. */
 export function isKitchenTicket(status: OrderStatus): boolean {
-  return status === 'submitted' || status === 'accepted'
-    || status === 'in_preparation' || status === 'ready'
+  return posActions[status].advance !== undefined
 }
 
 export function posColumnFor(status: OrderStatus): PosBoardColumnId | null {
