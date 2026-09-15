@@ -123,30 +123,21 @@ function ProductCard({
   disabled: boolean
   to: string
 }) {
-  const content = (
-    <>
-      <div>
-        <h3>{product.name}</h3>
+  // La tarjeta es un contenedor, no un enlace: el <Link> y los controles del
+  // carrusel son hermanos. El enlace se estira a toda la tarjeta por CSS
+  // (.product-card-link::after) y las flechas quedan por encima.
+  return (
+    <article className={disabled ? 'product-card is-disabled' : 'product-card'}>
+      <div className="product-card-body">
+        <h3>
+          {disabled ? product.name : <Link className="product-card-link" to={to}>{product.name}</Link>}
+        </h3>
         <p>{product.description}</p>
         {product.dietary_tags.length > 0 && <small>{product.dietary_tags.join(' · ')}</small>}
         <strong>{money(product.base_price)}</strong>
         {!product.is_available && <span className="unavailable">Agotado</span>}
       </div>
       <MediaCarousel media={productMedia(product)} variant="card" alt={product.name} />
-    </>
-  )
-
-  if (disabled) {
-    return (
-      <button className="product-card" disabled>
-        {content}
-      </button>
-    )
-  }
-
-  return (
-    <Link className="product-card" to={to}>
-      {content}
-    </Link>
+    </article>
   )
 }

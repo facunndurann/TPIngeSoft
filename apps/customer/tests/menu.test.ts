@@ -244,3 +244,32 @@ test('Toast keeps its live region mounted and schedules the fade within its own 
   // El dueño limpia el mensaje justo cuando termina la salida animada.
   assert.equal(delay + duration, TOAST_DURATION_MS)
 })
+
+test('product cards keep the link and the carousel controls as siblings', async () => {
+  const { createElement } = await import('react')
+  const { renderToStaticMarkup } = await import('react-dom/server')
+  const { MemoryRouter } = await import('react-router')
+  const { MenuBrowse } = await import('../src/features/MenuBrowse')
+
+  const card = (overrides: object) => ({
+    id: 'x', category_id: 'c', name: 'Plato', description: null, base_price: 10,
+    dietary_tags: [], is_available: true, media_urls: ['https://cdn/a.jpg', 'https://cdn/b.jpg'], ...overrides,
+  })
+  const render = (canEdit: boolean, products: object[]) => renderToStaticMarkup(createElement(
+    MemoryRouter, null,
+    createElement(MenuBrowse, { token: 't', canEdit, menu: { ...menu, categories: [{ id: 'c', name: 'Platos' }], products } as never }),
+  ))
+
+  const html = render(true, [card({ id: 'many' }), card({ id: 'sold-out', is_available: false })])
+  const cards = html.match(/<article class="product-card[^"]*">[\s\S]*?<\/article>/g) ?? []
+  assert.equal(cards.length, 2)
+
+  const [available, soldOut] = cards
+  assert.match(available, /<a class="product-card-link" href="\/m\/t\/producto\/many"[^>]*>Plato<\/a>/)
+  assert.match(available, /aria-label="Foto siguiente"/)
+  assert.match(soldOut, /class="product-card is-disabled"/)
+  assert.doesNotMatch(soldOut, /<a /, 'Unavailable dishes are not links')
+  // Ningún control interactivo anidado dentro de otro.
+  assert.doesNotMatch(html, /<a [^>]*>(?:(?!<\/a>)[\s\S])*<button/)
+  assert.doesNotMatch(html, /<button[^>]*>(?:(?!<\/button>)[\s\S])*<(?:button|a) /)
+})

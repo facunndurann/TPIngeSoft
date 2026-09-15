@@ -1,4 +1,4 @@
-import { useState, type MouseEvent } from 'react'
+import { useState } from 'react'
 import { mediaElementSrc, type ProductMedia } from '@restaurant-platform/shared'
 
 type MediaCarouselProps = {
@@ -15,20 +15,10 @@ export function MediaCarousel({ media, variant, alt }: MediaCarouselProps) {
   const current = media[index]
   const hasMany = media.length > 1
 
-  // La tarjeta vive dentro de un <Link>: las flechas no deben navegar al producto.
-  const step = (delta: number) => (event: MouseEvent) => {
-    event.preventDefault()
-    event.stopPropagation()
-    setIndex((i) => (i + delta + media.length) % media.length)
-  }
+  const step = (delta: number) => () => setIndex((i) => (i + delta + media.length) % media.length)
 
   return (
-    <div
-      className={`media-carousel ${variant}`}
-      onClick={(event) => {
-        if (variant === 'card' && hasMany) event.preventDefault()
-      }}
-    >
+    <div className={`media-carousel ${variant}`}>
       {current.kind === 'image' ? (
         <img
           className={variant === 'hero' ? 'hero-photo' : undefined}
@@ -51,10 +41,10 @@ export function MediaCarousel({ media, variant, alt }: MediaCarouselProps) {
 
       {hasMany && (
         <>
-          <button type="button" className="carousel-btn prev" aria-label="Anterior" onClick={step(-1)}>
+          <button type="button" className="carousel-btn prev" aria-label="Foto anterior" onClick={step(-1)}>
             ‹
           </button>
-          <button type="button" className="carousel-btn next" aria-label="Siguiente" onClick={step(1)}>
+          <button type="button" className="carousel-btn next" aria-label="Foto siguiente" onClick={step(1)}>
             ›
           </button>
           <div className="carousel-dots">
