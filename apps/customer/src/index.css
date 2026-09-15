@@ -133,7 +133,6 @@ footer { text-align: center; color: var(--menu-muted); font-size: 12px; margin-t
   border-radius: calc(var(--menu-radius) + 4px);
   margin: 24px 0;
 }
-.success-notice { background: var(--menu-success-bg); border-radius: var(--menu-radius); padding: 14px 18px; color: var(--menu-success-text); }
 .bill-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; margin: 0 0 22px; }
 .bill-grid dt { color: var(--menu-bill-muted); font-size: 13px; }
 .bill-grid dd { margin: 8px 0 0; font-size: clamp(18px, 4vw, 25px); font-weight: 750; }
@@ -236,21 +235,17 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; }
   border-radius: var(--menu-radius);
   box-shadow: var(--menu-shadow);
   border: 1px solid var(--menu-accent);
-  animation: slideInRight 0.3s cubic-bezier(0.2, 0, 0, 1) forwards;
+  /* Entrada y salida encadenadas: duración y retraso de la salida los fija Toast.tsx. */
+  animation-name: slideInRight, slideOutRight;
+  animation-timing-function: cubic-bezier(0.2, 0, 0, 1), ease-in;
+  animation-fill-mode: forwards;
   pointer-events: auto;
   max-width: calc(100vw - 40px);
   word-break: break-word;
 }
 
-.toast.hiding {
-  animation: slideOutRight 0.3s ease-in forwards;
-}
-
 @media(max-width: 640px) {
-  .toast-container {
-    top: calc(env(safe-area-inset-top, 20px) + 56px);
-    right: 16px;
-  }
+  .toast-container { right: 16px; }
 }
 
 .media-carousel {

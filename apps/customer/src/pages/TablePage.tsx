@@ -9,6 +9,7 @@ import {
 } from 'react-router'
 import { resolveMenuDesign } from '@restaurant-platform/shared'
 import { ErrorMessage } from '@/components/ErrorMessage'
+import { TOAST_DURATION_MS, Toast } from '@/components/Toast'
 import { CartPanel } from '@/features/CartPanel'
 import { MenuBrowse } from '@/features/MenuBrowse'
 import { cartPrice, money } from '@/features/menu'
@@ -87,6 +88,13 @@ function TableApp({ token }: { token: string }) {
     window.scrollTo(0, 0)
   }, [location.pathname])
 
+  // Cada aviso nuevo reinicia el plazo; uno anterior nunca puede borrar al siguiente.
+  useEffect(() => {
+    if (!announcement) return
+    const timer = setTimeout(() => setAnnouncement(''), TOAST_DURATION_MS)
+    return () => clearTimeout(timer)
+  }, [announcement])
+
   if (table.isPending) {
     return (
       <MenuShell role="status">
@@ -147,15 +155,7 @@ function TableApp({ token }: { token: string }) {
 
           <TableNav token={token} cartCount={cartCount} />
 
-          <div className="toast-container">
-            {announcement && (
-              <Toast
-                key={announcement}
-                message={announcement}
-                onClose={() => setAnnouncement('')}
-              />
-            )}
-          </div>
+          <Toast message={announcement} />
 
           {section !== 'orders' && menu.isPending && <p role="status">Cargando la carta…</p>}
           {section !== 'orders' && menu.isError && (
@@ -327,22 +327,4 @@ export function TableOrdersPage() {
 export function TableCatchAll() {
   const { token = '' } = useParams()
   return <Navigate to={tableRoot(token)} replace />
-}
-
-function Toast({ message, onClose }: { message: string; onClose: () => void }) {
-  const [hiding, setHiding] = useState(false)
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setHiding(true)
-      setTimeout(onClose, 300)
-    }, 3000)
-    return () => clearTimeout(timer)
-  }, [onClose])
-
-  return (
-    <div className={`toast ${hiding ? 'hiding' : ''}`} role="status">
-      {message}
-    </div>
-  )
 }

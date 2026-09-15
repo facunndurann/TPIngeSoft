@@ -230,3 +230,17 @@ test('productMedia classifies each url and mediaElementSrc only tweaks videos', 
   assert.equal(mediaKindFromMimeType('video/quicktime'), 'video')
   assert.equal(mediaKindFromMimeType('image/png'), 'image')
 })
+
+test('Toast keeps its live region mounted and schedules the fade within its own duration', async () => {
+  const { createElement } = await import('react')
+  const { renderToStaticMarkup } = await import('react-dom/server')
+  const { Toast, TOAST_DURATION_MS } = await import('../src/components/Toast')
+
+  assert.equal(renderToStaticMarkup(createElement(Toast, { message: '' })), '<div class="toast-container" role="status"></div>')
+
+  const html = renderToStaticMarkup(createElement(Toast, { message: 'Pedido enviado' }))
+  assert.match(html, /role="status"><div class="toast"/)
+  const [duration, delay] = [/animation-duration:(\d+)ms/, /animation-delay:0ms, (\d+)ms/].map((pattern) => Number(html.match(pattern)?.[1]))
+  // El dueño limpia el mensaje justo cuando termina la salida animada.
+  assert.equal(delay + duration, TOAST_DURATION_MS)
+})
