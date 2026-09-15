@@ -4,8 +4,10 @@ import { cartPrice, price, selectionErrors } from '../src/features/menu'
 import {
   calculateItemPrice,
   DEFAULT_MENU_DESIGN,
+  MENU_DESIGN_IDS,
   mediaElementSrc,
   mediaKindFromMimeType,
+  menuDesignCssVarName,
   menuDesignCssVars,
   MENU_DESIGNS,
   productMedia,
@@ -13,6 +15,7 @@ import {
 } from '@restaurant-platform/shared'
 import { recoverPendingSession } from '../src/features/session-recovery'
 import type { PendingSubmission } from '../src/stores/cart'
+import customerCss from '../src/index.css?raw'
 
 const memory = new Map<string, string>()
 Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: (key: string) => memory.get(key) ?? null, setItem: (key: string, value: string) => { memory.set(key, value) }, removeItem: (key: string) => { memory.delete(key) } } })
@@ -183,8 +186,21 @@ test('resolveMenuDesign returns catalog entries and falls back to oliva', () => 
   assert.equal(resolveMenuDesign('unknown').id, DEFAULT_MENU_DESIGN)
   assert.equal(resolveMenuDesign(null).id, DEFAULT_MENU_DESIGN)
   assert.equal(resolveMenuDesign(undefined).id, DEFAULT_MENU_DESIGN)
-  assert.equal(MENU_DESIGNS.length, 3)
+  assert.deepEqual(MENU_DESIGN_IDS, ['oliva', 'brasas', 'linterna'])
+  for (const id of MENU_DESIGN_IDS) assert.equal(MENU_DESIGNS[id].id, id)
   assert.equal(menuDesignCssVars(resolveMenuDesign('brasas').tokens)['--menu-accent'], resolveMenuDesign('brasas').tokens.accent)
+})
+
+test('design tokens define exactly the CSS variables the customer stylesheet uses', () => {
+  assert.equal(menuDesignCssVarName('bg'), '--menu-bg')
+  assert.equal(menuDesignCssVarName('surfaceMuted'), '--menu-surface-muted')
+  assert.equal(menuDesignCssVarName('radiusPill'), '--menu-radius-pill')
+
+  // index.css ya no declara valores por defecto: una variable sin token dejaría un estilo roto.
+  const used = [...new Set(customerCss.match(/--menu-[a-z-]+/g))].sort()
+  for (const id of MENU_DESIGN_IDS) {
+    assert.deepEqual(Object.keys(menuDesignCssVars(MENU_DESIGNS[id].tokens)).sort(), used, `Tokens of ${id}`)
+  }
 })
 
 test('MenuShell paints catalog tokens, layout and copy for each design', async () => {
@@ -285,7 +301,7 @@ test('design preview renders the real menu with each layout, offline and non-int
     createElement(Routes, null, createElement(Route, { path: '/vista-previa/:designId', element: createElement(DesignPreviewPage) })),
   ))
 
-  for (const design of MENU_DESIGNS) {
+  for (const design of Object.values(MENU_DESIGNS)) {
     const html = render(`/vista-previa/${design.id}`)
     assert.match(html, new RegExp(`data-layout="${design.layout}"`))
     assert.match(html, new RegExp(design.copy.menuTitle.replace('?', '\\?')))

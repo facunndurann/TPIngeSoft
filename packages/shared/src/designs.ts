@@ -1,7 +1,16 @@
+import { Constants, type Database } from './database.types.ts'
+
 export const MENU_DESIGN_LAYOUTS = ['classic', 'kiosk', 'editorial'] as const
 export type MenuDesignLayout = (typeof MENU_DESIGN_LAYOUTS)[number]
 
-export const DEFAULT_MENU_DESIGN = 'oliva'
+/** Ids válidos: los define el enum `public.menu_design` de la base (`pnpm db:types`). */
+export type MenuDesignId = Database['public']['Enums']['menu_design']
+
+/** Todos los diseños, en el orden en que se ofrecen. */
+export const MENU_DESIGN_IDS: readonly MenuDesignId[] = Constants.public.Enums.menu_design
+
+/** Espejado en el default de la columna `restaurants.menu_design` (verificado en edge.test.ts). */
+export const DEFAULT_MENU_DESIGN: MenuDesignId = 'oliva'
 
 export type MenuDesignTokens = {
   bg: string
@@ -43,8 +52,8 @@ export type MenuDesignCopy = {
   footer: string
 }
 
-export type MenuDesign = {
-  id: string
+export type MenuDesign<Id extends MenuDesignId = MenuDesignId> = {
+  id: Id
   name: string
   description: string
   layout: MenuDesignLayout
@@ -56,7 +65,7 @@ const sans = 'Inter, ui-sans-serif, system-ui, sans-serif'
 const displayKiosk = 'Oswald, Inter, ui-sans-serif, system-ui, sans-serif'
 const displayEditorial = 'Fraunces, "Times New Roman", serif'
 
-const oliva: MenuDesign = {
+const oliva: MenuDesign<'oliva'> = {
   id: 'oliva',
   name: 'Oliva',
   description: 'Carta clara en papel y verde sage. Simple y rápida de leer.',
@@ -101,7 +110,7 @@ const oliva: MenuDesign = {
   },
 }
 
-const brasas: MenuDesign = {
+const brasas: MenuDesign<'brasas'> = {
   id: 'brasas',
   name: 'Brasas',
   description: 'Kiosco oscuro con ámbar. Fotos grandes y tipografía potente.',
@@ -146,7 +155,7 @@ const brasas: MenuDesign = {
   },
 }
 
-const linterna: MenuDesign = {
+const linterna: MenuDesign<'linterna'> = {
   id: 'linterna',
   name: 'Linterna',
   description: 'Carta editorial en crema y burgundy, con más aire y serifas.',
@@ -191,53 +200,28 @@ const linterna: MenuDesign = {
   },
 }
 
-export const MENU_DESIGNS: readonly MenuDesign[] = [oliva, brasas, linterna]
+/**
+ * Catálogo por id. El tipo exige una entrada por cada valor del enum y que el `id`
+ * de cada diseño coincida con su clave.
+ */
+export const MENU_DESIGNS: { [Id in MenuDesignId]: MenuDesign<Id> } = { oliva, brasas, linterna }
 
-const designsById = new Map(MENU_DESIGNS.map((design) => [design.id, design]))
-
+/** Para ids sin tipar (p. ej. un parámetro de URL): uno desconocido usa el diseño por defecto. */
 export function resolveMenuDesign(id: string | null | undefined): MenuDesign {
-  return (id && designsById.get(id)) || designsById.get(DEFAULT_MENU_DESIGN)!
+  const known = MENU_DESIGN_IDS.find((designId) => designId === id)
+  return MENU_DESIGNS[known ?? DEFAULT_MENU_DESIGN]
 }
 
 /** Variables CSS de un diseño, listas para la prop `style` de React. */
 export type MenuDesignCssVars = Record<`--menu-${string}`, string>
 
-const tokenVarNames: Record<keyof MenuDesignTokens, keyof MenuDesignCssVars> = {
-  bg: '--menu-bg',
-  text: '--menu-text',
-  accent: '--menu-accent',
-  accentHover: '--menu-accent-hover',
-  accentText: '--menu-accent-text',
-  muted: '--menu-muted',
-  surface: '--menu-surface',
-  surfaceMuted: '--menu-surface-muted',
-  border: '--menu-border',
-  heading: '--menu-heading',
-  eyebrow: '--menu-eyebrow',
-  badgeBg: '--menu-badge-bg',
-  badgeText: '--menu-badge-text',
-  noticeBg: '--menu-notice-bg',
-  noticeText: '--menu-notice-text',
-  successBg: '--menu-success-bg',
-  successText: '--menu-success-text',
-  danger: '--menu-danger',
-  dangerBg: '--menu-danger-bg',
-  warningBg: '--menu-warning-bg',
-  warningText: '--menu-warning-text',
-  unavailable: '--menu-unavailable',
-  focus: '--menu-focus',
-  billMuted: '--menu-bill-muted',
-  font: '--menu-font',
-  fontDisplay: '--menu-font-display',
-  radius: '--menu-radius',
-  radiusPill: '--menu-radius-pill',
-  shadow: '--menu-shadow',
+/** Nombre de la variable CSS de un token: `surfaceMuted` → `--menu-surface-muted`. */
+export function menuDesignCssVarName(token: keyof MenuDesignTokens): `--menu-${string}` {
+  return `--menu-${token.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`
 }
 
 export function menuDesignCssVars(tokens: MenuDesignTokens): MenuDesignCssVars {
-  const vars: MenuDesignCssVars = {}
-  for (const key of Object.keys(tokenVarNames) as (keyof MenuDesignTokens)[]) {
-    vars[tokenVarNames[key]] = tokens[key]
-  }
-  return vars
+  return Object.fromEntries(
+    (Object.keys(tokens) as (keyof MenuDesignTokens)[]).map((token) => [menuDesignCssVarName(token), tokens[token]]),
+  )
 }

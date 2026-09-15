@@ -1,43 +1,12 @@
 @import "tailwindcss";
 
-:root {
-  --menu-bg: #faf9f5;
-  --menu-text: #292c26;
-  --menu-accent: #35563b;
-  --menu-accent-hover: #456747;
-  --menu-accent-text: #ffffff;
-  --menu-muted: #656b60;
-  --menu-surface: #ffffff;
-  --menu-surface-muted: #f0f1e9;
-  --menu-border: #dcded4;
-  --menu-heading: #292c26;
-  --menu-eyebrow: #597151;
-  --menu-badge-bg: #e9eddf;
-  --menu-badge-text: #405539;
-  --menu-notice-bg: #fff0dc;
-  --menu-notice-text: #8b5b21;
-  --menu-success-bg: #e9efdf;
-  --menu-success-text: #35563b;
-  --menu-danger: #873e32;
-  --menu-danger-bg: #f5e3de;
-  --menu-warning-bg: #fdf0c2;
-  --menu-warning-text: #755c12;
-  --menu-unavailable: #904828;
-  --menu-focus: #b16e30;
-  --menu-bill-muted: #59634e;
-  --menu-font: Inter, ui-sans-serif, system-ui, sans-serif;
-  --menu-font-display: Inter, ui-sans-serif, system-ui, sans-serif;
-  --menu-radius: 12px;
-  --menu-radius-pill: 30px;
-  --menu-shadow: 0 5px 24px #19301930;
-  font-family: var(--menu-font);
-  color: var(--menu-text);
-  background: var(--menu-bg);
-  font-synthesis: none;
-}
+/* Los tokens --menu-* no se declaran acá: los define el catálogo de diseños
+   (packages/shared/src/designs.ts) y MenuShell los aplica en .menu-page. */
+:root { font-synthesis: none; }
 
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--menu-bg); color: var(--menu-text); }
+body { margin: 0; }
+.menu-page { background: var(--menu-bg); color: var(--menu-text); font-family: var(--menu-font); }
 button, input, .tabs a, .categories a, .product-card, a.cart-bar, a.btn { font: inherit; }
 button, .tabs a, .categories a, .product-card, a.cart-bar, a.btn {
   cursor: pointer;

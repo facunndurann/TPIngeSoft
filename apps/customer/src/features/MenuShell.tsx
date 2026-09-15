@@ -13,14 +13,17 @@ export function MenuShell({
 }) {
   const design = useMenuDesign()
   return (
-    <main
-      className={className ? `shell ${className}` : 'shell'}
-      data-design={design.id}
-      data-layout={design.layout}
-      style={menuDesignCssVars(design.tokens)}
-      role={role}
-    >
-      {children}
-    </main>
+    // Las variables del diseño van en un contenedor a lo ancho de la pantalla: así el
+    // fondo alrededor de la columna central también es del diseño activo.
+    <div className="menu-page" style={menuDesignCssVars(design.tokens)}>
+      <main
+        className={className ? `shell ${className}` : 'shell'}
+        data-design={design.id}
+        data-layout={design.layout}
+        role={role}
+      >
+        {children}
+      </main>
+    </div>
   )
 }

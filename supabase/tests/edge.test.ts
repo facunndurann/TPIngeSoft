@@ -12,6 +12,9 @@ import {
 } from '../../packages/shared/src/pos.ts'
 // Si otra migración vuelve a redefinir transition_order, apuntá este import a esa.
 import transitionOrderSql from '../migrations/20260915130000_pos_transition_table.sql?raw'
+import { DEFAULT_MENU_DESIGN } from '../../packages/shared/src/designs.ts'
+// Si otra migración cambia el default de restaurants.menu_design, apuntá este import a esa.
+import menuDesignEnumSql from '../migrations/20260915150000_menu_design_enum.sql?raw'
 import { createSubmitOrderHandler } from '../functions/submit-order/handler.ts'
 import { databaseError } from '../functions/_shared/errors.ts'
 import type { OrderGateway, PosOrder } from '../functions/_shared/pos/adapter.ts'
@@ -166,4 +169,8 @@ test('restaurant day bounds use Argentina time and POS errors stay coded', () =>
   assert.equal(formatElapsed('2026-09-05T12:00:00.000Z', Date.parse('2026-09-05T13:05:00.000Z')), 'Hace 1 h 5 min')
   assert.equal(posErrorCode('FORBIDDEN'), 'FORBIDDEN')
   assert.equal(posErrorCode('P0001: INVALID_TRANSITION'), 'INVALID_TRANSITION')
+})
+
+test('the database default menu design matches DEFAULT_MENU_DESIGN', () => {
+  assert.equal(menuDesignEnumSql.match(/alter column menu_design set default '(\w+)'/)?.[1], DEFAULT_MENU_DESIGN)
 })

@@ -1,23 +1,23 @@
 import { useId, useState } from 'react'
 import { Maximize2 } from 'lucide-react'
 import {
+  MENU_DESIGN_IDS,
   MENU_DESIGNS,
   menuDesignCssVars,
-  resolveMenuDesign,
   type MenuDesign,
+  type MenuDesignId,
 } from '@restaurant-platform/shared'
 import { Modal } from '@/components/ui'
 import { customerAppUrl } from '@/lib/customer-app'
 
 type DesignPickerProps = {
-  value: string
-  onChange: (id: string) => void
+  value: MenuDesignId
+  onChange: (id: MenuDesignId) => void
   /** Texto de ayuda bajo el título; cambia según dónde se elige el diseño. */
   hint: string
 }
 
 export function DesignPicker({ value, onChange, hint }: DesignPickerProps) {
-  const selectedId = resolveMenuDesign(value).id
   const [previewDesign, setPreviewDesign] = useState<MenuDesign | null>(null)
   const id = useId()
   const [groupName, labelId, hintId] = [`${id}-design`, `${id}-label`, `${id}-hint`]
@@ -32,8 +32,9 @@ export function DesignPicker({ value, onChange, hint }: DesignPickerProps) {
         aria-labelledby={labelId}
         aria-describedby={hintId}
       >
-        {MENU_DESIGNS.map((design) => {
-          const selected = design.id === selectedId
+        {MENU_DESIGN_IDS.map((designId) => {
+          const design = MENU_DESIGNS[designId]
+          const selected = designId === value
           return (
             // Cada tarjeta contiene dos controles hermanos: el radio (dentro del
             // label, que ocupa toda la tarjeta) y el botón de vista previa encima.

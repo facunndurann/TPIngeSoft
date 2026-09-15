@@ -818,7 +818,7 @@ export type Database = {
           description: string | null
           id: string
           logo_url: string | null
-          menu_design: string
+          menu_design: Database["public"]["Enums"]["menu_design"]
           name: string
           slug: string
         }
@@ -827,7 +827,7 @@ export type Database = {
           description?: string | null
           id?: string
           logo_url?: string | null
-          menu_design?: string
+          menu_design?: Database["public"]["Enums"]["menu_design"]
           name: string
           slug: string
         }
@@ -836,7 +836,7 @@ export type Database = {
           description?: string | null
           id?: string
           logo_url?: string | null
-          menu_design?: string
+          menu_design?: Database["public"]["Enums"]["menu_design"]
           name?: string
           slug?: string
         }
@@ -1028,6 +1028,7 @@ export type Database = {
     }
     Enums: {
       member_role: "owner" | "staff"
+      menu_design: "oliva" | "brasas" | "linterna"
       order_status:
         | "submitted"
         | "accepted"
@@ -1170,6 +1171,7 @@ export const Constants = {
   public: {
     Enums: {
       member_role: ["owner", "staff"],
+      menu_design: ["oliva", "brasas", "linterna"],
       order_status: [
         "submitted",
         "accepted",

@@ -7,7 +7,7 @@ import {
   useNavigate,
   useParams,
 } from 'react-router'
-import { resolveMenuDesign } from '@restaurant-platform/shared'
+import { MENU_DESIGNS } from '@restaurant-platform/shared'
 import { ErrorMessage } from '@/components/ErrorMessage'
 import { TOAST_DURATION_MS, Toast } from '@/components/Toast'
 import { CartPanel } from '@/features/CartPanel'
@@ -113,7 +113,7 @@ function TableApp({ token }: { token: string }) {
   }
 
   const { restaurant, branch, table: currentTable } = table.data
-  const design = resolveMenuDesign(restaurant.menu_design)
+  const design = MENU_DESIGNS[restaurant.menu_design]
 
   return (
     <MenuDesignContext value={design}>

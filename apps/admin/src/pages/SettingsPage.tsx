@@ -1,7 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Trash2 } from 'lucide-react'
-import { DEFAULT_MENU_DESIGN } from '@restaurant-platform/shared'
 import { supabase } from '@/lib/supabase'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { DesignPicker } from '@/features/DesignPicker'
@@ -12,7 +11,7 @@ export function SettingsPage() {
   const queryClient = useQueryClient()
   const [name, setName] = useState(restaurant.name)
   const [description, setDescription] = useState(restaurant.description ?? '')
-  const [menuDesign, setMenuDesign] = useState(restaurant.menu_design ?? DEFAULT_MENU_DESIGN)
+  const [menuDesign, setMenuDesign] = useState(restaurant.menu_design)
   const [savedMessage, setSavedMessage] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
