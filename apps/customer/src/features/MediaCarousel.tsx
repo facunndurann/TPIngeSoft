@@ -21,13 +21,12 @@ export function MediaCarousel({ media, variant, alt }: MediaCarouselProps) {
     <div className={`media-carousel ${variant}`}>
       {current.kind === 'image' ? (
         <img
-          className={variant === 'hero' ? 'hero-photo' : undefined}
           src={mediaElementSrc(current)}
           alt={variant === 'hero' ? alt : ''}
           loading={variant === 'card' ? 'lazy' : undefined}
         />
       ) : variant === 'hero' ? (
-        <video className="hero-photo" src={mediaElementSrc(current)} controls preload="metadata" playsInline />
+        <video src={mediaElementSrc(current)} controls preload="metadata" playsInline />
       ) : (
         <div className="video-wrapper">
           <video src={mediaElementSrc(current)} preload="metadata" muted playsInline />
