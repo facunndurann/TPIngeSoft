@@ -54,13 +54,11 @@ export function SettingsPage() {
         <p className="text-xs text-neutral-500">
           Identificador público: <code className="rounded bg-neutral-100 px-1">{restaurant.slug}</code>
         </p>
-        <div>
-          <p className="mb-2 text-sm font-medium text-neutral-700">Diseño de la carta</p>
-          <p className="mb-3 text-xs text-neutral-500">
-            Elegí cómo se ve el menú que abren los comensales desde el QR.
-          </p>
-          <DesignPicker value={menuDesign} onChange={setMenuDesign} />
-        </div>
+        <DesignPicker
+          value={menuDesign}
+          onChange={setMenuDesign}
+          hint="Elegí cómo se ve el menú que abren los comensales desde el QR."
+        />
         <ErrorText message={error} />
         <div className="flex items-center gap-3">
           <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>

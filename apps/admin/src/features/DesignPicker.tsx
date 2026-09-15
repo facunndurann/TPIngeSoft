@@ -1,23 +1,37 @@
 import { useId, useState } from 'react'
 import { Maximize2 } from 'lucide-react'
-import { MENU_DESIGNS, menuDesignCssVars, resolveMenuDesign } from '@restaurant-platform/shared'
+import {
+  MENU_DESIGNS,
+  menuDesignCssVars,
+  resolveMenuDesign,
+  type MenuDesign,
+} from '@restaurant-platform/shared'
 import { Modal } from '@/components/ui'
+import { customerAppUrl } from '@/lib/customer-app'
 
 type DesignPickerProps = {
   value: string
   onChange: (id: string) => void
+  /** Texto de ayuda bajo el título; cambia según dónde se elige el diseño. */
+  hint: string
 }
 
-type MenuDesign = typeof MENU_DESIGNS[number]
-
-export function DesignPicker({ value, onChange }: DesignPickerProps) {
+export function DesignPicker({ value, onChange, hint }: DesignPickerProps) {
   const selectedId = resolveMenuDesign(value).id
   const [previewDesign, setPreviewDesign] = useState<MenuDesign | null>(null)
-  const groupName = useId()
+  const id = useId()
+  const [groupName, labelId, hintId] = [`${id}-design`, `${id}-label`, `${id}-hint`]
 
   return (
-    <>
-      <div className="grid gap-3 md:grid-cols-3" role="radiogroup" aria-label="Diseño de la carta">
+    <div>
+      <p id={labelId} className="mb-2 text-sm font-medium text-neutral-700">Diseño de la carta</p>
+      <p id={hintId} className="mb-3 text-xs text-neutral-500">{hint}</p>
+      <div
+        className="grid gap-3 md:grid-cols-3"
+        role="radiogroup"
+        aria-labelledby={labelId}
+        aria-describedby={hintId}
+      >
         {MENU_DESIGNS.map((design) => {
           const selected = design.id === selectedId
           return (
@@ -91,11 +105,20 @@ export function DesignPicker({ value, onChange }: DesignPickerProps) {
       </div>
 
       {previewDesign && (
-        <Modal title={`Vista previa: ${previewDesign.name}`} onClose={() => setPreviewDesign(null)} wide>
-          <MenuPreview design={previewDesign} />
+        <Modal title={`Vista previa: ${previewDesign.name}`} onClose={() => setPreviewDesign(null)}>
+          {/* La carta real de la app del comensal con este diseño, en tamaño de celular:
+              mismo layout y mismo CSS que ven los comensales. */}
+          <iframe
+            src={customerAppUrl(`/vista-previa/${encodeURIComponent(previewDesign.id)}`)}
+            title={`Carta de ejemplo con el diseño ${previewDesign.name}`}
+            className="mx-auto block h-[70vh] max-h-[720px] w-[390px] max-w-full rounded-xl border border-neutral-200"
+          />
+          <p className="mt-2 text-center text-xs text-neutral-500">
+            Así ven la carta los comensales en el celular.
+          </p>
         </Modal>
       )}
-    </>
+    </div>
   )
 }
 
@@ -105,69 +128,5 @@ function Swatch({ color }: { color: string }) {
       className="inline-block h-5 w-5 rounded-full border"
       style={{ background: color, borderColor: 'var(--menu-border)' }}
     />
-  )
-}
-
-function MenuPreview({ design }: { design: MenuDesign }) {
-  return (
-    <div 
-      className="rounded-xl overflow-hidden border border-neutral-200 mt-2"
-      style={menuDesignCssVars(design.tokens)}
-    >
-      <div 
-        className="p-5 sm:p-8"
-        style={{
-          background: 'var(--menu-bg)',
-          color: 'var(--menu-text)',
-          fontFamily: 'var(--menu-font)',
-        }}
-      >
-        <p
-          className="text-xs font-bold tracking-[0.16em] uppercase mb-1"
-          style={{ color: 'var(--menu-eyebrow)', fontFamily: 'var(--menu-font-display)' }}
-        >
-          {design.copy.welcome}
-        </p>
-        <h2 
-          className="text-2xl sm:text-3xl font-bold mb-6"
-          style={{ fontFamily: 'var(--menu-font-display)', color: 'var(--menu-heading)' }}
-        >
-          Menú de Ejemplo
-        </h2>
-        
-        <div className="space-y-6">
-          <div>
-            <h3 className="text-sm font-semibold uppercase tracking-wider mb-3 opacity-60">
-              Populares
-            </h3>
-            <div className="space-y-3">
-              {[
-                { name: 'Hamburguesa Completa', desc: 'Carne, queso, lechuga, tomate y papas.', price: '$8.500' },
-                { name: 'Ensalada César', desc: 'Pollo, crutones, queso parmesano y aderezo.', price: '$6.200' },
-              ].map(item => (
-                <div 
-                  key={item.name}
-                  className="p-4 rounded-xl border flex justify-between gap-4"
-                  style={{ 
-                    background: 'var(--menu-surface-muted)',
-                    borderColor: 'var(--menu-border)'
-                  }}
-                >
-                  <div>
-                    <h4 className="font-medium" style={{ color: 'var(--menu-heading)' }}>{item.name}</h4>
-                    <p className="text-sm opacity-80 mt-1">{item.desc}</p>
-                    <p className="font-medium mt-2" style={{ color: 'var(--menu-accent)' }}>{item.price}</p>
-                  </div>
-                  <div 
-                    className="w-20 h-20 rounded-lg flex-shrink-0"
-                    style={{ background: 'var(--menu-notice-bg)', opacity: 0.5 }}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
   )
 }

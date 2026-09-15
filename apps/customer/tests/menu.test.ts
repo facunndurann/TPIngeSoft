@@ -273,3 +273,26 @@ test('product cards keep the link and the carousel controls as siblings', async 
   assert.doesNotMatch(html, /<a [^>]*>(?:(?!<\/a>)[\s\S])*<button/)
   assert.doesNotMatch(html, /<button[^>]*>(?:(?!<\/button>)[\s\S])*<(?:button|a) /)
 })
+
+test('design preview renders the real menu with each layout, offline and non-interactive', async () => {
+  const { createElement } = await import('react')
+  const { renderToStaticMarkup } = await import('react-dom/server')
+  const { MemoryRouter, Route, Routes } = await import('react-router')
+  const { DesignPreviewPage } = await import('../src/pages/DesignPreviewPage')
+
+  const render = (path: string) => renderToStaticMarkup(createElement(
+    MemoryRouter, { initialEntries: [path] },
+    createElement(Routes, null, createElement(Route, { path: '/vista-previa/:designId', element: createElement(DesignPreviewPage) })),
+  ))
+
+  for (const design of MENU_DESIGNS) {
+    const html = render(`/vista-previa/${design.id}`)
+    assert.match(html, new RegExp(`data-layout="${design.layout}"`))
+    assert.match(html, new RegExp(design.copy.menuTitle.replace('?', '\\?')))
+    assert.equal((html.match(/<article class="product-card"/g) ?? []).length, 4)
+  }
+  const fallback = render('/vista-previa/no-existe')
+  assert.match(fallback, new RegExp(`data-design="${DEFAULT_MENU_DESIGN}"`))
+  assert.match(fallback, /^<div inert="">/, 'The preview is for looking only')
+  assert.doesNotMatch(fallback, /src="https?:/, 'Sample photos are embedded, not fetched')
+})
