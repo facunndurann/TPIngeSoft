@@ -34,6 +34,32 @@ export type Database = {
   }
   public: {
     Tables: {
+      abandoned_order_requests: {
+        Row: {
+          abandoned_at: string
+          participant_id: string
+          request_id: string
+        }
+        Insert: {
+          abandoned_at?: string
+          participant_id: string
+          request_id: string
+        }
+        Update: {
+          abandoned_at?: string
+          participant_id?: string
+          request_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "abandoned_order_requests_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "session_participants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       branches: {
         Row: {
           address: string | null
@@ -966,6 +992,10 @@ export type Database = {
       }
     }
     Functions: {
+      abandon_order_request: {
+        Args: { p_request_id: string; p_session_id: string }
+        Returns: string
+      }
       close_table_session: { Args: { p_session_id: string }; Returns: string }
       dispatch_internal_order: { Args: { p_order_id: string }; Returns: string }
       get_order_pos_type: {

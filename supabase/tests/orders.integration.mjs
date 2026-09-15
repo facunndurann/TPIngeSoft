@@ -261,6 +261,30 @@ try {
   await check('reusing a request id with different content is rejected', async () => {
     rejected(await edge(customer, { ...originalRequest, notes: 'Changed payload' }), [409], 'IDEMPOTENCY_CONFLICT')
   })
+  const abandon = (actor, body) => actor.rpc('abandon_order_request', { p_session_id: body.sessionId, p_request_id: body.requestId })
+  await check('abandoning a request that already created an order keeps that order', async () => {
+    assert.equal(unwrap(await abandon(customer, originalRequest), 'Abandon a landed request'), orderId)
+    assert.equal(successful(await edge(customer, originalRequest)).orderId, orderId, 'The original request stays retryable')
+  })
+  await check('an abandoned request never becomes an order, even if it arrives late', async () => {
+    const lateRequest = basicRequest()
+    for (const actor of [outsider, otherAdmin]) {
+      assert.ok((await abandon(actor, lateRequest)).error, 'Only participants of the session can abandon')
+    }
+    assert.equal(unwrap(await abandon(customer, lateRequest), 'Abandon an unknown request'), null)
+    assert.equal(unwrap(await abandon(customer, lateRequest), 'Abandoning twice is idempotent'), null)
+
+    rejected(await edge(customer, lateRequest), [409], 'REQUEST_ABANDONED')
+    const direct = await customer.rpc('submit_order', {
+      p_session_id: lateRequest.sessionId,
+      p_request_id: lateRequest.requestId,
+      p_items: lateRequest.items,
+      p_expected_total: lateRequest.expectedTotal,
+      p_notes: lateRequest.notes,
+    })
+    assert.equal(direct.error?.message, 'REQUEST_ABANDONED')
+    assert.equal((await rows(customer, 'orders', 'session_id', sessionId)).length, 1)
+  })
 
   let savedItem
   await check('the transaction persists participant, shared flag and complete snapshots', async () => {

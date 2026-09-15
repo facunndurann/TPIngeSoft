@@ -11,6 +11,7 @@ const businessErrors: Record<string, [number, string]> = {
   INVALID_INGREDIENTS: [409, 'Revisá los ingredientes: hay cambios en su disponibilidad o en cuáles se pueden quitar.'],
   PRICE_CHANGED: [409, 'El precio cambió. Revisá el total actualizado y volvé a confirmar.'],
   IDEMPOTENCY_CONFLICT: [409, 'Este envío ya se usó para otro contenido. Revisá los pedidos de la mesa antes de continuar.'],
+  REQUEST_ABANDONED: [409, 'Cancelaste este envío. Revisá tu carrito y volvé a confirmar.'],
   ORDER_NOT_FOUND: [404, 'No encontramos el pedido.'],
   FORBIDDEN: [403, 'No tenés permiso para realizar esta operación.'],
   POS_UNAVAILABLE: [503, 'El restaurante no puede recibir el pedido ahora. Reintentá este mismo envío en unos momentos.'],

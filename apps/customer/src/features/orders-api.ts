@@ -68,6 +68,33 @@ export async function submitOrder(input: SubmitOrderInput) {
   return data
 }
 
+export type AbandonResult =
+  | { outcome: 'abandoned' }
+  | { outcome: 'already_submitted'; orderId: string }
+
+/**
+ * Descarta un envío con resultado desconocido. El servidor lo serializa con
+ * submit_order: si el pedido ya se creó lo informa (no se puede descartar);
+ * si no, garantiza que ese requestId nunca se convierta en pedido.
+ */
+export async function abandonSubmission(
+  input: Pick<SubmitOrderInput, 'sessionId' | 'requestId'>,
+): Promise<AbandonResult> {
+  const { data, error } = await supabase.rpc('abandon_order_request', {
+    p_session_id: input.sessionId,
+    p_request_id: input.requestId,
+  })
+  if (error) {
+    throw new SubmissionError(
+      'CONNECTION_ERROR',
+      'No pudimos cancelar el envío porque todavía no sabemos si llegó. Revisá tu conexión y reintentá.',
+    )
+  }
+  // Los tipos generados no expresan que la función devuelve null al descartar.
+  const orderId: string | null = data
+  return orderId ? { outcome: 'already_submitted', orderId } : { outcome: 'abandoned' }
+}
+
 export async function loadOrders(sessionId: string) {
   const { data, error } = await supabase
     .from('orders')
