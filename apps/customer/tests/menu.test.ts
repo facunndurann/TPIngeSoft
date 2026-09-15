@@ -1,7 +1,16 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { cartPrice, price, selectionErrors } from '../src/features/menu'
-import { calculateItemPrice, DEFAULT_MENU_DESIGN, menuDesignCssVars, MENU_DESIGNS, resolveMenuDesign } from '@restaurant-platform/shared'
+import {
+  calculateItemPrice,
+  DEFAULT_MENU_DESIGN,
+  mediaElementSrc,
+  mediaKindFromMimeType,
+  menuDesignCssVars,
+  MENU_DESIGNS,
+  productMedia,
+  resolveMenuDesign,
+} from '@restaurant-platform/shared'
 import { recoverPendingSession } from '../src/features/session-recovery'
 import type { PendingSubmission } from '../src/stores/cart'
 
@@ -207,4 +216,16 @@ test('MenuShell paints catalog tokens, layout and copy for each design', async (
     assert.match(html, new RegExp(design.tokens.bg.replace('#', '[#]')))
     assert.match(html, new RegExp(design.copy.welcome))
   }
+})
+
+test('productMedia classifies each url and mediaElementSrc only tweaks videos', () => {
+  const media = productMedia({
+    media_urls: ['https://cdn/a.jpg', 'https://cdn/b.MP4', 'https://cdn/c.webm?v=2'],
+  })
+  assert.deepEqual(media.map((item) => item.kind), ['image', 'video', 'video'])
+  assert.equal(mediaElementSrc(media[0]), 'https://cdn/a.jpg')
+  assert.equal(mediaElementSrc(media[1]), 'https://cdn/b.MP4#t=0.001')
+  assert.deepEqual(productMedia({ media_urls: [] }), [])
+  assert.equal(mediaKindFromMimeType('video/quicktime'), 'video')
+  assert.equal(mediaKindFromMimeType('image/png'), 'image')
 })

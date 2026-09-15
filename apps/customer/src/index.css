@@ -255,12 +255,25 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; }
 
 .media-carousel {
   position: relative;
-  width: 95px;
-  height: 105px;
-  border-radius: calc(var(--menu-radius) - 2px);
   flex-shrink: 0;
   display: flex;
 }
+
+.media-carousel.card {
+  width: 95px;
+  height: 105px;
+  border-radius: calc(var(--menu-radius) - 2px);
+}
+
+/* Portada del detalle: el tamaño lo da .hero-photo; acá solo controles más grandes. */
+.media-carousel.hero { margin-bottom: 24px; }
+.media-carousel.hero .hero-photo { margin-bottom: 0; }
+.media-carousel.hero video { background: black; }
+.media-carousel.hero .carousel-btn { width: 36px; height: 36px; font-size: 24px; }
+.media-carousel.hero .carousel-btn.prev { left: 10px; }
+.media-carousel.hero .carousel-btn.next { right: 10px; }
+.media-carousel.hero .carousel-dots { bottom: 12px; }
+.media-carousel.hero .carousel-dots .dot { width: 8px; height: 8px; }
 
 [data-layout="kiosk"] .product-card .media-carousel {
   width: 100%;
@@ -278,7 +291,7 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; }
   [data-layout="editorial"] .product-card .media-carousel { width: 88px; height: 100px; }
 }
 
-.media-carousel img, .media-carousel .video-wrapper {
+.media-carousel.card img, .media-carousel.card .video-wrapper {
   width: 100% !important;
   height: 100% !important;
   border-radius: inherit !important;

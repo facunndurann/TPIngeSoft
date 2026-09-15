@@ -1,5 +1,6 @@
-import { useState } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
+import { productMedia } from '@restaurant-platform/shared'
+import { MediaCarousel } from '@/features/MediaCarousel'
 import { matchesSearch, money } from '@/features/menu'
 import type { Menu, Product } from '@/features/menu'
 import { menuPath, parseMenuFilters, productPath } from '@/features/table-paths'
@@ -113,63 +114,6 @@ function FilterLink({ to, active, children }: { to: string; active: boolean; chi
   )
 }
 
-function ProductMediaCarousel({ urls }: { urls: string[] }) {
-  const [index, setIndex] = useState(0)
-  if (!urls.length) return null
-
-  const url = urls[index]
-  const isVideo = url.match(/\.(mp4|webm|ogg|mov)$/i)
-
-  return (
-    <div className="media-carousel" onClick={(e) => urls.length > 1 && e.preventDefault()}>
-      {isVideo ? (
-        <div className="video-wrapper">
-          <video src={url + '#t=0.001'} preload="metadata" muted playsInline />
-          <div className="play-icon">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="white" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polygon points="5 3 19 12 5 21 5 3" />
-            </svg>
-          </div>
-        </div>
-      ) : (
-        <img src={url} alt="" loading="lazy" />
-      )}
-      
-      {urls.length > 1 && (
-        <>
-          <button 
-            type="button"
-            className="carousel-btn prev"
-            onClick={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              setIndex((i) => (i === 0 ? urls.length - 1 : i - 1))
-            }}
-          >
-            ‹
-          </button>
-          <button 
-            type="button"
-            className="carousel-btn next"
-            onClick={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              setIndex((i) => (i === urls.length - 1 ? 0 : i + 1))
-            }}
-          >
-            ›
-          </button>
-          <div className="carousel-dots">
-            {urls.map((_, i) => (
-              <span key={i} className={`dot ${i === index ? 'active' : ''}`} />
-            ))}
-          </div>
-        </>
-      )}
-    </div>
-  )
-}
-
 function ProductCard({
   product,
   disabled,
@@ -188,9 +132,7 @@ function ProductCard({
         <strong>{money(product.base_price)}</strong>
         {!product.is_available && <span className="unavailable">Agotado</span>}
       </div>
-      {product.photo_url && (
-        <ProductMediaCarousel urls={product.photo_url.split(',')} />
-      )}
+      <MediaCarousel media={productMedia(product)} variant="card" alt={product.name} />
     </>
   )
 

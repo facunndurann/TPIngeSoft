@@ -2,8 +2,16 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Plus, Trash2, Upload } from 'lucide-react'
+import {
+  PRODUCT_MEDIA_LIMIT,
+  PRODUCT_MEDIA_MAX_BYTES,
+  mediaKindFromMimeType,
+  productMedia,
+  type ProductMedia,
+} from '@restaurant-platform/shared'
 import { supabase } from '@/lib/supabase'
 import { useRestaurant } from '@/restaurant/restaurant-context'
+import { MediaThumb } from '@/features/MediaThumb'
 import { Button, ErrorText, Field, Input, Select, Spinner, Textarea, Toggle } from '@/components/ui'
 
 const DIETARY_TAGS = [
@@ -12,6 +20,12 @@ const DIETARY_TAGS = [
   { value: 'sin-tacc', label: 'Sin TACC' },
   { value: 'picante', label: 'Picante' },
 ]
+
+/** Archivo elegido pero todavía no subido, con su vista previa local (blob URL). */
+interface NewMedia {
+  file: File
+  preview: ProductMedia
+}
 
 interface IngredientDraft {
   id?: string
@@ -35,14 +49,24 @@ export function ProductEditPage() {
   const [foodInfo, setFoodInfo] = useState('')
   const [dietaryTags, setDietaryTags] = useState<string[]>([])
   const [isAvailable, setIsAvailable] = useState(true)
-  const [mediaUrls, setMediaUrls] = useState<string[]>([])
-  const [mediaFiles, setMediaFiles] = useState<File[]>([])
+  const [savedMedia, setSavedMedia] = useState<ProductMedia[]>([])
+  const [newMedia, setNewMedia] = useState<NewMedia[]>([])
   const [ingredients, setIngredients] = useState<IngredientDraft[]>([])
   const [removedIngredientIds, setRemovedIngredientIds] = useState<string[]>([])
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([])
   const [loadedProduct, setLoadedProduct] = useState(isNew)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+
+  // Guardados primero y nuevos después: es el mismo orden en que se persisten.
+  const mediaItems = [
+    ...savedMedia.map((media) => ({
+      media,
+      remove: () => setSavedMedia((prev) => prev.filter((other) => other !== media)),
+    })),
+    ...newMedia.map((item) => ({ media: item.preview, remove: () => removeNewMedia(item) })),
+  ]
+  const mediaCount = mediaItems.length
 
   const { data: categories } = useQuery({
     queryKey: ['categories', restaurant.id],
@@ -93,8 +117,8 @@ export function ProductEditPage() {
     setFoodInfo(existing.food_info ?? '')
     setDietaryTags(existing.dietary_tags)
     setIsAvailable(existing.is_available)
-    setMediaUrls(existing.photo_url ? existing.photo_url.split(',') : [])
-    setMediaFiles([])
+    setSavedMedia(productMedia(existing))
+    setNewMedia([])
     setIngredients(
       [...existing.product_ingredients]
         .sort((a, b) => a.sort_order - b.sort_order)
@@ -123,6 +147,29 @@ export function ProductEditPage() {
     setIngredients((prev) => prev.map((ing, i) => (i === index ? { ...ing, ...patch } : ing)))
   }
 
+  function addMediaFiles(files: File[]) {
+    const filesToAdd = files.slice(0, PRODUCT_MEDIA_LIMIT - mediaCount)
+    if (filesToAdd.some((file) => file.size > PRODUCT_MEDIA_MAX_BYTES)) {
+      const maxMb = PRODUCT_MEDIA_MAX_BYTES / 1024 / 1024
+      setError(`Un archivo es muy pesado. El límite es ${maxMb} MB para garantizar que la carta cargue rápido.`)
+      return
+    }
+    setError(null)
+    // La vista previa se crea una sola vez por archivo y se libera al quitarlo.
+    setNewMedia((prev) => [
+      ...prev,
+      ...filesToAdd.map((file) => ({
+        file,
+        preview: { url: URL.createObjectURL(file), kind: mediaKindFromMimeType(file.type) },
+      })),
+    ])
+  }
+
+  function removeNewMedia(item: NewMedia) {
+    URL.revokeObjectURL(item.preview.url)
+    setNewMedia((prev) => prev.filter((other) => other !== item))
+  }
+
   function removeIngredient(index: number) {
     const ingredient = ingredients[index]
     if (ingredient.id) setRemovedIngredientIds((prev) => [...prev, ingredient.id!])
@@ -139,9 +186,9 @@ export function ProductEditPage() {
 
     setSaving(true)
     try {
-      // 1. Foto: subir si hay archivo nuevo
+      // 1. Fotos y videos: subir los archivos nuevos después de los ya guardados
       const uploadedUrls: string[] = []
-      for (const file of mediaFiles) {
+      for (const { file } of newMedia) {
         const extension = file.name.split('.').pop() ?? 'jpg'
         const path = `${restaurant.id}/${crypto.randomUUID()}.${extension}`
         const { error: upErr } = await supabase.storage
@@ -150,8 +197,6 @@ export function ProductEditPage() {
         if (upErr) throw upErr
         uploadedUrls.push(supabase.storage.from('product-images').getPublicUrl(path).data.publicUrl)
       }
-      
-      const finalPhotoUrl = [...mediaUrls, ...uploadedUrls].join(',') || null
 
       // 2. Producto
       const productData = {
@@ -163,7 +208,7 @@ export function ProductEditPage() {
         food_info: foodInfo.trim() || null,
         dietary_tags: dietaryTags,
         is_available: isAvailable,
-        photo_url: finalPhotoUrl,
+        media_urls: [...savedMedia.map((media) => media.url), ...uploadedUrls],
       }
 
       let savedId = productId
@@ -322,53 +367,24 @@ export function ProductEditPage() {
 
       <section className="space-y-3 rounded-xl border border-neutral-200 bg-white p-5">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-neutral-900">Fotografía o video (máx 3)</h2>
+          <h2 className="font-semibold text-neutral-900">Fotografía o video (máx {PRODUCT_MEDIA_LIMIT})</h2>
         </div>
         <div className="flex flex-wrap items-center gap-4">
-          {[...mediaUrls, ...mediaFiles].map((media, index) => {
-            const isFile = media instanceof File
-            const src = isFile ? URL.createObjectURL(media) : (media as string)
-            const isVideo = isFile 
-              ? media.type.startsWith('video/') 
-              : src.match(/\.(mp4|webm|ogg|mov)$/i)
-            
-            return (
-              <div key={index} className="relative group">
-                {isVideo ? (
-                  <video
-                    src={src + "#t=0.001"}
-                    className="h-24 w-24 rounded-lg object-cover bg-black"
-                    autoPlay
-                    muted
-                    loop
-                    playsInline
-                  />
-                ) : (
-                  <img
-                    src={src}
-                    alt={`Vista previa ${index + 1}`}
-                    className="h-24 w-24 rounded-lg object-cover"
-                  />
-                )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (isFile) {
-                      setMediaFiles(files => files.filter(f => f !== media))
-                    } else {
-                      setMediaUrls(urls => urls.filter(u => u !== media))
-                    }
-                  }}
-                  className="absolute -top-2 -right-2 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full bg-red-500 text-white shadow-sm hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
-                  aria-label="Quitar archivo"
-                >
-                  <Trash2 size={12} />
-                </button>
-              </div>
-            )
-          })}
-          
-          {(mediaUrls.length + mediaFiles.length) < 3 && (
+          {mediaItems.map(({ media, remove }, index) => (
+            <div key={media.url} className="relative group">
+              <MediaThumb media={media} alt={`Vista previa ${index + 1}`} className="h-24 w-24" />
+              <button
+                type="button"
+                onClick={remove}
+                className="absolute -top-2 -right-2 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full bg-red-500 text-white shadow-sm hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                aria-label="Quitar archivo"
+              >
+                <Trash2 size={12} />
+              </button>
+            </div>
+          ))}
+
+          {mediaCount < PRODUCT_MEDIA_LIMIT && (
             <label className="flex h-24 w-24 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-neutral-300 bg-neutral-50 text-neutral-500 hover:bg-neutral-100">
               <Upload size={20} />
               <span className="text-xs font-medium">Subir</span>
@@ -378,19 +394,8 @@ export function ProductEditPage() {
                 multiple
                 className="hidden"
                 onChange={(e) => {
-                  const files = Array.from(e.target.files ?? [])
-                  const remainingSlots = 3 - (mediaUrls.length + mediaFiles.length)
-                  const filesToAdd = files.slice(0, remainingSlots)
-                  
-                  const oversized = filesToAdd.find(f => f.size > 7 * 1024 * 1024)
-                  if (oversized) {
-                    setError('Un archivo es muy pesado. El límite es 7 MB para garantizar que la carta cargue rápido.')
-                    e.target.value = ''
-                    return
-                  }
-                  
-                  setError(null)
-                  setMediaFiles(prev => [...prev, ...filesToAdd])
+                  addMediaFiles(Array.from(e.target.files ?? []))
+                  // Permite volver a elegir el mismo archivo después de quitarlo.
                   e.target.value = ''
                 }}
               />

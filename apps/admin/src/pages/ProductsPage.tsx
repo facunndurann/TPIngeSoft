@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ImageOff, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Pencil, Plus, Trash2 } from 'lucide-react'
+import { productMedia } from '@restaurant-platform/shared'
+import { MediaThumb } from '@/features/MediaThumb'
 import { supabase } from '@/lib/supabase'
 import { formatPrice } from '@/lib/format'
 import { useRestaurant } from '@/restaurant/restaurant-context'
@@ -115,31 +117,7 @@ export function ProductsPage() {
                       key={product.id}
                       className="flex items-center gap-3 rounded-xl border border-neutral-200 bg-white p-3"
                     >
-                      {product.photo_url ? (
-                        (() => {
-                          const firstUrl = product.photo_url.split(',')[0]
-                          return firstUrl.match(/\.(mp4|webm|ogg|mov)$/i) ? (
-                            <video
-                              src={firstUrl + "#t=0.001"}
-                              className="h-14 w-14 rounded-lg object-cover bg-black flex-shrink-0"
-                              autoPlay
-                              muted
-                              loop
-                              playsInline
-                            />
-                          ) : (
-                            <img
-                              src={firstUrl}
-                              alt={product.name}
-                              className="h-14 w-14 rounded-lg object-cover flex-shrink-0"
-                            />
-                          )
-                        })()
-                      ) : (
-                        <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-neutral-100 text-neutral-400">
-                          <ImageOff size={18} />
-                        </div>
-                      )}
+                      <MediaThumb media={productMedia(product)[0]} alt={product.name} className="h-14 w-14" />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <p className="truncate text-sm font-medium text-neutral-900">{product.name}</p>

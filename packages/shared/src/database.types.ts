@@ -704,11 +704,10 @@ export type Database = {
           food_info: string | null
           id: string
           is_available: boolean
+          media_urls: string[]
           name: string
-          photo_url: string | null
           restaurant_id: string
           sort_order: number
-          video_poster_url: string | null
         }
         Insert: {
           base_price: number
@@ -719,11 +718,10 @@ export type Database = {
           food_info?: string | null
           id?: string
           is_available?: boolean
+          media_urls?: string[]
           name: string
-          photo_url?: string | null
           restaurant_id: string
           sort_order?: number
-          video_poster_url?: string | null
         }
         Update: {
           base_price?: number
@@ -734,11 +732,10 @@ export type Database = {
           food_info?: string | null
           id?: string
           is_available?: boolean
+          media_urls?: string[]
           name?: string
-          photo_url?: string | null
           restaurant_id?: string
           sort_order?: number
-          video_poster_url?: string | null
         }
         Relationships: [
           {
