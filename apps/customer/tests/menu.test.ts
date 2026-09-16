@@ -1,9 +1,21 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { cartPrice, price, selectionErrors } from '../src/features/menu'
-import { calculateItemPrice, DEFAULT_MENU_DESIGN, menuDesignCssVars, MENU_DESIGNS, resolveMenuDesign } from '@restaurant-platform/shared'
+import {
+  calculateItemPrice,
+  DEFAULT_MENU_DESIGN,
+  MENU_DESIGN_IDS,
+  mediaElementSrc,
+  mediaKindFromMimeType,
+  menuDesignCssVarName,
+  menuDesignCssVars,
+  MENU_DESIGNS,
+  productMedia,
+  resolveMenuDesign,
+} from '@restaurant-platform/shared'
 import { recoverPendingSession } from '../src/features/session-recovery'
 import type { PendingSubmission } from '../src/stores/cart'
+import customerCss from '../src/index.css?raw'
 
 const memory = new Map<string, string>()
 Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: (key: string) => memory.get(key) ?? null, setItem: (key: string, value: string) => { memory.set(key, value) }, removeItem: (key: string) => { memory.delete(key) } } })
@@ -174,22 +186,37 @@ test('resolveMenuDesign returns catalog entries and falls back to oliva', () => 
   assert.equal(resolveMenuDesign('unknown').id, DEFAULT_MENU_DESIGN)
   assert.equal(resolveMenuDesign(null).id, DEFAULT_MENU_DESIGN)
   assert.equal(resolveMenuDesign(undefined).id, DEFAULT_MENU_DESIGN)
-  assert.equal(MENU_DESIGNS.length, 3)
+  assert.deepEqual(MENU_DESIGN_IDS, ['oliva', 'brasas', 'linterna'])
+  for (const id of MENU_DESIGN_IDS) assert.equal(MENU_DESIGNS[id].id, id)
   assert.equal(menuDesignCssVars(resolveMenuDesign('brasas').tokens)['--menu-accent'], resolveMenuDesign('brasas').tokens.accent)
+})
+
+test('design tokens define exactly the CSS variables the customer stylesheet uses', () => {
+  assert.equal(menuDesignCssVarName('bg'), '--menu-bg')
+  assert.equal(menuDesignCssVarName('surfaceMuted'), '--menu-surface-muted')
+  assert.equal(menuDesignCssVarName('radiusPill'), '--menu-radius-pill')
+
+  // index.css ya no declara valores por defecto: una variable sin token dejaría un estilo roto.
+  const used = [...new Set(customerCss.match(/--menu-[a-z-]+/g))].sort()
+  for (const id of MENU_DESIGN_IDS) {
+    assert.deepEqual(Object.keys(menuDesignCssVars(MENU_DESIGNS[id].tokens)).sort(), used, `Tokens of ${id}`)
+  }
 })
 
 test('MenuShell paints catalog tokens, layout and copy for each design', async () => {
   const { createElement } = await import('react')
   const { renderToStaticMarkup } = await import('react-dom/server')
-  const { MenuDesignProvider, MenuShell } = await import('../src/features/MenuShell')
+  const { MenuShell } = await import('../src/features/MenuShell')
+  const { MenuDesignContext } = await import('../src/features/menu-design')
   const { TableHeader } = await import('../src/features/TableHeader')
 
   for (const id of ['oliva', 'brasas', 'linterna'] as const) {
     const design = resolveMenuDesign(id)
+    // TableHeader no recibe el texto por props: tiene que leerlo del contexto.
     const html = renderToStaticMarkup(
       createElement(
-        MenuDesignProvider,
-        { designId: id },
+        MenuDesignContext,
+        { value: design },
         createElement(
           MenuShell,
           null,
@@ -197,7 +224,6 @@ test('MenuShell paints catalog tokens, layout and copy for each design', async (
             restaurantName: 'Demo',
             branchName: 'Casa',
             tableLabel: 'Mesa 1',
-            welcome: design.copy.welcome,
           }),
         ),
       ),
@@ -207,4 +233,82 @@ test('MenuShell paints catalog tokens, layout and copy for each design', async (
     assert.match(html, new RegExp(design.tokens.bg.replace('#', '[#]')))
     assert.match(html, new RegExp(design.copy.welcome))
   }
+})
+
+test('productMedia classifies each url and mediaElementSrc only tweaks videos', () => {
+  const media = productMedia({
+    media_urls: ['https://cdn/a.jpg', 'https://cdn/b.MP4', 'https://cdn/c.webm?v=2'],
+  })
+  assert.deepEqual(media.map((item) => item.kind), ['image', 'video', 'video'])
+  assert.equal(mediaElementSrc(media[0]), 'https://cdn/a.jpg')
+  assert.equal(mediaElementSrc(media[1]), 'https://cdn/b.MP4#t=0.001')
+  assert.deepEqual(productMedia({ media_urls: [] }), [])
+  assert.equal(mediaKindFromMimeType('video/quicktime'), 'video')
+  assert.equal(mediaKindFromMimeType('image/png'), 'image')
+})
+
+test('Toast keeps its live region mounted and schedules the fade within its own duration', async () => {
+  const { createElement } = await import('react')
+  const { renderToStaticMarkup } = await import('react-dom/server')
+  const { Toast, TOAST_DURATION_MS } = await import('../src/components/Toast')
+
+  assert.equal(renderToStaticMarkup(createElement(Toast, { message: '' })), '<div class="toast-container" role="status"></div>')
+
+  const html = renderToStaticMarkup(createElement(Toast, { message: 'Pedido enviado' }))
+  assert.match(html, /role="status"><div class="toast"/)
+  const [duration, delay] = [/animation-duration:(\d+)ms/, /animation-delay:0ms, (\d+)ms/].map((pattern) => Number(html.match(pattern)?.[1]))
+  // El dueño limpia el mensaje justo cuando termina la salida animada.
+  assert.equal(delay + duration, TOAST_DURATION_MS)
+})
+
+test('product cards keep the link and the carousel controls as siblings', async () => {
+  const { createElement } = await import('react')
+  const { renderToStaticMarkup } = await import('react-dom/server')
+  const { MemoryRouter } = await import('react-router')
+  const { MenuBrowse } = await import('../src/features/MenuBrowse')
+
+  const card = (overrides: object) => ({
+    id: 'x', category_id: 'c', name: 'Plato', description: null, base_price: 10,
+    dietary_tags: [], is_available: true, media_urls: ['https://cdn/a.jpg', 'https://cdn/b.jpg'], ...overrides,
+  })
+  const render = (canEdit: boolean, products: object[]) => renderToStaticMarkup(createElement(
+    MemoryRouter, null,
+    createElement(MenuBrowse, { token: 't', canEdit, menu: { ...menu, categories: [{ id: 'c', name: 'Platos' }], products } as never }),
+  ))
+
+  const html = render(true, [card({ id: 'many' }), card({ id: 'sold-out', is_available: false })])
+  const cards = html.match(/<article class="product-card[^"]*">[\s\S]*?<\/article>/g) ?? []
+  assert.equal(cards.length, 2)
+
+  const [available, soldOut] = cards
+  assert.match(available, /<a class="product-card-link" href="\/m\/t\/producto\/many"[^>]*>Plato<\/a>/)
+  assert.match(available, /aria-label="Foto siguiente"/)
+  assert.match(soldOut, /class="product-card is-disabled"/)
+  assert.doesNotMatch(soldOut, /<a /, 'Unavailable dishes are not links')
+  // Ningún control interactivo anidado dentro de otro.
+  assert.doesNotMatch(html, /<a [^>]*>(?:(?!<\/a>)[\s\S])*<button/)
+  assert.doesNotMatch(html, /<button[^>]*>(?:(?!<\/button>)[\s\S])*<(?:button|a) /)
+})
+
+test('design preview renders the real menu with each layout, offline and non-interactive', async () => {
+  const { createElement } = await import('react')
+  const { renderToStaticMarkup } = await import('react-dom/server')
+  const { MemoryRouter, Route, Routes } = await import('react-router')
+  const { DesignPreviewPage } = await import('../src/pages/DesignPreviewPage')
+
+  const render = (path: string) => renderToStaticMarkup(createElement(
+    MemoryRouter, { initialEntries: [path] },
+    createElement(Routes, null, createElement(Route, { path: '/vista-previa/:designId', element: createElement(DesignPreviewPage) })),
+  ))
+
+  for (const design of Object.values(MENU_DESIGNS)) {
+    const html = render(`/vista-previa/${design.id}`)
+    assert.match(html, new RegExp(`data-layout="${design.layout}"`))
+    assert.match(html, new RegExp(design.copy.menuTitle.replace('?', '\\?')))
+    assert.equal((html.match(/<article class="product-card"/g) ?? []).length, 4)
+  }
+  const fallback = render('/vista-previa/no-existe')
+  assert.match(fallback, new RegExp(`data-design="${DEFAULT_MENU_DESIGN}"`))
+  assert.match(fallback, /^<div inert="">/, 'The preview is for looking only')
+  assert.doesNotMatch(fallback, /src="https?:/, 'Sample photos are embedded, not fetched')
 })

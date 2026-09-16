@@ -34,6 +34,32 @@ export type Database = {
   }
   public: {
     Tables: {
+      abandoned_order_requests: {
+        Row: {
+          abandoned_at: string
+          participant_id: string
+          request_id: string
+        }
+        Insert: {
+          abandoned_at?: string
+          participant_id: string
+          request_id: string
+        }
+        Update: {
+          abandoned_at?: string
+          participant_id?: string
+          request_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "abandoned_order_requests_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "session_participants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       branches: {
         Row: {
           address: string | null
@@ -704,11 +730,10 @@ export type Database = {
           food_info: string | null
           id: string
           is_available: boolean
+          media_urls: string[]
           name: string
-          photo_url: string | null
           restaurant_id: string
           sort_order: number
-          video_poster_url: string | null
         }
         Insert: {
           base_price: number
@@ -719,11 +744,10 @@ export type Database = {
           food_info?: string | null
           id?: string
           is_available?: boolean
+          media_urls?: string[]
           name: string
-          photo_url?: string | null
           restaurant_id: string
           sort_order?: number
-          video_poster_url?: string | null
         }
         Update: {
           base_price?: number
@@ -734,11 +758,10 @@ export type Database = {
           food_info?: string | null
           id?: string
           is_available?: boolean
+          media_urls?: string[]
           name?: string
-          photo_url?: string | null
           restaurant_id?: string
           sort_order?: number
-          video_poster_url?: string | null
         }
         Relationships: [
           {
@@ -795,7 +818,7 @@ export type Database = {
           description: string | null
           id: string
           logo_url: string | null
-          menu_design: string
+          menu_design: Database["public"]["Enums"]["menu_design"]
           name: string
           slug: string
         }
@@ -804,7 +827,7 @@ export type Database = {
           description?: string | null
           id?: string
           logo_url?: string | null
-          menu_design?: string
+          menu_design?: Database["public"]["Enums"]["menu_design"]
           name: string
           slug: string
         }
@@ -813,7 +836,7 @@ export type Database = {
           description?: string | null
           id?: string
           logo_url?: string | null
-          menu_design?: string
+          menu_design?: Database["public"]["Enums"]["menu_design"]
           name?: string
           slug?: string
         }
@@ -969,6 +992,10 @@ export type Database = {
       }
     }
     Functions: {
+      abandon_order_request: {
+        Args: { p_request_id: string; p_session_id: string }
+        Returns: string
+      }
       close_table_session: { Args: { p_session_id: string }; Returns: string }
       dispatch_internal_order: { Args: { p_order_id: string }; Returns: string }
       get_order_pos_type: {
@@ -1001,6 +1028,7 @@ export type Database = {
     }
     Enums: {
       member_role: "owner" | "staff"
+      menu_design: "oliva" | "brasas" | "linterna"
       order_status:
         | "submitted"
         | "accepted"
@@ -1143,6 +1171,7 @@ export const Constants = {
   public: {
     Enums: {
       member_role: ["owner", "staff"],
+      menu_design: ["oliva", "brasas", "linterna"],
       order_status: [
         "submitted",
         "accepted",

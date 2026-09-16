@@ -4,9 +4,8 @@ import {
   dayRangeUtc,
   groupOrdersByColumn,
   localDateKey,
-  nextPosStatus,
-  prevPosStatus,
   posBoardColumns,
+  type OrderStatus,
 } from '@restaurant-platform/shared'
 import { supabase } from '@/lib/supabase'
 import { useRestaurant } from '@/restaurant/restaurant-context'
@@ -78,11 +77,11 @@ export function CommandBoard() {
 
   const grouped = useMemo(() => groupOrdersByColumn(visible), [visible])
 
-  function confirmCancel(order: PosOrder) {
-    if (!window.confirm(`¿Cancelar el pedido de ${order.table_sessions.tables.label}? Se saca de la cuenta.`)) {
-      return
-    }
-    transition.mutate({ orderId: order.id, status: 'cancelled' })
+  function handleTransition(order: PosOrder, to: OrderStatus) {
+    // Cancelar saca el pedido de la cuenta: es la única acción que pide confirmación.
+    const confirmed = to !== 'cancelled'
+      || window.confirm(`¿Cancelar el pedido de ${order.table_sessions.tables.label}? Se saca de la cuenta.`)
+    if (confirmed) transition.mutate({ orderId: order.id, status: to })
   }
 
   return (
@@ -140,26 +139,16 @@ export function CommandBoard() {
                       {column.id === 'new' ? 'No hay pedidos nuevos.' : 'Vacío'}
                     </p>
                   )}
-                  {orders.map((order) => {
-                    const next = nextPosStatus[order.status]
-                    const prev = prevPosStatus[order.status]
-                    return (
-                      <OrderTicket
-                        key={order.id}
-                        order={order}
-                        now={now}
-                        busy={pendingId === order.id}
-                        error={actionError?.id === order.id ? actionError.message : null}
-                        onAdvance={() => {
-                          if (next) transition.mutate({ orderId: order.id, status: next })
-                        }}
-                        onCancel={() => confirmCancel(order)}
-                        onRevert={() => {
-                          if (prev) transition.mutate({ orderId: order.id, status: prev })
-                        }}
-                      />
-                    )
-                  })}
+                  {orders.map((order) => (
+                    <OrderTicket
+                      key={order.id}
+                      order={order}
+                      now={now}
+                      busy={pendingId === order.id}
+                      error={actionError?.id === order.id ? actionError.message : null}
+                      onTransition={(to) => handleTransition(order, to)}
+                    />
+                  ))}
                 </div>
               </section>
             )

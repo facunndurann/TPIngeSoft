@@ -114,13 +114,11 @@ function CreateRestaurantScreen() {
           <Field label="Nombre de la primera sucursal">
             <Input value={branchName} onChange={(e) => setBranchName(e.target.value)} required />
           </Field>
-          <div>
-            <p className="mb-2 text-sm font-medium text-neutral-700">Diseño de la carta</p>
-            <p className="mb-3 text-xs text-neutral-500">
-              Podés cambiarlo después desde Restaurante.
-            </p>
-            <DesignPicker value={menuDesign} onChange={setMenuDesign} />
-          </div>
+          <DesignPicker
+            value={menuDesign}
+            onChange={setMenuDesign}
+            hint="Podés cambiarlo después desde Restaurante."
+          />
           <ErrorText message={error} />
           <Button type="submit" disabled={submitting} className="w-full">
             {submitting ? 'Creando…' : 'Crear restaurante'}

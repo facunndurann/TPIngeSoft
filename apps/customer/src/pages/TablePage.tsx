@@ -7,7 +7,9 @@ import {
   useNavigate,
   useParams,
 } from 'react-router'
+import { MENU_DESIGNS } from '@restaurant-platform/shared'
 import { ErrorMessage } from '@/components/ErrorMessage'
+import { TOAST_DURATION_MS, Toast } from '@/components/Toast'
 import { CartPanel } from '@/features/CartPanel'
 import { MenuBrowse } from '@/features/MenuBrowse'
 import { cartPrice, money } from '@/features/menu'
@@ -23,10 +25,9 @@ import {
   ordersPath,
   tableRoot,
   tableSection,
-  type TableSection,
 } from '@/features/table-paths'
-import { MenuDesignProvider, MenuShell } from '@/features/MenuShell'
-import { useMenuDesign } from '@/features/menu-design'
+import { MenuShell } from '@/features/MenuShell'
+import { MenuDesignContext } from '@/features/menu-design'
 import { useTableSession } from '@/hooks/useTableSession'
 import { useCart } from '@/stores/cart'
 import type { CartItem } from '@/stores/cart'
@@ -87,6 +88,13 @@ function TableApp({ token }: { token: string }) {
     window.scrollTo(0, 0)
   }, [location.pathname])
 
+  // Cada aviso nuevo reinicia el plazo; uno anterior nunca puede borrar al siguiente.
+  useEffect(() => {
+    if (!announcement) return
+    const timer = setTimeout(() => setAnnouncement(''), TOAST_DURATION_MS)
+    return () => clearTimeout(timer)
+  }, [announcement])
+
   if (table.isPending) {
     return (
       <MenuShell role="status">
@@ -105,9 +113,10 @@ function TableApp({ token }: { token: string }) {
   }
 
   const { restaurant, branch, table: currentTable } = table.data
+  const design = MENU_DESIGNS[restaurant.menu_design]
 
   return (
-    <MenuDesignProvider designId={restaurant.menu_design}>
+    <MenuDesignContext value={design}>
       <TableContext.Provider
         value={{
           token,
@@ -123,146 +132,64 @@ function TableApp({ token }: { token: string }) {
           setAnnouncement,
         }}
       >
-        <DesignedTable
-          restaurantName={restaurant.name}
-          branchName={branch.name}
-          tableLabel={currentTable.label}
-          token={token}
-          cartCount={cartCount}
-          joined={joined}
-          session={session}
-          userId={joined.data?.userId}
-          hasPendingSubmission={!!cart.submissions[cartKey]}
-          name={name}
-          setName={setName}
-          rename={rename}
-          announcement={announcement}
-          setAnnouncement={setAnnouncement}
-          section={section}
-          atMenu={atMenu}
-          total={total}
-        />
-      </TableContext.Provider>
-    </MenuDesignProvider>
-  )
-}
-
-function DesignedTable({
-  restaurantName,
-  branchName,
-  tableLabel,
-  token,
-  cartCount,
-  joined,
-  session,
-  userId,
-  hasPendingSubmission,
-  name,
-  setName,
-  rename,
-  announcement,
-  setAnnouncement,
-  section,
-  atMenu,
-  total,
-}: {
-  restaurantName: string
-  branchName: string
-  tableLabel: string
-  token: string
-  cartCount: number
-  joined: TableSession['joined']
-  session: TableSession['session']
-  userId?: string
-  hasPendingSubmission: boolean
-  name: string
-  setName: (value: string) => void
-  rename: TableSession['rename']
-  announcement: string
-  setAnnouncement: (value: string) => void
-  section: TableSection
-  atMenu: boolean
-  total: number
-}) {
-  const { menu, cartKey, items } = useTable()
-  const { copy } = useMenuDesign()
-  const cart = useCart()
-
-  return (
-    <MenuShell>
-      <TableHeader
-        restaurantName={restaurantName}
-        branchName={branchName}
-        tableLabel={tableLabel}
-        welcome={copy.welcome}
-      />
-
-      <SessionPanel
-        joined={joined}
-        session={session}
-        userId={userId}
-        hasPendingSubmission={hasPendingSubmission}
-        name={name}
-        onNameChange={setName}
-        rename={rename}
-        onOpenNewSession={() => {
-          setAnnouncement('')
-          void joined.refetch()
-        }}
-      />
-
-      <TableNav token={token} cartCount={cartCount} />
-
-      <div className="toast-container">
-        {announcement && (
-          <Toast
-            key={announcement}
-            message={announcement}
-            onClose={() => setAnnouncement('')}
+        <MenuShell>
+          <TableHeader
+            restaurantName={restaurant.name}
+            branchName={branch.name}
+            tableLabel={currentTable.label}
           />
-        )}
-      </div>
 
-      {section !== 'orders' && menu.isPending && <p role="status">Cargando la carta…</p>}
-      {section !== 'orders' && menu.isError && (
-        <ErrorMessage error={menu.error} retry={() => { void menu.refetch() }} />
-      )}
+          <SessionPanel
+            joined={joined}
+            session={session}
+            userId={joined.data?.userId}
+            hasPendingSubmission={!!cart.submissions[cartKey]}
+            name={name}
+            onNameChange={setName}
+            rename={rename}
+            onOpenNewSession={() => {
+              setAnnouncement('')
+              void joined.refetch()
+            }}
+          />
 
-      {section !== 'cart' && cart.submissions[cartKey] && (
-        <div className="notice">
-          <p>Tu último envío todavía necesita confirmación.</p>
-          <Link className="btn" to={cartPath(token)}>
-            Consultar o reintentar envío
-          </Link>
-        </div>
-      )}
+          <TableNav token={token} cartCount={cartCount} />
 
-      <Outlet />
+          <Toast message={announcement} />
 
-      {atMenu && items.length > 0 && (
-        <Link className="primary cart-bar" to={cartPath(token)}>
-          Ver mi carrito <strong>{money(total)}</strong>
-        </Link>
-      )}
+          {section !== 'orders' && menu.isPending && <p role="status">Cargando la carta…</p>}
+          {section !== 'orders' && menu.isError && (
+            <ErrorMessage error={menu.error} retry={() => { void menu.refetch() }} />
+          )}
 
-      <footer>{copy.footer}</footer>
-    </MenuShell>
+          {section !== 'cart' && cart.submissions[cartKey] && (
+            <div className="notice">
+              <p>Tu último envío todavía necesita confirmación.</p>
+              <Link className="btn" to={cartPath(token)}>
+                Consultar o reintentar envío
+              </Link>
+            </div>
+          )}
+
+          <Outlet />
+
+          {atMenu && items.length > 0 && (
+            <Link className="primary cart-bar" to={cartPath(token)}>
+              Ver mi carrito <strong>{money(total)}</strong>
+            </Link>
+          )}
+
+          <footer>{design.copy.footer}</footer>
+        </MenuShell>
+      </TableContext.Provider>
+    </MenuDesignContext>
   )
 }
 
 export function TableMenuPage() {
   const { token, menu, canEdit } = useTable()
-  const { copy } = useMenuDesign()
   if (!menu.data) return null
-  return (
-    <MenuBrowse
-      token={token}
-      menu={menu.data}
-      canEdit={canEdit}
-      heading={copy.menu}
-      title={copy.menuTitle}
-    />
-  )
+  return <MenuBrowse token={token} menu={menu.data} canEdit={canEdit} />
 }
 
 export function TableCartPage({ reviewing = false }: { reviewing?: boolean }) {
@@ -400,22 +327,4 @@ export function TableOrdersPage() {
 export function TableCatchAll() {
   const { token = '' } = useParams()
   return <Navigate to={tableRoot(token)} replace />
-}
-
-function Toast({ message, onClose }: { message: string; onClose: () => void }) {
-  const [hiding, setHiding] = useState(false)
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setHiding(true)
-      setTimeout(onClose, 300)
-    }, 3000)
-    return () => clearTimeout(timer)
-  }, [onClose])
-
-  return (
-    <div className={`toast ${hiding ? 'hiding' : ''}`} role="status">
-      {message}
-    </div>
-  )
 }

@@ -3,17 +3,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { QRCodeSVG } from 'qrcode.react'
 import { Copy, Plus, Printer, QrCode, Trash2 } from 'lucide-react'
 import type { Tables } from '@restaurant-platform/shared'
+import { customerAppUrl } from '@/lib/customer-app'
 import { supabase } from '@/lib/supabase'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { Badge, Button, EmptyState, ErrorText, Input, Modal, Select, Spinner, Toggle } from '@/components/ui'
 
 type DiningTable = Tables<'tables'>
 
-const CUSTOMER_APP_URL: string =
-  import.meta.env.VITE_CUSTOMER_APP_URL ?? 'http://localhost:5173'
-
 function tableUrl(table: DiningTable) {
-  return `${CUSTOMER_APP_URL}/m/${table.qr_token}`
+  return customerAppUrl(`/m/${table.qr_token}`)
 }
 
 export function TablesPage() {

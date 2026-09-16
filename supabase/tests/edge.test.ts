@@ -2,14 +2,19 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { submitOrderSchema } from '../../packages/shared/src/orders.ts'
 import {
-  canCancelOrder,
   dayRangeUtc,
   formatElapsed,
   groupOrdersByColumn,
-  nextPosStatus,
+  isKitchenTicket,
+  posActions,
   posColumnFor,
   posErrorCode,
 } from '../../packages/shared/src/pos.ts'
+// Si otra migración vuelve a redefinir transition_order, apuntá este import a esa.
+import transitionOrderSql from '../migrations/20260915130000_pos_transition_table.sql?raw'
+import { DEFAULT_MENU_DESIGN } from '../../packages/shared/src/designs.ts'
+// Si otra migración cambia el default de restaurants.menu_design, apuntá este import a esa.
+import menuDesignEnumSql from '../migrations/20260915150000_menu_design_enum.sql?raw'
 import { createSubmitOrderHandler } from '../functions/submit-order/handler.ts'
 import { databaseError } from '../functions/_shared/errors.ts'
 import type { OrderGateway, PosOrder } from '../functions/_shared/pos/adapter.ts'
@@ -126,10 +131,33 @@ test('POS board groups kitchen columns, FIFO in prep/ready, and newest first oth
   assert.deepEqual(grouped.ready.map((order) => order.id), ['r'])
   assert.deepEqual(grouped.delivered.map((order) => order.id), ['d'])
   assert.equal(posColumnFor('cancelled'), null)
-  assert.equal(nextPosStatus.accepted, 'in_preparation')
-  assert.equal(canCancelOrder('ready'), true)
-  assert.equal(canCancelOrder('delivered'), false)
-  assert.equal(canCancelOrder('cancelled'), false)
+  assert.equal(posActions.accepted.advance?.to, 'in_preparation')
+  assert.equal(posActions.ready.cancel?.to, 'cancelled')
+  assert.equal(posActions.delivered.cancel, undefined)
+  assert.equal(posActions.cancelled.cancel, undefined)
+  assert.equal(isKitchenTicket('ready'), true)
+  assert.equal(isKitchenTicket('delivered'), false)
+  assert.equal(isKitchenTicket('cancelled'), false)
+})
+
+test('transition_order accepts exactly the transitions posActions offers', () => {
+  const offered = Object.entries(posActions)
+    .flatMap(([from, actions]) => Object.values(actions).map((step) => `${from} -> ${step.to}`))
+    .sort()
+
+  // Pares ('desde', 'hacia') del bloque `not in (values …) then` de la migración.
+  const valuesBlock = transitionOrderSql.match(/not in \(values([\s\S]*?)\)\s*then/)?.[1]
+  assert.ok(valuesBlock, 'transition_order must list its allowed pairs in a VALUES block')
+  const allowed = [...valuesBlock.matchAll(/\('(\w+)'(?:::[\w.]+)?,\s*'(\w+)'/g)]
+    .map(([, from, to]) => `${from} -> ${to}`)
+    .sort()
+
+  assert.deepEqual(allowed, offered)
+  // Revertir retrocede exactamente una etapa: nunca a submitted ni desde cancelled.
+  assert.deepEqual(
+    Object.entries(posActions).flatMap(([from, { revert }]) => (revert ? [`${from} -> ${revert.to}`] : [])),
+    ['in_preparation -> accepted', 'ready -> in_preparation', 'delivered -> ready'],
+  )
 })
 
 test('restaurant day bounds use Argentina time and POS errors stay coded', () => {
@@ -141,4 +169,8 @@ test('restaurant day bounds use Argentina time and POS errors stay coded', () =>
   assert.equal(formatElapsed('2026-09-05T12:00:00.000Z', Date.parse('2026-09-05T13:05:00.000Z')), 'Hace 1 h 5 min')
   assert.equal(posErrorCode('FORBIDDEN'), 'FORBIDDEN')
   assert.equal(posErrorCode('P0001: INVALID_TRANSITION'), 'INVALID_TRANSITION')
+})
+
+test('the database default menu design matches DEFAULT_MENU_DESIGN', () => {
+  assert.equal(menuDesignEnumSql.match(/alter column menu_design set default '(\w+)'/)?.[1], DEFAULT_MENU_DESIGN)
 })

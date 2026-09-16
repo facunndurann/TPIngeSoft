@@ -1,45 +1,14 @@
 @import "tailwindcss";
 
-:root {
-  --menu-bg: #faf9f5;
-  --menu-text: #292c26;
-  --menu-accent: #35563b;
-  --menu-accent-hover: #456747;
-  --menu-accent-text: #ffffff;
-  --menu-muted: #656b60;
-  --menu-surface: #ffffff;
-  --menu-surface-muted: #f0f1e9;
-  --menu-border: #dcded4;
-  --menu-heading: #292c26;
-  --menu-eyebrow: #597151;
-  --menu-badge-bg: #e9eddf;
-  --menu-badge-text: #405539;
-  --menu-notice-bg: #fff0dc;
-  --menu-notice-text: #8b5b21;
-  --menu-success-bg: #e9efdf;
-  --menu-success-text: #35563b;
-  --menu-danger: #873e32;
-  --menu-danger-bg: #f5e3de;
-  --menu-warning-bg: #fdf0c2;
-  --menu-warning-text: #755c12;
-  --menu-unavailable: #904828;
-  --menu-focus: #b16e30;
-  --menu-bill-muted: #59634e;
-  --menu-font: Inter, ui-sans-serif, system-ui, sans-serif;
-  --menu-font-display: Inter, ui-sans-serif, system-ui, sans-serif;
-  --menu-radius: 12px;
-  --menu-radius-pill: 30px;
-  --menu-shadow: 0 5px 24px #19301930;
-  font-family: var(--menu-font);
-  color: var(--menu-text);
-  background: var(--menu-bg);
-  font-synthesis: none;
-}
+/* Los tokens --menu-* no se declaran acá: los define el catálogo de diseños
+   (packages/shared/src/designs.ts) y MenuShell los aplica en .menu-page. */
+:root { font-synthesis: none; }
 
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--menu-bg); color: var(--menu-text); }
-button, input, .tabs a, .categories a, a.product-card, a.cart-bar, a.btn { font: inherit; }
-button, .tabs a, .categories a, a.product-card, a.cart-bar, a.btn {
+body { margin: 0; }
+.menu-page { background: var(--menu-bg); color: var(--menu-text); font-family: var(--menu-font); }
+button, input, .tabs a, .categories a, .product-card, a.cart-bar, a.btn { font: inherit; }
+button, .tabs a, .categories a, .product-card, a.cart-bar, a.btn {
   cursor: pointer;
   border: 1px solid var(--menu-border);
   border-radius: var(--menu-radius);
@@ -49,8 +18,8 @@ button, .tabs a, .categories a, a.product-card, a.cart-bar, a.btn {
   color: inherit;
   text-decoration: none;
 }
-button:disabled { cursor: not-allowed; opacity: .55; }
-button:hover:not(:disabled), .tabs a:hover, .categories a:hover, a.product-card:hover, a.cart-bar:hover, a.btn:hover {
+button:disabled, .product-card.is-disabled { cursor: not-allowed; opacity: .55; }
+button:hover:not(:disabled), .tabs a:hover, .categories a:hover, .product-card:not(.is-disabled):hover, a.cart-bar:hover, a.btn:hover {
   border-color: var(--menu-accent-hover);
 }
 button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid var(--menu-focus); outline-offset: 3px; }
@@ -91,19 +60,21 @@ button[aria-pressed=true], .tabs a[aria-current=page], .categories a[aria-curren
 .categories button, .categories a { white-space: nowrap; border-radius: var(--menu-radius-pill); display: inline-flex; align-items: center; }
 section { margin-bottom: 28px; }
 .product-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-.product-card { display: flex; text-align: left; justify-content: space-between; gap: 16px; padding: 20px; min-height: 155px; }
+/* Tarjeta como contenedor: el enlace del nombre cubre toda la tarjeta con ::after.
+   isolation encierra los z-index para que no tapen la barra del carrito ni el toast. */
+.product-card { position: relative; isolation: isolate; display: flex; text-align: left; justify-content: space-between; gap: 16px; padding: 20px; min-height: 155px; }
+.product-card-link { color: inherit; text-decoration: none; }
+.product-card-link::after { content: ''; position: absolute; inset: 0; z-index: 1; }
+.product-card-link:focus-visible { outline: none; }
+.product-card:has(.product-card-link:focus-visible) { outline: 3px solid var(--menu-focus); outline-offset: 3px; }
 .product-card p { font-size: 13px; color: var(--menu-muted); }
 .product-card strong, .product-card small { display: block; margin-top: 8px; }
-.product-card img, .product-card .video-wrapper { width: 95px; height: 105px; border-radius: calc(var(--menu-radius) - 2px); object-fit: cover; flex-shrink: 0; position: relative; }
-.product-card .video-wrapper video { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; background-color: black; display: block; }
-.product-card .play-icon { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background-color: rgba(0,0,0,0.3); border-radius: inherit; pointer-events: none; }
 .unavailable { display: block; color: var(--menu-unavailable); font-size: 13px; margin-top: 6px; }
 .notice { padding: 14px 18px; background: var(--menu-notice-bg); color: var(--menu-notice-text); border-radius: var(--menu-radius); margin: 16px 0; font-size: 14px; }
 ul.notice { padding-left: 32px; list-style: disc; }
 .empty { text-align: center; padding: 45px 15px; color: var(--menu-muted); }
 .editor { max-width: 620px; margin: auto; }
 .text-button { margin-bottom: 20px; }
-.hero-photo { width: 100%; height: 240px; object-fit: cover; border-radius: calc(var(--menu-radius) + 4px); margin-bottom: 24px; }
 fieldset { border: 1px solid var(--menu-border); padding: 16px; margin: 24px 0; border-radius: var(--menu-radius); }
 legend { padding: 0 8px; font-weight: 700; font-family: var(--menu-font-display); }
 .choice { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px 0; }
@@ -133,7 +104,6 @@ footer { text-align: center; color: var(--menu-muted); font-size: 12px; margin-t
   border-radius: calc(var(--menu-radius) + 4px);
   margin: 24px 0;
 }
-.success-notice { background: var(--menu-success-bg); border-radius: var(--menu-radius); padding: 14px 18px; color: var(--menu-success-text); }
 .bill-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; margin: 0 0 22px; }
 .bill-grid dt { color: var(--menu-bill-muted); font-size: 13px; }
 .bill-grid dd { margin: 8px 0 0; font-size: clamp(18px, 4vw, 25px); font-weight: 750; }
@@ -160,15 +130,10 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; }
   overflow: hidden;
   gap: 0;
 }
-[data-layout="kiosk"] .product-card > div { padding: 18px 20px 20px; }
-[data-layout="kiosk"] .product-card img,
-[data-layout="kiosk"] .product-card .video-wrapper {
-  width: 100%;
-  height: 180px;
-  border-radius: 0;
-}
+[data-layout="kiosk"] .product-card-body { padding: 18px 20px 20px; }
+[data-layout="kiosk"] .media-carousel.card { width: 100%; height: 180px; border-radius: 0; }
+[data-layout="kiosk"] .media-carousel.hero { height: 280px; border-radius: var(--menu-radius); }
 [data-layout="kiosk"] .tabs { gap: 8px; }
-[data-layout="kiosk"] .hero-photo { height: 280px; border-radius: var(--menu-radius); }
 [data-layout="kiosk"] .categories a { border-radius: var(--menu-radius); }
 
 .shell[data-layout="editorial"] { max-width: 760px; padding-top: 40px; }
@@ -176,7 +141,8 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; }
 [data-layout="editorial"] h2 { font-weight: 600; font-style: italic; }
 [data-layout="editorial"] .product-grid { grid-template-columns: 1fr; gap: 20px; }
 [data-layout="editorial"] .product-card { min-height: 0; padding: 28px; gap: 24px; }
-[data-layout="editorial"] .product-card img, [data-layout="editorial"] .product-card .video-wrapper { width: 120px; height: 140px; }
+[data-layout="editorial"] .media-carousel.card { width: 120px; height: 140px; }
+[data-layout="editorial"] .media-carousel.hero { height: 280px; }
 [data-layout="editorial"] .categories { gap: 4px; }
 [data-layout="editorial"] .categories a {
   background: transparent;
@@ -192,21 +158,6 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; }
 }
 [data-layout="editorial"] .tabs a { border-radius: var(--menu-radius); }
 [data-layout="editorial"] header { border-bottom-width: 0; padding-bottom: 8px; }
-[data-layout="editorial"] .hero-photo { height: 280px; }
-
-@media(max-width: 640px) {
-  .product-grid { grid-template-columns: 1fr; }
-  .shell { padding-top: 24px; }
-  .product-card { padding: 16px; }
-  .name-form button, .tabs a { font-size: 13px; }
-  .tabs { gap: 6px; }
-  .tabs a { padding: 10px 8px; }
-  .confirmation, .bill-panel, .order-card { padding: 16px; }
-  [data-layout="kiosk"] .product-card { padding: 0; }
-  [data-layout="kiosk"] .product-card img, [data-layout="kiosk"] .product-card .video-wrapper { height: 160px; }
-  [data-layout="editorial"] .product-card { padding: 20px; }
-  [data-layout="editorial"] .product-card img, [data-layout="editorial"] .product-card .video-wrapper { width: 88px; height: 100px; }
-}
 
 @keyframes slideInRight {
   from { transform: translateX(120%); opacity: 0; }
@@ -236,54 +187,43 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; }
   border-radius: var(--menu-radius);
   box-shadow: var(--menu-shadow);
   border: 1px solid var(--menu-accent);
-  animation: slideInRight 0.3s cubic-bezier(0.2, 0, 0, 1) forwards;
+  /* Entrada y salida encadenadas: duración y retraso de la salida los fija Toast.tsx. */
+  animation-name: slideInRight, slideOutRight;
+  animation-timing-function: cubic-bezier(0.2, 0, 0, 1), ease-in;
+  animation-fill-mode: forwards;
   pointer-events: auto;
   max-width: calc(100vw - 40px);
   word-break: break-word;
 }
 
-.toast.hiding {
-  animation: slideOutRight 0.3s ease-in forwards;
-}
+/* Carrusel de fotos/videos. El tamaño y el radio los define SOLO el contenedor
+   (una regla por variante y layout); la imagen, el video y su envoltorio lo llenan. */
+.media-carousel { position: relative; flex-shrink: 0; display: flex; }
+.media-carousel.card { width: 95px; height: 105px; border-radius: calc(var(--menu-radius) - 2px); }
+.media-carousel.hero { width: 100%; height: 240px; border-radius: calc(var(--menu-radius) + 4px); margin-bottom: 24px; }
 
-@media(max-width: 640px) {
-  .toast-container {
-    top: calc(env(safe-area-inset-top, 20px) + 56px);
-    right: 16px;
-  }
-}
-
-.media-carousel {
-  position: relative;
-  width: 95px;
-  height: 105px;
-  border-radius: calc(var(--menu-radius) - 2px);
-  flex-shrink: 0;
-  display: flex;
-}
-
-[data-layout="kiosk"] .product-card .media-carousel {
+.media-carousel > img,
+.media-carousel > video,
+.media-carousel .video-wrapper,
+.media-carousel .video-wrapper video {
+  display: block;
   width: 100%;
-  height: 180px;
-  border-radius: 0;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
 }
+.media-carousel video { background: black; }
+.media-carousel .video-wrapper { position: relative; }
+.media-carousel .play-icon { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background-color: rgba(0,0,0,0.3); border-radius: inherit; pointer-events: none; }
 
-[data-layout="editorial"] .product-card .media-carousel {
-  width: 120px;
-  height: 140px;
-}
+/* Portada del detalle: controles más grandes. */
+.media-carousel.hero .carousel-btn { width: 36px; height: 36px; font-size: 24px; }
+.media-carousel.hero .carousel-btn.prev { left: 10px; }
+.media-carousel.hero .carousel-btn.next { right: 10px; }
+.media-carousel.hero .carousel-dots { bottom: 12px; }
+.media-carousel.hero .carousel-dots .dot { width: 8px; height: 8px; }
 
-@media(max-width: 640px) {
-  [data-layout="kiosk"] .product-card .media-carousel { height: 160px; }
-  [data-layout="editorial"] .product-card .media-carousel { width: 88px; height: 100px; }
-}
-
-.media-carousel img, .media-carousel .video-wrapper {
-  width: 100% !important;
-  height: 100% !important;
-  border-radius: inherit !important;
-}
-
+/* Por encima del enlace estirado de la tarjeta (z-index: 1). */
 .carousel-btn {
   position: absolute;
   top: 50%;
@@ -326,6 +266,7 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; }
   justify-content: center;
   gap: 4px;
   z-index: 2;
+  pointer-events: none;
 }
 
 .carousel-dots .dot {
@@ -337,4 +278,19 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; }
 
 .carousel-dots .dot.active {
   background: white;
+}
+
+/* Único breakpoint del sitio: va al final para pisar las reglas de arriba con igual especificidad. */
+@media (max-width: 640px) {
+  .shell { padding-top: 24px; }
+  .product-grid { grid-template-columns: 1fr; }
+  .product-card { padding: 16px; }
+  .name-form button, .tabs a { font-size: 13px; }
+  .tabs { gap: 6px; }
+  .tabs a { padding: 10px 8px; }
+  .confirmation, .bill-panel, .order-card { padding: 16px; }
+  .toast-container { right: 16px; }
+  [data-layout="kiosk"] .media-carousel.card { height: 160px; }
+  [data-layout="editorial"] .product-card { padding: 20px; }
+  [data-layout="editorial"] .media-carousel.card { width: 88px; height: 100px; }
 }

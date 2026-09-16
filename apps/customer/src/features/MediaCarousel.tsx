@@ -1,0 +1,58 @@
+import { useState } from 'react'
+import { mediaElementSrc, type ProductMedia } from '@restaurant-platform/shared'
+
+type MediaCarouselProps = {
+  media: ProductMedia[]
+  /** `card`: miniatura dentro de la tarjeta del menú. `hero`: portada del detalle del producto. */
+  variant: 'card' | 'hero'
+  alt: string
+}
+
+export function MediaCarousel({ media, variant, alt }: MediaCarouselProps) {
+  const [index, setIndex] = useState(0)
+  if (media.length === 0) return null
+
+  const current = media[index]
+  const hasMany = media.length > 1
+
+  const step = (delta: number) => () => setIndex((i) => (i + delta + media.length) % media.length)
+
+  return (
+    <div className={`media-carousel ${variant}`}>
+      {current.kind === 'image' ? (
+        <img
+          src={mediaElementSrc(current)}
+          alt={variant === 'hero' ? alt : ''}
+          loading={variant === 'card' ? 'lazy' : undefined}
+        />
+      ) : variant === 'hero' ? (
+        <video src={mediaElementSrc(current)} controls preload="metadata" playsInline />
+      ) : (
+        <div className="video-wrapper">
+          <video src={mediaElementSrc(current)} preload="metadata" muted playsInline />
+          <div className="play-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="white" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="5 3 19 12 5 21 5 3" />
+            </svg>
+          </div>
+        </div>
+      )}
+
+      {hasMany && (
+        <>
+          <button type="button" className="carousel-btn prev" aria-label="Foto anterior" onClick={step(-1)}>
+            ‹
+          </button>
+          <button type="button" className="carousel-btn next" aria-label="Foto siguiente" onClick={step(1)}>
+            ›
+          </button>
+          <div className="carousel-dots">
+            {media.map((item, i) => (
+              <span key={item.url} className={`dot ${i === index ? 'active' : ''}`} />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}

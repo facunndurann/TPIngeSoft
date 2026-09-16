@@ -3,7 +3,7 @@ import { useMutation } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router'
 import { cartPrice, money, price, selectionErrors } from '@/features/menu'
 import type { Menu } from '@/features/menu'
-import { SubmissionError, submitOrder } from '@/features/orders-api'
+import { SubmissionError, abandonSubmission, submitOrder } from '@/features/orders-api'
 import { cartItemPath, cartPath, cartReviewPath } from '@/features/table-paths'
 import { useCart } from '@/stores/cart'
 import type { CartItem } from '@/stores/cart'
@@ -88,6 +88,24 @@ export function CartPanel({
     },
   })
 
+  const abandon = useMutation({
+    mutationFn: abandonSubmission,
+    retry: false,
+    onMutate: () => send.reset(),
+    onSuccess: (result, input) => {
+      const submission = useCart.getState().submissions[cartKey]
+      if (result.outcome === 'already_submitted' && submission?.input.requestId === input.requestId) {
+        // El pedido ya llegó y no se puede editar. Reintentar es idempotente:
+        // completa el despacho al POS si faltaba y cierra el envío por onSuccess.
+        send.mutate(submission.input)
+        return
+      }
+      cart.rejectSubmission(cartKey, input.requestId)
+      setReview(undefined)
+      navigate(cartPath(token))
+    },
+  })
+
   const editable = canEdit && !pending && !send.isPending
   const reviewed = review?.signature === signature && review.total === total
 
@@ -131,18 +149,22 @@ export function CartPanel({
             : 'No pudimos enviar el pedido. Intentá nuevamente.'}
         </p>
       )}
+      {abandon.isError && (
+        <p className="notice" role="alert">
+          {abandon.error.message}
+        </p>
+      )}
 
       {pending ? (
         <PendingSubmission
           itemCount={pending.snapshot.reduce((sum, item) => sum + item.quantity, 0)}
           total={pending.input.expectedTotal}
-          sending={send.isPending}
-          onRetry={() => send.mutate(pending.input)}
-          onCancel={() => {
-            cart.rejectSubmission(cartKey, pending.input.requestId)
-            setReview(undefined)
-            navigate(cartPath(token))
+          status={send.isPending ? 'sending' : abandon.isPending ? 'cancelling' : 'idle'}
+          onRetry={() => {
+            abandon.reset()
+            send.mutate(pending.input)
           }}
+          onCancel={() => abandon.mutate(pending.input)}
         />
       ) : (
         items.length > 0 && (
@@ -291,32 +313,33 @@ function CartLine({
 function PendingSubmission({
   itemCount,
   total,
-  sending,
+  status,
   onRetry,
   onCancel,
 }: {
   itemCount: number
   total: number
-  sending: boolean
+  status: 'idle' | 'sending' | 'cancelling'
   onRetry: () => void
   onCancel: () => void
 }) {
+  const busy = status !== 'idle'
   return (
     <div className="confirmation" aria-live="polite">
-      <h3>{sending ? 'Enviando tu pedido…' : 'Hay un envío por confirmar'}</h3>
+      <h3>{status === 'sending' ? 'Enviando tu pedido…' : 'Hay un envío por confirmar'}</h3>
       <p>
         {itemCount} productos · {money(total)}
       </p>
       <p>
         Conservamos este envío y bloqueamos su edición hasta conocer el resultado. Podés
-        reintentarlo sin duplicar el pedido.
+        reintentarlo sin duplicar el pedido, o cancelarlo si todavía no llegó al restaurante.
       </p>
       <div className="cart-actions" style={{ marginTop: '16px' }}>
-        <button onClick={onCancel} disabled={sending}>
-          Cancelar y editar
+        <button onClick={onCancel} disabled={busy}>
+          {status === 'cancelling' ? 'Cancelando…' : 'Cancelar y editar'}
         </button>
-        <button className="primary" disabled={sending} onClick={onRetry}>
-          {sending ? 'Confirmando…' : 'Reintentar'}
+        <button className="primary" disabled={busy} onClick={onRetry}>
+          {status === 'sending' ? 'Confirmando…' : 'Reintentar'}
         </button>
       </div>
     </div>
