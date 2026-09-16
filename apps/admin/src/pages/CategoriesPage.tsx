@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowDown, ArrowUp, Check, Pencil, Plus, Trash2 } from 'lucide-react'
 import type { Tables } from '@restaurant-platform/shared'
+import { rpcError } from '@/lib/rpc-error'
 import { supabase } from '@/lib/supabase'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { Badge, Button, EmptyState, ErrorText, Input, Spinner, Toggle } from '@/components/ui'
@@ -74,16 +75,26 @@ export function CategoriesPage() {
       ),
   })
 
-  async function move(category: Category, direction: -1 | 1) {
+  // Se envía la lista completa en el orden nuevo: la base la aplica de una vez y
+  // rechaza la operación si la lista quedó desactualizada.
+  const reorderMutation = useMutation({
+    mutationFn: async (categoryIds: string[]) => {
+      const { error: mErr } = await supabase.rpc('reorder_categories', {
+        p_restaurant_id: restaurant.id,
+        p_category_ids: categoryIds,
+      })
+      if (mErr) throw rpcError(mErr)
+    },
+    onError: (e) => setError(e.message),
+    onSettled: invalidate,
+  })
+
+  function move(index: number, direction: -1 | 1) {
     if (!categories) return
-    const index = categories.findIndex((c) => c.id === category.id)
-    const swapWith = categories[index + direction]
-    if (!swapWith) return
-    await Promise.all([
-      supabase.from('menu_categories').update({ sort_order: swapWith.sort_order }).eq('id', category.id),
-      supabase.from('menu_categories').update({ sort_order: category.sort_order }).eq('id', swapWith.id),
-    ])
-    invalidate()
+    const ids = categories.map((category) => category.id)
+    const [moved] = ids.splice(index, 1)
+    ids.splice(index + direction, 0, moved)
+    reorderMutation.mutate(ids)
   }
 
   function handleCreate(e: FormEvent) {
@@ -127,16 +138,16 @@ export function CategoriesPage() {
               <div className="flex flex-col">
                 <button
                   className="cursor-pointer text-neutral-400 hover:text-neutral-700 disabled:opacity-30"
-                  disabled={index === 0}
-                  onClick={() => move(category, -1)}
+                  disabled={index === 0 || reorderMutation.isPending}
+                  onClick={() => move(index, -1)}
                   aria-label="Subir"
                 >
                   <ArrowUp size={15} />
                 </button>
                 <button
                   className="cursor-pointer text-neutral-400 hover:text-neutral-700 disabled:opacity-30"
-                  disabled={index === categories.length - 1}
-                  onClick={() => move(category, 1)}
+                  disabled={index === categories.length - 1 || reorderMutation.isPending}
+                  onClick={() => move(index, 1)}
                   aria-label="Bajar"
                 >
                   <ArrowDown size={15} />

@@ -242,3 +242,13 @@ pnpm build
 `close_table_session` es exclusiva de miembros del restaurante, idempotente y usa el mismo orden de bloqueo mesa → sesión que el ingreso por QR. Los navegadores no pueden cambiar el estado de una sesión con un `update` directo.
 
 **Resultado de implementación:** migración aplicada; 32 verificaciones integradas (incluye consulta anidada del tablero, cierre por RPC, aislamiento y Realtime de cierre); aserciones SQL de POS y pedidos; 18 pruebas de lógica (9 de pedidos/POS + 9 del comensal); typecheck, lint y build verificados. El cobro con Mercado Pago y el cierre automático al saldar siguen en la Fase 7.
+
+## 8. Probar los guardados del panel
+
+Los formularios del admin guardan con RPCs transaccionales: `create_restaurant`, `reorder_categories`, `save_modifier_group` y `save_product`. Si un paso falla, no queda nada guardado y reintentar no duplica filas. Con el stack local y las migraciones aplicadas (`pnpm supabase migration up --local`):
+
+```bash
+docker exec -i supabase_db_TP psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/tests/admin.sql
+```
+
+Las aserciones cubren permisos (los comensales anónimos no pueden crear restaurantes), fallas a mitad de guardado, datos desactualizados y el orden de las listas. Corren dentro de `BEGIN … ROLLBACK`.

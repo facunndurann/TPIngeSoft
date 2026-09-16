@@ -997,6 +997,16 @@ export type Database = {
         Returns: string
       }
       close_table_session: { Args: { p_session_id: string }; Returns: string }
+      create_restaurant: {
+        Args: {
+          p_branch_name: string
+          p_description?: string
+          p_menu_design: Database["public"]["Enums"]["menu_design"]
+          p_name: string
+          p_slug: string
+        }
+        Returns: string
+      }
       dispatch_internal_order: { Args: { p_order_id: string }; Returns: string }
       get_order_pos_type: {
         Args: { p_order_id: string }
@@ -1006,6 +1016,39 @@ export type Database = {
       is_session_participant: { Args: { sid: string }; Returns: boolean }
       join_table_session: {
         Args: { participant_name?: string; qr: string }
+        Returns: string
+      }
+      reorder_categories: {
+        Args: { p_category_ids: string[]; p_restaurant_id: string }
+        Returns: undefined
+      }
+      save_modifier_group: {
+        Args: {
+          p_group_id?: string
+          p_is_available: boolean
+          p_max_select: number
+          p_min_select: number
+          p_name: string
+          p_options: Json
+          p_restaurant_id: string
+        }
+        Returns: string
+      }
+      save_product: {
+        Args: {
+          p_base_price: number
+          p_category_id: string
+          p_description?: string
+          p_dietary_tags: string[]
+          p_food_info?: string
+          p_group_ids: string[]
+          p_ingredients: Json
+          p_is_available: boolean
+          p_media_urls: string[]
+          p_name: string
+          p_product_id?: string
+          p_restaurant_id: string
+        }
         Returns: string
       }
       submit_order: {
