@@ -1,7 +1,6 @@
 import { submitOrderSchema } from '../../../packages/shared/src/orders.ts';
 import { databaseError, OrderError } from '../_shared/errors.ts';
-import type { OrderGateway } from '../_shared/pos/adapter.ts';
-import { createPosAdapter } from '../_shared/pos/index.ts';
+import type { OrderGateway } from '../_shared/order-gateway.ts';
 
 const headers = {
   'Access-Control-Allow-Origin': '*',
@@ -49,14 +48,7 @@ export function createSubmitOrderHandler(authenticate: (jwt: string) => Promise<
       const parsed = submitOrderSchema.safeParse(await readBody(request));
       if (!parsed.success) throw databaseError({ message: 'INVALID_REQUEST' });
       const gateway = await authenticate(token);
-      const id = await gateway.submit(parsed.data);
-      let order = await gateway.loadOrder(id);
-      if (order.status === 'submitted') {
-        const adapter = createPosAdapter(await gateway.posType(id), gateway);
-        await adapter.sendOrder(order);
-        order = await gateway.loadOrder(id);
-      }
-      return json({ orderId: order.id, status: order.status, totalAmount: order.total_amount });
+      return json(await gateway.submit(parsed.data));
     } catch (error) {
       const failure = error instanceof OrderError ? error : databaseError({ message: 'UNKNOWN' });
       return json({ error: { code: failure.code, message: failure.message } }, failure.status);

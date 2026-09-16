@@ -41,7 +41,7 @@ La **app del comensal** incluye las Fases 3 y 4. Aplicá las migraciones con `pn
 
 - Revisión y confirmación del carrito; validación transaccional de disponibilidad, personalización y precios reales. Si cambian los precios, se exige revisar y confirmar nuevamente.
 - Envíos persistidos con identificador de reintento: una respuesta perdida o dos solicitudes simultáneas no duplican el pedido.
-- Recepción mediante `InternalPosAdapter`, con estados y registro de transiciones. El personal avanza las comandas desde el **POS** del admin (`/pos`): tablero kanban, mesas activas y historial del día. El cierre de sesión es manual; el cobro digital corresponde a la Fase 7.
+- Recepción del POS interno en la misma transacción de `submit_order`, con estados y registro de transiciones. El personal avanza las comandas desde el **POS** del admin (`/pos`): tablero kanban, mesas activas y historial del día. El cierre de sesión es manual; el cobro digital corresponde a la Fase 7.
 - Pedidos de toda la mesa con nombres, modificaciones y precios conservados, junto con una cuenta que distingue enviado por confirmar, en cuenta, pendiente y pagado. Realtime con respaldo por polling cada 15 segundos.
 
 El menú se actualiza cada minuto y al volver a la ventana. La cuenta incluye pedidos aceptados y descuenta únicamente pagos aprobados; la integración de pagos corresponde a la Fase 7. Ver el recorrido de prueba y las verificaciones ejecutadas en [docs/SETUP.md](docs/SETUP.md#6-probar-pedidos-y-cuenta-fase-4) y el POS en [docs/SETUP.md](docs/SETUP.md#7-probar-el-pos-propio-fase-5).
@@ -57,7 +57,7 @@ packages/
 supabase/
   migrations/  Schema SQL versionado (Postgres)
   seed.sql     Datos demo: 2 restaurantes con menús distintos + usuarios admin
-  functions/   submit-order, validación de entrada y adaptadores POS
+  functions/   submit-order: validación de entrada y llamada a submit_order
   tests/       Pruebas de función, SQL e integración local
 ```
 
@@ -65,7 +65,7 @@ supabase/
 
 - **Frontend**: React 19 + TypeScript + Vite 7, Tailwind CSS 4, React Router, TanStack Query, Zustand, react-hook-form + Zod.
 - **Backend**: Supabase (Postgres + RLS, Auth, Realtime, Storage, Edge Functions).
-- **Integraciones**: Mercado Pago (sandbox) para pagos; capa de adaptadores POS con POS propio incluido (Fudo y otros a futuro).
+- **Integraciones**: Mercado Pago (sandbox) para pagos; POS propio incluido; los POS externos (Fudo y otros) se integrarán a futuro.
 
 ## Cómo correr el proyecto
 
@@ -95,7 +95,7 @@ pnpm dev:functions  # submit-order         -> http://127.0.0.1:54321/functions/v
 pnpm typecheck        # typecheck de todos los paquetes
 pnpm lint             # lint de todos los paquetes
 pnpm --filter customer test # reglas de personalización, precios y persistencia del carrito
-pnpm test:orders      # contrato HTTP, validación de entrada, adaptador POS y tablero
+pnpm test:orders      # contrato HTTP, validación de entrada, errores y tablero
 pnpm test:orders:integration # pruebas contra el stack local + Edge Functions (pedidos y cierre de sesión)
 pnpm build            # build de producción de todas las apps
 pnpm db:types         # regenerar packages/shared/src/database.types.ts desde la DB local

@@ -79,8 +79,7 @@ begin
   perform pg_temp.expect_close_error(null, 'INVALID_REQUEST');
 
   perform set_config('request.jwt.claim.sub', diner::text, true);
-  v_order_id := public.submit_order(sid, gen_random_uuid(), items, 10, null);
-  perform public.dispatch_internal_order(v_order_id);
+  v_order_id := (public.submit_order(sid, gen_random_uuid(), items, 10, null)).id;
 
   perform set_config('request.jwt.claim.sub', staff::text, true);
   closed_id := public.close_table_session(sid);

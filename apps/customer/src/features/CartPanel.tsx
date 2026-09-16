@@ -96,7 +96,7 @@ export function CartPanel({
       const submission = useCart.getState().submissions[cartKey]
       if (result.outcome === 'already_submitted' && submission?.input.requestId === input.requestId) {
         // El pedido ya llegó y no se puede editar. Reintentar es idempotente:
-        // completa el despacho al POS si faltaba y cierra el envío por onSuccess.
+        // devuelve ese mismo pedido y cierra el envío por onSuccess.
         send.mutate(submission.input)
         return
       }

@@ -1008,10 +1008,6 @@ export type Database = {
         Returns: string
       }
       dispatch_internal_order: { Args: { p_order_id: string }; Returns: string }
-      get_order_pos_type: {
-        Args: { p_order_id: string }
-        Returns: Database["public"]["Enums"]["pos_type"]
-      }
       is_restaurant_member: { Args: { rid: string }; Returns: boolean }
       is_session_participant: { Args: { sid: string }; Returns: boolean }
       join_table_session: {
@@ -1059,7 +1055,29 @@ export type Database = {
           p_request_id: string
           p_session_id: string
         }
-        Returns: string
+        Returns: {
+          accepted_at: string | null
+          cancelled_at: string | null
+          created_at: string
+          delivered_at: string | null
+          id: string
+          notes: string | null
+          preparing_at: string | null
+          ready_at: string | null
+          request_id: string | null
+          request_payload: Json | null
+          restaurant_id: string
+          session_id: string
+          status: Database["public"]["Enums"]["order_status"]
+          submitted_by: string | null
+          total_amount: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "orders"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       transition_order: {
         Args: {

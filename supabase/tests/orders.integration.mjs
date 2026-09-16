@@ -257,12 +257,23 @@ try {
   await check('invalid requests leave no partial orders', async () => {
     assert.equal((await rows(admin, 'orders', 'session_id', sessionId)).length, 0)
   })
+  await check('an inactive POS rejects the submission without leaving an order', async () => {
+    const [integration] = await rows(admin, 'pos_integrations', 'restaurant_id', restaurantId)
+    assert.ok(integration, 'The demo restaurant needs a POS integration row.')
+    await update(admin, 'pos_integrations', integration.id, { is_active: false })
+    try {
+      rejected(await edge(customer, basicRequest()), [503], 'POS_UNAVAILABLE')
+      assert.equal((await rows(admin, 'orders', 'session_id', sessionId)).length, 0)
+    } finally {
+      await update(admin, 'pos_integrations', integration.id, { is_active: integration.is_active })
+    }
+  })
 
   const peerEvents = await subscribe(peer, sessionId)
   const outsiderEvents = await subscribe(outsider, sessionId)
   const originalRequest = request()
   let orderId
-  await check('concurrent retries create and dispatch exactly one order', async () => {
+  await check('concurrent retries create and accept exactly one order', async () => {
     const results = await Promise.all(Array.from({ length: 3 }, () => edge(customer, originalRequest)))
     const orders = results.map(successful)
     orderId = orders[0].orderId
@@ -391,22 +402,27 @@ try {
 
   const peerRequest = basicRequest()
   let peerOrderId
-  await check('submitted orders appear separately before POS acceptance', async () => {
-    peerOrderId = unwrap(await peer.rpc('submit_order', {
+  await check('submit_order creates and accepts the order in one transaction', async () => {
+    const order = unwrap(await peer.rpc('submit_order', {
       p_session_id: sessionId,
       p_request_id: peerRequest.requestId,
       p_items: peerRequest.items,
       p_expected_total: peerRequest.expectedTotal,
       p_notes: peerRequest.notes,
     }), 'Submit order RPC')
-    assert.equal((await rows(peer, 'orders', 'id', peerOrderId))[0].status, 'submitted')
-    await assertBill(peer, sessionId, { submitted_amount: 1000, total_amount: 2800, paid_amount: 0, pending_amount: 2800 })
+    assert.equal(order.status, 'accepted')
+    assert.equal(Number(order.total_amount), 1000)
+    assert.ok(order.accepted_at)
+    peerOrderId = order.id
+    await assertBill(peer, sessionId, { submitted_amount: 0, total_amount: 3800, paid_amount: 0, pending_amount: 3800 })
   })
-  await check('Edge retries dispatch an existing submitted order without duplicating it', async () => {
+  await check('Edge replays an existing order without duplicating it', async () => {
     const result = successful(await edge(peer, peerRequest))
     assert.equal(result.orderId, peerOrderId)
+    assert.equal(Number(result.totalAmount), 1000)
     assert.equal((await rows(customer, 'orders', 'session_id', sessionId)).length, 2)
-    await assertBill(customer, sessionId, { submitted_amount: 0, total_amount: 3800, paid_amount: 0, pending_amount: 3800 })
+    const logs = await rows(admin, 'integration_logs', 'order_id', peerOrderId)
+    assert.equal(logs.filter((row) => row.event === 'pos.internal.accepted').length, 1)
   })
   await check('only members of the order restaurant can advance its status', async () => {
     for (const actor of [customer, outsider, otherAdmin]) {

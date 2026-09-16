@@ -17,7 +17,7 @@ import { DEFAULT_MENU_DESIGN } from '../../packages/shared/src/designs.ts'
 import menuDesignEnumSql from '../migrations/20260915150000_menu_design_enum.sql?raw'
 import { createSubmitOrderHandler } from '../functions/submit-order/handler.ts'
 import { databaseError } from '../functions/_shared/errors.ts'
-import type { OrderGateway, PosOrder } from '../functions/_shared/pos/adapter.ts'
+import type { OrderGateway } from '../functions/_shared/order-gateway.ts'
 
 const input = {
   sessionId: '00000000-0000-4000-8000-000000000001',
@@ -26,17 +26,13 @@ const input = {
   expectedTotal: 20.2,
 }
 const request = (body: unknown = input, headers: Record<string, string> = { Authorization: 'Bearer valid-user', 'Content-Type': 'application/json' }) => new Request('http://local/submit-order', { method: 'POST', headers, body: JSON.stringify(body) })
+const accepted = { orderId: input.requestId, status: 'accepted', totalAmount: 20.2 } as const
 function fixture() {
-  let status: PosOrder['status'] = 'submitted'
-  let sends = 0
   let creates = 0
   const gateway: OrderGateway = {
-    submit: async () => { creates++; return input.requestId },
-    loadOrder: async () => ({ id: input.requestId, status, total_amount: 20.2 } as PosOrder),
-    posType: async () => 'internal',
-    dispatchInternal: async () => { sends++; status = 'accepted' },
+    submit: async () => { creates++; return accepted },
   }
-  return { gateway, sends: () => sends, creates: () => creates }
+  return { gateway, creates: () => creates }
 }
 
 test('schema rejects forged amounts, attribution, invalid quantities and duplicate selections', () => {
@@ -73,46 +69,33 @@ test('requires a verified identity and valid bounded JSON', async () => {
   assert.equal(creates(), 0)
 })
 
-test('dispatches through the internal adapter and returns server prices and status', async () => {
-  const { gateway, sends } = fixture()
-  const handler = createSubmitOrderHandler(async () => gateway)
-  const result = await handler(request())
+test('returns the order status and total confirmed by submit_order', async () => {
+  const { gateway, creates } = fixture()
+  const result = await createSubmitOrderHandler(async () => gateway)(request())
   assert.equal(result.status, 200)
-  assert.deepEqual(await result.json(), { orderId: input.requestId, status: 'accepted', totalAmount: 20.2 })
-  await handler(request())
-  assert.equal(sends(), 1, 'an already received order must not be dispatched again')
+  assert.deepEqual(await result.json(), accepted)
+  assert.equal(creates(), 1)
 })
 
-test('price changes do not dispatch, errors retain a safe actionable code', async () => {
-  const { gateway, sends } = fixture()
-  gateway.submit = async () => { throw databaseError({ message: 'PRICE_CHANGED' }) }
-  const response = await createSubmitOrderHandler(async () => gateway)(request())
-  assert.equal(response.status, 409)
-  assert.equal((await response.json()).error.code, 'PRICE_CHANGED')
-  assert.equal(sends(), 0)
-})
-
-test('adapter failure preserves submission and retry delivers the same order', async () => {
-  const { gateway, sends } = fixture()
-  const dispatch = gateway.dispatchInternal
-  gateway.dispatchInternal = async () => { throw new Error('private backend detail') }
+test('business errors keep their HTTP status and actionable code', async () => {
+  const { gateway } = fixture()
   const handler = createSubmitOrderHandler(async () => gateway)
-  const failed = await handler(request())
-  assert.equal(failed.status, 503)
-  assert.doesNotMatch(await failed.text(), /private backend detail/)
-  gateway.dispatchInternal = dispatch
-  const retry = await handler(request())
-  assert.equal((await retry.json()).orderId, input.requestId)
-  assert.equal(sends(), 1)
+  for (const [code, status] of [['PRICE_CHANGED', 409], ['POS_UNAVAILABLE', 503], ['POS_UNSUPPORTED', 503]] as const) {
+    gateway.submit = async () => { throw databaseError({ message: code }) }
+    const response = await handler(request())
+    assert.equal(response.status, status)
+    assert.equal((await response.json()).error.code, code)
+  }
 })
 
-test('unsupported POS is explicit and never silently falls back to internal', async () => {
-  const { gateway, sends } = fixture()
-  gateway.posType = async () => 'fudo'
-  const response = await createSubmitOrderHandler(async () => gateway)(request())
-  assert.equal(response.status, 503)
-  assert.equal((await response.json()).error.code, 'POS_UNSUPPORTED')
-  assert.equal(sends(), 0)
+test('unexpected failures never leak backend details', async () => {
+  const { gateway } = fixture()
+  gateway.submit = async () => { throw new Error('private backend detail') }
+  const failed = await createSubmitOrderHandler(async () => gateway)(request())
+  assert.equal(failed.status, 503)
+  const body = await failed.text()
+  assert.doesNotMatch(body, /private backend detail/)
+  assert.equal(JSON.parse(body).error.code, 'SERVER_ERROR')
 })
 
 test('POS board groups kitchen columns, FIFO in prep/ready, and newest first otherwise', () => {

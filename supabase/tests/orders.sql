@@ -34,6 +34,8 @@ declare
   choice_two uuid;
   request_id uuid := gen_random_uuid();
   v_order_id uuid;
+  legacy_order_id uuid;
+  saved public.orders;
   items jsonb;
   changed jsonb;
   bill record;
@@ -117,12 +119,23 @@ begin
   update public.tables set is_active = false where id = table_id;
   perform pg_temp.expect_submit_error(sid, request_id, items, 23.50, null, 'TABLE_UNAVAILABLE');
   update public.tables set is_active = true where id = table_id;
+  -- Un POS que no puede recibir el pedido revierte el envío completo; el mismo requestId
+  -- se usa más abajo para confirmar que el reintento posterior funciona.
+  insert into public.pos_integrations(restaurant_id, type, is_active) values(restaurant, 'internal', false);
+  perform pg_temp.expect_submit_error(sid, request_id, items, 23.50, null, 'POS_UNAVAILABLE');
+  update public.pos_integrations set type = 'fudo', is_active = true where restaurant_id = restaurant;
+  perform pg_temp.expect_submit_error(sid, request_id, items, 23.50, null, 'POS_UNSUPPORTED');
+  delete from public.pos_integrations where restaurant_id = restaurant;
   perform pg_temp.expect_submit_error(sid, request_id, items, 0, null, 'PRICE_CHANGED');
   if exists(select 1 from public.orders where session_id = sid) then
     raise exception 'Invalid requests left partial orders';
   end if;
 
-  v_order_id := public.submit_order(sid, request_id, items, 23.50, 'Kitchen note');
+  saved := public.submit_order(sid, request_id, items, 23.50, 'Kitchen note');
+  v_order_id := saved.id;
+  if saved.status <> 'accepted' or saved.total_amount <> 23.50 or saved.accepted_at is null then
+    raise exception 'submit_order must return the order accepted by the internal POS';
+  end if;
   if not exists(select 1 from public.order_items oi where oi.order_id = v_order_id
     and oi.product_name = 'Original dish' and oi.quantity = 2 and oi.is_shared
     and oi.base_price = 10.50 and oi.total_price = 23.50 and oi.participant_id = participant) then
@@ -134,17 +147,23 @@ begin
       and om.group_name = 'Original group' and om.price_delta = 1.25) then
     raise exception 'Missing modifier snapshot';
   end if;
-  select * into bill from public.session_bills where session_id = sid;
-  if bill.submitted_amount <> 23.50 or bill.total_amount <> 0 or bill.pending_amount <> 0
-    or bill.paid_amount <> 0 or bill.is_settled then raise exception 'Incorrect submitted bill'; end if;
-  if public.get_order_pos_type(v_order_id) <> 'internal' then raise exception 'Missing default POS'; end if;
-  perform public.dispatch_internal_order(v_order_id);
-  perform public.dispatch_internal_order(v_order_id);
   if (select count(*) from public.integration_logs l where l.order_id = v_order_id
-    and event = 'pos.internal.accepted') <> 1 then raise exception 'Duplicate dispatch'; end if;
+    and event = 'pos.internal.accepted') <> 1 then raise exception 'Missing internal POS acceptance log'; end if;
   select * into bill from public.session_bills where session_id = sid;
   if bill.submitted_amount <> 0 or bill.total_amount <> 23.50 or bill.pending_amount <> 23.50
-    or bill.is_settled then raise exception 'Incorrect accepted bill'; end if;
+    or bill.paid_amount <> 0 or bill.is_settled then raise exception 'Incorrect accepted bill'; end if;
+
+  -- Pedidos 'submitted' anteriores a este flujo: la cuenta los separa y
+  -- dispatch_internal_order (vía transition_order) los acepta una sola vez.
+  insert into public.orders(restaurant_id, session_id, submitted_by, total_amount)
+    values(restaurant, sid, participant, 4) returning id into legacy_order_id;
+  select * into bill from public.session_bills where session_id = sid;
+  if bill.submitted_amount <> 4 or bill.total_amount <> 23.50 then raise exception 'Incorrect submitted bill'; end if;
+  perform public.dispatch_internal_order(legacy_order_id);
+  perform public.dispatch_internal_order(legacy_order_id);
+  if (select count(*) from public.integration_logs l where l.order_id = legacy_order_id
+    and event = 'pos.internal.accepted') <> 1 then raise exception 'Duplicate dispatch'; end if;
+  update public.orders set status = 'cancelled' where id = legacy_order_id;
 
   insert into public.payments(restaurant_id, session_id, participant_id, amount, mode, status)
     values(restaurant, sid, participant, 3.50, 'custom', 'approved'),
@@ -162,7 +181,7 @@ begin
   update public.products set name = 'Changed', base_price = 99, is_available = false where id = product;
   update public.modifier_options set name = 'Changed choice', price_delta = 5 where id = choice;
   update public.table_sessions set status = 'closed', closed_at = now() where id = sid;
-  if public.submit_order(sid, request_id, items, 23.50, 'Kitchen note') <> v_order_id then
+  if (public.submit_order(sid, request_id, items, 23.50, 'Kitchen note')).id <> v_order_id then
     raise exception 'Replay failed after menu change and closure'; end if;
   perform pg_temp.expect_submit_error(sid, request_id, items, 23.50, null, 'IDEMPOTENCY_CONFLICT');
   perform pg_temp.expect_submit_error(sid, gen_random_uuid(), items, 23.50, null, 'SESSION_CLOSED');
