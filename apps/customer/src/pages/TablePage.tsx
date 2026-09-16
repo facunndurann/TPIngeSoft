@@ -10,6 +10,7 @@ import {
 import { MENU_DESIGNS } from '@restaurant-platform/shared'
 import { ErrorMessage } from '@/components/ErrorMessage'
 import { TOAST_DURATION_MS, Toast } from '@/components/Toast'
+import { cartKeyFor } from '@/features/cart'
 import { CartPanel } from '@/features/CartPanel'
 import { MenuBrowse } from '@/features/MenuBrowse'
 import { cartPrice, money } from '@/features/menu'
@@ -75,7 +76,7 @@ function TableApp({ token }: { token: string }) {
   const location = useLocation()
   const [announcement, setAnnouncement] = useState('')
   const cart = useCart()
-  const cartKey = `${sessionId ?? ''}:${joined.data?.userId ?? ''}`
+  const cartKey = cartKeyFor(sessionId, joined.data?.userId)
   const items = cart.carts[cartKey] ?? []
   const sessionOpen = session.data?.status === 'open' && !session.isError
   const canEdit = sessionOpen && !cart.submissions[cartKey]
@@ -207,7 +208,7 @@ export function TableCartPage({ reviewing = false }: { reviewing?: boolean }) {
       cartKey={cartKey}
       sessionId={sessionId}
       menu={menu.data}
-      canEdit={sessionOpen}
+      sessionOpen={sessionOpen}
       reviewing={reviewing}
       refreshMenu={() => menu.refetch({ throwOnError: true })}
       onSubmitted={() => {

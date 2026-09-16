@@ -1,3 +1,4 @@
+import { cartKeyFor } from './cart'
 import type { PendingSubmission } from '../stores/cart'
 
 type RecoverableSession = {
@@ -17,7 +18,8 @@ export async function recoverPendingSession(
 ) {
   const ids = Object.entries(submissions).flatMap(([key, submission]) => {
     const id = submission?.input.sessionId
-    const matchesKey = id && key === `${id}:${userId}` && SESSION_ID.test(id)
+    // La clave es la que prueba que el envío es de este comensal: el input solo trae la sesión.
+    const matchesKey = id && key === cartKeyFor(id, userId) && SESSION_ID.test(id)
     return matchesKey ? [id] : []
   })
   if (!ids.length) return undefined

@@ -14,6 +14,7 @@ import {
   productMedia,
   resolveMenuDesign,
 } from '@restaurant-platform/shared'
+import { cartKeyFor, cartPhase } from '../src/features/cart'
 import { recoverPendingSession } from '../src/features/session-recovery'
 import type { PendingSubmission } from '../src/stores/cart'
 import customerCss from '../src/index.css?raw'
@@ -103,11 +104,45 @@ test('a successful response removes only the exact submitted snapshots', async (
   useCart.getState().finishSubmission(key, submission.input.requestId)
   assert.deepEqual(useCart.getState().carts[key], [changed, added])
 })
+test('a successful response matches submitted lines by value, not by key or option order', async () => {
+  const { useCart } = await import('../src/stores/cart')
+  const key = cartKeyFor('ordered-session', 'user')
+  const item = { ...selection, optionIds: ['o', 'o2'], removedIds: ['i'], id: 'ordered-line', productId: 'p' }
+  useCart.getState().save(key, item)
+  const submission = useCart.getState().beginSubmission(key, 'ordered-session', 30.9)!
+  const reordered = { productId: 'p', id: 'ordered-line', isShared: false, quantity: 3, removedIds: ['i'], optionIds: ['o2', 'o'] }
+  useCart.setState((state) => ({ carts: { ...state.carts, [key]: [reordered] } }))
+  useCart.getState().finishSubmission(key, submission.input.requestId)
+  assert.deepEqual(useCart.getState().carts[key], [])
+})
+test('the cart phase is the single source for what the diner can do', () => {
+  const item = { ...selection, id: 'line', productId: 'p' }
+  const draft = { items: [item], menu, total: 30.9, sessionId: 'session', sessionOpen: true, reviewing: false, menuOutdated: false, sending: false, cancelling: false }
+  assert.deepEqual(cartPhase(draft), { kind: 'editing', editable: true, canReview: true })
+  assert.deepEqual(cartPhase({ ...draft, items: [] }), { kind: 'empty' })
+  assert.deepEqual(cartPhase({ ...draft, menuOutdated: true }), { kind: 'editing', editable: true, canReview: false })
+  assert.deepEqual(cartPhase({ ...draft, items: [{ ...item, optionIds: [] }] }), { kind: 'editing', editable: true, canReview: false })
+  assert.deepEqual(cartPhase({ ...draft, sessionOpen: false }), { kind: 'editing', editable: false, canReview: false })
+  assert.deepEqual(cartPhase({ ...draft, sending: true }), { kind: 'editing', editable: false, canReview: false }, 'a rejection still refreshing the menu freezes the draft')
+
+  const submission: PendingSubmission = { input: { sessionId: 'session', requestId: 'request', expectedTotal: 30.9, items: [] }, snapshot: [item] }
+  assert.deepEqual(cartPhase({ ...draft, submission, sending: true, cancelling: true }), { kind: 'pending', submission, activity: 'sending' })
+  assert.deepEqual(cartPhase({ ...draft, submission, cancelling: true }), { kind: 'pending', submission, activity: 'cancelling' })
+
+  const review = { items: [{ ...item }], total: 30.9 }
+  const reviewing = { ...draft, reviewing: true, review }
+  assert.deepEqual(cartPhase(reviewing), { kind: 'reviewing', review, outdated: false, confirmable: { sessionId: 'session', expectedTotal: 30.9 } })
+  assert.deepEqual(cartPhase({ ...reviewing, total: 31 }), { kind: 'reviewing', review, outdated: true, confirmable: undefined })
+  assert.deepEqual(cartPhase({ ...reviewing, items: [{ ...item, quantity: 4 }] }), { kind: 'reviewing', review, outdated: true, confirmable: undefined })
+  assert.deepEqual(cartPhase({ ...reviewing, menuOutdated: true }), { kind: 'reviewing', review, outdated: false, confirmable: undefined })
+  assert.deepEqual(cartPhase({ ...draft, reviewing: true, menu: undefined }), { kind: 'reviewing', review: undefined, outdated: false, confirmable: undefined })
+})
 test('session recovery restores pending orders after closure only for the authenticated participant and QR table', async () => {
   const previousId = '00000000-0000-4000-8000-000000000001'
   const otherTableId = '00000000-0000-4000-8000-000000000002'
   const otherUserId = '00000000-0000-4000-8000-000000000003'
   const submission = (sessionId: string): PendingSubmission => ({ input: { sessionId, requestId: 'request', expectedTotal: 30.9, items: [{ ...selection, productId: 'p' }] }, snapshot: [] })
+  assert.equal(cartKeyFor(previousId, 'me'), `${previousId}:me`, 'the persisted key format must not change')
   const submissions = {
     [`${previousId}:me`]: submission(previousId),
     [`${otherTableId}:me`]: submission(otherTableId),
