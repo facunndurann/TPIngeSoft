@@ -176,6 +176,22 @@ try {
   const removable = await createFixture(admin, 'product_ingredients', { restaurant_id: restaurantId, product_id: product.id, name: `${title} removable`, is_removable: true })
   const fixed = await createFixture(admin, 'product_ingredients', { restaurant_id: restaurantId, product_id: product.id, name: `${title} fixed`, is_removable: false })
 
+  await check('members cannot attach rows to another restaurant, even with their own restaurant_id', async () => {
+    const attempts = [
+      ['product_ingredients', { restaurant_id: otherRestaurantId, product_id: product.id, name: `${title} foreign` }],
+      ['product_modifier_groups', { restaurant_id: otherRestaurantId, product_id: simple.id, group_id: group.id }],
+      ['modifier_options', { restaurant_id: otherRestaurantId, group_id: group.id, name: `${title} foreign` }],
+      ['products', { restaurant_id: otherRestaurantId, category_id: category.id, name: `${title} foreign`, base_price: 1 }],
+      ['tables', { restaurant_id: otherRestaurantId, branch_id: branch.id, label: `${title} foreign` }],
+    ]
+    for (const [table, values] of attempts) {
+      const result = await otherAdmin.from(table).insert(values).select('id')
+      // Si la base lo aceptara, la fila queda registrada para limpiarla antes de fallar.
+      for (const row of result.data ?? []) fixtures.push({ admin: otherAdmin, table, id: row.id })
+      assert.equal(result.error?.code, '23503', `${table} must reject a parent from another restaurant`)
+    }
+  })
+
   const [customer, peer, outsider] = await Promise.all([anonymous(), anonymous(), anonymous()])
   let sessionId
   let otherSessionId

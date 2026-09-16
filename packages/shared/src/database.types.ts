@@ -126,10 +126,10 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "integration_logs_order_id_fkey"
-            columns: ["order_id"]
+            columns: ["restaurant_id", "order_id"]
             isOneToOne: false
             referencedRelation: "orders"
-            referencedColumns: ["id"]
+            referencedColumns: ["restaurant_id", "id"]
           },
           {
             foreignKeyName: "integration_logs_restaurant_id_fkey"
@@ -244,10 +244,10 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "modifier_options_group_id_fkey"
-            columns: ["group_id"]
+            columns: ["restaurant_id", "group_id"]
             isOneToOne: false
             referencedRelation: "modifier_groups"
-            referencedColumns: ["id"]
+            referencedColumns: ["restaurant_id", "id"]
           },
           {
             foreignKeyName: "modifier_options_restaurant_id_fkey"
@@ -469,17 +469,17 @@ export type Database = {
           },
           {
             foreignKeyName: "orders_session_id_fkey"
-            columns: ["session_id"]
+            columns: ["restaurant_id", "session_id"]
             isOneToOne: false
             referencedRelation: "session_bills"
-            referencedColumns: ["session_id"]
+            referencedColumns: ["restaurant_id", "session_id"]
           },
           {
             foreignKeyName: "orders_session_id_fkey"
-            columns: ["session_id"]
+            columns: ["restaurant_id", "session_id"]
             isOneToOne: false
             referencedRelation: "table_sessions"
-            referencedColumns: ["id"]
+            referencedColumns: ["restaurant_id", "id"]
           },
           {
             foreignKeyName: "orders_submitted_by_fkey"
@@ -544,17 +544,17 @@ export type Database = {
           },
           {
             foreignKeyName: "payments_session_id_fkey"
-            columns: ["session_id"]
+            columns: ["restaurant_id", "session_id"]
             isOneToOne: false
             referencedRelation: "session_bills"
-            referencedColumns: ["session_id"]
+            referencedColumns: ["restaurant_id", "session_id"]
           },
           {
             foreignKeyName: "payments_session_id_fkey"
-            columns: ["session_id"]
+            columns: ["restaurant_id", "session_id"]
             isOneToOne: false
             referencedRelation: "table_sessions"
-            referencedColumns: ["id"]
+            referencedColumns: ["restaurant_id", "id"]
           },
         ]
       }
@@ -615,10 +615,10 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "pos_product_mappings_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: true
+            columns: ["restaurant_id", "product_id"]
+            isOneToOne: false
             referencedRelation: "products"
-            referencedColumns: ["id"]
+            referencedColumns: ["restaurant_id", "id"]
           },
           {
             foreignKeyName: "pos_product_mappings_restaurant_id_fkey"
@@ -660,10 +660,10 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "product_ingredients_product_id_fkey"
-            columns: ["product_id"]
+            columns: ["restaurant_id", "product_id"]
             isOneToOne: false
             referencedRelation: "products"
-            referencedColumns: ["id"]
+            referencedColumns: ["restaurant_id", "id"]
           },
           {
             foreignKeyName: "product_ingredients_restaurant_id_fkey"
@@ -699,17 +699,17 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "product_modifier_groups_group_id_fkey"
-            columns: ["group_id"]
+            columns: ["restaurant_id", "group_id"]
             isOneToOne: false
             referencedRelation: "modifier_groups"
-            referencedColumns: ["id"]
+            referencedColumns: ["restaurant_id", "id"]
           },
           {
             foreignKeyName: "product_modifier_groups_product_id_fkey"
-            columns: ["product_id"]
+            columns: ["restaurant_id", "product_id"]
             isOneToOne: false
             referencedRelation: "products"
-            referencedColumns: ["id"]
+            referencedColumns: ["restaurant_id", "id"]
           },
           {
             foreignKeyName: "product_modifier_groups_restaurant_id_fkey"
@@ -766,10 +766,10 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "products_category_id_fkey"
-            columns: ["category_id"]
+            columns: ["restaurant_id", "category_id"]
             isOneToOne: false
             referencedRelation: "menu_categories"
-            referencedColumns: ["id"]
+            referencedColumns: ["restaurant_id", "id"]
           },
           {
             foreignKeyName: "products_restaurant_id_fkey"
@@ -916,10 +916,10 @@ export type Database = {
           },
           {
             foreignKeyName: "table_sessions_table_id_fkey"
-            columns: ["table_id"]
+            columns: ["restaurant_id", "table_id"]
             isOneToOne: false
             referencedRelation: "tables"
-            referencedColumns: ["id"]
+            referencedColumns: ["restaurant_id", "id"]
           },
         ]
       }
@@ -954,10 +954,10 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "tables_branch_id_fkey"
-            columns: ["branch_id"]
+            columns: ["restaurant_id", "branch_id"]
             isOneToOne: false
             referencedRelation: "branches"
-            referencedColumns: ["id"]
+            referencedColumns: ["restaurant_id", "id"]
           },
           {
             foreignKeyName: "tables_restaurant_id_fkey"

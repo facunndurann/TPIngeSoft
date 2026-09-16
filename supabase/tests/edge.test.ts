@@ -11,7 +11,7 @@ import {
   posErrorCode,
 } from '../../packages/shared/src/pos.ts'
 // Si otra migración vuelve a redefinir transition_order, apuntá este import a esa.
-import transitionOrderSql from '../migrations/20260915130000_pos_transition_table.sql?raw'
+import transitionOrderSql from '../migrations/20260916120000_restaurant_scoped_foreign_keys.sql?raw'
 import { DEFAULT_MENU_DESIGN } from '../../packages/shared/src/designs.ts'
 // Si otra migración cambia el default de restaurants.menu_design, apuntá este import a esa.
 import menuDesignEnumSql from '../migrations/20260915150000_menu_design_enum.sql?raw'

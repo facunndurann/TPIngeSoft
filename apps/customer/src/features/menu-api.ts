@@ -15,7 +15,6 @@ export async function loadTable(token: string) {
       .from('branches')
       .select('*')
       .eq('id', table.branch_id)
-      .eq('restaurant_id', table.restaurant_id)
       .eq('is_active', true)
       .single(),
     supabase.from('restaurants').select('*').eq('id', table.restaurant_id).single(),
