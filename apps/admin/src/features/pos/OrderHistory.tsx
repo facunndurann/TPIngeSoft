@@ -1,12 +1,11 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { asAmount, dayRangeUtc, localDateKey, orderStatusLabels } from '@restaurant-platform/shared'
+import { localDateKey, orderStatusLabels } from '@restaurant-platform/shared'
 import type { OrderStatus } from '@restaurant-platform/shared'
 import { formatPrice } from '@/lib/format'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { Badge, EmptyState, ErrorText, Input, Modal, Select, Spinner } from '@/components/ui'
-import { loadDayOrders } from './api'
-import type { PosOrder } from './types'
+import { posHistoryQuery, type PosOrder } from './api'
 
 const statusFilterOptions: Array<{ value: 'all' | OrderStatus; label: string }> = [
   { value: 'all', label: 'Todos los estados' },
@@ -24,13 +23,8 @@ export function OrderHistory() {
   const [status, setStatus] = useState<'all' | OrderStatus>('all')
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<PosOrder | null>(null)
-  const range = dayRangeUtc(dateKey)
 
-  const history = useQuery({
-    queryKey: ['pos', restaurant.id, 'history', dateKey],
-    queryFn: () => loadDayOrders(restaurant.id, range.start, range.end),
-    refetchInterval: 15000,
-  })
+  const history = useQuery(posHistoryQuery(restaurant.id, dateKey))
 
   const filtered = useMemo(() => {
     const query = search.trim().toLocaleLowerCase()
@@ -48,7 +42,7 @@ export function OrderHistory() {
 
   const totals = filtered.reduce(
     (acc, order) => {
-      if (order.status !== 'cancelled') acc.amount += asAmount(order.total_amount)
+      if (order.status !== 'cancelled') acc.amount += order.total_amount
       acc.count += 1
       return acc
     },
@@ -143,7 +137,7 @@ export function OrderHistory() {
                     </Badge>
                   </td>
                   <td className="px-4 py-3 text-right font-medium text-neutral-900">
-                    {formatPrice(asAmount(order.total_amount))}
+                    {formatPrice(order.total_amount)}
                   </td>
                 </tr>
               ))}
@@ -166,7 +160,7 @@ function HistoryDetail({ order }: { order: PosOrder }) {
     <div className="space-y-3 text-sm">
       <div className="flex items-center justify-between">
         <Badge color={order.status === 'cancelled' ? 'red' : 'indigo'}>{orderStatusLabels[order.status]}</Badge>
-        <span className="font-semibold">{formatPrice(asAmount(order.total_amount))}</span>
+        <span className="font-semibold">{formatPrice(order.total_amount)}</span>
       </div>
       <p className="text-xs text-neutral-500">#{order.id.slice(0, 8)}</p>
       {order.order_items.map((item) => (
@@ -177,7 +171,7 @@ function HistoryDetail({ order }: { order: PosOrder }) {
           {item.is_shared && <p className="text-xs text-neutral-500">Para compartir</p>}
           {item.order_item_modifiers.map((modifier) => (
             <p key={modifier.id} className="text-xs text-neutral-600">
-              + {modifier.group_name}: {modifier.option_name} ({formatPrice(asAmount(modifier.price_delta))})
+              + {modifier.group_name}: {modifier.option_name} ({formatPrice(modifier.price_delta)})
             </p>
           ))}
           {item.order_item_removed_ingredients.map((ingredient) => (

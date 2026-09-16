@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { NavLink, Outlet } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { useRestaurant } from '@/restaurant/restaurant-context'
+import { posQueryKey } from './api'
 import { subscribeToRestaurantPos } from './realtime'
 
 const tabs = [
@@ -16,7 +17,7 @@ export function PosPage() {
 
   useEffect(() => {
     return subscribeToRestaurantPos(restaurant.id, () => {
-      void queryClient.invalidateQueries({ queryKey: ['pos', restaurant.id] })
+      void queryClient.invalidateQueries({ queryKey: posQueryKey(restaurant.id) })
     })
   }, [restaurant.id, queryClient])
 

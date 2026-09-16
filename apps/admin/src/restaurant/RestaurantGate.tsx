@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Store } from 'lucide-react'
 import { DEFAULT_MENU_DESIGN } from '@restaurant-platform/shared'
 import { rpcError } from '@/lib/rpc-error'
+import { myRestaurantQuery } from '@/queries/restaurant'
 import { supabase } from '@/lib/supabase'
 import { Button, ErrorText, Field, Input, Spinner, Textarea } from '@/components/ui'
 import { DesignPicker } from '@/features/DesignPicker'
@@ -14,17 +15,7 @@ import { RestaurantContext } from './restaurant-context'
  * sucursal inicial + POS interno).
  */
 export function RestaurantGate({ children }: { children: ReactNode }) {
-  const { data, isLoading } = useQuery({
-    queryKey: ['my-restaurant'],
-    queryFn: async () => {
-      const { data: memberships, error } = await supabase
-        .from('restaurant_members')
-        .select('restaurant_id, restaurants(*)')
-        .limit(1)
-      if (error) throw error
-      return memberships?.[0]?.restaurants ?? null
-    },
-  })
+  const { data, isLoading } = useQuery(myRestaurantQuery)
 
   if (isLoading) return <Spinner />
   if (!data) return <CreateRestaurantScreen />
@@ -66,7 +57,7 @@ function CreateRestaurantScreen() {
       })
       if (rpcErr) throw rpcError(rpcErr)
 
-      await queryClient.invalidateQueries({ queryKey: ['my-restaurant'] })
+      await queryClient.invalidateQueries({ queryKey: myRestaurantQuery.queryKey })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error creando el restaurante')
     } finally {

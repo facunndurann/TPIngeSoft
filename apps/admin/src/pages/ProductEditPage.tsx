@@ -5,6 +5,9 @@ import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
 import { PRODUCT_MEDIA_LIMIT } from '@restaurant-platform/shared'
 import { rpcError } from '@/lib/rpc-error'
 import { supabase } from '@/lib/supabase'
+import { categoriesQuery } from '@/queries/categories'
+import { modifierGroupsQuery } from '@/queries/modifier-groups'
+import { productQuery, productsByCategoryQuery } from '@/queries/products'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { MediaUploader } from '@/features/MediaUploader'
 import { savedMediaDrafts, uploadMediaDrafts, type MediaDraft } from '@/features/product-media'
@@ -47,47 +50,9 @@ export function ProductEditPage() {
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
-  const { data: categories } = useQuery({
-    queryKey: ['categories', restaurant.id],
-    queryFn: async () => {
-      const { data, error: qErr } = await supabase
-        .from('menu_categories')
-        .select('*')
-        .eq('restaurant_id', restaurant.id)
-        .order('sort_order')
-      if (qErr) throw qErr
-      return data
-    },
-  })
-
-  const { data: allGroups } = useQuery({
-    queryKey: ['modifier-groups', restaurant.id],
-    queryFn: async () => {
-      const { data, error: qErr } = await supabase
-        .from('modifier_groups')
-        .select('*')
-        .eq('restaurant_id', restaurant.id)
-        .order('created_at')
-      if (qErr) throw qErr
-      return data
-    },
-  })
-
-  const { data: existing, isLoading } = useQuery({
-    queryKey: ['product', productId],
-    enabled: !isNew,
-    queryFn: async () => {
-      const { data, error: qErr } = await supabase
-        .from('products')
-        .select('*, product_ingredients(*), product_modifier_groups(group_id)')
-        .eq('id', productId!)
-        // save_product guarda los grupos en el orden de la lista: se cargan en ese mismo orden.
-        .order('sort_order', { referencedTable: 'product_modifier_groups' })
-        .single()
-      if (qErr) throw qErr
-      return data
-    },
-  })
+  const { data: categories } = useQuery(categoriesQuery(restaurant.id))
+  const { data: allGroups } = useQuery(modifierGroupsQuery(restaurant.id))
+  const { data: existing, isLoading } = useQuery({ ...productQuery(productId ?? ''), enabled: !isNew })
 
   useEffect(() => {
     if (!existing || loadedProduct) return
@@ -166,8 +131,8 @@ export function ProductEditPage() {
         throw rpcError(rpcErr)
       }
 
-      await queryClient.invalidateQueries({ queryKey: ['products', restaurant.id] })
-      await queryClient.invalidateQueries({ queryKey: ['product', savedId] })
+      await queryClient.invalidateQueries({ queryKey: productsByCategoryQuery(restaurant.id).queryKey })
+      await queryClient.invalidateQueries({ queryKey: productQuery(savedId).queryKey })
       navigate('/productos')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error guardando el producto')

@@ -92,11 +92,6 @@ export function groupOrdersByColumn<T extends { status: OrderStatus; created_at:
   return grouped
 }
 
-export function asAmount(value: number | string | null | undefined): number {
-  const amount = typeof value === 'number' ? value : Number(value ?? 0)
-  return Number.isFinite(amount) ? amount : 0
-}
-
 export function localDateKey(now: Date = new Date(), timeZone = POS_TIME_ZONE): string {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone,

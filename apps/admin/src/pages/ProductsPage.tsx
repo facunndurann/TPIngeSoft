@@ -5,6 +5,7 @@ import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { productMedia, type Tables } from '@restaurant-platform/shared'
 import { MediaThumb } from '@/features/MediaThumb'
 import { supabase } from '@/lib/supabase'
+import { productsByCategoryQuery } from '@/queries/products'
 import { formatPrice } from '@/lib/format'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { Badge, Button, EmptyState, ErrorText, Spinner, Toggle } from '@/components/ui'
@@ -15,23 +16,10 @@ export function ProductsPage() {
   const [categoryFilter, setCategoryFilter] = useState<string | 'all'>('all')
   const [error, setError] = useState<string | null>(null)
 
-  // Una sola consulta: cada producto llega dentro de su categoría (la FK compuesta
-  // garantiza que es del mismo restaurante), así que ninguno puede quedar sin agrupar.
-  const { data: categories, isLoading } = useQuery({
-    queryKey: ['products', restaurant.id],
-    queryFn: async () => {
-      const { data, error: qErr } = await supabase
-        .from('menu_categories')
-        .select('*, products(*)')
-        .eq('restaurant_id', restaurant.id)
-        .order('sort_order')
-        .order('sort_order', { referencedTable: 'products' })
-      if (qErr) throw qErr
-      return data
-    },
-  })
+  const { data: categories, isLoading } = useQuery(productsByCategoryQuery(restaurant.id))
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['products', restaurant.id] })
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: productsByCategoryQuery(restaurant.id).queryKey })
 
   const availabilityMutation = useMutation({
     mutationFn: async ({ id, is_available }: { id: string; is_available: boolean }) => {

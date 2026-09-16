@@ -2,6 +2,8 @@ import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { branchesQuery } from '@/queries/branches'
+import { myRestaurantQuery } from '@/queries/restaurant'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { DesignPicker } from '@/features/DesignPicker'
 import { Badge, Button, ErrorText, Field, Input, Spinner, Textarea, Toggle } from '@/components/ui'
@@ -28,7 +30,7 @@ export function SettingsPage() {
       if (mErr) throw mErr
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['my-restaurant'] })
+      queryClient.invalidateQueries({ queryKey: myRestaurantQuery.queryKey })
       setSavedMessage(true)
       setTimeout(() => setSavedMessage(false), 2000)
     },
@@ -78,20 +80,9 @@ function BranchesSection({ restaurantId }: { restaurantId: string }) {
   const [newAddress, setNewAddress] = useState('')
   const [error, setError] = useState<string | null>(null)
 
-  const { data: branches, isLoading } = useQuery({
-    queryKey: ['branches', restaurantId],
-    queryFn: async () => {
-      const { data, error: qErr } = await supabase
-        .from('branches')
-        .select('*')
-        .eq('restaurant_id', restaurantId)
-        .order('created_at')
-      if (qErr) throw qErr
-      return data
-    },
-  })
+  const { data: branches, isLoading } = useQuery(branchesQuery(restaurantId))
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['branches', restaurantId] })
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: branchesQuery(restaurantId).queryKey })
 
   const createMutation = useMutation({
     mutationFn: async () => {

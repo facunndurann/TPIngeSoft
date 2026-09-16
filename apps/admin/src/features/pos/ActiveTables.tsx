@@ -1,12 +1,21 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { asAmount, dayRangeUtc, formatElapsed, isKitchenTicket, localDateKey } from '@restaurant-platform/shared'
+import { formatElapsed, isKitchenTicket } from '@restaurant-platform/shared'
 import { formatPrice } from '@/lib/format'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { Badge, Button, EmptyState, ErrorText, Modal, Spinner } from '@/components/ui'
-import { closePosSession, loadBoardOrders, loadOpenSessions, loadRestaurantTables, loadSessionBills } from './api'
+import {
+  closePosSession,
+  posBillsQuery,
+  posBoardQuery,
+  posDiningTablesQuery,
+  posOpenSessionsQuery,
+  posQueryKey,
+  type PosBill,
+  type PosDiningTable,
+  type PosOpenSession,
+} from './api'
 import { useNow } from './useNow'
-import type { PosBill, PosDiningTable, PosOpenSession } from './types'
 
 export function ActiveTables() {
   const restaurant = useRestaurant()
@@ -15,26 +24,11 @@ export function ActiveTables() {
   const [closing, setClosing] = useState<PosOpenSession | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const sessions = useQuery({
-    queryKey: ['pos', restaurant.id, 'sessions'],
-    queryFn: () => loadOpenSessions(restaurant.id),
-    refetchInterval: 15000,
-  })
-  const bills = useQuery({
-    queryKey: ['pos', restaurant.id, 'bills', sessions.data?.map((session) => session.id).join(',')],
-    queryFn: () => loadSessionBills((sessions.data ?? []).map((session) => session.id)),
-    enabled: !!sessions.data,
-    refetchInterval: 15000,
-  })
-  const tables = useQuery({
-    queryKey: ['pos', restaurant.id, 'tables'],
-    queryFn: () => loadRestaurantTables(restaurant.id),
-  })
-  const board = useQuery({
-    queryKey: ['pos', restaurant.id, 'board'],
-    queryFn: () => loadBoardOrders(restaurant.id, dayRangeUtc(localDateKey()).start),
-    refetchInterval: 15000,
-  })
+  const sessions = useQuery(posOpenSessionsQuery(restaurant.id))
+  const sessionIds = (sessions.data ?? []).map((session) => session.id)
+  const bills = useQuery({ ...posBillsQuery(restaurant.id, sessionIds), enabled: !!sessions.data })
+  const tables = useQuery(posDiningTablesQuery(restaurant.id))
+  const board = useQuery(posBoardQuery(restaurant.id))
 
   const billBySession = useMemo(() => {
     const map = new Map<string, PosBill>()
@@ -54,7 +48,7 @@ export function ActiveTables() {
     onSuccess: () => {
       setClosing(null)
       setError(null)
-      void queryClient.invalidateQueries({ queryKey: ['pos', restaurant.id] })
+      void queryClient.invalidateQueries({ queryKey: posQueryKey(restaurant.id) })
     },
     onError: (err) => setError(err instanceof Error ? err.message : 'No pudimos cerrar la sesión.'),
   })
@@ -106,8 +100,8 @@ export function ActiveTables() {
                           {formatElapsed(session.opened_at, now)}
                         </p>
                       </div>
-                      <Badge color={asAmount(bill?.pending_amount) > 0 ? 'amber' : 'green'}>
-                        {asAmount(bill?.pending_amount) > 0 ? 'Pendiente' : 'Sin saldo'}
+                      <Badge color={(bill?.pending_amount ?? 0) > 0 ? 'amber' : 'green'}>
+                        {(bill?.pending_amount ?? 0) > 0 ? 'Pendiente' : 'Sin saldo'}
                       </Badge>
                     </div>
                     <p className="text-xs text-neutral-500 break-words">
@@ -118,25 +112,25 @@ export function ActiveTables() {
                       <div>
                         <dt className="text-neutral-500">Por confirmar</dt>
                         <dd className="font-medium text-neutral-900">
-                          {formatPrice(asAmount(bill?.submitted_amount))}
+                          {formatPrice(bill?.submitted_amount ?? 0)}
                         </dd>
                       </div>
                       <div>
                         <dt className="text-neutral-500">En cuenta</dt>
                         <dd className="font-medium text-neutral-900">
-                          {formatPrice(asAmount(bill?.total_amount))}
+                          {formatPrice(bill?.total_amount ?? 0)}
                         </dd>
                       </div>
                       <div>
                         <dt className="text-neutral-500">Pagado</dt>
                         <dd className="font-medium text-neutral-900">
-                          {formatPrice(asAmount(bill?.paid_amount))}
+                          {formatPrice(bill?.paid_amount ?? 0)}
                         </dd>
                       </div>
                       <div>
                         <dt className="text-neutral-500">Pendiente</dt>
                         <dd className="font-medium text-neutral-900">
-                          {formatPrice(asAmount(bill?.pending_amount))}
+                          {formatPrice(bill?.pending_amount ?? 0)}
                         </dd>
                       </div>
                     </dl>
@@ -187,9 +181,9 @@ export function ActiveTables() {
               Los comensales no podrán enviar más pedidos en esta cuenta. Si vuelven a escanear el QR se
               abre una sesión nueva.
             </p>
-            {asAmount(closingBill?.pending_amount) > 0 && (
+            {(closingBill?.pending_amount ?? 0) > 0 && (
               <p className="rounded-lg bg-amber-50 px-3 py-2 text-amber-950">
-                Queda {formatPrice(asAmount(closingBill?.pending_amount))} pendiente. El pago en efectivo no
+                Queda {formatPrice(closingBill?.pending_amount ?? 0)} pendiente. El pago en efectivo no
                 se registra todavía en el sistema.
               </p>
             )}
@@ -199,7 +193,7 @@ export function ActiveTables() {
                 seguir visibles en el tablero.
               </p>
             )}
-            {asAmount(closingBill?.submitted_amount) > 0 && (
+            {(closingBill?.submitted_amount ?? 0) > 0 && (
               <p className="rounded-lg bg-red-50 px-3 py-2 text-red-800">
                 Hay pedidos enviados sin aceptar. Podés cancelarlos desde Comandas.
               </p>

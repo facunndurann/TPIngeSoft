@@ -4,6 +4,7 @@ import { ArrowDown, ArrowUp, Check, Pencil, Plus, Trash2 } from 'lucide-react'
 import type { Tables } from '@restaurant-platform/shared'
 import { rpcError } from '@/lib/rpc-error'
 import { supabase } from '@/lib/supabase'
+import { categoriesQuery } from '@/queries/categories'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { Badge, Button, EmptyState, ErrorText, Input, Spinner, Toggle } from '@/components/ui'
 
@@ -17,20 +18,9 @@ export function CategoriesPage() {
   const [editingName, setEditingName] = useState('')
   const [error, setError] = useState<string | null>(null)
 
-  const { data: categories, isLoading } = useQuery({
-    queryKey: ['categories', restaurant.id],
-    queryFn: async () => {
-      const { data, error: qErr } = await supabase
-        .from('menu_categories')
-        .select('*')
-        .eq('restaurant_id', restaurant.id)
-        .order('sort_order')
-      if (qErr) throw qErr
-      return data
-    },
-  })
+  const { data: categories, isLoading } = useQuery(categoriesQuery(restaurant.id))
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['categories', restaurant.id] })
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: categoriesQuery(restaurant.id).queryKey })
 
   const createMutation = useMutation({
     mutationFn: async (name: string) => {
