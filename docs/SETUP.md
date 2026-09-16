@@ -142,7 +142,7 @@ Recorrido de aceptación:
 Pruebas automáticas de lógica, sin backend:
 
 ```bash
-pnpm --filter customer test
+pnpm test
 pnpm typecheck
 pnpm lint
 pnpm build
@@ -184,11 +184,9 @@ Recorrido de aceptación:
 Pruebas reproducibles:
 
 ```bash
-pnpm --filter customer test
-pnpm test:orders
+pnpm test
 pnpm test:orders:integration
-docker exec -i supabase_db_TP psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/tests/orders.sql
-docker exec -i supabase_db_TP psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/tests/pos.sql
+pnpm test:sql
 pnpm typecheck
 pnpm lint
 pnpm build
@@ -231,9 +229,9 @@ Recorrido de aceptación:
 Pruebas reproducibles (además de las de la sección 6):
 
 ```bash
-pnpm test:orders
+pnpm test
 pnpm test:orders:integration
-docker exec -i supabase_db_TP psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/tests/pos.sql
+pnpm test:sql
 pnpm typecheck
 pnpm lint
 pnpm build
@@ -248,7 +246,7 @@ pnpm build
 Los formularios del admin guardan con RPCs transaccionales: `create_restaurant`, `reorder_categories`, `save_modifier_group` y `save_product`. Si un paso falla, no queda nada guardado y reintentar no duplica filas. Con el stack local y las migraciones aplicadas (`pnpm supabase migration up --local`):
 
 ```bash
-docker exec -i supabase_db_TP psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/tests/admin.sql
+pnpm test:sql
 ```
 
-Las aserciones cubren permisos (los comensales anónimos no pueden crear restaurantes), fallas a mitad de guardado, datos desactualizados y el orden de las listas. Corren dentro de `BEGIN … ROLLBACK`.
+Las aserciones cubren permisos (los comensales anónimos no pueden crear restaurantes), fallas a mitad de guardado, datos desactualizados y el orden de las listas. Corren dentro de `BEGIN … ROLLBACK`, junto con las de pedidos y POS.

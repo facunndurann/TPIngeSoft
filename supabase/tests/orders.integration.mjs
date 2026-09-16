@@ -347,12 +347,19 @@ try {
     assert.ok(ticket.table_sessions.session_participants.length >= 2)
     assert.equal(ticket.order_items[0].product_name, product.name)
     assert.equal(ticket.order_items[0].order_item_modifiers[0].option_name, option.name)
+    // Mismo filtro que el tablero del admin: entregas del día por local_date.
     const board = unwrap(await admin.from('orders').select(posOrderSelect)
       .eq('restaurant_id', restaurantId)
-      .or('status.in.(submitted,accepted,in_preparation,ready),and(status.eq.delivered,created_at.gte."2020-01-01T00:00:00.000Z")'), 'POS board filter')
+      .or(`status.in.(submitted,accepted,in_preparation,ready),and(status.eq.delivered,local_date.eq.${ticket.local_date})`), 'POS board filter')
     assert.ok(board.some((row) => row.id === orderId))
-    const openSessions = unwrap(await admin.from('table_sessions').select('*,session_participants(id,display_name),tables!inner(id,label,branch_id,branch:branches(id,name))').eq('id', sessionId).single(), 'POS session')
-    assert.equal(openSessions.tables.branch.name, branch.name)
+    const history = unwrap(await admin.from('orders').select('id').eq('restaurant_id', restaurantId).eq('local_date', ticket.local_date), 'POS history by day')
+    assert.ok(history.some((row) => row.id === orderId))
+    const openSession = unwrap(await admin.from('pos_open_sessions').select('*').eq('id', sessionId).single(), 'POS open session')
+    assert.equal(openSession.table_label, title)
+    assert.equal(openSession.branch_name, branch.name)
+    assert.ok(openSession.participant_names.length >= 2)
+    assert.equal(openSession.kitchen_tickets, 1)
+    assert.equal(openSession.total_amount, 2800)
   })
   await check('both diners read the shared order and account', async () => {
     assert.equal((await rows(peer, 'orders', 'id', orderId)).length, 1)
@@ -366,6 +373,7 @@ try {
       assert.deepEqual(await rows(actor, 'order_item_modifiers', 'order_item_id', savedItem.id), [])
       assert.deepEqual(await rows(actor, 'order_item_removed_ingredients', 'order_item_id', savedItem.id), [])
       assert.deepEqual(await rows(actor, 'session_bills', 'session_id', sessionId), [])
+      assert.deepEqual(await rows(actor, 'pos_open_sessions', 'id', sessionId), [])
     }
   })
   await check('diners cannot insert orders or alter prices and states directly', async () => {
@@ -531,6 +539,7 @@ try {
     const closed = (await rows(admin, 'table_sessions', 'id', sessionId))[0]
     assert.equal(closed.status, 'closed')
     assert.ok(closed.closed_at)
+    assert.deepEqual(await rows(admin, 'pos_open_sessions', 'id', sessionId), [])
     const logs = await rows(admin, 'integration_logs', 'restaurant_id', restaurantId)
     assert.equal(logs.filter((row) => row.event === 'session.closed' && row.payload?.sessionId === sessionId).length, 1)
     assert.equal((await rows(customer, 'orders', 'id', orderId))[0].status, 'delivered')

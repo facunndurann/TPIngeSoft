@@ -1,4 +1,4 @@
-import { test } from 'node:test'
+import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import { buildMenu, cartPrice, price, productOptions, selectionErrors } from '../src/features/menu'
 import type { Menu, MenuRows } from '../src/features/menu'

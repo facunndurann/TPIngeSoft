@@ -1,7 +1,8 @@
 import { queryOptions } from '@tanstack/react-query'
 import type { QueryData } from '@supabase/supabase-js'
-import { appErrorMessage, dayRangeUtc, localDateKey, type OrderStatus, type Tables } from '@restaurant-platform/shared'
+import { appErrorMessage, type OrderStatus, type Tables } from '@restaurant-platform/shared'
 import { supabase } from '@/lib/supabase'
+import { localDateKey } from './time'
 
 export class PosActionError extends Error {
   constructor(message: string) {
@@ -29,26 +30,36 @@ const ordersOf = (restaurantId: string) =>
     .select('*, order_items(*, order_item_modifiers(*), order_item_removed_ingredients(*)), table_sessions!inner(id, status, opened_at, closed_at, table_id, session_participants(id, display_name, joined_at), tables!inner(id, label, branch_id, branch:branches(id, name)))')
     .eq('restaurant_id', restaurantId)
 
+/**
+ * Fila de la vista pos_open_sessions: sesión abierta con mesa, sucursal, comensales,
+ * cuenta y comandas en cocina. Postgres no propaga NOT NULL a las columnas de una
+ * vista y los tipos generados las marcan nullables; esta vista nunca devuelve null
+ * (joins internos, coalesce y count), así que se declaran requeridas.
+ */
+export type PosOpenSession = {
+  [Column in keyof Tables<'pos_open_sessions'>]-?: NonNullable<Tables<'pos_open_sessions'>[Column]>
+}
+
 const openSessionsOf = (restaurantId: string) =>
   supabase
-    .from('table_sessions')
-    .select('*, session_participants(id, display_name, joined_at), tables!inner(id, label, branch_id, branch:branches(id, name))')
+    .from('pos_open_sessions')
+    .select('*')
     .eq('restaurant_id', restaurantId)
-    .eq('status', 'open')
     .order('opened_at', { ascending: true })
+    .overrideTypes<PosOpenSession[], { merge: false }>()
 
+// El spread aplana la sucursal a branch_name, la misma columna que expone
+// pos_open_sessions: así mesas libres y ocupadas se agrupan con la misma función.
 const diningTablesOf = (restaurantId: string) =>
   supabase
     .from('tables')
-    .select('id, label, branch_id, is_active, branches(id, name)')
+    .select('id, label, is_active, ...branches(branch_name:name)')
     .eq('restaurant_id', restaurantId)
     .order('created_at')
 
 export type PosOrder = QueryData<ReturnType<typeof ordersOf>>[number]
 export type PosOrderItem = PosOrder['order_items'][number]
-export type PosOpenSession = QueryData<ReturnType<typeof openSessionsOf>>[number]
 export type PosDiningTable = QueryData<ReturnType<typeof diningTablesOf>>[number]
-export type PosBill = Tables<'session_bills'>
 
 /** Raíz de las queries del POS: invalidarla refresca tablero, mesas e historial. */
 export const posQueryKey = (restaurantId: string) => ['pos', restaurantId] as const
@@ -60,7 +71,7 @@ export const posBoardQuery = (restaurantId: string) =>
     queryFn: () =>
       rowsOf(
         ordersOf(restaurantId)
-          .or(`status.in.(submitted,accepted,in_preparation,ready),and(status.eq.delivered,created_at.gte."${dayRangeUtc(localDateKey()).start}")`)
+          .or(`status.in.(submitted,accepted,in_preparation,ready),and(status.eq.delivered,local_date.eq.${localDateKey()})`)
           .order('created_at', { ascending: false }),
       ),
     refetchInterval: 15_000,
@@ -69,32 +80,20 @@ export const posBoardQuery = (restaurantId: string) =>
 export const posHistoryQuery = (restaurantId: string, dateKey: string) =>
   queryOptions({
     queryKey: [...posQueryKey(restaurantId), 'history', dateKey],
-    queryFn: () => {
-      const { start, end } = dayRangeUtc(dateKey)
-      return rowsOf(
+    queryFn: () =>
+      rowsOf(
         ordersOf(restaurantId)
-          .gte('created_at', start)
-          .lt('created_at', end)
+          .eq('local_date', dateKey)
           .order('created_at', { ascending: false }),
-      )
-    },
+      ),
     refetchInterval: 15_000,
   })
 
+/** Mesas activas: una sola lectura de la vista, con cuenta y comandas en cocina. */
 export const posOpenSessionsQuery = (restaurantId: string) =>
   queryOptions({
     queryKey: [...posQueryKey(restaurantId), 'sessions'],
     queryFn: () => rowsOf(openSessionsOf(restaurantId)),
-    refetchInterval: 15_000,
-  })
-
-export const posBillsQuery = (restaurantId: string, sessionIds: string[]) =>
-  queryOptions({
-    queryKey: [...posQueryKey(restaurantId), 'bills', sessionIds],
-    queryFn: async (): Promise<PosBill[]> =>
-      sessionIds.length === 0
-        ? []
-        : rowsOf(supabase.from('session_bills').select('*').in('session_id', sessionIds)),
     refetchInterval: 15_000,
   })
 

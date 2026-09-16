@@ -7,7 +7,7 @@ Ver [setup y recorrido de aceptación](../../docs/SETUP.md#6-probar-pedidos-y-cu
 ```bash
 pnpm dev:customer
 pnpm dev:functions
-pnpm --filter customer test
+pnpm test --project customer
 ```
 
 `features/menu-api.ts` carga la carta por restaurante; `features/menu.ts` valida configuraciones y calcula precios con la lógica compartida. `features/session.ts` gestiona ingreso anónimo mediante la RPC transaccional y recupera sesiones con envíos pendientes. `stores/cart.ts` persiste borradores e intentos de envío independientes por sesión y usuario. La UI escucha participantes, pedidos, pagos y cierre de sesión por Realtime y consulta cada 15 segundos como respaldo.

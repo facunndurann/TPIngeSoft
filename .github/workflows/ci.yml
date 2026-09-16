@@ -7,6 +7,7 @@ on:
 
 jobs:
   check:
+    name: Unit tests, typecheck, lint and build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,11 +22,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Customer logic tests
-        run: pnpm --filter customer test
-
-      - name: Order function tests
-        run: pnpm test:orders
+      - name: Unit tests
+        run: pnpm test
 
       - name: Typecheck
         run: pnpm typecheck
@@ -38,3 +36,51 @@ jobs:
         env:
           VITE_SUPABASE_URL: http://127.0.0.1:54321
           VITE_SUPABASE_ANON_KEY: ci-placeholder
+
+  database:
+    name: SQL and integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Aplica migraciones y seed. Studio, correo, imágenes, analytics y pooler
+      # no participan en las pruebas; storage-api sí (las migraciones crean buckets).
+      - name: Start local Supabase
+        run: pnpm exec supabase start -x studio,mailpit,imgproxy,logflare,vector,supavisor
+
+      - name: SQL assertions
+        run: pnpm test:sql
+
+      # La suite integrada llama a submit-order por HTTP. El proceso sigue vivo en
+      # los pasos siguientes; se espera a que el preflight responda 204.
+      - name: Serve submit-order
+        run: |
+          pnpm exec supabase functions serve submit-order > "$RUNNER_TEMP/functions.log" 2>&1 &
+          for attempt in $(seq 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -X OPTIONS http://127.0.0.1:54321/functions/v1/submit-order || true)
+            if [ "$code" = 204 ]; then exit 0; fi
+            sleep 2
+          done
+          cat "$RUNNER_TEMP/functions.log"
+          exit 1
+
+      - name: Integration tests
+        run: |
+          stack=$(pnpm exec supabase status -o json)
+          export SUPABASE_URL=$(jq -r .API_URL <<< "$stack")
+          export SUPABASE_ANON_KEY=$(jq -r .ANON_KEY <<< "$stack")
+          pnpm test:orders:integration
+
+      - name: Edge Functions log
+        if: failure()
+        run: cat "$RUNNER_TEMP/functions.log" || true

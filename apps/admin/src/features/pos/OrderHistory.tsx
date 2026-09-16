@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { localDateKey, orderStatusLabels } from '@restaurant-platform/shared'
+import { orderStatusLabels } from '@restaurant-platform/shared'
 import type { OrderStatus } from '@restaurant-platform/shared'
 import { formatPrice } from '@/lib/format'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { Badge, EmptyState, ErrorText, Input, Modal, Select, Spinner } from '@/components/ui'
 import { posHistoryQuery, type PosOrder } from './api'
+import { localDateKey, POS_TIME_ZONE } from './time'
 
 const statusFilterOptions: Array<{ value: 'all' | OrderStatus; label: string }> = [
   { value: 'all', label: 'Todos los estados' },
@@ -188,7 +189,7 @@ function HistoryDetail({ order }: { order: PosOrder }) {
 
 function formatClock(iso: string) {
   return new Intl.DateTimeFormat('es-AR', {
-    timeZone: 'America/Argentina/Buenos_Aires',
+    timeZone: POS_TIME_ZONE,
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(iso))

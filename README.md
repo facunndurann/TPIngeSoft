@@ -63,7 +63,7 @@ supabase/
 
 ## Stack
 
-- **Frontend**: React 19 + TypeScript + Vite 7, Tailwind CSS 4, React Router, TanStack Query, Zustand, react-hook-form + Zod.
+- **Frontend**: React 19 + TypeScript + Vite 7, Tailwind CSS 4, React Router, TanStack Query y Zustand (carrito del comensal). Zod valida los contratos de `packages/shared`.
 - **Backend**: Supabase (Postgres + RLS, Auth, Realtime, Storage, Edge Functions).
 - **Integraciones**: Mercado Pago (sandbox) para pagos; POS propio incluido; los POS externos (Fudo y otros) se integrarán a futuro.
 
@@ -94,8 +94,8 @@ pnpm dev:functions  # submit-order         -> http://127.0.0.1:54321/functions/v
 ```bash
 pnpm typecheck        # typecheck de todos los paquetes
 pnpm lint             # lint de todos los paquetes
-pnpm --filter customer test # reglas de personalización, precios y persistencia del carrito
-pnpm test:orders      # contrato HTTP, validación de entrada, errores y tablero
+pnpm test            # Vitest: carrito y precios del comensal, tablero del POS, contrato de submit-order
+pnpm test:sql        # aserciones SQL contra el stack local (cada archivo en BEGIN … ROLLBACK)
 pnpm test:orders:integration # pruebas contra el stack local + Edge Functions (pedidos y cierre de sesión)
 pnpm build            # build de producción de todas las apps
 pnpm db:types         # regenerar packages/shared/src/database.types.ts desde la DB local
@@ -104,4 +104,4 @@ pnpm supabase status  # ver URLs y credenciales del stack local
 ```
 
 - **Supabase Studio** (explorar la DB visualmente): http://127.0.0.1:54323
-- El CI (GitHub Actions) corre pruebas de lógica del comensal y pedidos, typecheck (incluida la lógica Edge), lint y build en cada push/PR. La suite integrada se ejecuta contra Supabase local.
+- El CI (GitHub Actions) corre dos jobs en cada push/PR: pruebas de lógica, typecheck (incluida la lógica Edge), lint y build; y otro que levanta Supabase local para las aserciones SQL y la suite integrada.

@@ -1,20 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { formatElapsed, isKitchenTicket } from '@restaurant-platform/shared'
 import { formatPrice } from '@/lib/format'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { Badge, Button, EmptyState, ErrorText, Modal, Spinner } from '@/components/ui'
-import {
-  closePosSession,
-  posBillsQuery,
-  posBoardQuery,
-  posDiningTablesQuery,
-  posOpenSessionsQuery,
-  posQueryKey,
-  type PosBill,
-  type PosDiningTable,
-  type PosOpenSession,
-} from './api'
+import { closePosSession, posDiningTablesQuery, posOpenSessionsQuery, posQueryKey, type PosOpenSession } from './api'
+import { formatElapsed } from './time'
 import { useNow } from './useNow'
 
 export function ActiveTables() {
@@ -24,24 +14,14 @@ export function ActiveTables() {
   const [closing, setClosing] = useState<PosOpenSession | null>(null)
   const [error, setError] = useState<string | null>(null)
 
+  // Cuenta y comandas en cocina ya vienen en cada sesión (vista pos_open_sessions).
   const sessions = useQuery(posOpenSessionsQuery(restaurant.id))
-  const sessionIds = (sessions.data ?? []).map((session) => session.id)
-  const bills = useQuery({ ...posBillsQuery(restaurant.id, sessionIds), enabled: !!sessions.data })
   const tables = useQuery(posDiningTablesQuery(restaurant.id))
-  const board = useQuery(posBoardQuery(restaurant.id))
-
-  const billBySession = useMemo(() => {
-    const map = new Map<string, PosBill>()
-    for (const bill of bills.data ?? []) {
-      if (bill.session_id) map.set(bill.session_id, bill)
-    }
-    return map
-  }, [bills.data])
 
   const occupiedIds = new Set((sessions.data ?? []).map((session) => session.table_id))
   const freeTables = (tables.data ?? []).filter((table) => !occupiedIds.has(table.id))
   const groupedOccupied = groupByBranch(sessions.data ?? [])
-  const groupedFree = groupFreeByBranch(freeTables)
+  const groupedFree = groupByBranch(freeTables)
 
   const closeMutation = useMutation({
     mutationFn: (sessionId: string) => closePosSession(sessionId),
@@ -53,11 +33,6 @@ export function ActiveTables() {
     onError: (err) => setError(err instanceof Error ? err.message : 'No pudimos cerrar la sesión.'),
   })
 
-  const closingBill = closing ? billBySession.get(closing.id) : undefined
-  const closingKitchen = (board.data ?? []).filter(
-    (order) => order.session_id === closing?.id && isKitchenTicket(order.status),
-  ).length
-
   return (
     <div className="space-y-6">
       <div>
@@ -68,7 +43,7 @@ export function ActiveTables() {
         </p>
       </div>
 
-      {(sessions.isError || bills.isError || tables.isError) && (
+      {(sessions.isError || tables.isError) && (
         <ErrorText message="No pudimos actualizar el estado de las mesas." />
       )}
 
@@ -82,10 +57,7 @@ export function ActiveTables() {
             <h2 className="text-sm font-semibold text-neutral-700">{branch}</h2>
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {openSessions.map((session) => {
-                const bill = billBySession.get(session.id)
-                const kitchen = (board.data ?? []).filter(
-                  (order) => order.session_id === session.id && isKitchenTicket(order.status),
-                ).length
+                const kitchen = session.kitchen_tickets
                 return (
                   <article
                     key={session.id}
@@ -93,44 +65,43 @@ export function ActiveTables() {
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <p className="font-semibold text-neutral-900">{session.tables.label}</p>
+                        <p className="font-semibold text-neutral-900">{session.table_label}</p>
                         <p className="text-xs text-neutral-500">
-                          {session.session_participants.length} comensal
-                          {session.session_participants.length === 1 ? '' : 'es'} ·{' '}
+                          {session.participant_names.length} comensal
+                          {session.participant_names.length === 1 ? '' : 'es'} ·{' '}
                           {formatElapsed(session.opened_at, now)}
                         </p>
                       </div>
-                      <Badge color={(bill?.pending_amount ?? 0) > 0 ? 'amber' : 'green'}>
-                        {(bill?.pending_amount ?? 0) > 0 ? 'Pendiente' : 'Sin saldo'}
+                      <Badge color={session.pending_amount > 0 ? 'amber' : 'green'}>
+                        {session.pending_amount > 0 ? 'Pendiente' : 'Sin saldo'}
                       </Badge>
                     </div>
                     <p className="text-xs text-neutral-500 break-words">
-                      {session.session_participants.map((participant) => participant.display_name).join(' · ')
-                        || 'Sin nombres'}
+                      {session.participant_names.join(' · ') || 'Sin nombres'}
                     </p>
                     <dl className="grid grid-cols-2 gap-2 text-xs">
                       <div>
                         <dt className="text-neutral-500">Por confirmar</dt>
                         <dd className="font-medium text-neutral-900">
-                          {formatPrice(bill?.submitted_amount ?? 0)}
+                          {formatPrice(session.submitted_amount)}
                         </dd>
                       </div>
                       <div>
                         <dt className="text-neutral-500">En cuenta</dt>
                         <dd className="font-medium text-neutral-900">
-                          {formatPrice(bill?.total_amount ?? 0)}
+                          {formatPrice(session.total_amount)}
                         </dd>
                       </div>
                       <div>
                         <dt className="text-neutral-500">Pagado</dt>
                         <dd className="font-medium text-neutral-900">
-                          {formatPrice(bill?.paid_amount ?? 0)}
+                          {formatPrice(session.paid_amount)}
                         </dd>
                       </div>
                       <div>
                         <dt className="text-neutral-500">Pendiente</dt>
                         <dd className="font-medium text-neutral-900">
-                          {formatPrice(bill?.pending_amount ?? 0)}
+                          {formatPrice(session.pending_amount)}
                         </dd>
                       </div>
                     </dl>
@@ -175,25 +146,25 @@ export function ActiveTables() {
       )}
 
       {closing && (
-        <Modal title={`Cerrar ${closing.tables.label}`} onClose={() => setClosing(null)}>
+        <Modal title={`Cerrar ${closing.table_label}`} onClose={() => setClosing(null)}>
           <div className="space-y-3 text-sm text-neutral-700">
             <p>
               Los comensales no podrán enviar más pedidos en esta cuenta. Si vuelven a escanear el QR se
               abre una sesión nueva.
             </p>
-            {(closingBill?.pending_amount ?? 0) > 0 && (
+            {closing.pending_amount > 0 && (
               <p className="rounded-lg bg-amber-50 px-3 py-2 text-amber-950">
-                Queda {formatPrice(closingBill?.pending_amount ?? 0)} pendiente. El pago en efectivo no
+                Queda {formatPrice(closing.pending_amount)} pendiente. El pago en efectivo no
                 se registra todavía en el sistema.
               </p>
             )}
-            {closingKitchen > 0 && (
+            {closing.kitchen_tickets > 0 && (
               <p className="rounded-lg bg-indigo-50 px-3 py-2 text-indigo-950">
-                Hay {closingKitchen} comanda{closingKitchen === 1 ? '' : 's'} todavía en cocina. Van a
+                Hay {closing.kitchen_tickets} comanda{closing.kitchen_tickets === 1 ? '' : 's'} todavía en cocina. Van a
                 seguir visibles en el tablero.
               </p>
             )}
-            {(closingBill?.submitted_amount ?? 0) > 0 && (
+            {closing.submitted_amount > 0 && (
               <p className="rounded-lg bg-red-50 px-3 py-2 text-red-800">
                 Hay pedidos enviados sin aceptar. Podés cancelarlos desde Comandas.
               </p>
@@ -219,22 +190,13 @@ export function ActiveTables() {
   )
 }
 
-function groupByBranch(sessions: PosOpenSession[]) {
-  const grouped: Record<string, PosOpenSession[]> = {}
-  for (const session of sessions) {
-    const name = session.tables.branch?.name ?? 'Sucursal'
+/** Agrupa sesiones o mesas por sucursal, conservando el orden en que llegan. */
+function groupByBranch<Row extends { branch_name: string | null }>(rows: Row[]): Record<string, Row[]> {
+  const grouped: Record<string, Row[]> = {}
+  for (const row of rows) {
+    const name = row.branch_name ?? 'Sucursal'
     grouped[name] ??= []
-    grouped[name].push(session)
-  }
-  return grouped
-}
-
-function groupFreeByBranch(tables: PosDiningTable[]) {
-  const grouped: Record<string, typeof tables> = {}
-  for (const table of tables) {
-    const name = table.branches?.name ?? 'Sucursal'
-    grouped[name] ??= []
-    grouped[name].push(table)
+    grouped[name].push(row)
   }
   return grouped
 }

@@ -432,6 +432,7 @@ export type Database = {
           created_at: string
           delivered_at: string | null
           id: string
+          local_date: string
           notes: string | null
           preparing_at: string | null
           ready_at: string | null
@@ -449,6 +450,7 @@ export type Database = {
           created_at?: string
           delivered_at?: string | null
           id?: string
+          local_date?: string
           notes?: string | null
           preparing_at?: string | null
           ready_at?: string | null
@@ -466,6 +468,7 @@ export type Database = {
           created_at?: string
           delivered_at?: string | null
           id?: string
+          local_date?: string
           notes?: string | null
           preparing_at?: string | null
           ready_at?: string | null
@@ -484,6 +487,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "restaurants"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_session_id_fkey"
+            columns: ["restaurant_id", "session_id"]
+            isOneToOne: false
+            referencedRelation: "pos_open_sessions"
+            referencedColumns: ["restaurant_id", "id"]
           },
           {
             foreignKeyName: "orders_session_id_fkey"
@@ -559,6 +569,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "restaurants"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_session_id_fkey"
+            columns: ["restaurant_id", "session_id"]
+            isOneToOne: false
+            referencedRelation: "pos_open_sessions"
+            referencedColumns: ["restaurant_id", "id"]
           },
           {
             foreignKeyName: "payments_session_id_fkey"
@@ -887,6 +904,13 @@ export type Database = {
             foreignKeyName: "session_participants_session_id_fkey"
             columns: ["session_id"]
             isOneToOne: false
+            referencedRelation: "pos_open_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "session_participants_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
             referencedRelation: "session_bills"
             referencedColumns: ["session_id"]
           },
@@ -988,6 +1012,38 @@ export type Database = {
       }
     }
     Views: {
+      pos_open_sessions: {
+        Row: {
+          branch_name: string | null
+          id: string | null
+          kitchen_tickets: number | null
+          opened_at: string | null
+          paid_amount: number | null
+          participant_names: string[] | null
+          pending_amount: number | null
+          restaurant_id: string | null
+          submitted_amount: number | null
+          table_id: string | null
+          table_label: string | null
+          total_amount: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "table_sessions_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "table_sessions_table_id_fkey"
+            columns: ["restaurant_id", "table_id"]
+            isOneToOne: false
+            referencedRelation: "tables"
+            referencedColumns: ["restaurant_id", "id"]
+          },
+        ]
+      }
       session_bills: {
         Row: {
           is_settled: boolean | null
@@ -1079,6 +1135,7 @@ export type Database = {
           created_at: string
           delivered_at: string | null
           id: string
+          local_date: string
           notes: string | null
           preparing_at: string | null
           ready_at: string | null

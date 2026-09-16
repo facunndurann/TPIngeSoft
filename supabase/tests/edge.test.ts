@@ -1,15 +1,8 @@
-import { test } from 'node:test'
+import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import { submitOrderErrorSchema, submitOrderResultSchema, submitOrderSchema } from '../../packages/shared/src/orders.ts'
 import { appErrorMessage, appErrors, isRetryableError } from '../../packages/shared/src/errors.ts'
-import {
-  dayRangeUtc,
-  formatElapsed,
-  groupOrdersByColumn,
-  isKitchenTicket,
-  posActions,
-  posColumnFor,
-} from '../../packages/shared/src/pos.ts'
+import { posActions } from '../../packages/shared/src/pos.ts'
 import { DEFAULT_MENU_DESIGN } from '../../packages/shared/src/designs.ts'
 // Si otra migración cambia el default de restaurants.menu_design, apuntá este import a esa.
 import menuDesignEnumSql from '../migrations/20260915150000_menu_design_enum.sql?raw'
@@ -105,29 +98,12 @@ test('unexpected failures never leak backend details', async () => {
   assert.equal(JSON.parse(body).error.code, 'SERVER_ERROR')
 })
 
-test('POS board groups kitchen columns, FIFO in prep/ready, and newest first otherwise', () => {
-  const orders = [
-    { id: 'd', status: 'delivered', created_at: '2026-09-05T12:00:00.000Z' },
-    { id: 'n2', status: 'accepted', created_at: '2026-09-05T12:05:00.000Z' },
-    { id: 'p-old', status: 'in_preparation', created_at: '2026-09-05T11:00:00.000Z' },
-    { id: 'p-new', status: 'in_preparation', created_at: '2026-09-05T11:30:00.000Z' },
-    { id: 'n1', status: 'submitted', created_at: '2026-09-05T12:01:00.000Z' },
-    { id: 'r', status: 'ready', created_at: '2026-09-05T10:00:00.000Z' },
-    { id: 'c', status: 'cancelled', created_at: '2026-09-05T12:00:00.000Z' },
-  ] as const
-  const grouped = groupOrdersByColumn([...orders])
-  assert.deepEqual(grouped.new.map((order) => order.id), ['n2', 'n1'])
-  assert.deepEqual(grouped.in_preparation.map((order) => order.id), ['p-old', 'p-new'])
-  assert.deepEqual(grouped.ready.map((order) => order.id), ['r'])
-  assert.deepEqual(grouped.delivered.map((order) => order.id), ['d'])
-  assert.equal(posColumnFor('cancelled'), null)
+test('POS actions advance and cancel until delivery, and nothing leaves cancelled', () => {
   assert.equal(posActions.accepted.advance?.to, 'in_preparation')
   assert.equal(posActions.ready.cancel?.to, 'cancelled')
+  assert.equal(posActions.delivered.advance, undefined)
   assert.equal(posActions.delivered.cancel, undefined)
-  assert.equal(posActions.cancelled.cancel, undefined)
-  assert.equal(isKitchenTicket('ready'), true)
-  assert.equal(isKitchenTicket('delivered'), false)
-  assert.equal(isKitchenTicket('cancelled'), false)
+  assert.deepEqual(posActions.cancelled, {})
 })
 
 test('reverting steps back exactly one stage, never to submitted nor from cancelled', () => {
@@ -137,15 +113,6 @@ test('reverting steps back exactly one stage, never to submitted nor from cancel
     Object.entries(posActions).flatMap(([from, { revert }]) => (revert ? [`${from} -> ${revert.to}`] : [])),
     ['in_preparation -> accepted', 'ready -> in_preparation', 'delivered -> ready'],
   )
-})
-
-test('restaurant day bounds use Argentina time', () => {
-  assert.deepEqual(dayRangeUtc('2026-09-05'), {
-    start: '2026-09-05T03:00:00.000Z',
-    end: '2026-09-06T03:00:00.000Z',
-  })
-  assert.equal(formatElapsed('2026-09-05T12:00:00.000Z', Date.parse('2026-09-05T12:00:30.000Z')), 'Ahora')
-  assert.equal(formatElapsed('2026-09-05T12:00:00.000Z', Date.parse('2026-09-05T13:05:00.000Z')), 'Hace 1 h 5 min')
 })
 
 test('the error catalog decides which failures keep a submission for retry', () => {
