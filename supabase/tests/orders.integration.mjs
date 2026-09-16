@@ -123,22 +123,31 @@ async function assertBill(actor, sessionId, expected) {
   }
 }
 
-async function subscribe(actor, sessionId) {
+// Resolves once Realtime is actually streaming the requested changes. SUBSCRIBED only
+// means the channel joined: the server confirms the Postgres listener later with a
+// `system` event ("Subscribed to PostgreSQL"). On a freshly started Realtime, as in CI,
+// that takes seconds, and a change written in between is never delivered.
+async function listen(actor, changes) {
   const events = []
-  const channel = actor.channel(`integration-orders-${randomUUID()}`).on('postgres_changes', {
-    event: '*', schema: 'public', table: 'orders', filter: `session_id=eq.${sessionId}`,
-  }, (event) => events.push(event))
+  const channel = actor.channel(`integration-${changes.table}-${randomUUID()}`)
+    .on('postgres_changes', { schema: 'public', ...changes }, (event) => events.push(event))
   await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('Realtime subscription timed out')), 12_000)
-    channel.subscribe((status, error) => {
-      if (status === 'SUBSCRIBED') {
-        clearTimeout(timer)
-        resolve()
-      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-        clearTimeout(timer)
-        reject(new Error(`Realtime ${status}: ${error?.message ?? 'check local Realtime service'}`))
-      }
-    })
+    const settle = (error) => {
+      clearTimeout(timer)
+      if (error) reject(error)
+      else resolve()
+    }
+    const timer = setTimeout(() => settle(new Error(`Realtime did not start streaming ${changes.table} changes within 30 seconds`)), 30_000)
+    channel
+      .on('system', {}, (payload) => {
+        if (payload.extension !== 'postgres_changes') return
+        settle(payload.status === 'ok' ? undefined : new Error(`Realtime postgres_changes: ${payload.message}`))
+      })
+      .subscribe((status, error) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          settle(new Error(`Realtime ${status}: ${error?.message ?? 'check local Realtime service'}`))
+        }
+      })
   })
   return events
 }
@@ -270,8 +279,9 @@ try {
     }
   })
 
-  const peerEvents = await subscribe(peer, sessionId)
-  const outsiderEvents = await subscribe(outsider, sessionId)
+  const sessionOrders = { event: '*', table: 'orders', filter: `session_id=eq.${sessionId}` }
+  const peerEvents = await listen(peer, sessionOrders)
+  const outsiderEvents = await listen(outsider, sessionOrders)
   const originalRequest = request()
   let orderId
   await check('concurrent retries create and accept exactly one order', async () => {
@@ -517,22 +527,7 @@ try {
     assert.ok(result.error || result.data.length === 0)
     assert.equal((await rows(admin, 'table_sessions', 'id', sessionId))[0].status, 'open')
   })
-  const sessionEvents = []
-  const sessionChannel = customer.channel(`integration-session-${randomUUID()}`).on('postgres_changes', {
-    event: 'UPDATE', schema: 'public', table: 'table_sessions', filter: `id=eq.${sessionId}`,
-  }, (event) => sessionEvents.push(event))
-  await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('Session Realtime subscription timed out')), 12_000)
-    sessionChannel.subscribe((status, error) => {
-      if (status === 'SUBSCRIBED') {
-        clearTimeout(timer)
-        resolve()
-      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-        clearTimeout(timer)
-        reject(new Error(`Realtime ${status}: ${error?.message ?? 'check local Realtime service'}`))
-      }
-    })
-  })
+  const sessionEvents = await listen(customer, { event: 'UPDATE', table: 'table_sessions', filter: `id=eq.${sessionId}` })
   await check('closing a session is idempotent, leaves kitchen tickets and the bill, and opens a new QR session', async () => {
     unwrap(await admin.rpc('close_table_session', { p_session_id: sessionId }), 'Close table session')
     unwrap(await admin.rpc('close_table_session', { p_session_id: sessionId }), 'Idempotent close')
