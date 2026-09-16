@@ -1,12 +1,12 @@
 import type { OrderStatus } from '@restaurant-platform/shared'
-import { posErrorMessage } from '@restaurant-platform/shared'
+import { appErrorMessage } from '@restaurant-platform/shared'
 import { supabase } from '@/lib/supabase'
 import type { PosBill, PosDiningTable, PosOpenSession, PosOrder } from './types'
 import { posOrderSelect, posSessionSelect } from './types'
 
 export class PosActionError extends Error {
   constructor(message: string) {
-    super(posErrorMessage(message))
+    super(appErrorMessage(message, 'No pudimos completar la acción. Reintentá.'))
   }
 }
 

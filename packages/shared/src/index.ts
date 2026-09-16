@@ -5,3 +5,4 @@ export * from './orders';
 export * from './pos';
 export * from './designs';
 export * from './product-media';
+export * from './errors';

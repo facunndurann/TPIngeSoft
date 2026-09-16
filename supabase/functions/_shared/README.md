@@ -3,8 +3,8 @@
 Código compartido de la función `submit-order`:
 
 - `order-gateway.ts`: acceso a Postgres con el JWT validado del comensal; no usa service role.
-- `errors.ts`: códigos de error de negocio y mensajes HTTP, sin exponer errores internos.
-- `packages/shared/src/orders.ts`: contrato Zod compartido entre frontend y función.
+- `errors.ts`: traduce errores de Postgres al catálogo compartido (`packages/shared/src/errors.ts`), sin exponer errores internos.
+- `packages/shared/src/orders.ts`: schemas Zod compartidos de la solicitud y de la respuesta (éxito y error).
 
 La validación autoritativa, la persistencia y la recepción del POS interno se ejecutan en una sola transacción dentro de `submit_order` (versión vigente en `20260916180000_accept_internal_orders_on_submit.sql`). La función solo valida la entrada, llama a la RPC y devuelve `{ orderId, status, totalAmount }`. Si el POS está inactivo o es externo, `submit_order` revierte el pedido y devuelve `POS_UNAVAILABLE` o `POS_UNSUPPORTED`. La capa de adaptadores para POS externos (Fudo y otros) se diseña cuando se integre el primero.
 

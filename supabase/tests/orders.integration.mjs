@@ -1,12 +1,13 @@
 // Run against the seeded local stack with submit-order being served:
 //   pnpm supabase functions serve submit-order
-//   node supabase/tests/orders.integration.mjs
+//   pnpm test:orders:integration
 // Optional: SUPABASE_SERVICE_ROLE_KEY also removes the three anonymous test users.
 // Fixtures are isolated and removed in finally; existing menus/orders are untouched.
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
+import { posActions } from '../../packages/shared/src/pos.ts'
 
 const require = createRequire(new URL('../../apps/customer/package.json', import.meta.url))
 const { createClient } = require('@supabase/supabase-js')
@@ -423,6 +424,14 @@ try {
     assert.equal((await rows(customer, 'orders', 'session_id', sessionId)).length, 2)
     const logs = await rows(admin, 'integration_logs', 'order_id', peerOrderId)
     assert.equal(logs.filter((row) => row.event === 'pos.internal.accepted').length, 1)
+  })
+  await check('order_status_transitions holds exactly the actions the POS board offers', async () => {
+    const transitions = unwrap(await admin.from('order_status_transitions').select('from_status,to_status,kind'), 'Read order transitions')
+    const allowed = transitions.map((row) => `${row.from_status} -${row.kind}-> ${row.to_status}`).sort()
+    const offered = Object.entries(posActions)
+      .flatMap(([from, actions]) => Object.entries(actions).map(([kind, step]) => `${from} -${kind}-> ${step.to}`))
+      .sort()
+    assert.deepEqual(allowed, offered)
   })
   await check('only members of the order restaurant can advance its status', async () => {
     for (const actor of [customer, outsider, otherAdmin]) {

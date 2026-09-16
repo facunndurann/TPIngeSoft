@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
+import { isRetryableError } from '@restaurant-platform/shared'
 import { useNavigate, useParams } from 'react-router'
 import { cartPrice, money, price, selectionErrors } from '@/features/menu'
 import type { Menu } from '@/features/menu'
@@ -7,20 +8,6 @@ import { SubmissionError, abandonSubmission, submitOrder } from '@/features/orde
 import { cartItemPath, cartPath, cartReviewPath } from '@/features/table-paths'
 import { useCart } from '@/stores/cart'
 import type { CartItem } from '@/stores/cart'
-
-const definitiveRejections = new Set([
-  'INVALID_REQUEST',
-  'INVALID_ITEMS',
-  'PAYLOAD_TOO_LARGE',
-  'SESSION_NOT_FOUND',
-  'SESSION_CLOSED',
-  'NOT_PARTICIPANT',
-  'TABLE_UNAVAILABLE',
-  'PRODUCT_UNAVAILABLE',
-  'INVALID_MODIFIERS',
-  'INVALID_INGREDIENTS',
-  'PRICE_CHANGED',
-])
 
 type CartPanelProps = {
   cartKey: string
@@ -79,7 +66,9 @@ export function CartPanel({
       onSubmitted()
     },
     onError: async (error, input) => {
-      if (error instanceof SubmissionError && definitiveRejections.has(error.code)) {
+      // Solo un rechazo definitivo libera el envío; si se puede reintentar, queda
+      // pendiente para repetirlo con el mismo requestId sin duplicar el pedido.
+      if (error instanceof SubmissionError && !isRetryableError(error.code)) {
         cart.rejectSubmission(cartKey, input.requestId)
         setReview(undefined)
         if (reviewing) navigate(cartPath(token))

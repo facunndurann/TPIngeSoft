@@ -1,6 +1,10 @@
 import { FunctionsHttpError } from '@supabase/supabase-js'
-import { orderStatusLabels } from '@restaurant-platform/shared'
-import type { OrderStatus, SubmitOrderInput } from '@restaurant-platform/shared'
+import {
+  submitOrderErrorSchema,
+  submitOrderResultSchema,
+  type SubmitOrderInput,
+  type SubmitOrderResult,
+} from '@restaurant-platform/shared'
 import { supabase } from '@/lib/supabase'
 
 export class SubmissionError extends Error {
@@ -11,45 +15,14 @@ export class SubmissionError extends Error {
   }
 }
 
-function readError(value: unknown): SubmissionError | undefined {
-  if (typeof value !== 'object' || value === null || !('error' in value)) return
-  const error = value.error
-  if (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    'message' in error &&
-    typeof error.code === 'string' &&
-    typeof error.message === 'string'
-  ) {
-    return new SubmissionError(error.code, error.message)
-  }
-}
-
-function isSubmitResult(
-  data: unknown,
-): data is { orderId: string; status: OrderStatus; totalAmount: number } {
-  if (typeof data !== 'object' || data === null) return false
-  if (!('orderId' in data) || typeof data.orderId !== 'string') return false
-  if (!('status' in data) || typeof data.status !== 'string') return false
-  if (!Object.prototype.hasOwnProperty.call(orderStatusLabels, data.status)) return false
-  if (!('totalAmount' in data) || typeof data.totalAmount !== 'number') return false
-  return Number.isFinite(data.totalAmount)
-}
-
-export async function submitOrder(input: SubmitOrderInput) {
+export async function submitOrder(input: SubmitOrderInput): Promise<SubmitOrderResult> {
   const { data, error } = await supabase.functions.invoke<unknown>('submit-order', { body: input })
 
   if (error) {
     if (error instanceof FunctionsHttpError) {
-      let body: unknown
-      try {
-        body = await error.context.json()
-      } catch {
-        /* Keep the original request for a safe retry. */
-      }
-      const parsed = readError(body)
-      if (parsed) throw parsed
+      // Un cuerpo ilegible no es un rechazo del servidor: se conserva el envío para reintentar.
+      const body = submitOrderErrorSchema.safeParse(await error.context.json().catch(() => null))
+      if (body.success) throw new SubmissionError(body.data.error.code, body.data.error.message)
     }
     throw new SubmissionError(
       'CONNECTION_ERROR',
@@ -57,15 +30,14 @@ export async function submitOrder(input: SubmitOrderInput) {
     )
   }
 
-  const parsed = readError(data)
-  if (parsed) throw parsed
-  if (!isSubmitResult(data)) {
+  const result = submitOrderResultSchema.safeParse(data)
+  if (!result.success) {
     throw new SubmissionError(
       'CONNECTION_ERROR',
       'No pudimos confirmar la respuesta. Reintentá el mismo envío para consultar su resultado.',
     )
   }
-  return data
+  return result.data
 }
 
 export type AbandonResult =

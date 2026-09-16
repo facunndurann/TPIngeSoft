@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { submitOrderSchema } from '../../packages/shared/src/orders.ts'
+import { submitOrderErrorSchema, submitOrderResultSchema, submitOrderSchema } from '../../packages/shared/src/orders.ts'
+import { appErrorMessage, appErrors, isRetryableError } from '../../packages/shared/src/errors.ts'
 import {
   dayRangeUtc,
   formatElapsed,
@@ -8,15 +9,12 @@ import {
   isKitchenTicket,
   posActions,
   posColumnFor,
-  posErrorCode,
 } from '../../packages/shared/src/pos.ts'
-// Si otra migración vuelve a redefinir transition_order, apuntá este import a esa.
-import transitionOrderSql from '../migrations/20260916120000_restaurant_scoped_foreign_keys.sql?raw'
 import { DEFAULT_MENU_DESIGN } from '../../packages/shared/src/designs.ts'
 // Si otra migración cambia el default de restaurants.menu_design, apuntá este import a esa.
 import menuDesignEnumSql from '../migrations/20260915150000_menu_design_enum.sql?raw'
 import { createSubmitOrderHandler } from '../functions/submit-order/handler.ts'
-import { databaseError } from '../functions/_shared/errors.ts'
+import { databaseError, OrderError } from '../functions/_shared/errors.ts'
 import type { OrderGateway } from '../functions/_shared/order-gateway.ts'
 
 const input = {
@@ -57,7 +55,7 @@ test('preflight and wrong method never authenticate or create orders', async () 
 test('requires a verified identity and valid bounded JSON', async () => {
   const { gateway, creates } = fixture()
   const handler = createSubmitOrderHandler(async jwt => {
-    if (jwt !== 'valid-user') throw databaseError({ message: 'AUTH_REQUIRED' })
+    if (jwt !== 'valid-user') throw new OrderError('AUTH_REQUIRED')
     return gateway
   })
   assert.equal((await handler(request(input, { 'Content-Type': 'application/json' }))).status, 401)
@@ -77,15 +75,24 @@ test('returns the order status and total confirmed by submit_order', async () =>
   assert.equal(creates(), 1)
 })
 
-test('business errors keep their HTTP status and actionable code', async () => {
+test('database errors answer with the status, code and message of the shared catalog', async () => {
   const { gateway } = fixture()
   const handler = createSubmitOrderHandler(async () => gateway)
-  for (const [code, status] of [['PRICE_CHANGED', 409], ['POS_UNAVAILABLE', 503], ['POS_UNSUPPORTED', 503]] as const) {
+  for (const code of ['PRICE_CHANGED', 'REQUEST_ABANDONED', 'POS_UNAVAILABLE'] as const) {
     gateway.submit = async () => { throw databaseError({ message: code }) }
     const response = await handler(request())
-    assert.equal(response.status, status)
-    assert.equal((await response.json()).error.code, code)
+    assert.equal(response.status, appErrors[code].status)
+    const body = submitOrderErrorSchema.parse(await response.json())
+    assert.deepEqual(body.error, { code, message: appErrors[code].message })
   }
+})
+
+test('successful responses match the shared result schema', async () => {
+  const { gateway } = fixture()
+  const response = await createSubmitOrderHandler(async () => gateway)(request())
+  assert.deepEqual(submitOrderResultSchema.parse(await response.json()), accepted)
+  assert.equal(submitOrderResultSchema.safeParse({ ...accepted, status: 'lost' }).success, false)
+  assert.equal(submitOrderResultSchema.safeParse({ ...accepted, totalAmount: '20.2' }).success, false)
 })
 
 test('unexpected failures never leak backend details', async () => {
@@ -123,35 +130,35 @@ test('POS board groups kitchen columns, FIFO in prep/ready, and newest first oth
   assert.equal(isKitchenTicket('cancelled'), false)
 })
 
-test('transition_order accepts exactly the transitions posActions offers', () => {
-  const offered = Object.entries(posActions)
-    .flatMap(([from, actions]) => Object.values(actions).map((step) => `${from} -> ${step.to}`))
-    .sort()
-
-  // Pares ('desde', 'hacia') del bloque `not in (values …) then` de la migración.
-  const valuesBlock = transitionOrderSql.match(/not in \(values([\s\S]*?)\)\s*then/)?.[1]
-  assert.ok(valuesBlock, 'transition_order must list its allowed pairs in a VALUES block')
-  const allowed = [...valuesBlock.matchAll(/\('(\w+)'(?:::[\w.]+)?,\s*'(\w+)'/g)]
-    .map(([, from, to]) => `${from} -> ${to}`)
-    .sort()
-
-  assert.deepEqual(allowed, offered)
-  // Revertir retrocede exactamente una etapa: nunca a submitted ni desde cancelled.
+test('reverting steps back exactly one stage, never to submitted nor from cancelled', () => {
+  // Que estos pares coincidan con la tabla order_status_transitions lo verifica
+  // supabase/tests/orders.integration.mjs contra la base.
   assert.deepEqual(
     Object.entries(posActions).flatMap(([from, { revert }]) => (revert ? [`${from} -> ${revert.to}`] : [])),
     ['in_preparation -> accepted', 'ready -> in_preparation', 'delivered -> ready'],
   )
 })
 
-test('restaurant day bounds use Argentina time and POS errors stay coded', () => {
+test('restaurant day bounds use Argentina time', () => {
   assert.deepEqual(dayRangeUtc('2026-09-05'), {
     start: '2026-09-05T03:00:00.000Z',
     end: '2026-09-06T03:00:00.000Z',
   })
   assert.equal(formatElapsed('2026-09-05T12:00:00.000Z', Date.parse('2026-09-05T12:00:30.000Z')), 'Ahora')
   assert.equal(formatElapsed('2026-09-05T12:00:00.000Z', Date.parse('2026-09-05T13:05:00.000Z')), 'Hace 1 h 5 min')
-  assert.equal(posErrorCode('FORBIDDEN'), 'FORBIDDEN')
-  assert.equal(posErrorCode('P0001: INVALID_TRANSITION'), 'INVALID_TRANSITION')
+})
+
+test('the error catalog decides which failures keep a submission for retry', () => {
+  // Rechazos definitivos: liberan el envío para que el comensal revise el carrito.
+  for (const code of ['PRICE_CHANGED', 'SESSION_CLOSED', 'IDEMPOTENCY_CONFLICT', 'REQUEST_ABANDONED']) {
+    assert.equal(isRetryableError(code), false, code)
+  }
+  // Fallas transitorias y códigos desconocidos (red caída): el envío se conserva.
+  for (const code of ['POS_UNAVAILABLE', 'SERVER_ERROR', 'AUTH_REQUIRED', 'CONNECTION_ERROR']) {
+    assert.equal(isRetryableError(code), true, code)
+  }
+  assert.equal(appErrorMessage('STALE_DATA', 'fallback'), appErrors.STALE_DATA.message)
+  assert.equal(appErrorMessage('P0001: INVALID_TRANSITION', 'fallback'), 'fallback')
 })
 
 test('the database default menu design matches DEFAULT_MENU_DESIGN', () => {

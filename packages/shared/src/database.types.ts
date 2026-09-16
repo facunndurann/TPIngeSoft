@@ -407,6 +407,24 @@ export type Database = {
           },
         ]
       }
+      order_status_transitions: {
+        Row: {
+          from_status: Database["public"]["Enums"]["order_status"]
+          kind: Database["public"]["Enums"]["order_transition_kind"]
+          to_status: Database["public"]["Enums"]["order_status"]
+        }
+        Insert: {
+          from_status: Database["public"]["Enums"]["order_status"]
+          kind: Database["public"]["Enums"]["order_transition_kind"]
+          to_status: Database["public"]["Enums"]["order_status"]
+        }
+        Update: {
+          from_status?: Database["public"]["Enums"]["order_status"]
+          kind?: Database["public"]["Enums"]["order_transition_kind"]
+          to_status?: Database["public"]["Enums"]["order_status"]
+        }
+        Relationships: []
+      }
       orders: {
         Row: {
           accepted_at: string | null
@@ -1097,6 +1115,7 @@ export type Database = {
         | "ready"
         | "delivered"
         | "cancelled"
+      order_transition_kind: "advance" | "revert" | "cancel"
       payment_mode: "full" | "own" | "equal_split" | "custom"
       payment_status: "pending" | "approved" | "rejected" | "cancelled"
       pos_type: "internal" | "fudo"
@@ -1241,6 +1260,7 @@ export const Constants = {
         "delivered",
         "cancelled",
       ],
+      order_transition_kind: ["advance", "revert", "cancel"],
       payment_mode: ["full", "own", "equal_split", "custom"],
       payment_status: ["pending", "approved", "rejected", "cancelled"],
       pos_type: ["internal", "fudo"],

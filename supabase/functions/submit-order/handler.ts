@@ -1,5 +1,5 @@
-import { submitOrderSchema } from '../../../packages/shared/src/orders.ts';
-import { databaseError, OrderError } from '../_shared/errors.ts';
+import { submitOrderSchema, type SubmitOrderError } from '../../../packages/shared/src/orders.ts';
+import { OrderError } from '../_shared/errors.ts';
 import type { OrderGateway } from '../_shared/order-gateway.ts';
 
 const headers = {
@@ -11,11 +11,13 @@ const headers = {
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status, headers: { ...headers, 'Content-Type': 'application/json' },
 });
+const errorResponse = ({ code, message, status }: OrderError) =>
+  json({ error: { code, message } } satisfies SubmitOrderError, status);
 
 async function readBody(request: Request): Promise<unknown> {
   const limit = 128 * 1024;
   const reader = request.body?.getReader();
-  if (!reader) throw databaseError({ message: 'INVALID_REQUEST' });
+  if (!reader) throw new OrderError('INVALID_REQUEST');
   const chunks: Uint8Array[] = [];
   let length = 0;
   while (true) {
@@ -24,7 +26,7 @@ async function readBody(request: Request): Promise<unknown> {
     length += value.length;
     if (length > limit) {
       await reader.cancel();
-      throw new OrderError('PAYLOAD_TOO_LARGE', 413, 'El pedido es demasiado grande.');
+      throw new OrderError('PAYLOAD_TOO_LARGE');
     }
     chunks.push(value);
   }
@@ -32,26 +34,25 @@ async function readBody(request: Request): Promise<unknown> {
   let offset = 0;
   for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
   try { return JSON.parse(new TextDecoder().decode(bytes)); }
-  catch { throw databaseError({ message: 'INVALID_REQUEST' }); }
+  catch { throw new OrderError('INVALID_REQUEST'); }
 }
 
 export function createSubmitOrderHandler(authenticate: (jwt: string) => Promise<OrderGateway>) {
   return async (request: Request): Promise<Response> => {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers });
-    if (request.method !== 'POST') return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Usá POST para enviar un pedido.' } }, 405);
+    if (request.method !== 'POST') return errorResponse(new OrderError('METHOD_NOT_ALLOWED'));
     try {
       const token = request.headers.get('Authorization')?.match(/^Bearer\s+(\S+)$/i)?.[1];
-      if (!token) throw databaseError({ message: 'AUTH_REQUIRED' });
+      if (!token) throw new OrderError('AUTH_REQUIRED');
       if (request.headers.get('Content-Type')?.split(';')[0].trim().toLowerCase() !== 'application/json') {
-        throw databaseError({ message: 'INVALID_REQUEST' });
+        throw new OrderError('INVALID_REQUEST');
       }
       const parsed = submitOrderSchema.safeParse(await readBody(request));
-      if (!parsed.success) throw databaseError({ message: 'INVALID_REQUEST' });
+      if (!parsed.success) throw new OrderError('INVALID_REQUEST');
       const gateway = await authenticate(token);
       return json(await gateway.submit(parsed.data));
     } catch (error) {
-      const failure = error instanceof OrderError ? error : databaseError({ message: 'UNKNOWN' });
-      return json({ error: { code: failure.code, message: failure.message } }, failure.status);
+      return errorResponse(error instanceof OrderError ? error : new OrderError('SERVER_ERROR'));
     }
   };
 }
