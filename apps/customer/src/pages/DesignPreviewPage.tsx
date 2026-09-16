@@ -1,7 +1,7 @@
 import { useParams } from 'react-router'
 import { resolveMenuDesign, type Tables } from '@restaurant-platform/shared'
 import { MenuBrowse } from '@/features/MenuBrowse'
-import type { Menu } from '@/features/menu'
+import { buildMenu, type MenuRows } from '@/features/menu'
 import { MenuDesignContext } from '@/features/menu-design'
 import { MenuShell } from '@/features/MenuShell'
 import { TableHeader } from '@/features/TableHeader'
@@ -46,7 +46,7 @@ function dish(
   basePrice: number,
   photo: string,
   dietaryTags: string[] = [],
-): Tables<'products'> {
+): MenuRows['products'][number] {
   return {
     id,
     category_id: categoryId,
@@ -60,10 +60,12 @@ function dish(
     food_info: null,
     sort_order: 0,
     created_at: '',
+    product_ingredients: [],
+    product_modifier_groups: [],
   }
 }
 
-const sampleMenu: Menu = {
+const sampleMenu = buildMenu({
   categories: [category('principales', 'Principales', 0), category('postres', 'Postres', 1)],
   products: [
     dish('hamburguesa', 'principales', 'Hamburguesa completa', 'Carne, queso, lechuga, tomate y papas.', 8500, samplePhoto('🍔', '#f4d8b5')),
@@ -71,8 +73,5 @@ const sampleMenu: Menu = {
     dish('pasta', 'principales', 'Sorrentinos', 'Rellenos de jamón y queso con salsa rosa.', 7400, samplePhoto('🍝', '#f2d3c9')),
     dish('flan', 'postres', 'Flan casero', 'Con dulce de leche y crema.', 3900, samplePhoto('🍮', '#f5e6c4'), ['vegetariano']),
   ],
-  ingredients: [],
   groups: [],
-  options: [],
-  links: [],
-}
+})

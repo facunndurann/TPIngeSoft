@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { cartPrice, price, selectionErrors } from '../src/features/menu'
+import { buildMenu, cartPrice, price, productOptions, selectionErrors } from '../src/features/menu'
+import type { Menu, MenuRows } from '../src/features/menu'
 import {
   calculateItemPrice,
   DEFAULT_MENU_DESIGN,
@@ -21,21 +22,34 @@ const memory = new Map<string, string>()
 Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: (key: string) => memory.get(key) ?? null, setItem: (key: string, value: string) => { memory.set(key, value) }, removeItem: (key: string) => { memory.delete(key) } } })
 Object.defineProperty(globalThis, 'window', { configurable: true, value: { localStorage: globalThis.localStorage } })
 
-const product = { id: 'p', category_id: 'c', is_available: true, base_price: 10.10 }
-const menu = {
-  categories: [{ id: 'c' }], products: [product],
-  ingredients: [{ id: 'i', product_id: 'p', is_removable: true, is_available: true }],
-  links: [{ product_id: 'p', group_id: 'g' }],
-  groups: [{ id: 'g', name: 'Salsa', min_select: 1, max_select: 1, is_available: true }],
-  options: [{ id: 'o', group_id: 'g', price_delta: .20, is_available: true }, { id: 'o2', group_id: 'g', price_delta: 1, is_available: true }],
+// Filas mínimas como las devuelve loadMenu; el modelo se arma con buildMenu, igual que en la app.
+const rows = {
+  categories: [{ id: 'c' }],
+  products: [{
+    id: 'p', category_id: 'c', is_available: true, base_price: 10.10,
+    product_ingredients: [{ id: 'i', product_id: 'p', is_removable: true, is_available: true }],
+    product_modifier_groups: [{ group_id: 'g' }],
+  }],
+  groups: [{
+    id: 'g', name: 'Salsa', min_select: 1, max_select: 1, is_available: true,
+    modifier_options: [{ id: 'o', group_id: 'g', price_delta: .20, is_available: true }, { id: 'o2', group_id: 'g', price_delta: 1, is_available: true }],
+  }],
+} as unknown as MenuRows
+const menu = buildMenu(rows)
+const product = menu.productsById.get('p')!
+/** Producto 'p' tras cambiar una fila, como llegaría en el siguiente refetch de la carta. */
+function productAfter(change: (changed: MenuRows) => void) {
+  const changed = structuredClone(rows)
+  change(changed)
+  return buildMenu(changed).productsById.get('p')!
 }
 const selection = { optionIds: ['o'], removedIds: [], quantity: 3, isShared: false }
 test('required single-choice groups and decimal pricing', () => {
-  assert.deepEqual(selectionErrors(menu, product, selection), [])
-  assert.equal(price(menu, product, selection), 30.90)
+  assert.deepEqual(selectionErrors(product, selection), [])
+  assert.equal(price(product, selection), 30.90)
   assert.equal(calculateItemPrice(.1, [{ optionId: 'o', priceDelta: .2 }], 3), .9)
-  assert.ok(selectionErrors(menu, product, { ...selection, optionIds: [] }).length)
-  assert.ok(selectionErrors(menu, product, { ...selection, optionIds: ['o', 'o2'] }).length)
+  assert.ok(selectionErrors(product, { ...selection, optionIds: [] }).length)
+  assert.ok(selectionErrors(product, { ...selection, optionIds: ['o', 'o2'] }).length)
   assert.equal(cartPrice(menu, [{ ...selection, productId: 'p' }, { ...selection, productId: 'p', quantity: 1 }]), 41.2)
 })
 test('an unconfirmed submission survives reload and retries with the same immutable payload', async () => {
@@ -136,26 +150,45 @@ test('customer table URLs encode screens, product pages and menu filters', async
   assert.equal(paths.isMenuIndex('/m/x/producto/1'), false)
 })
 test('rejects unknown, duplicated and unavailable modifiers', () => {
-  for (const optionIds of [['other'], ['o', 'o']]) assert.ok(selectionErrors(menu, product, { ...selection, optionIds }).length)
-  const changed = structuredClone(menu)
-  changed.options[0].is_available = false
-  assert.ok(selectionErrors(changed, product, selection).length)
-  changed.groups[0].is_available = false
-  assert.ok(selectionErrors(changed, product, selection).length)
+  for (const optionIds of [['other'], ['o', 'o']]) assert.ok(selectionErrors(product, { ...selection, optionIds }).length)
+  assert.ok(selectionErrors(productAfter((changed) => { changed.groups[0].modifier_options[0].is_available = false }), selection).length)
+  assert.ok(selectionErrors(productAfter((changed) => { changed.groups[0].is_available = false }), selection).length)
 })
 test('unavailable ingredients require removal and fixed ingredients cannot be removed', () => {
-  const changed = structuredClone(menu)
-  changed.ingredients[0].is_available = false
-  assert.ok(selectionErrors(changed, product, selection).length)
-  assert.deepEqual(selectionErrors(changed, product, { ...selection, removedIds: ['i'] }), [])
-  changed.ingredients[0].is_removable = false
-  assert.ok(selectionErrors(changed, product, { ...selection, removedIds: ['i'] }).length)
-  assert.ok(selectionErrors(menu, product, { ...selection, removedIds: ['unknown'] }).length)
+  const soldOut = productAfter((changed) => { changed.products[0].product_ingredients[0].is_available = false })
+  assert.ok(selectionErrors(soldOut, selection).length)
+  assert.deepEqual(selectionErrors(soldOut, { ...selection, removedIds: ['i'] }), [])
+  const fixed = productAfter((changed) => {
+    changed.products[0].product_ingredients[0].is_available = false
+    changed.products[0].product_ingredients[0].is_removable = false
+  })
+  assert.ok(selectionErrors(fixed, { ...selection, removedIds: ['i'] }).length)
+  assert.ok(selectionErrors(product, { ...selection, removedIds: ['unknown'] }).length)
 })
 test('rejects inactive categories, unavailable products and invalid quantities', () => {
-  assert.ok(selectionErrors({ ...menu, categories: [] }, product, selection).length)
-  assert.ok(selectionErrors(menu, { ...product, is_available: false }, selection).length)
-  for (const quantity of [0, -1, 1.5, 100, NaN]) assert.ok(selectionErrors(menu, product, { ...selection, quantity }).length)
+  assert.ok(selectionErrors(productAfter((changed) => { changed.categories = [] }), selection).length)
+  assert.ok(selectionErrors({ ...product, is_available: false }, selection).length)
+  for (const quantity of [0, -1, 1.5, 100, NaN]) assert.ok(selectionErrors(product, { ...selection, quantity }).length)
+})
+test('buildMenu nests products once: ordered groups shared across products and inactive categories kept for the cart', () => {
+  const built: Menu = buildMenu({
+    categories: [{ id: 'c' }],
+    products: [
+      { id: 'a', category_id: 'c', product_ingredients: [{ id: 'i1' }], product_modifier_groups: [{ group_id: 'g2' }, { group_id: 'g1' }] },
+      { id: 'b', category_id: 'c', product_ingredients: [], product_modifier_groups: [{ group_id: 'g1' }] },
+      { id: 'hidden', category_id: 'inactive', product_ingredients: [], product_modifier_groups: [] },
+    ],
+    groups: [{ id: 'g1', modifier_options: [{ id: 'o1' }] }, { id: 'g2', modifier_options: [] }],
+  } as unknown as MenuRows)
+  const [a, b] = built.categories[0].products
+  assert.deepEqual(built.categories[0].products.map((entry) => entry.id), ['a', 'b'])
+  assert.deepEqual(a.ingredients.map((entry) => entry.id), ['i1'])
+  assert.deepEqual(a.groups.map((group) => group.id), ['g2', 'g1'], 'groups keep the assignment order')
+  assert.equal(a.groups[1], b.groups[0], 'a group shared by two products is the same object')
+  assert.deepEqual(productOptions(a).map((option) => option.id), ['o1'])
+  assert.equal('product_modifier_groups' in a, false, 'raw relation fields do not leak into the model')
+  assert.equal(built.productsById.get('hidden')?.categoryActive, false)
+  assert.equal(built.categories.some((category) => category.products.some((entry) => entry.id === 'hidden')), false)
 })
 test('cart edits preserve customization and isolate participants and sessions', async () => {
   const { useCart } = await import('../src/stores/cart')
@@ -269,11 +302,16 @@ test('product cards keep the link and the carousel controls as siblings', async 
 
   const card = (overrides: object) => ({
     id: 'x', category_id: 'c', name: 'Plato', description: null, base_price: 10,
-    dietary_tags: [], is_available: true, media_urls: ['https://cdn/a.jpg', 'https://cdn/b.jpg'], ...overrides,
+    dietary_tags: [], is_available: true, media_urls: ['https://cdn/a.jpg', 'https://cdn/b.jpg'],
+    product_ingredients: [], product_modifier_groups: [], ...overrides,
   })
   const render = (canEdit: boolean, products: object[]) => renderToStaticMarkup(createElement(
     MemoryRouter, null,
-    createElement(MenuBrowse, { token: 't', canEdit, menu: { ...menu, categories: [{ id: 'c', name: 'Platos' }], products } as never }),
+    createElement(MenuBrowse, {
+      token: 't',
+      canEdit,
+      menu: buildMenu({ categories: [{ id: 'c', name: 'Platos' }], products, groups: [] } as unknown as MenuRows),
+    }),
   ))
 
   const html = render(true, [card({ id: 'many' }), card({ id: 'sold-out', is_available: false })])

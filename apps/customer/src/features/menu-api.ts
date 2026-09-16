@@ -1,3 +1,4 @@
+import { buildMenu, type Menu } from '@/features/menu'
 import { supabase } from '@/lib/supabase'
 
 export async function loadTable(token: string) {
@@ -25,8 +26,8 @@ export async function loadTable(token: string) {
   return { table, branch: branch.data, restaurant: restaurant.data }
 }
 
-export async function loadMenu(restaurantId: string) {
-  const [categories, products, ingredients, groups, options, links] = await Promise.all([
+export async function loadMenu(restaurantId: string): Promise<Menu> {
+  const [categories, products, groups] = await Promise.all([
     supabase
       .from('menu_categories')
       .select('*')
@@ -34,40 +35,25 @@ export async function loadMenu(restaurantId: string) {
       .eq('is_active', true)
       .order('sort_order')
       .order('name'),
+    // Cada producto trae sus ingredientes y los ids de sus grupos, ya ordenados.
     supabase
       .from('products')
-      .select('*')
+      .select('*, product_ingredients(*), product_modifier_groups(group_id)')
       .eq('restaurant_id', restaurantId)
       .order('sort_order')
-      .order('name'),
+      .order('name')
+      .order('sort_order', { referencedTable: 'product_ingredients' })
+      .order('sort_order', { referencedTable: 'product_modifier_groups' }),
+    // Los grupos se comparten entre productos: se piden una vez, con sus opciones.
     supabase
-      .from('product_ingredients')
-      .select('*')
+      .from('modifier_groups')
+      .select('*, modifier_options(*)')
       .eq('restaurant_id', restaurantId)
-      .order('sort_order'),
-    supabase.from('modifier_groups').select('*').eq('restaurant_id', restaurantId),
-    supabase
-      .from('modifier_options')
-      .select('*')
-      .eq('restaurant_id', restaurantId)
-      .order('sort_order'),
-    supabase
-      .from('product_modifier_groups')
-      .select('*')
-      .eq('restaurant_id', restaurantId)
-      .order('sort_order'),
+      .order('sort_order', { referencedTable: 'modifier_options' }),
   ])
+  if (categories.error) throw categories.error
+  if (products.error) throw products.error
+  if (groups.error) throw groups.error
 
-  for (const result of [categories, products, ingredients, groups, options, links]) {
-    if (result.error) throw result.error
-  }
-
-  return {
-    categories: categories.data!,
-    products: products.data!,
-    ingredients: ingredients.data!,
-    groups: groups.data!,
-    options: options.data!,
-    links: links.data!,
-  }
+  return buildMenu({ categories: categories.data, products: products.data, groups: groups.data })
 }

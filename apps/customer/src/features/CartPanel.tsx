@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { isRetryableError } from '@restaurant-platform/shared'
 import { useNavigate, useParams } from 'react-router'
-import { cartPrice, money, price, selectionErrors } from '@/features/menu'
+import { cartPrice, money, price, productOptions, selectionErrors } from '@/features/menu'
 import type { Menu } from '@/features/menu'
 import { SubmissionError, abandonSubmission, submitOrder } from '@/features/orders-api'
 import { cartItemPath, cartPath, cartReviewPath } from '@/features/table-paths'
@@ -38,8 +38,8 @@ export function CartPanel({
   const signature = JSON.stringify(items)
   const total = menu ? cartPrice(menu, items) : 0
   const validItems = !!menu && items.length > 0 && items.length <= 50 && items.every((item) => {
-    const product = menu.products.find((entry) => entry.id === item.productId)
-    return product && selectionErrors(menu, product, item).length === 0
+    const product = menu.productsById.get(item.productId)
+    return product && selectionErrors(product, item).length === 0
   })
 
   useEffect(() => {
@@ -239,10 +239,11 @@ function CartLine({
   onEdit: () => void
   onRemove: () => void
 }) {
-  const product = menu?.products.find((entry) => entry.id === item.productId)
+  const product = menu?.productsById.get(item.productId)
+  const options = product ? productOptions(product) : []
   const errors = menu
     ? product
-      ? selectionErrors(menu, product, item)
+      ? selectionErrors(product, item)
       : ['El producto ya no está en la carta.']
     : []
   const title = product?.name ?? (menu ? 'Producto eliminado' : 'Producto del carrito')
@@ -255,7 +256,7 @@ function CartLine({
       </h3>
       <p>Base: {product ? money(product.base_price) : '—'}</p>
       {item.optionIds.map((id) => {
-        const option = menu?.options.find((entry) => entry.id === id)
+        const option = options.find((entry) => entry.id === id)
         return (
           <p key={id}>
             + {option ? `${option.name} (${money(option.price_delta)})` : 'Opción pendiente de actualizar'}
@@ -264,7 +265,7 @@ function CartLine({
       })}
       {item.removedIds.map((id) => (
         <p key={id}>
-          Sin {menu?.ingredients.find((ingredient) => ingredient.id === id)?.name ?? 'ingrediente pendiente de actualizar'}
+          Sin {product?.ingredients.find((ingredient) => ingredient.id === id)?.name ?? 'ingrediente pendiente de actualizar'}
         </p>
       ))}
       <div className="cart-actions">
@@ -284,7 +285,7 @@ function CartLine({
             }}
           />
         </label>
-        <strong>{product && menu ? money(price(menu, product, item)) : '—'}</strong>
+        <strong>{product ? money(price(product, item)) : '—'}</strong>
       </div>
       {errors.length > 0 && <p className="notice">{errors.join(' ')}</p>}
       <div className="cart-actions">

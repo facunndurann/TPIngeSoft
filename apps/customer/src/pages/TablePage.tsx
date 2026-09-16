@@ -228,7 +228,7 @@ export function TableProductPage() {
   const location = useLocation()
   const back = useTableBack(`${menuPath(token)}${location.search}`)
   const cart = useCart()
-  const product = menu.data?.products.find((entry) => entry.id === productId)
+  const product = menu.data?.productsById.get(productId)
 
   if (!menu.data) return null
   if (!product) {
@@ -258,7 +258,6 @@ export function TableProductPage() {
   return (
     <ProductEditor
       key={product.id}
-      menu={menu.data}
       product={product}
       onClose={back}
       onSave={(item) => {
@@ -276,7 +275,7 @@ export function TableCartItemPage() {
   const back = useTableBack(cartPath(token))
   const cart = useCart()
   const item = items.find((entry) => entry.id === itemId)
-  const product = menu.data?.products.find((entry) => entry.id === item?.productId)
+  const product = item && menu.data?.productsById.get(item.productId)
 
   if (!item) return <Navigate to={cartPath(token)} replace />
   if (!menu.data) return null
@@ -299,7 +298,6 @@ export function TableCartItemPage() {
   return (
     <ProductEditor
       key={item.id}
-      menu={menu.data}
       product={product}
       initial={item}
       onClose={back}
