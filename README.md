@@ -18,6 +18,7 @@ Plataforma web multi-restaurante de autoservicio: menú digital por QR de mesa, 
 | 5.1 | POS desacoplado del backoffice: roles, empleados con PIN y auditoría (MI-61) | Completa |
 | 5.2 | Salón: sectores y layout de mesas configurables (MI-66) | Completa |
 | 5.3 | Mapa operativo: estados, tiempos, totales y responsable por mesa (MI-62/MI-63) | Completa |
+| 5.4 | Abrir y continuar comandas desde el mapa (MI-64) | Completa |
 | 6 | Menú inteligente (LLM) | Pendiente |
 | 7 | Pagos (Mercado Pago sandbox, división) | Pendiente |
 | 8 | Pulido y demo | Pendiente |
@@ -27,7 +28,7 @@ Plataforma web multi-restaurante de autoservicio: menú digital por QR de mesa, 
 Con el stack local corriendo (ver más abajo), en el **panel admin** (`http://localhost:5174`):
 
 1. **Login** con un usuario demo: `admin@esquina.demo` / `demo1234` (hamburguesería) o `admin@nonna.demo` / `demo1234` (trattoria). También podés registrar una cuenta nueva y crear tu propio restaurante desde cero.
-2. **POS**: tablero de comandas en tiempo real y mapa de salón por sector. El mapa distingue mesas libres, ocupadas, con pedidos, cuenta solicitada o cobro pendiente, y muestra tiempo, total y responsable sin abrir la comanda. El POS pide el PIN de un empleado antes de operar (demo: `1234`), se bloquea por inactividad y registra quién hizo cada acción.
+2. **POS**: tablero de comandas en tiempo real y mapa de salón por sector. El mapa distingue mesas libres, ocupadas, con pedidos, cuenta solicitada o cobro pendiente, y muestra tiempo, total y responsable sin abrir la comanda. Desde una mesa se abre o continúa su comanda, y al volver el plano conserva el sector. El POS pide el PIN de un empleado antes de operar (demo: `1234`), se bloquea por inactividad y registra quién hizo cada acción.
 3. **Productos**: crear/editar productos con foto, precio, categoría, etiquetas dietarias, disponibilidad, ingredientes (marcando cuáles se pueden quitar) y grupos de modificadores asignados.
 4. **Categorías**: crear, renombrar, reordenar, activar/desactivar.
 5. **Modificadores**: grupos con reglas mín/máx (ej: "Extras" 0-4 con precio, "Guarnición" exactamente 1) y sus opciones.
@@ -74,25 +75,34 @@ supabase/
 
 ## Cómo correr el proyecto
 
-Requisitos: **Node >= 22**, **pnpm >= 10**, **Docker** corriendo.
+Requisitos: **Node >= 22** y **Docker** corriendo.
 
 ```bash
+# 0. pnpm (viene con Node 22 vía corepack; omitilo si ya lo tenés)
+corepack enable
+
 # 1. Instalar dependencias
 pnpm install
 
-# 2. Levantar Supabase local (primera vez descarga imágenes, tarda unos minutos)
+# 2. Crear los .env locales (no se versionan; los valores del stack local
+#    son iguales en todas las máquinas, así que alcanza con copiarlos)
+cp apps/admin/.env.example apps/admin/.env
+cp apps/customer/.env.example apps/customer/.env
+
+# 3. Levantar Supabase local (la primera vez descarga imágenes, tarda varios minutos)
 pnpm supabase start
 
-# 3. Aplicar schema + datos demo
+# 4. Aplicar schema + datos demo
 pnpm supabase db reset
 
-# 4. Configurar .env de cada app (ver docs/SETUP.md; en local ya vienen creados)
-
-# 5. Levantar las apps
+# 5. Levantar las apps, cada una en su terminal
 pnpm dev:admin      # Panel del restaurante -> http://localhost:5174
-pnpm dev:customer   # App del comensal     -> http://localhost:5173
-pnpm dev:functions  # submit-order         -> http://127.0.0.1:54321/functions/v1/submit-order
+pnpm dev:customer   # App del comensal      -> http://localhost:5173
+pnpm dev:functions  # submit-order          -> http://127.0.0.1:54321/functions/v1/submit-order
 ```
+
+Entrá a `http://localhost:5174` con `admin@esquina.demo` / `demo1234`; el POS pide el PIN `1234`.
+Detalle completo y resolución de problemas en **[docs/SETUP.md](docs/SETUP.md)**.
 
 ## Comandos útiles
 

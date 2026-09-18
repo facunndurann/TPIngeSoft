@@ -1225,6 +1225,10 @@ export type Database = {
         Args: { p_employee_id?: string; p_session_id: string }
         Returns: string
       }
+      pos_open_table_session: {
+        Args: { p_employee_id?: string; p_table_id: string }
+        Returns: string
+      }
       pos_transition_order: {
         Args: {
           p_employee_id?: string
@@ -1448,3 +1452,4 @@ export const Constants = {
     },
   },
 } as const
+

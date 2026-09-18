@@ -11,7 +11,7 @@ El proyecto usa la CLI de Supabase (ya incluida como dependencia del monorepo: s
 ### Requisitos
 
 - Docker Desktop (u otro runtime de Docker) **corriendo**.
-- Node >= 22 y pnpm >= 10.
+- Node >= 22. `pnpm` viene con Node vía corepack: si `pnpm -v` falla, corré `corepack enable`.
 
 ### Pasos
 
@@ -19,11 +19,23 @@ El proyecto usa la CLI de Supabase (ya incluida como dependencia del monorepo: s
 # 1. Instalar dependencias del monorepo
 pnpm install
 
-# 2. Levantar el stack (la primera vez descarga las imágenes, ~5 min)
+# 2. Crear los .env locales (ver sección 2: no se versionan)
+cp apps/admin/.env.example apps/admin/.env
+cp apps/customer/.env.example apps/customer/.env
+
+# 3. Levantar el stack (la primera vez descarga las imágenes, ~5 min)
 pnpm supabase start
 
-# 3. Aplicar el schema y los datos demo (migraciones + seed)
+# 4. Aplicar el schema y los datos demo (migraciones + seed)
 pnpm supabase db reset
+```
+
+Después, cada app en su terminal:
+
+```bash
+pnpm dev:admin      # http://localhost:5174
+pnpm dev:customer   # http://localhost:5173
+pnpm dev:functions  # necesario para que el comensal pueda enviar pedidos
 ```
 
 `supabase start` imprime las credenciales del stack local. Las importantes:
@@ -76,7 +88,8 @@ Notas:
 
 - La **anon key es pública por diseño** (viaja al navegador). La seguridad la aplican las políticas RLS de la base; la `service_role key` en cambio **nunca** va en un `.env` de frontend.
 - Tras cambiar un `.env` hay que reiniciar el dev server de Vite.
-- En este repo los `.env` locales ya vienen creados con los valores del stack local, porque son iguales para todos los entornos locales de Supabase.
+- Los `.env` **no se versionan** (`.gitignore`), así que un clon nuevo no los tiene: hay que copiarlos desde los `.env.example`, que ya vienen con los valores del stack local. La anon key local es la misma en todas las máquinas porque el stack local firma siempre con el mismo JWT secret de demo.
+- Si alguna vez no coincide, `pnpm supabase status -o env` imprime los valores reales de tu stack.
 
 ---
 
@@ -365,3 +378,37 @@ pnpm typecheck
 pnpm lint
 pnpm build
 ```
+
+---
+
+## 11. Abrir y continuar comandas desde el plano (MI-64)
+
+Tocar una mesa del plano abre su **comanda**: `/pos/salon/<tableId>`. Es la misma pantalla para una mesa libre y una ocupada, porque la RPC `pos_open_table_session` es idempotente — si la mesa ya tiene sesión abierta la devuelve en lugar de fallar, así dos mozos que tocan la misma mesa a la vez terminan en la misma comanda.
+
+A diferencia de `join_table_session` (el ingreso por QR), abrir desde el POS **no suma al mozo como comensal** de la mesa.
+
+La sucursal y el sector viajan en la query (`/pos/salon?sucursal=…&sector=…`), así que **Volver al plano** deja el mapa en el mismo sector desde el que se entró. También sobrevive a recargar la página o compartir el link.
+
+Recorrido de aceptación (como `admin@esquina.demo`, PIN `1234`):
+
+1. En **POS → Salón**, tocar una mesa verde: el resumen ofrece **Abrir comanda**.
+2. Abrir: la mesa pasa a ocupada en el plano, con tiempo, total y responsable.
+3. **Volver al plano**: vuelve al mismo sector, no al primero.
+4. Tocar la misma mesa: el botón dice **Continuar comanda** y entra a la sesión que ya existía, sin crear otra.
+5. Que un comensal escanee el QR de esa mesa: entra a la comanda que abrió el mozo, no a una nueva.
+6. Desde la comanda, avanzar el estado de un pedido y cerrar la sesión.
+7. En **Empleados → Actividad reciente**, figuran `session.opened` y `session.resumed` con el empleado del PIN.
+8. Una mesa fuera de servicio, oculta, o de un sector/sucursal dado de baja no se puede abrir: la RPC responde `TABLE_UNAVAILABLE` aunque se la llame a mano.
+
+También se llega a la comanda desde **Mesas activas**: las mesas ocupadas tienen **Continuar comanda** y las libres son un link para abrirla.
+
+Pruebas reproducibles:
+
+```bash
+docker exec -i supabase_db_TP psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/tests/pos-open-session.sql
+pnpm typecheck
+pnpm lint
+pnpm build
+```
+
+La apertura usa el mismo orden de bloqueo mesa → sesión que `join_table_session` y `close_table_session`, así que dos aperturas simultáneas se serializan y el índice único de una sesión abierta por mesa nunca se viola.

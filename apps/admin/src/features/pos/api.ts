@@ -114,6 +114,43 @@ export async function transitionPosOrder(
   throwIfError(error)
 }
 
+/**
+ * Abre la comanda de una mesa, o devuelve la que ya estaba abierta (MI-64).
+ * Es la misma llamada para "abrir" y para "continuar": la RPC es idempotente,
+ * así que dos mozos sobre la misma mesa terminan en la misma sesión.
+ */
+export async function openPosTableSession(tableId: string, employeeId: string | null) {
+  const { data, error } = await supabase.rpc('pos_open_table_session', {
+    p_table_id: tableId,
+    p_employee_id: employeeId ?? undefined,
+  })
+  throwIfError(error)
+  if (!data) throw new PosActionError('SESSION_NOT_FOUND')
+  return data as string
+}
+
+/** Comanda completa de una mesa: la sesión abierta con sus pedidos y su cuenta. */
+export async function loadTableSession(tableId: string) {
+  const { data, error } = await supabase
+    .from('table_sessions')
+    .select(posSessionSelect)
+    .eq('table_id', tableId)
+    .eq('status', 'open')
+    .maybeSingle()
+  throwIfError(error)
+  return (data ?? null) as PosOpenSession | null
+}
+
+export async function loadSessionOrders(sessionId: string) {
+  const { data, error } = await supabase
+    .from('orders')
+    .select(posOrderSelect)
+    .eq('session_id', sessionId)
+    .order('created_at', { ascending: false })
+  throwIfError(error)
+  return (data ?? []) as PosOrder[]
+}
+
 export async function closePosSession(sessionId: string, employeeId: string | null) {
   const { error } = await supabase.rpc('pos_close_table_session', {
     p_session_id: sessionId,

@@ -20,6 +20,7 @@ import { CommandBoard } from '@/features/pos/CommandBoard'
 import { ActiveTables } from '@/features/pos/ActiveTables'
 import { OrderHistory } from '@/features/pos/OrderHistory'
 import { FloorMap } from '@/features/pos/FloorMap'
+import { TableCommand } from '@/features/pos/TableCommand'
 
 function App() {
   const { session, loading } = useAuth()
@@ -55,6 +56,7 @@ function App() {
         >
           <Route index element={<CommandBoard />} />
           <Route path="salon" element={<FloorMap />} />
+          <Route path="salon/:tableId" element={<TableCommand />} />
           <Route path="mesas" element={<ActiveTables />} />
           <Route path="historial" element={<OrderHistory />} />
         </Route>
