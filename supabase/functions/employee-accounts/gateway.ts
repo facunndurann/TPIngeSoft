@@ -19,7 +19,13 @@ export async function authenticateEmployees(url: string, anonKey: string, servic
     },
     async createAuth(email, password) {
       const { data, error } = await admin.auth.admin.createUser({ email, password, email_confirm: true })
-      check(error)
+      if (error) {
+        // El username ya tomado sólo llega como "already registered" cuando GoTrue
+        // gana su chequeo previo; bajo concurrencia devuelve un 500 opaco. El dato
+        // queda igual de protegido por el índice único: falta nombrar bien el error.
+        const { data: taken } = await admin.rpc('employee_email_exists', { p_email: email })
+        throw new Error(taken ? 'USERNAME_TAKEN' : error.message)
+      }
       if (!data.user) throw new Error('AUTH_CREATE_FAILED')
       return data.user.id
     },

@@ -1343,6 +1343,7 @@ export type Database = {
         Args: { bid?: string; rid: string }
         Returns: boolean
       }
+      employee_email_exists: { Args: { p_email: string }; Returns: boolean }
       get_order_pos_type: {
         Args: { p_order_id: string }
         Returns: Database["public"]["Enums"]["pos_type"]
