@@ -58,6 +58,8 @@ do $$
 declare
   r1 uuid; r2 uuid;
   b1 uuid; b2 uuid;
+  -- sectores del salón (MI-66)
+  s_salon uuid; s_terraza uuid; s_nonna uuid;
   -- categorías burger
   c_entradas uuid; c_burgers uuid; c_acomp uuid; c_bebidas uuid; c_postres uuid;
   -- categorías trattoria
@@ -87,11 +89,22 @@ begin
   insert into public.branches (restaurant_id, name, address)
   values (r1, 'Casa Central', 'Av. Siempreviva 742') returning id into b1;
 
-  insert into public.tables (restaurant_id, branch_id, label, qr_token) values
-    (r1, b1, 'Mesa 1', 'demo-burger-mesa-1'),
-    (r1, b1, 'Mesa 2', 'demo-burger-mesa-2'),
-    (r1, b1, 'Mesa 3', 'demo-burger-mesa-3'),
-    (r1, b1, 'Mesa 4', 'demo-burger-mesa-4');
+  insert into public.floor_sections (restaurant_id, branch_id, name, sort_order)
+  values (r1, b1, 'Salón principal', 0) returning id into s_salon;
+  insert into public.floor_sections (restaurant_id, branch_id, name, sort_order)
+  values (r1, b1, 'Terraza', 1) returning id into s_terraza;
+
+  insert into public.tables
+    (restaurant_id, branch_id, section_id, label, qr_token, position_x, position_y, seats, shape, width, height) values
+    (r1, b1, s_salon,   'Mesa 1', 'demo-burger-mesa-1',  1,  1, 4, 'rect',  3, 3),
+    (r1, b1, s_salon,   'Mesa 2', 'demo-burger-mesa-2',  6,  1, 2, 'round', 2, 2),
+    (r1, b1, s_salon,   'Mesa 3', 'demo-burger-mesa-3',  1,  6, 6, 'rect',  5, 2),
+    (r1, b1, s_terraza, 'Mesa 4', 'demo-burger-mesa-4',  1,  1, 4, 'round', 3, 3);
+
+  -- Mobiliario que existe pero no se atiende: no aparece en el plano operativo.
+  insert into public.tables
+    (restaurant_id, branch_id, section_id, label, position_x, position_y, seats, shape, width, height, is_visible) values
+    (r1, b1, s_salon, 'Barra de apoyo', 10, 1, 2, 'rect', 8, 1, false);
 
   insert into public.menu_categories (restaurant_id, name, sort_order) values
     (r1, 'Entradas', 0) returning id into c_entradas;
@@ -198,10 +211,14 @@ begin
   insert into public.branches (restaurant_id, name, address)
   values (r2, 'Casa Central', 'Calle Falsa 123') returning id into b2;
 
-  insert into public.tables (restaurant_id, branch_id, label, qr_token) values
-    (r2, b2, 'Mesa 1', 'demo-nonna-mesa-1'),
-    (r2, b2, 'Mesa 2', 'demo-nonna-mesa-2'),
-    (r2, b2, 'Mesa 3', 'demo-nonna-mesa-3');
+  insert into public.floor_sections (restaurant_id, branch_id, name, sort_order)
+  values (r2, b2, 'Salón', 0) returning id into s_nonna;
+
+  insert into public.tables
+    (restaurant_id, branch_id, section_id, label, qr_token, position_x, position_y, seats, shape, width, height) values
+    (r2, b2, s_nonna, 'Mesa 1', 'demo-nonna-mesa-1', 1, 1, 2, 'round', 2, 2),
+    (r2, b2, s_nonna, 'Mesa 2', 'demo-nonna-mesa-2', 5, 1, 4, 'rect',  3, 3),
+    (r2, b2, s_nonna, 'Mesa 3', 'demo-nonna-mesa-3', 1, 5, 8, 'rect',  7, 3);
 
   insert into public.menu_categories (restaurant_id, name, sort_order) values
     (r2, 'Entradas', 0) returning id into t_entradas;

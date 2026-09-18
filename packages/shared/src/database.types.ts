@@ -95,6 +95,51 @@ export type Database = {
           },
         ]
       }
+      floor_sections: {
+        Row: {
+          branch_id: string
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          restaurant_id: string
+          sort_order: number
+        }
+        Insert: {
+          branch_id: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          restaurant_id: string
+          sort_order?: number
+        }
+        Update: {
+          branch_id?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          restaurant_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "floor_sections_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "floor_sections_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       integration_logs: {
         Row: {
           created_at: string
@@ -1043,29 +1088,53 @@ export type Database = {
         Row: {
           branch_id: string
           created_at: string
+          height: number
           id: string
           is_active: boolean
+          is_visible: boolean
           label: string
+          position_x: number
+          position_y: number
           qr_token: string
           restaurant_id: string
+          seats: number
+          section_id: string | null
+          shape: string
+          width: number
         }
         Insert: {
           branch_id: string
           created_at?: string
+          height?: number
           id?: string
           is_active?: boolean
+          is_visible?: boolean
           label: string
+          position_x?: number
+          position_y?: number
           qr_token?: string
           restaurant_id: string
+          seats?: number
+          section_id?: string | null
+          shape?: string
+          width?: number
         }
         Update: {
           branch_id?: string
           created_at?: string
+          height?: number
           id?: string
           is_active?: boolean
+          is_visible?: boolean
           label?: string
+          position_x?: number
+          position_y?: number
           qr_token?: string
           restaurant_id?: string
+          seats?: number
+          section_id?: string | null
+          shape?: string
+          width?: number
         }
         Relationships: [
           {
@@ -1081,6 +1150,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "restaurants"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tables_section_same_branch"
+            columns: ["section_id", "branch_id"]
+            isOneToOne: false
+            referencedRelation: "floor_sections"
+            referencedColumns: ["id", "branch_id"]
           },
         ]
       }

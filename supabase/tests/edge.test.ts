@@ -12,6 +12,20 @@ import {
 } from '../../packages/shared/src/pos.ts'
 // Si otra migración vuelve a redefinir transition_order, apuntá este import a esa.
 import transitionOrderSql from '../migrations/20260915130000_pos_transition_table.sql?raw'
+import {
+  FLOOR_GRID,
+  TABLE_SPAN,
+  clampSpan,
+  clampToGrid,
+  collidesWithAny,
+  findFreeCell,
+  isOperable,
+  tableFootprint,
+  tableShapes,
+} from '../../packages/shared/src/floor.ts'
+// Si otra migración cambia el check de shape o el rango de width/height,
+// apuntá este import a esa.
+import floorLayoutSql from '../migrations/20260918030000_free_table_sizes.sql?raw'
 import { DEFAULT_MENU_DESIGN } from '../../packages/shared/src/designs.ts'
 // Si otra migración cambia el default de restaurants.menu_design, apuntá este import a esa.
 import menuDesignEnumSql from '../migrations/20260915150000_menu_design_enum.sql?raw'
@@ -173,4 +187,76 @@ test('restaurant day bounds use Argentina time and POS errors stay coded', () =>
 
 test('the database default menu design matches DEFAULT_MENU_DESIGN', () => {
   assert.equal(menuDesignEnumSql.match(/alter column menu_design set default '(\w+)'/)?.[1], DEFAULT_MENU_DESIGN)
+})
+
+test('table sizes are free but always drawable inside the grid', () => {
+  assert.deepEqual(tableFootprint({ width: 5, height: 2 }), { w: 5, h: 2 })
+  assert.deepEqual(tableFootprint({ width: 1, height: 1 }), { w: 1, h: 1 })
+
+  // Datos fuera de rango no rompen el plano: se recortan al dibujar.
+  assert.deepEqual(tableFootprint({ width: 0, height: -3 }), {
+    w: TABLE_SPAN.min,
+    h: TABLE_SPAN.min,
+  })
+  assert.deepEqual(tableFootprint({ width: 999, height: 999 }), {
+    w: TABLE_SPAN.max,
+    h: TABLE_SPAN.max,
+  })
+  assert.equal(clampSpan(3.6, FLOOR_GRID.cols), 4)
+  // El límite del eje manda sobre el tope general.
+  assert.equal(clampSpan(99, 5), 5)
+
+  const big = tableFootprint({ width: 5, height: 4 })
+  assert.deepEqual(clampToGrid(-5, -5, big), { x: 0, y: 0 })
+  assert.deepEqual(clampToGrid(999, 999, big), {
+    x: FLOOR_GRID.cols - big.w,
+    y: FLOOR_GRID.rows - big.h,
+  })
+  assert.deepEqual(clampToGrid(4.4, 6.6, big), { x: 4, y: 7 })
+})
+
+test('tables collide when they overlap and fit when they only touch', () => {
+  const footprint = tableFootprint({ width: 3, height: 3 })
+  const anchor = { x: 3, y: 3, footprint }
+
+  assert.equal(collidesWithAny({ x: 5, y: 3, footprint }, [anchor]), true)
+  // Pegada al borde derecho: comparten borde, no celdas.
+  assert.equal(collidesWithAny({ x: 6, y: 3, footprint }, [anchor]), false)
+  assert.equal(collidesWithAny({ x: 3, y: 6, footprint }, [anchor]), false)
+
+  // El hueco que propone una mesa nueva nunca pisa a las existentes.
+  const taken = [anchor, { x: 0, y: 0, footprint }]
+  const free = findFreeCell(footprint, taken)
+  assert.equal(collidesWithAny({ ...free, footprint }, taken), false)
+})
+
+test('a hidden table, one out of service, or one in a closed section is never operable', () => {
+  const open = { is_active: true }
+  const closed = { is_active: false }
+
+  assert.equal(isOperable({ is_active: true, is_visible: true }), true)
+  assert.equal(isOperable({ is_active: true, is_visible: false }), false)
+  assert.equal(isOperable({ is_active: false, is_visible: true }), false)
+
+  // Un sector dado de baja saca de la operación hasta a sus mesas sanas.
+  assert.equal(isOperable({ is_active: true, is_visible: true }, open), true)
+  assert.equal(isOperable({ is_active: true, is_visible: true }, closed), false)
+  assert.equal(isOperable({ is_active: true, is_visible: false }, open), false)
+
+  // Sin sector la mesa sigue siendo operable: existe y tiene QR.
+  assert.equal(isOperable({ is_active: true, is_visible: true }, null), true)
+})
+
+test('the database accepts exactly the shapes the floor editor offers', () => {
+  const listed = floorLayoutSql
+    .match(/tables_shape_valid check \(shape in \(([^)]*)\)/)?.[1]
+    .match(/'(\w+)'/g)
+    ?.map((value) => value.replaceAll("'", ''))
+    .sort()
+  assert.deepEqual(listed, [...tableShapes].sort())
+
+  // El tope de la DB no puede quedar por debajo del que ofrece el editor.
+  const span = floorLayoutSql.match(/width between (\d+) and (\d+)/)
+  assert.ok(span, 'the migration must bound width and height')
+  assert.ok(Number(span[1]) <= TABLE_SPAN.min && Number(span[2]) >= TABLE_SPAN.max)
 })

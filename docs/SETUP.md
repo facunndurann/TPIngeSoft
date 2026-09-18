@@ -43,6 +43,7 @@ pnpm supabase db reset
   - `admin@esquina.demo` / `demo1234`
   - `admin@nonna.demo` / `demo1234`
 - **QR tokens de mesas demo**: `demo-burger-mesa-1` a `4` y `demo-nonna-mesa-1` a `3`. La URL de una mesa es `http://localhost:5173/m/<token>`.
+- **Sectores del salón**: La Esquina Burger tiene `Salón principal` (Mesas 1-3 y una `Barra de apoyo` oculta de 8 × 1 celdas) y `Terraza` (Mesa 4); Trattoria Nonna tiene `Salón` con sus 3 mesas, incluida una de 7 × 3 para 8 personas.
 - **Empleados del POS con PIN** (desbloquean el salón, no tienen cuenta propia):
   - La Esquina Burger: `Ana (mozo)` → `1234`, `Bruno (cajero)` → `5678`
   - Trattoria Nonna: `Carla (mozo)` → `1234`
@@ -281,3 +282,54 @@ pnpm build
 ```
 
 El PIN se guarda con bcrypt y el hash queda fuera del `grant` de columnas, así que no sale por PostgREST. `pos_audit_log` es de solo lectura para la app: las entradas las escriben `verify_pos_pin`, `pos_transition_order` y `pos_close_table_session`, que son los envoltorios auditados de las RPC del POS.
+
+---
+
+## 9. Configurar el salón: sectores y layout (MI-66)
+
+El local se representa en dos niveles: **sectores** (`floor_sections`) dentro de una sucursal, y **mesas** ubicadas en una grilla de 24 × 16 celdas dentro de un sector. La geometría vive en `packages/shared/src/floor.ts`, así que el plano que guarda el administrador es el mismo que después dibuja el POS.
+
+Cada mesa declara su **ancho y alto en celdas** (`width`, `height`, de 1 a 12): no hay tamaños predefinidos. `shape` es solo estilo visual, `rect` o `round`. Una mesa alargada es simplemente una con ancho distinto del alto.
+
+La pantalla tiene dos modos:
+
+- **Visualizar** (el que abre por defecto): el plano de solo lectura, con el resumen de mesas operables y lugares del sector. Es lo que conviene mirar durante el servicio.
+- **Editar**: agrega el alta de sectores y mesas, el arrastre, el redimensionado y el panel de propiedades.
+
+Cada mesa tiene dos banderas que responden preguntas distintas:
+
+- `is_active`: la mesa está fuera de servicio. Su QR tampoco abre sesión.
+- `is_visible`: la mesa existe y funciona, pero no se dibuja en el plano operativo (barra de apoyo, mobiliario que no se atiende).
+
+Ninguna de las dos se ofrece para operar desde el POS.
+
+Aplicar la migración sin borrar datos:
+
+```bash
+pnpm supabase migration up --local
+```
+
+Recorrido de aceptación (como `admin@esquina.demo`, en **Salón**):
+
+1. El sector `Salón principal` muestra su plano con Mesa 1, Mesa 2, Mesa 3 y la `Barra de apoyo` en gris punteado (oculta).
+2. Crear un sector nuevo. Repetir un nombre existente en la misma sucursal da un error claro; el mismo nombre en otra sucursal se acepta.
+3. En **Editar**, arrastrar una mesa: al soltar se guarda la celda. Si se superpone con otra queda en rojo y no se guarda. Las flechas del teclado la mueven de a una celda.
+4. Con la mesa seleccionada, tirar del cuadradito de la esquina inferior derecha para cambiarle el tamaño. También se puede escribir ancho y alto en el panel derecho (1 a 12 celdas cada lado).
+5. Cambiar identificador, capacidad, forma y sector desde el panel. Un identificador repetido en la sucursal se rechaza; al cambiar de sector la mesa entra en un hueco libre del destino.
+6. Apagar **Visible en el plano operativo**: en **POS → Mesas activas** esa mesa deja de figurar como libre.
+7. Apagar **Sector en uso**: todas las mesas de ese sector salen de la operación, y en **Visualizar** el resumen lo advierte.
+8. Agregar una mesa al sector: aparece en el primer hueco libre, sin pisar a las existentes.
+9. Eliminar un sector con mesas: las mesas no se borran, quedan en **Mesas sin sector** y se pueden reubicar con un clic.
+10. Con un usuario de rol `staff`, `/salon` redirige a `/pos` y la RLS rechaza cualquier escritura sobre sectores o layout.
+
+Pruebas reproducibles:
+
+```bash
+docker exec -i supabase_db_TP psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/tests/floor.sql
+pnpm test:orders
+pnpm typecheck
+pnpm lint
+pnpm build
+```
+
+Una mesa solo puede pertenecer a un sector de su propia sucursal: lo garantiza una clave foránea compuesta `(section_id, branch_id)`, no una validación de la UI. Borrar un sector anula `section_id` y conserva la mesa y su QR.

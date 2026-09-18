@@ -10,6 +10,7 @@ import { ProductEditPage } from '@/pages/ProductEditPage'
 import { CategoriesPage } from '@/pages/CategoriesPage'
 import { ModifiersPage } from '@/pages/ModifiersPage'
 import { TablesPage } from '@/pages/TablesPage'
+import { FloorPlanPage } from '@/pages/FloorPlanPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { EmployeesPage } from '@/pages/EmployeesPage'
 import { PosGate } from '@/features/pos/PosGate'
@@ -61,6 +62,7 @@ function App() {
         <Route path="productos/:productId" element={<RequireAdmin><ProductEditPage /></RequireAdmin>} />
         <Route path="categorias" element={<RequireAdmin><CategoriesPage /></RequireAdmin>} />
         <Route path="modificadores" element={<RequireAdmin><ModifiersPage /></RequireAdmin>} />
+        <Route path="salon" element={<RequireAdmin><FloorPlanPage /></RequireAdmin>} />
         <Route path="mesas" element={<RequireAdmin><TablesPage /></RequireAdmin>} />
         <Route path="empleados" element={<RequireAdmin><EmployeesPage /></RequireAdmin>} />
         <Route path="restaurante" element={<RequireAdmin><SettingsPage /></RequireAdmin>} />

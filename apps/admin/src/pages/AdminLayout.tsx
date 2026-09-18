@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router'
-import { ClipboardList, LayoutGrid, ListTree, LogOut, QrCode, Settings, SlidersHorizontal, Users, UtensilsCrossed } from 'lucide-react'
+import { ClipboardList, LayoutGrid, ListTree, LogOut, Map, QrCode, Settings, SlidersHorizontal, Users, UtensilsCrossed } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { usePosOperator } from '@/features/pos/operator-context'
 import { useMembership } from '@/restaurant/restaurant-context'
@@ -9,6 +9,7 @@ const navigation = [
   { to: '/productos', label: 'Productos', icon: UtensilsCrossed, adminOnly: true },
   { to: '/categorias', label: 'Categorías', icon: ListTree, adminOnly: true },
   { to: '/modificadores', label: 'Modificadores', icon: SlidersHorizontal, adminOnly: true },
+  { to: '/salon', label: 'Salón', icon: Map, adminOnly: true },
   { to: '/mesas', label: 'Mesas y QR', icon: QrCode, adminOnly: true },
   { to: '/empleados', label: 'Empleados', icon: Users, adminOnly: true },
   { to: '/restaurante', label: 'Restaurante', icon: Settings, adminOnly: true },
@@ -23,7 +24,7 @@ export function AdminLayout() {
 
   return (
     <div className="flex min-h-dvh bg-neutral-100">
-      <aside className="fixed inset-y-0 left-0 flex w-60 flex-col border-r border-neutral-200 bg-white">
+      <aside className="fixed inset-y-0 left-0 z-20 flex w-60 flex-col border-r border-neutral-200 bg-white">
         <div className="flex items-center gap-2.5 border-b border-neutral-200 px-4 py-4">
           <div className="rounded-lg bg-indigo-600 p-2 text-white">
             <LayoutGrid size={16} />

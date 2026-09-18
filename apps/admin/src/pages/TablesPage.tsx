@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { QRCodeSVG } from 'qrcode.react'
 import { Copy, Plus, Printer, QrCode, Trash2 } from 'lucide-react'
+import { Link } from 'react-router'
 import type { Tables } from '@restaurant-platform/shared'
 import { customerAppUrl } from '@/lib/customer-app'
 import { supabase } from '@/lib/supabase'
@@ -43,7 +44,7 @@ export function TablesPage() {
     queryFn: async () => {
       const { data, error: qErr } = await supabase
         .from('tables')
-        .select('*')
+        .select('*, floor_sections (id, name)')
         .eq('branch_id', branchId!)
         .order('created_at')
       if (qErr) throw qErr
@@ -97,7 +98,12 @@ export function TablesPage() {
       <div>
         <h1 className="text-xl font-bold text-neutral-900">Mesas y códigos QR</h1>
         <p className="text-sm text-neutral-500">
-          Cada mesa tiene un QR único que identifica al restaurante, la sucursal y la mesa.
+          Cada mesa tiene un QR único que identifica al restaurante, la sucursal y la mesa. El sector
+          y la ubicación se editan en{' '}
+          <Link to="/salon" className="text-indigo-600 hover:underline">
+            Salón
+          </Link>
+          .
         </p>
       </div>
 
@@ -136,6 +142,10 @@ export function TablesPage() {
               className="flex items-center gap-3 rounded-xl border border-neutral-200 bg-white px-4 py-3"
             >
               <span className="flex-1 text-sm font-medium text-neutral-900">{table.label}</span>
+              <Badge color={table.floor_sections ? 'neutral' : 'amber'}>
+                {table.floor_sections?.name ?? 'Sin sector'}
+              </Badge>
+              {!table.is_visible && table.is_active && <Badge color="amber">Oculta</Badge>}
               {!table.is_active && <Badge color="red">Inactiva</Badge>}
               <Button variant="secondary" onClick={() => setQrTable(table)}>
                 <QrCode size={15} /> Ver QR

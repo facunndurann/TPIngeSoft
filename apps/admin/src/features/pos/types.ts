@@ -29,8 +29,23 @@ export type PosOpenSession = Tables<'table_sessions'> & {
 
 export type PosBill = Tables<'session_bills'>
 
-export type PosDiningTable = Pick<Tables<'tables'>, 'id' | 'label' | 'branch_id' | 'is_active'> & {
+export type PosDiningTable = Pick<
+  Tables<'tables'>,
+  | 'id'
+  | 'label'
+  | 'branch_id'
+  | 'is_active'
+  | 'is_visible'
+  | 'section_id'
+  | 'position_x'
+  | 'position_y'
+  | 'seats'
+  | 'shape'
+  | 'width'
+  | 'height'
+> & {
   branches: Pick<Tables<'branches'>, 'id' | 'name'> | null
+  floor_sections: Pick<Tables<'floor_sections'>, 'id' | 'name' | 'sort_order' | 'is_active'> | null
 }
 
 export const posOrderSelect = `

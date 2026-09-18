@@ -171,9 +171,6 @@ export function ActiveTables() {
                     className="rounded-lg border border-dashed border-neutral-300 bg-white px-3 py-1.5 text-sm text-neutral-600"
                   >
                     {table.label}
-                    {!table.is_active && (
-                      <span className="ml-2 text-xs text-red-600">Inactiva</span>
-                    )}
                   </li>
                 ))}
               </ul>

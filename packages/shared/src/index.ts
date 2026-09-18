@@ -3,5 +3,6 @@ export * from './schemas';
 export * from './database.types';
 export * from './orders';
 export * from './pos';
+export * from './floor';
 export * from './designs';
 export * from './product-media';

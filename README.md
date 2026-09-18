@@ -16,6 +16,7 @@ Plataforma web multi-restaurante de autoservicio: menú digital por QR de mesa, 
 | 4 | Pedidos: validación server-side, estados, realtime, cuenta | Completa; pruebas integradas en Supabase local |
 | 5 | POS propio: tablero de comandas realtime, mesas activas, cierre de sesión | Completa |
 | 5.1 | POS desacoplado del backoffice: roles, empleados con PIN y auditoría (MI-61) | Completa |
+| 5.2 | Salón: sectores y layout de mesas configurables (MI-66) | Completa |
 | 6 | Menú inteligente (LLM) | Pendiente |
 | 7 | Pagos (Mercado Pago sandbox, división) | Pendiente |
 | 8 | Pulido y demo | Pendiente |
@@ -30,8 +31,9 @@ Con el stack local corriendo (ver más abajo), en el **panel admin** (`http://lo
 4. **Categorías**: crear, renombrar, reordenar, activar/desactivar.
 5. **Modificadores**: grupos con reglas mín/máx (ej: "Extras" 0-4 con precio, "Guarnición" exactamente 1) y sus opciones.
 6. **Mesas y QR**: crear mesas por sucursal, ver/copiar/imprimir el QR único de cada una.
-7. **Empleados**: alta de empleados del POS con PIN, baja lógica y actividad reciente del salón. Solo para el administrador.
-8. **Restaurante**: editar información general y sucursales.
+7. **Salón**: modo visualizar (plano de solo lectura con resumen del sector) y modo editar (sectores, mesas arrastrables y redimensionables con ancho y alto libres, capacidad, forma y visibilidad). Es el layout que después usa el POS.
+8. **Empleados**: alta de empleados del POS con PIN, baja lógica y actividad reciente del salón. Solo para el administrador.
+9. **Restaurante**: editar información general y sucursales.
 
 La **app del comensal** incluye las Fases 3 y 4. Aplicá las migraciones con `pnpm supabase migration up --local`, iniciá la función con `pnpm dev:functions` y abrí `http://localhost:5173/m/demo-burger-mesa-1` o `http://localhost:5173/m/demo-nonna-mesa-1`.
 

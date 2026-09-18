@@ -1,5 +1,5 @@
 import type { OrderStatus } from '@restaurant-platform/shared'
-import { posErrorMessage } from '@restaurant-platform/shared'
+import { isOperable, posErrorMessage } from '@restaurant-platform/shared'
 import { supabase } from '@/lib/supabase'
 import type { PosBill, PosDiningTable, PosOpenSession, PosOrder } from './types'
 import { posOrderSelect, posSessionSelect } from './types'
@@ -60,14 +60,27 @@ export async function loadSessionBills(sessionIds: string[]) {
   return (data ?? []) as PosBill[]
 }
 
+/**
+ * Mesas que el POS puede operar. Quedan afuera las que están fuera de servicio,
+ * las ocultas del plano y las de un sector que el local dio de baja (MI-66).
+ * Una mesa sin sector sigue siendo operable: existe y tiene QR.
+ */
 export async function loadRestaurantTables(restaurantId: string) {
   const { data, error } = await supabase
     .from('tables')
-    .select('id, label, branch_id, is_active, branches (id, name)')
+    .select(
+      'id, label, branch_id, is_active, is_visible, section_id, position_x, position_y, seats, shape, width, height, branches (id, name), floor_sections (id, name, sort_order, is_active)',
+    )
     .eq('restaurant_id', restaurantId)
-    .order('created_at')
+    .eq('is_active', true)
+    .eq('is_visible', true)
+    .order('label')
   throwIfError(error)
-  return (data ?? []) as PosDiningTable[]
+  // El sector se filtra acá: PostgREST no expresa "sin sector o sector activo"
+  // sin forzar un inner join que descartaría las mesas sin sector.
+  return ((data ?? []) as PosDiningTable[]).filter((table) =>
+    isOperable(table, table.floor_sections),
+  )
 }
 
 // Los envoltorios pos_* validan igual que transition_order/close_table_session
