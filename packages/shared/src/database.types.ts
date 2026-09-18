@@ -887,6 +887,8 @@ export type Database = {
           id: string
           opened_at: string
           restaurant_id: string
+          split_allocations: Json
+          split_type: string
           status: Database["public"]["Enums"]["session_status"]
           table_id: string
         }
@@ -895,6 +897,8 @@ export type Database = {
           id?: string
           opened_at?: string
           restaurant_id: string
+          split_allocations?: Json
+          split_type?: string
           status?: Database["public"]["Enums"]["session_status"]
           table_id: string
         }
@@ -903,6 +907,8 @@ export type Database = {
           id?: string
           opened_at?: string
           restaurant_id?: string
+          split_allocations?: Json
+          split_type?: string
           status?: Database["public"]["Enums"]["session_status"]
           table_id?: string
         }
@@ -1024,6 +1030,14 @@ export type Database = {
           p_status: Database["public"]["Enums"]["order_status"]
         }
         Returns: string
+      }
+      update_session_split: {
+        Args: {
+          p_allocations: Json
+          p_session_id: string
+          p_split_type: string
+        }
+        Returns: undefined
       }
     }
     Enums: {

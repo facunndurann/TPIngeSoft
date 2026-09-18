@@ -317,6 +317,7 @@ export function TableOrdersPage() {
   return (
     <SessionOrders
       sessionId={sessionId}
+      session={session.data}
       participants={session.data?.participants ?? []}
       userId={userId}
       closed={session.data?.status === 'closed'}
