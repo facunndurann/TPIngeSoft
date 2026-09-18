@@ -114,3 +114,16 @@ export async function loadBill(sessionId: string) {
   if (error) throw error
   return data
 }
+
+export async function updateSessionSplit(
+  sessionId: string,
+  splitType: 'none' | 'equal' | 'percentages',
+  allocations: Record<string, number> = {}
+) {
+  const { error } = await supabase.rpc('update_session_split', {
+    p_session_id: sessionId,
+    p_split_type: splitType,
+    p_allocations: allocations,
+  })
+  if (error) throw new SubmissionError('SPLIT_ERROR', 'No pudimos actualizar la división de la cuenta.')
+}
