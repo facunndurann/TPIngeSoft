@@ -6,7 +6,9 @@ import { money } from '@/features/menu'
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { updateSessionSplit } from '@/features/orders-api'
+import type { loadSession } from '@/features/session'
 
+type SessionData = Awaited<ReturnType<typeof loadSession>>
 type Participant = Tables<'session_participants'>
 type Order = Awaited<ReturnType<typeof loadOrders>>[number]
 type OrderItem = Order['order_items'][number]
@@ -14,7 +16,7 @@ type Bill = Awaited<ReturnType<typeof loadBill>>
 
 type SessionOrdersProps = {
   sessionId?: string
-  session?: any
+  session?: SessionData
   participants: Participant[]
   userId?: string
   closed: boolean
@@ -195,14 +197,26 @@ function OrderLine({
   )
 }
 
-function BillSplitter({ session, bill, orders, participants, userId }: any) {
+function BillSplitter({
+  session,
+  bill,
+  orders,
+  participants,
+  userId,
+}: {
+  session: SessionData
+  bill: Bill
+  orders?: Order[]
+  participants: Participant[]
+  userId?: string
+}) {
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
   
   const currentType = session?.split_type || 'none';
-  const currentAllocations = session?.split_allocations || {};
+  const currentAllocations = (session?.split_allocations as Record<string, number>) || {};
 
-  const [mode, setMode] = useState<'none' | 'equal' | 'percentages'>(currentType);
+  const [mode, setMode] = useState<'none' | 'equal' | 'percentages'>(currentType as 'none' | 'equal' | 'percentages');
   const [allocations, setAllocations] = useState<Record<string, number>>(currentAllocations);
 
   const total = bill.pending_amount ?? 0;
@@ -217,17 +231,14 @@ function BillSplitter({ session, bill, orders, participants, userId }: any) {
 
   if (total === 0) return null;
 
-  // --- CÁLCULO DE CONSUMO INDIVIDUAL ("CADA UNO PAGA LO SUYO") ---
   const individualTotals: Record<string, number> = {};
   let sharedTotal = 0;
   
-  // Inicializamos a todos en 0
-  participants.forEach((p: any) => individualTotals[p.id] = 0);
+  participants.forEach((p: Participant) => individualTotals[p.id] = 0);
 
-  // Recorremos los pedidos que ya fueron aceptados por el restaurante
-  orders?.forEach((order: any) => {
+  orders?.forEach((order: Order) => {
     if (['accepted', 'in_preparation', 'ready', 'delivered'].includes(order.status)) {
-      order.order_items.forEach((item: any) => {
+      order.order_items.forEach((item: OrderItem) => {
         if (item.is_shared) {
           sharedTotal += Number(item.total_price);
         } else if (item.participant_id) {
@@ -237,9 +248,7 @@ function BillSplitter({ session, bill, orders, participants, userId }: any) {
     }
   });
 
-  // Lo compartido se divide entre todos los integrantes de la mesa
   const sharedPerPerson = participants.length > 0 ? sharedTotal / participants.length : 0;
-  // --------------------------------------------------------------
 
   // 1. Vista de Lectura
   if (!isEditing) {
@@ -254,7 +263,7 @@ function BillSplitter({ session, bill, orders, participants, userId }: any) {
         </p>
 
         <ul style={{ listStyle: 'none', padding: 0, margin: '16px 0' }}>
-          {participants.map((p: any) => {
+          {participants.map((p: Participant) => {
             const isMe = p.user_id === userId;
             let amount = 0;
             
@@ -284,11 +293,11 @@ function BillSplitter({ session, bill, orders, participants, userId }: any) {
 
         <div className="cart-actions" style={{ marginTop: '16px' }}>
           <button onClick={() => {
-            setMode(currentType);
+            setMode(currentType as 'none' | 'equal' | 'percentages');
             setAllocations(currentAllocations);
             setIsEditing(true);
           }}>
-            Editar división
+            {currentType === 'none' ? 'Dividir cuenta' : 'Editar división'}
           </button>
         </div>
       </div>
@@ -310,7 +319,7 @@ function BillSplitter({ session, bill, orders, participants, userId }: any) {
 
       {mode === 'percentages' && (
         <div style={{ marginBottom: '16px' }}>
-          {participants.map((p: any) => (
+          {participants.map((p: Participant) => (
             <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
               <span style={{ color: 'var(--menu-text)' }}>{p.display_name}</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
