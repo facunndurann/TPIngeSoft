@@ -69,6 +69,49 @@ export function isKitchenTicket(status: OrderStatus): boolean {
   return posActions[status].advance !== undefined
 }
 
+export type PosTableState =
+  | 'free'
+  | 'occupied'
+  | 'order_pending'
+  | 'in_preparation'
+  | 'ready'
+  | 'bill_requested'
+  | 'payment_pending'
+
+export const posTableStateLabels: Record<PosTableState, string> = {
+  free: 'Libre',
+  occupied: 'Ocupada',
+  order_pending: 'Pedido pendiente',
+  in_preparation: 'En preparación',
+  ready: 'Listo para servir',
+  bill_requested: 'Cuenta solicitada',
+  payment_pending: 'Cobro pendiente',
+}
+
+export type PosTableStateInput = {
+  hasOpenSession: boolean
+  orderStatuses?: readonly OrderStatus[]
+  billRequestedAt?: string | null
+  inPersonPaymentRequestedAt?: string | null
+  hasPendingPayment?: boolean
+}
+
+/**
+ * Estado principal de una mesa, ordenado por prioridad operativa. Los rótulos
+ * se muestran junto al color para que el mapa no dependa solo de la vista.
+ */
+export function getPosTableState(input: PosTableStateInput): PosTableState {
+  if (!input.hasOpenSession) return 'free'
+  if (input.inPersonPaymentRequestedAt || input.hasPendingPayment) return 'payment_pending'
+  if (input.billRequestedAt) return 'bill_requested'
+
+  const statuses = input.orderStatuses ?? []
+  if (statuses.includes('ready')) return 'ready'
+  if (statuses.includes('submitted') || statuses.includes('accepted')) return 'order_pending'
+  if (statuses.includes('in_preparation')) return 'in_preparation'
+  return 'occupied'
+}
+
 export function posColumnFor(status: OrderStatus): PosBoardColumnId | null {
   for (const column of posBoardColumns) {
     if ((column.statuses as readonly OrderStatus[]).includes(status)) return column.id

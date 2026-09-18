@@ -333,3 +333,35 @@ pnpm build
 ```
 
 Una mesa solo puede pertenecer a un sector de su propia sucursal: lo garantiza una clave foránea compuesta `(section_id, branch_id)`, no una validación de la UI. Borrar un sector anula `section_id` y conserva la mesa y su QR.
+
+---
+
+## 10. Mapa operativo y estados de mesa (MI-62/MI-63)
+
+En **POS → Salón**, el plano configurado por el administrador se combina con la sesión abierta de cada mesa. Los estados tienen prioridad operativa: cobro pendiente, cuenta solicitada, listo para servir, pedido pendiente, en preparación, ocupada y libre. Cada color incluye su rótulo para no depender únicamente de la percepción cromática.
+
+Una mesa ocupada muestra directamente tiempo desde la apertura, total incorporado a la cuenta y empleado responsable. Al tocarla aparece el resumen ampliado, sin abrir la comanda. El responsable es el último empleado que operó uno de sus pedidos; si nadie lo hizo todavía se muestra **Sin asignar**.
+
+Recorrido de aceptación:
+
+1. Abrir **POS → Salón**, cambiar de sector y comprobar que las mesas conservan posición, forma y tamaño.
+2. Abrir el QR de una mesa sin sesión: figura **Libre**. Al ingresar desde el comensal pasa a **Ocupada**.
+3. Enviar un pedido y recorrer sus estados desde **Comandas**. El mapa cambia entre **Pedido pendiente**, **En preparación** y **Listo para servir** sin recargar.
+4. Confirmar que, al operar con PIN, el nombre del empleado aparece como responsable de la mesa.
+5. Verificar que tiempo y total se actualizan en el bloque de la mesa y en el resumen táctil.
+6. Crear un pago `pending` de prueba: la mesa pasa a **Cobro pendiente**; un pago rechazado o cancelado no conserva ese estado.
+7. Hasta incorporar las acciones del comensal de MI-38/MI-46, marcar desde Studio `bill_requested_at = now()` o `in_person_payment_requested_at = now()` en una sesión abierta y comprobar los estados **Cuenta solicitada** y **Cobro pendiente**.
+8. Desactivar u ocultar una mesa, un sector o una sucursal: deja de aparecer en el mapa operativo.
+
+Realtime invalida el mapa ante cambios en sesiones, pedidos, pagos, empleados y layout. Además hay un respaldo de consulta cada 15 segundos para sesiones y cuenta.
+
+Pruebas reproducibles:
+
+```bash
+pnpm test:orders
+docker exec -i supabase_db_TP psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/tests/pos-employees.sql
+docker exec -i supabase_db_TP psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/tests/pos.sql
+pnpm typecheck
+pnpm lint
+pnpm build
+```

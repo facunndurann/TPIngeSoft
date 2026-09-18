@@ -1,21 +1,36 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { FLOOR_GRID, clampToGrid, tableFootprint } from '@restaurant-platform/shared'
-import { Move, Users } from 'lucide-react'
+import {
+  FLOOR_GRID,
+  asAmount,
+  clampToGrid,
+  formatElapsed,
+  getPosTableState,
+  posTableStateLabels,
+  tableFootprint,
+  type PosTableState,
+} from '@restaurant-platform/shared'
+import { Clock3, Move, UserRound, Users } from 'lucide-react'
 import { EmptyState, ErrorText, Select, Spinner } from '@/components/ui'
+import { formatPrice } from '@/lib/format'
 import { useRestaurant } from '@/restaurant/restaurant-context'
-import { loadPosFloorSections, loadRestaurantTables } from './api'
-import type { PosDiningTable } from './types'
+import {
+  loadOpenSessions,
+  loadPosFloorSections,
+  loadRestaurantTables,
+  loadSessionBills,
+} from './api'
+import { useNow } from './useNow'
+import type { PosBill, PosDiningTable, PosOpenSession } from './types'
 
 /**
- * Plano operativo del salón (MI-62).
- *
- * El estado de las mesas y las acciones sobre la comanda pertenecen a las
- * fases siguientes. Esta vista se limita a representar fielmente el layout
- * configurado por el administrador y a navegarlo por sucursal/sector.
+ * Plano operativo del salón (MI-62/MI-63). El layout viene de la configuración
+ * administrativa y el estado de pedidos/cuenta se compone desde la sesión
+ * abierta; seleccionar una mesa solo muestra el resumen, no abre la comanda.
  */
 export function FloorMap() {
   const restaurant = useRestaurant()
+  const now = useNow()
   const [branchChoice, setBranchChoice] = useState<string | null>(null)
   const [sectionChoice, setSectionChoice] = useState<string | null>(null)
 
@@ -26,6 +41,18 @@ export function FloorMap() {
   const tables = useQuery({
     queryKey: ['pos', restaurant.id, 'tables'],
     queryFn: () => loadRestaurantTables(restaurant.id),
+  })
+  const sessions = useQuery({
+    queryKey: ['pos', restaurant.id, 'sessions'],
+    queryFn: () => loadOpenSessions(restaurant.id),
+    refetchInterval: 15000,
+  })
+  const sessionIds = (sessions.data ?? []).map((session) => session.id)
+  const bills = useQuery({
+    queryKey: ['pos', restaurant.id, 'bills', sessionIds.join(',')],
+    queryFn: () => loadSessionBills(sessionIds),
+    enabled: sessions.isSuccess,
+    refetchInterval: 15000,
   })
 
   const branches = useMemo(() => {
@@ -46,10 +73,41 @@ export function FloorMap() {
   const sectionTables = (tables.data ?? []).filter((table) => table.section_id === sectionId)
   const activeSection = branchSections.find((section) => section.id === sectionId)
 
-  if (sections.isLoading || tables.isLoading) return <Spinner />
+  const sessionByTable = useMemo(
+    () => new Map((sessions.data ?? []).map((session) => [session.table_id, session])),
+    [sessions.data],
+  )
+  const billBySession = useMemo(
+    () => new Map((bills.data ?? []).flatMap((bill) => bill.session_id ? [[bill.session_id, bill]] : [])),
+    [bills.data],
+  )
+  const entries = sectionTables.map((table): FloorMapEntry => {
+    const session = sessionByTable.get(table.id)
+    const bill = session ? billBySession.get(session.id) : undefined
+    return {
+      table,
+      session,
+      bill,
+      state: getPosTableState({
+        hasOpenSession: !!session,
+        orderStatuses: session?.orders.map((order) => order.status),
+        billRequestedAt: session?.bill_requested_at,
+        inPersonPaymentRequestedAt: session?.in_person_payment_requested_at,
+        hasPendingPayment: session?.payments.some((payment) => payment.status === 'pending'),
+      }),
+    }
+  })
+
+  if (
+    sections.isLoading ||
+    tables.isLoading ||
+    sessions.isLoading ||
+    (sessions.isSuccess && bills.isLoading)
+  ) return <Spinner />
+  const queryFailed = sections.isError || tables.isError || sessions.isError || bills.isError
 
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-neutral-900">Salón</h1>
@@ -77,11 +135,9 @@ export function FloorMap() {
         )}
       </div>
 
-      {(sections.isError || tables.isError) && (
+      {queryFailed ? (
         <ErrorText message="No pudimos cargar el plano del salón." />
-      )}
-
-      {!sections.isError && branches.length === 0 ? (
+      ) : branches.length === 0 ? (
         <EmptyState message="Todavía no hay sectores activos configurados para operar." />
       ) : (
         <>
@@ -112,15 +168,17 @@ export function FloorMap() {
           </div>
 
           {activeSection && (
-            <section aria-labelledby="floor-map-heading" className="space-y-2">
+            <section aria-labelledby="floor-map-heading" className="min-w-0 space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h2 id="floor-map-heading" className="text-sm font-semibold text-neutral-800">
                     {activeSection.name}
                   </h2>
                   <p className="text-xs text-neutral-500">
-                    {sectionTables.length} mesa{sectionTables.length === 1 ? '' : 's'} operativa
-                    {sectionTables.length === 1 ? '' : 's'}
+                    {entries.length} mesa{entries.length === 1 ? '' : 's'} operativa
+                    {entries.length === 1 ? '' : 's'} ·{' '}
+                    {entries.filter((entry) => entry.state !== 'free').length} ocupada
+                    {entries.filter((entry) => entry.state !== 'free').length === 1 ? '' : 's'}
                   </p>
                 </div>
                 <p className="inline-flex items-center gap-1.5 text-xs text-neutral-500">
@@ -128,7 +186,8 @@ export function FloorMap() {
                   Deslizá para recorrer el plano
                 </p>
               </div>
-              <FloorSurface key={activeSection.id} tables={sectionTables} />
+              <StateLegend />
+              <FloorSurface key={activeSection.id} entries={entries} now={now} />
             </section>
           )}
         </>
@@ -137,59 +196,209 @@ export function FloorMap() {
   )
 }
 
-function FloorSurface({ tables }: { tables: PosDiningTable[] }) {
+type FloorMapEntry = {
+  table: PosDiningTable
+  session?: PosOpenSession
+  bill?: PosBill
+  state: PosTableState
+}
+
+const stateStyles: Record<PosTableState, { table: string; badge: string; dot: string }> = {
+  free: {
+    table: 'border-emerald-400 bg-emerald-50 text-emerald-950',
+    badge: 'bg-emerald-100 text-emerald-800',
+    dot: 'bg-emerald-500',
+  },
+  occupied: {
+    table: 'border-neutral-400 bg-neutral-100 text-neutral-900',
+    badge: 'bg-neutral-200 text-neutral-700',
+    dot: 'bg-neutral-500',
+  },
+  order_pending: {
+    table: 'border-amber-500 bg-amber-50 text-amber-950',
+    badge: 'bg-amber-200 text-amber-900',
+    dot: 'bg-amber-500',
+  },
+  in_preparation: {
+    table: 'border-blue-500 bg-blue-50 text-blue-950',
+    badge: 'bg-blue-200 text-blue-900',
+    dot: 'bg-blue-500',
+  },
+  ready: {
+    table: 'border-cyan-600 bg-cyan-50 text-cyan-950',
+    badge: 'bg-cyan-200 text-cyan-950',
+    dot: 'bg-cyan-600',
+  },
+  bill_requested: {
+    table: 'border-violet-600 bg-violet-50 text-violet-950',
+    badge: 'bg-violet-200 text-violet-950',
+    dot: 'bg-violet-600',
+  },
+  payment_pending: {
+    table: 'border-rose-600 bg-rose-50 text-rose-950',
+    badge: 'bg-rose-200 text-rose-950',
+    dot: 'bg-rose-600',
+  },
+}
+
+const legendStates: PosTableState[] = [
+  'free',
+  'occupied',
+  'order_pending',
+  'in_preparation',
+  'ready',
+  'bill_requested',
+  'payment_pending',
+]
+
+function StateLegend() {
   return (
-    <div
-      className="max-h-[calc(100dvh-15rem)] min-h-80 overflow-auto overscroll-contain rounded-xl border border-neutral-200 bg-white p-3 shadow-sm"
-      tabIndex={0}
-      aria-label="Plano desplazable del sector"
-    >
+    <ul className="flex gap-x-4 gap-y-1 overflow-x-auto rounded-lg border border-neutral-200 bg-white px-3 py-2 text-[11px] text-neutral-600">
+      {legendStates.map((state) => (
+        <li key={state} className="flex shrink-0 items-center gap-1.5">
+          <span className={`h-2.5 w-2.5 rounded-full ${stateStyles[state].dot}`} aria-hidden="true" />
+          {posTableStateLabels[state]}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function FloorSurface({ entries, now }: { entries: FloorMapEntry[]; now: number }) {
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const selected = entries.find((entry) => entry.table.id === selectedId)
+
+  return (
+    <div className="min-w-0 space-y-2">
+      {selected && <TableSummary entry={selected} now={now} />}
       <div
-        className="relative"
-        style={{
-          width: FLOOR_GRID.cols * FLOOR_GRID.cell,
-          height: FLOOR_GRID.rows * FLOOR_GRID.cell,
-          backgroundSize: `${FLOOR_GRID.cell}px ${FLOOR_GRID.cell}px`,
-          backgroundImage:
-            'linear-gradient(to right, #f1f1f1 1px, transparent 1px), linear-gradient(to bottom, #f1f1f1 1px, transparent 1px)',
-        }}
-        role="list"
-        aria-label="Mesas del sector"
+        className="max-h-[calc(100dvh-18rem)] min-h-80 overflow-auto overscroll-contain rounded-xl border border-neutral-200 bg-white p-3 shadow-sm"
+        tabIndex={0}
+        aria-label="Plano desplazable del sector"
       >
-        {tables.map((table) => {
-          const footprint = tableFootprint(table)
-          const position = clampToGrid(table.position_x, table.position_y, footprint)
+        <div
+          className="relative"
+          style={{
+            width: FLOOR_GRID.cols * FLOOR_GRID.cell,
+            height: FLOOR_GRID.rows * FLOOR_GRID.cell,
+            backgroundSize: `${FLOOR_GRID.cell}px ${FLOOR_GRID.cell}px`,
+            backgroundImage:
+              'linear-gradient(to right, #f1f1f1 1px, transparent 1px), linear-gradient(to bottom, #f1f1f1 1px, transparent 1px)',
+          }}
+          aria-label="Mesas del sector"
+        >
+          {entries.map((entry) => {
+            const { table, session, bill, state } = entry
+            const footprint = tableFootprint(table)
+            const position = clampToGrid(table.position_x, table.position_y, footprint)
+            const selectedTable = selectedId === table.id
+            const operator = session?.assigned_employee?.full_name ?? 'Sin asignar'
+            const summary = session
+              ? `${formatElapsed(session.opened_at, now)}, ${formatPrice(asAmount(bill?.total_amount))}, ${operator}`
+              : `${table.seats} lugares`
 
-          return (
-            <div
-              key={table.id}
-              role="listitem"
-              aria-label={`${table.label}, ${table.seats} lugares`}
-              className={`absolute flex flex-col items-center justify-center overflow-hidden border-2 border-neutral-400 bg-neutral-50 text-center text-neutral-800 shadow-sm ${
-                table.shape === 'round' ? 'rounded-full' : 'rounded-xl'
-              }`}
-              style={{
-                left: position.x * FLOOR_GRID.cell + 3,
-                top: position.y * FLOOR_GRID.cell + 3,
-                width: footprint.w * FLOOR_GRID.cell - 6,
-                height: footprint.h * FLOOR_GRID.cell - 6,
-              }}
-            >
-              <span className="max-w-full truncate px-2 text-sm font-semibold">{table.label}</span>
-              <span className="mt-1 inline-flex items-center gap-1 text-[11px] text-neutral-500">
-                <Users size={12} aria-hidden="true" />
-                {table.seats}
-              </span>
-            </div>
-          )
-        })}
+            return (
+              <button
+                key={table.id}
+                type="button"
+                onClick={() => setSelectedId(selectedTable ? null : table.id)}
+                aria-pressed={selectedTable}
+                aria-label={`${table.label}, ${posTableStateLabels[state]}, ${summary}`}
+                className={`absolute flex cursor-pointer flex-col items-center justify-center overflow-hidden border-2 text-center shadow-sm transition hover:brightness-95 focus-visible:ring-2 focus-visible:ring-indigo-600 focus-visible:ring-offset-2 focus-visible:outline-none ${stateStyles[state].table} ${
+                  selectedTable ? 'ring-2 ring-indigo-600 ring-offset-2' : ''
+                } ${table.shape === 'round' ? 'rounded-full' : 'rounded-xl'}`}
+                style={{
+                  left: position.x * FLOOR_GRID.cell + 3,
+                  top: position.y * FLOOR_GRID.cell + 3,
+                  width: footprint.w * FLOOR_GRID.cell - 6,
+                  height: footprint.h * FLOOR_GRID.cell - 6,
+                }}
+              >
+                <span className="max-w-full truncate px-1 text-xs font-bold leading-tight">{table.label}</span>
+                <span className={`mt-0.5 max-w-[90%] truncate rounded px-1 py-0.5 text-[9px] font-semibold leading-none ${stateStyles[state].badge}`}>
+                  {posTableStateLabels[state]}
+                </span>
+                {session ? (
+                  <>
+                    <span className="mt-1 max-w-[90%] truncate text-[10px] font-medium leading-none">
+                      {formatElapsed(session.opened_at, now)}
+                    </span>
+                    <span className="mt-1 max-w-[90%] truncate text-[10px] font-semibold leading-none">
+                      {formatPrice(asAmount(bill?.total_amount))}
+                    </span>
+                    <span className="mt-1 max-w-[90%] truncate text-[9px] leading-none opacity-75">
+                      {operator}
+                    </span>
+                  </>
+                ) : (
+                  <span className="mt-1 inline-flex items-center gap-1 text-[10px] leading-none opacity-70">
+                    <Users size={11} aria-hidden="true" />
+                    {table.seats}
+                  </span>
+                )}
+              </button>
+            )
+          })}
 
-        {tables.length === 0 && (
-          <p className="absolute inset-0 flex items-center justify-center text-sm text-neutral-400">
-            Este sector todavía no tiene mesas operativas.
-          </p>
-        )}
+          {entries.length === 0 && (
+            <p className="absolute inset-0 flex items-center justify-center text-sm text-neutral-400">
+              Este sector todavía no tiene mesas operativas.
+            </p>
+          )}
+        </div>
       </div>
+    </div>
+  )
+}
+
+function TableSummary({ entry, now }: { entry: FloorMapEntry; now: number }) {
+  const { table, session, bill, state } = entry
+  const activeOrders = session?.orders.filter((order) =>
+    ['submitted', 'accepted', 'in_preparation', 'ready'].includes(order.status),
+  ).length ?? 0
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm shadow-sm">
+      <div className="mr-auto">
+        <p className="font-semibold text-neutral-900">{table.label}</p>
+        <span className={`mt-1 inline-flex rounded px-1.5 py-0.5 text-[10px] font-semibold ${stateStyles[state].badge}`}>
+          {posTableStateLabels[state]}
+        </span>
+      </div>
+      {session ? (
+        <>
+          <SummaryItem icon={Clock3} label="Abierta" value={formatElapsed(session.opened_at, now)} />
+          <SummaryItem label="Total acumulado" value={formatPrice(asAmount(bill?.total_amount))} />
+          <SummaryItem label="Pedidos activos" value={String(activeOrders)} />
+          <SummaryItem
+            icon={UserRound}
+            label="Responsable"
+            value={session.assigned_employee?.full_name ?? 'Sin asignar'}
+          />
+        </>
+      ) : (
+        <SummaryItem icon={Users} label="Capacidad" value={`${table.seats} lugares`} />
+      )}
+    </div>
+  )
+}
+
+function SummaryItem({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon?: typeof Clock3
+  label: string
+  value: string
+}) {
+  return (
+    <div className="min-w-28">
+      <p className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-neutral-400">
+        {Icon && <Icon size={12} aria-hidden="true" />}
+        {label}
+      </p>
+      <p className="mt-0.5 font-medium text-neutral-800">{value}</p>
     </div>
   )
 }

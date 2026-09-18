@@ -5,6 +5,7 @@ import {
   dayRangeUtc,
   formatElapsed,
   groupOrdersByColumn,
+  getPosTableState,
   isKitchenTicket,
   posActions,
   posColumnFor,
@@ -183,6 +184,25 @@ test('restaurant day bounds use Argentina time and POS errors stay coded', () =>
   assert.equal(formatElapsed('2026-09-05T12:00:00.000Z', Date.parse('2026-09-05T13:05:00.000Z')), 'Hace 1 h 5 min')
   assert.equal(posErrorCode('FORBIDDEN'), 'FORBIDDEN')
   assert.equal(posErrorCode('P0001: INVALID_TRANSITION'), 'INVALID_TRANSITION')
+})
+
+test('table map states follow operational priority without inventing occupancy', () => {
+  assert.equal(getPosTableState({ hasOpenSession: false, billRequestedAt: '2026-09-18' }), 'free')
+  assert.equal(getPosTableState({ hasOpenSession: true }), 'occupied')
+  assert.equal(getPosTableState({ hasOpenSession: true, orderStatuses: ['delivered'] }), 'occupied')
+  assert.equal(getPosTableState({ hasOpenSession: true, orderStatuses: ['accepted'] }), 'order_pending')
+  assert.equal(getPosTableState({ hasOpenSession: true, orderStatuses: ['in_preparation'] }), 'in_preparation')
+  assert.equal(getPosTableState({ hasOpenSession: true, orderStatuses: ['submitted', 'ready'] }), 'ready')
+  assert.equal(getPosTableState({
+    hasOpenSession: true,
+    orderStatuses: ['ready'],
+    billRequestedAt: '2026-09-18T12:00:00Z',
+  }), 'bill_requested')
+  assert.equal(getPosTableState({
+    hasOpenSession: true,
+    billRequestedAt: '2026-09-18T12:00:00Z',
+    hasPendingPayment: true,
+  }), 'payment_pending')
 })
 
 test('the database default menu design matches DEFAULT_MENU_DESIGN', () => {

@@ -1038,8 +1038,11 @@ export type Database = {
       }
       table_sessions: {
         Row: {
+          assigned_employee_id: string | null
+          bill_requested_at: string | null
           closed_at: string | null
           id: string
+          in_person_payment_requested_at: string | null
           opened_at: string
           restaurant_id: string
           split_allocations: Json
@@ -1048,8 +1051,11 @@ export type Database = {
           table_id: string
         }
         Insert: {
+          assigned_employee_id?: string | null
+          bill_requested_at?: string | null
           closed_at?: string | null
           id?: string
+          in_person_payment_requested_at?: string | null
           opened_at?: string
           restaurant_id: string
           split_allocations?: Json
@@ -1058,8 +1064,11 @@ export type Database = {
           table_id: string
         }
         Update: {
+          assigned_employee_id?: string | null
+          bill_requested_at?: string | null
           closed_at?: string | null
           id?: string
+          in_person_payment_requested_at?: string | null
           opened_at?: string
           restaurant_id?: string
           split_allocations?: Json
@@ -1068,6 +1077,13 @@ export type Database = {
           table_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "table_sessions_assigned_employee_id_fkey"
+            columns: ["assigned_employee_id"]
+            isOneToOne: false
+            referencedRelation: "pos_employees"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "table_sessions_restaurant_id_fkey"
             columns: ["restaurant_id"]

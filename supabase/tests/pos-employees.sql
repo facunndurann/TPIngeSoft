@@ -166,9 +166,11 @@ begin
     raise exception 'Audited transition returned another order'; end if;
   if (select status from public.orders where id = v_order_id) <> 'accepted' then
     raise exception 'Audited transition did not apply'; end if;
+  if (select assigned_employee_id from public.table_sessions where id = sid) <> employee then
+    raise exception 'POS operator was not assigned to the table session'; end if;
   select count(*) into log_count from public.pos_audit_log
     where restaurant_id = restaurant and action = 'order.transition' and employee_id = employee
-      and order_id = v_order_id and details->>'to' = 'accepted';
+      and order_id = v_order_id and session_id = sid and details->>'to' = 'accepted';
   if log_count <> 1 then raise exception 'Order transition was not audited'; end if;
 
   -- El operador queda registrado aun sin empleado (administrador sin altas).
