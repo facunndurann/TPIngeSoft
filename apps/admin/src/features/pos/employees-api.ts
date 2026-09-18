@@ -8,7 +8,7 @@ const messages: Record<string, string> = {
   INVALID_PIN: 'PIN incorrecto.',
   PIN_TAKEN: 'Ese PIN ya lo usa otro empleado activo.',
   NAME_TAKEN: 'Ya hay un empleado con ese nombre.',
-  EMPLOYEE_NOT_FOUND: 'El empleado ya no existe o está inactivo.',
+  EMPLOYEE_NOT_FOUND: 'El empleado ya no existe.',
 }
 
 export class PosEmployeeError extends Error {
@@ -65,6 +65,15 @@ export async function savePosEmployee(input: SavePosEmployeeInput) {
     p_pin: input.pin ?? undefined,
     p_employee_id: input.employeeId,
     p_is_active: input.isActive ?? true,
+  })
+  if (error) throw new PosEmployeeError(error.message)
+  return data
+}
+
+export async function deletePosEmployee(restaurantId: string, employeeId: string) {
+  const { data, error } = await supabase.rpc('delete_pos_employee', {
+    p_restaurant_id: restaurantId,
+    p_employee_id: employeeId,
   })
   if (error) throw new PosEmployeeError(error.message)
   return data

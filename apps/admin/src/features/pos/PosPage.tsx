@@ -9,6 +9,7 @@ import { subscribeToRestaurantPos } from './realtime'
 
 const tabs = [
   { to: '/pos', label: 'Comandas', end: true },
+  { to: '/pos/salon', label: 'Salón', end: false },
   { to: '/pos/mesas', label: 'Mesas activas', end: false },
   { to: '/pos/historial', label: 'Historial', end: false },
 ]

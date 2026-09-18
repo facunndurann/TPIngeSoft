@@ -1,7 +1,7 @@
 import type { OrderStatus } from '@restaurant-platform/shared'
 import { isOperable, posErrorMessage } from '@restaurant-platform/shared'
 import { supabase } from '@/lib/supabase'
-import type { PosBill, PosDiningTable, PosOpenSession, PosOrder } from './types'
+import type { PosBill, PosDiningTable, PosFloorSection, PosOpenSession, PosOrder } from './types'
 import { posOrderSelect, posSessionSelect } from './types'
 
 export class PosActionError extends Error {
@@ -69,7 +69,7 @@ export async function loadRestaurantTables(restaurantId: string) {
   const { data, error } = await supabase
     .from('tables')
     .select(
-      'id, label, branch_id, is_active, is_visible, section_id, position_x, position_y, seats, shape, width, height, branches (id, name), floor_sections (id, name, sort_order, is_active)',
+      'id, label, branch_id, is_active, is_visible, section_id, position_x, position_y, seats, shape, width, height, branches (id, name, is_active), floor_sections (id, name, sort_order, is_active)',
     )
     .eq('restaurant_id', restaurantId)
     .eq('is_active', true)
@@ -78,8 +78,23 @@ export async function loadRestaurantTables(restaurantId: string) {
   throwIfError(error)
   // El sector se filtra acá: PostgREST no expresa "sin sector o sector activo"
   // sin forzar un inner join que descartaría las mesas sin sector.
-  return ((data ?? []) as PosDiningTable[]).filter((table) =>
-    isOperable(table, table.floor_sections),
+  return ((data ?? []) as PosDiningTable[]).filter(
+    (table) => table.branches?.is_active === true && isOperable(table, table.floor_sections),
+  )
+}
+
+/** Sectores activos que el POS puede recorrer, incluso si todavía están vacíos. */
+export async function loadPosFloorSections(restaurantId: string) {
+  const { data, error } = await supabase
+    .from('floor_sections')
+    .select('id, name, branch_id, sort_order, is_active, branches (id, name, is_active)')
+    .eq('restaurant_id', restaurantId)
+    .eq('is_active', true)
+    .order('sort_order')
+    .order('name')
+  throwIfError(error)
+  return ((data ?? []) as PosFloorSection[]).filter(
+    (section) => section.branches?.is_active === true,
   )
 }
 

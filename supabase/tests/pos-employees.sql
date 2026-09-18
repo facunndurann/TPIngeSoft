@@ -213,6 +213,33 @@ begin
     'update public.products set base_price = 11 where id = %L', product)) then
     raise exception 'Administrator lost write access to products'; end if;
 
+  -- ---------- Baja definitiva de empleados ----------
+  perform set_config('request.jwt.claim.sub', '', true);
+  perform pg_temp.expect_error(
+    format('select public.delete_pos_employee(%L, %L)', restaurant, employee), 'AUTH_REQUIRED');
+  perform set_config('request.jwt.claim.sub', staff_user::text, true);
+  perform pg_temp.expect_error(
+    format('select public.delete_pos_employee(%L, %L)', restaurant, employee), 'FORBIDDEN');
+  perform set_config('request.jwt.claim.sub', admin_user::text, true);
+  perform pg_temp.expect_error(
+    format('select public.delete_pos_employee(%L, %L)', restaurant, other_employee),
+    'EMPLOYEE_NOT_FOUND');
+
+  if public.delete_pos_employee(restaurant, employee) <> employee then
+    raise exception 'Employee deletion returned another employee'; end if;
+  if exists(select 1 from public.pos_employees where id = employee) then
+    raise exception 'Employee was not deleted'; end if;
+  select count(*) into log_count from public.pos_audit_log
+    where restaurant_id = restaurant and action = 'employee.deleted'
+      and employee_id is null and details->>'employeeId' = employee::text
+      and details->>'employeeName' = 'Ana';
+  if log_count <> 1 then raise exception 'Employee deletion was not audited'; end if;
+  if exists(
+    select 1 from public.pos_audit_log
+    where details->>'employeeId' = employee::text
+      and details->>'employeeName' is distinct from 'Ana'
+  ) then raise exception 'Deleted employee identity was not preserved in audit'; end if;
+
   -- ---------- Privilegios ----------
   if has_table_privilege('authenticated', 'public.pos_employees', 'INSERT')
     or has_table_privilege('authenticated', 'public.pos_employees', 'UPDATE')
@@ -229,6 +256,9 @@ begin
   if has_function_privilege('authenticated',
     'public.record_pos_action(uuid, uuid, text, uuid, uuid, jsonb)', 'EXECUTE') then
     raise exception 'Audit entries can be forged directly'; end if;
+  if not has_function_privilege('authenticated',
+    'public.delete_pos_employee(uuid, uuid)', 'EXECUTE') then
+    raise exception 'Admin client cannot invoke employee deletion'; end if;
 
   raise notice 'POS employee SQL assertions passed (roles, PIN, audit, RLS, privileges)';
 end;

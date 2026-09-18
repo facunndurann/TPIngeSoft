@@ -1189,6 +1189,10 @@ export type Database = {
         Returns: string
       }
       close_table_session: { Args: { p_session_id: string }; Returns: string }
+      delete_pos_employee: {
+        Args: { p_employee_id: string; p_restaurant_id: string }
+        Returns: string
+      }
       dispatch_internal_order: { Args: { p_order_id: string }; Returns: string }
       get_order_pos_type: {
         Args: { p_order_id: string }
@@ -1428,4 +1432,3 @@ export const Constants = {
     },
   },
 } as const
-

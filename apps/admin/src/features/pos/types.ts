@@ -44,8 +44,15 @@ export type PosDiningTable = Pick<
   | 'width'
   | 'height'
 > & {
-  branches: Pick<Tables<'branches'>, 'id' | 'name'> | null
+  branches: Pick<Tables<'branches'>, 'id' | 'name' | 'is_active'> | null
   floor_sections: Pick<Tables<'floor_sections'>, 'id' | 'name' | 'sort_order' | 'is_active'> | null
+}
+
+export type PosFloorSection = Pick<
+  Tables<'floor_sections'>,
+  'id' | 'name' | 'branch_id' | 'sort_order' | 'is_active'
+> & {
+  branches: Pick<Tables<'branches'>, 'id' | 'name' | 'is_active'> | null
 }
 
 export const posOrderSelect = `

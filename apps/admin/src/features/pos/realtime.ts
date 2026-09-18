@@ -25,6 +25,21 @@ export function subscribeToRestaurantPos(restaurantId: string, onChange: () => v
       { event: '*', schema: 'public', table: 'session_participants' },
       onChange,
     )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'tables', filter: restaurantFilter },
+      onChange,
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'floor_sections', filter: restaurantFilter },
+      onChange,
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'branches', filter: restaurantFilter },
+      onChange,
+    )
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') onChange()
     })

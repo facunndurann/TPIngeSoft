@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { KeyRound, Plus, Users } from 'lucide-react'
+import { KeyRound, Plus, Trash2, Users } from 'lucide-react'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import {
   loadPosAudit,
   loadPosEmployees,
+  deletePosEmployee,
   savePosEmployee,
   type PosAuditEntry,
   type PosEmployee,
@@ -17,6 +18,7 @@ const auditLabels: Record<string, string> = {
   'session.closed': 'Cerró una sesión de mesa',
   'employee.created': 'Alta de empleado',
   'employee.updated': 'Edición de empleado',
+  'employee.deleted': 'Baja de empleado',
 }
 
 export function EmployeesPage() {
@@ -25,6 +27,7 @@ export function EmployeesPage() {
   const [newName, setNewName] = useState('')
   const [newPin, setNewPin] = useState('')
   const [editing, setEditing] = useState<PosEmployee | null>(null)
+  const [deleting, setDeleting] = useState<PosEmployee | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const employees = useQuery({
@@ -71,14 +74,28 @@ export function EmployeesPage() {
     onError: (err) => setError(err instanceof Error ? err.message : 'No pudimos actualizar el empleado.'),
   })
 
+  const deleteMutation = useMutation({
+    mutationFn: (employee: PosEmployee) => deletePosEmployee(restaurant.id, employee.id),
+    onSuccess: () => {
+      setDeleting(null)
+      setError(null)
+      invalidate()
+    },
+    onError: (err) => setError(err instanceof Error ? err.message : 'No pudimos eliminar el empleado.'),
+  })
+
   function handleCreate(event: FormEvent) {
     event.preventDefault()
     setError(null)
     createMutation.mutate()
   }
 
-  const employeeName = (id: string | null) =>
-    employees.data?.find((employee) => employee.id === id)?.full_name ?? 'Administrador'
+  const employeeName = (entry: PosAuditEntry) => {
+    const current = employees.data?.find((employee) => employee.id === entry.employee_id)?.full_name
+    if (current) return current
+    const snapshot = auditEmployeeName(entry.details)
+    return snapshot ?? (entry.employee_id ? 'Empleado eliminado' : 'Administrador')
+  }
 
   return (
     <div className="space-y-6">
@@ -153,6 +170,17 @@ export function EmployeesPage() {
                   <KeyRound size={15} />
                   Cambiar PIN
                 </Button>
+                <Button
+                  variant="ghost"
+                  className="text-red-600 hover:bg-red-50"
+                  onClick={() => {
+                    setError(null)
+                    setDeleting(employee)
+                  }}
+                >
+                  <Trash2 size={15} />
+                  Eliminar
+                </Button>
               </div>
             </li>
           ))}
@@ -185,6 +213,40 @@ export function EmployeesPage() {
           }}
         />
       )}
+
+      {deleting && (
+        <Modal title={`Eliminar a ${deleting.full_name}`} onClose={() => setDeleting(null)}>
+          <div className="space-y-4 text-sm text-neutral-700">
+            <p>
+              Esta persona dejará de poder ingresar al POS con su PIN. Su actividad anterior seguirá
+              visible en la auditoría.
+            </p>
+            <p className="rounded-lg bg-red-50 px-3 py-2 text-red-800">
+              Esta acción no se puede deshacer. Si solo querés bloquear temporalmente el acceso,
+              desactivá “Habilitado”.
+            </p>
+            <ErrorText message={error} />
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                className="flex-1"
+                onClick={() => setDeleting(null)}
+                disabled={deleteMutation.isPending}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="danger"
+                className="flex-1"
+                onClick={() => deleteMutation.mutate(deleting)}
+                disabled={deleteMutation.isPending}
+              >
+                {deleteMutation.isPending ? 'Eliminando…' : 'Eliminar empleado'}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }
@@ -194,7 +256,7 @@ function AuditRow({
   employeeName,
 }: {
   entry: PosAuditEntry
-  employeeName: (id: string | null) => string
+  employeeName: (entry: PosAuditEntry) => string
 }) {
   const when = new Intl.DateTimeFormat('es-AR', { dateStyle: 'short', timeStyle: 'short' }).format(
     new Date(entry.created_at),
@@ -202,11 +264,17 @@ function AuditRow({
   return (
     <li className="flex flex-wrap items-center justify-between gap-2 p-3">
       <span className="text-neutral-900">
-        {employeeName(entry.employee_id)} · {auditLabels[entry.action] ?? entry.action}
+        {employeeName(entry)} · {auditLabels[entry.action] ?? entry.action}
       </span>
       <span className="text-xs text-neutral-500">{when}</span>
     </li>
   )
+}
+
+function auditEmployeeName(details: unknown): string | null {
+  if (!details || typeof details !== 'object' || Array.isArray(details)) return null
+  const value = (details as Record<string, unknown>).employeeName
+  return typeof value === 'string' && value.trim() ? value : null
 }
 
 function ChangePinModal({
