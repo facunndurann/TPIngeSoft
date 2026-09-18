@@ -11,6 +11,7 @@ import { supabase } from '@/lib/supabase'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { ErrorText, Select, Spinner } from '@/components/ui'
 import { loadBoardOrders, transitionPosOrder } from './api'
+import { useOperatorId } from './operator-context'
 import { OrderTicket } from './OrderTicket'
 import { useNow } from './useNow'
 import type { PosOrder } from './types'
@@ -24,6 +25,7 @@ const columnStyles: Record<string, string> = {
 
 export function CommandBoard() {
   const restaurant = useRestaurant()
+  const operatorId = useOperatorId()
   const queryClient = useQueryClient()
   const now = useNow()
   const [branchId, setBranchId] = useState<string | 'all'>('all')
@@ -53,7 +55,7 @@ export function CommandBoard() {
 
   const transition = useMutation({
     mutationFn: ({ orderId, status }: { orderId: string; status: PosOrder['status'] }) =>
-      transitionPosOrder(orderId, status),
+      transitionPosOrder(orderId, status, operatorId),
     onMutate: ({ orderId }) => {
       setPendingId(orderId)
       setActionError(null)

@@ -15,6 +15,7 @@ Plataforma web multi-restaurante de autoservicio: menú digital por QR de mesa, 
 | 3 | App comensal: menú, personalización, carrito, sesión compartida | Implementada; ingreso concurrente y RLS verificados en Supabase local |
 | 4 | Pedidos: validación server-side, estados, realtime, cuenta | Completa; pruebas integradas en Supabase local |
 | 5 | POS propio: tablero de comandas realtime, mesas activas, cierre de sesión | Completa |
+| 5.1 | POS desacoplado del backoffice: roles, empleados con PIN y auditoría (MI-61) | Completa |
 | 6 | Menú inteligente (LLM) | Pendiente |
 | 7 | Pagos (Mercado Pago sandbox, división) | Pendiente |
 | 8 | Pulido y demo | Pendiente |
@@ -24,12 +25,13 @@ Plataforma web multi-restaurante de autoservicio: menú digital por QR de mesa, 
 Con el stack local corriendo (ver más abajo), en el **panel admin** (`http://localhost:5174`):
 
 1. **Login** con un usuario demo: `admin@esquina.demo` / `demo1234` (hamburguesería) o `admin@nonna.demo` / `demo1234` (trattoria). También podés registrar una cuenta nueva y crear tu propio restaurante desde cero.
-2. **POS**: tablero de comandas en tiempo real, mesas activas con consumo y pendiente de pago, cierre manual de sesión e historial del día.
+2. **POS**: tablero de comandas en tiempo real, mesas activas con consumo y pendiente de pago, cierre manual de sesión e historial del día. El POS pide el PIN de un empleado antes de operar (demo: `1234`), se bloquea por inactividad y registra quién hizo cada acción.
 3. **Productos**: crear/editar productos con foto, precio, categoría, etiquetas dietarias, disponibilidad, ingredientes (marcando cuáles se pueden quitar) y grupos de modificadores asignados.
 4. **Categorías**: crear, renombrar, reordenar, activar/desactivar.
 5. **Modificadores**: grupos con reglas mín/máx (ej: "Extras" 0-4 con precio, "Guarnición" exactamente 1) y sus opciones.
 6. **Mesas y QR**: crear mesas por sucursal, ver/copiar/imprimir el QR único de cada una.
-7. **Restaurante**: editar información general y sucursales.
+7. **Empleados**: alta de empleados del POS con PIN, baja lógica y actividad reciente del salón. Solo para el administrador.
+8. **Restaurante**: editar información general y sucursales.
 
 La **app del comensal** incluye las Fases 3 y 4. Aplicá las migraciones con `pnpm supabase migration up --local`, iniciá la función con `pnpm dev:functions` y abrí `http://localhost:5173/m/demo-burger-mesa-1` o `http://localhost:5173/m/demo-nonna-mesa-1`.
 

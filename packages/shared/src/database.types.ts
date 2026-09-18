@@ -558,6 +558,116 @@ export type Database = {
           },
         ]
       }
+      pos_audit_log: {
+        Row: {
+          action: string
+          created_at: string
+          details: Json
+          employee_id: string | null
+          id: string
+          order_id: string | null
+          restaurant_id: string
+          session_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          details?: Json
+          employee_id?: string | null
+          id?: string
+          order_id?: string | null
+          restaurant_id: string
+          session_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          details?: Json
+          employee_id?: string | null
+          id?: string
+          order_id?: string | null
+          restaurant_id?: string
+          session_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pos_audit_log_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "pos_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_audit_log_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_audit_log_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_audit_log_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "session_bills"
+            referencedColumns: ["session_id"]
+          },
+          {
+            foreignKeyName: "pos_audit_log_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "table_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pos_employees: {
+        Row: {
+          created_at: string
+          full_name: string
+          id: string
+          is_active: boolean
+          pin_hash: string
+          restaurant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          full_name: string
+          id?: string
+          is_active?: boolean
+          pin_hash: string
+          restaurant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          full_name?: string
+          id?: string
+          is_active?: boolean
+          pin_hash?: string
+          restaurant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pos_employees_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pos_integrations: {
         Row: {
           created_at: string
@@ -1008,11 +1118,35 @@ export type Database = {
         Args: { p_order_id: string }
         Returns: Database["public"]["Enums"]["pos_type"]
       }
+      is_restaurant_admin: { Args: { rid: string }; Returns: boolean }
       is_restaurant_member: { Args: { rid: string }; Returns: boolean }
       is_session_participant: { Args: { sid: string }; Returns: boolean }
       join_table_session: {
         Args: { participant_name?: string; qr: string }
         Returns: string
+      }
+      pos_close_table_session: {
+        Args: { p_employee_id?: string; p_session_id: string }
+        Returns: string
+      }
+      pos_transition_order: {
+        Args: {
+          p_employee_id?: string
+          p_order_id: string
+          p_status: Database["public"]["Enums"]["order_status"]
+        }
+        Returns: string
+      }
+      record_pos_action: {
+        Args: {
+          p_action: string
+          p_details?: Json
+          p_employee_id: string
+          p_order_id?: string
+          p_restaurant_id: string
+          p_session_id?: string
+        }
+        Returns: undefined
       }
       submit_order: {
         Args: {
@@ -1038,6 +1172,23 @@ export type Database = {
           p_split_type: string
         }
         Returns: undefined
+      }
+      upsert_pos_employee: {
+        Args: {
+          p_employee_id?: string
+          p_full_name: string
+          p_is_active?: boolean
+          p_pin?: string
+          p_restaurant_id: string
+        }
+        Returns: string
+      }
+      verify_pos_pin: {
+        Args: { p_pin: string; p_restaurant_id: string }
+        Returns: {
+          full_name: string
+          id: string
+        }[]
       }
     }
     Enums: {

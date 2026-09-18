@@ -70,15 +70,26 @@ export async function loadRestaurantTables(restaurantId: string) {
   return (data ?? []) as PosDiningTable[]
 }
 
-export async function transitionPosOrder(orderId: string, status: OrderStatus) {
-  const { error } = await supabase.rpc('transition_order', {
+// Los envoltorios pos_* validan igual que transition_order/close_table_session
+// y además dejan la acción asociada al empleado que opera (MI-61).
+export async function transitionPosOrder(
+  orderId: string,
+  status: OrderStatus,
+  employeeId: string | null,
+) {
+  const { error } = await supabase.rpc('pos_transition_order', {
     p_order_id: orderId,
     p_status: status,
+    // omitir = null en la RPC: la acción queda solo con el usuario del dispositivo
+    p_employee_id: employeeId ?? undefined,
   })
   throwIfError(error)
 }
 
-export async function closePosSession(sessionId: string) {
-  const { error } = await supabase.rpc('close_table_session', { p_session_id: sessionId })
+export async function closePosSession(sessionId: string, employeeId: string | null) {
+  const { error } = await supabase.rpc('pos_close_table_session', {
+    p_session_id: sessionId,
+    p_employee_id: employeeId ?? undefined,
+  })
   throwIfError(error)
 }

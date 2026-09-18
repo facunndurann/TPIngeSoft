@@ -5,23 +5,25 @@ import { DEFAULT_MENU_DESIGN } from '@restaurant-platform/shared'
 import { supabase } from '@/lib/supabase'
 import { Button, ErrorText, Field, Input, Spinner, Textarea } from '@/components/ui'
 import { DesignPicker } from '@/features/DesignPicker'
-import { RestaurantContext } from './restaurant-context'
+import { RestaurantContext, type Membership } from './restaurant-context'
 
 /**
- * Carga el restaurante del usuario autenticado. Si todavía no tiene uno,
- * muestra el onboarding para crearlo (restaurante + membresía owner +
+ * Carga el restaurante del usuario autenticado y su rol. Si todavía no tiene
+ * uno, muestra el onboarding para crearlo (restaurante + membresía owner +
  * sucursal inicial + POS interno).
  */
 export function RestaurantGate({ children }: { children: ReactNode }) {
   const { data, isLoading } = useQuery({
     queryKey: ['my-restaurant'],
-    queryFn: async () => {
+    queryFn: async (): Promise<Membership | null> => {
       const { data: memberships, error } = await supabase
         .from('restaurant_members')
-        .select('restaurant_id, restaurants(*)')
+        .select('restaurant_id, role, restaurants(*)')
         .limit(1)
       if (error) throw error
-      return memberships?.[0]?.restaurants ?? null
+      const membership = memberships?.[0]
+      if (!membership?.restaurants) return null
+      return { restaurant: membership.restaurants, role: membership.role }
     },
   })
 

@@ -79,6 +79,11 @@ begin
 
   insert into public.pos_integrations (restaurant_id, type) values (r1, 'internal');
 
+  -- Empleados del POS: desbloquean el salón con PIN (Fase 1 del sprint 2)
+  insert into public.pos_employees (restaurant_id, full_name, pin_hash) values
+    (r1, 'Ana (mozo)', crypt('1234', gen_salt('bf'))),
+    (r1, 'Bruno (cajero)', crypt('5678', gen_salt('bf')));
+
   insert into public.branches (restaurant_id, name, address)
   values (r1, 'Casa Central', 'Av. Siempreviva 742') returning id into b1;
 
@@ -186,6 +191,9 @@ begin
   values (r2, 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'owner');
 
   insert into public.pos_integrations (restaurant_id, type) values (r2, 'internal');
+
+  insert into public.pos_employees (restaurant_id, full_name, pin_hash) values
+    (r2, 'Carla (mozo)', crypt('1234', gen_salt('bf')));
 
   insert into public.branches (restaurant_id, name, address)
   values (r2, 'Casa Central', 'Calle Falsa 123') returning id into b2;

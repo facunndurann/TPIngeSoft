@@ -43,6 +43,9 @@ pnpm supabase db reset
   - `admin@esquina.demo` / `demo1234`
   - `admin@nonna.demo` / `demo1234`
 - **QR tokens de mesas demo**: `demo-burger-mesa-1` a `4` y `demo-nonna-mesa-1` a `3`. La URL de una mesa es `http://localhost:5173/m/<token>`.
+- **Empleados del POS con PIN** (desbloquean el salón, no tienen cuenta propia):
+  - La Esquina Burger: `Ana (mozo)` → `1234`, `Bruno (cajero)` → `5678`
+  - Trattoria Nonna: `Carla (mozo)` → `1234`
 
 Para volver a un estado limpio en cualquier momento: `pnpm supabase db reset` (reaplica migraciones + seed).
 
@@ -242,3 +245,39 @@ pnpm build
 `close_table_session` es exclusiva de miembros del restaurante, idempotente y usa el mismo orden de bloqueo mesa → sesión que el ingreso por QR. Los navegadores no pueden cambiar el estado de una sesión con un `update` directo.
 
 **Resultado de implementación:** migración aplicada; 32 verificaciones integradas (incluye consulta anidada del tablero, cierre por RPC, aislamiento y Realtime de cierre); aserciones SQL de POS y pedidos; 18 pruebas de lógica (9 de pedidos/POS + 9 del comensal); typecheck, lint y build verificados. El cobro con Mercado Pago y el cierre automático al saldar siguen en la Fase 7.
+
+---
+
+## 8. Probar el POS desacoplado del admin (MI-61)
+
+El POS ya no comparte permisos con el backoffice. Hay dos capas:
+
+- **Rol de la cuenta** (`restaurant_members.role`): `owner` administra carta, precios, mesas y configuración; `staff` solo opera el salón. La RLS aplica esta regla en la base, no solo en la UI.
+- **Empleado del POS** (`pos_employees`): la persona que atiende, identificada por PIN sobre el dispositivo compartido. Sus acciones quedan en `pos_audit_log`.
+
+Aplicar la migración sin borrar datos:
+
+```bash
+pnpm supabase migration up --local
+```
+
+Recorrido de aceptación:
+
+1. Ingresar como `admin@esquina.demo` y abrir `http://localhost:5174/pos`: el POS pide PIN antes de mostrar comandas.
+2. Ingresar `1234`: el encabezado muestra `Ana (mozo)` y se habilitan comandas, mesas e historial.
+3. Avanzar una comanda y cerrar una sesión de mesa. En **Empleados → Actividad reciente del POS** aparecen ambas acciones con el nombre del empleado.
+4. Tocar **Bloquear**: el POS vuelve a pedir PIN. Tras 10 minutos sin actividad se bloquea solo.
+5. Un PIN incorrecto no desbloquea. Desactivar a `Ana` desde **Empleados** y comprobar que su PIN deja de servir.
+6. Con un usuario de rol `staff` (se crea insertando una fila en `restaurant_members` con `role = 'staff'`), la barra lateral solo muestra **POS** y entrar a mano a `/productos` redirige a `/pos`. Un `update` directo sobre productos o precios lo rechaza la RLS.
+7. Si el restaurante no tiene empleados activos, el administrador puede operar el POS con un aviso, y las acciones quedan asociadas a su usuario.
+
+Pruebas reproducibles:
+
+```bash
+docker exec -i supabase_db_TP psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/tests/pos-employees.sql
+pnpm typecheck
+pnpm lint
+pnpm build
+```
+
+El PIN se guarda con bcrypt y el hash queda fuera del `grant` de columnas, así que no sale por PostgREST. `pos_audit_log` es de solo lectura para la app: las entradas las escriben `verify_pos_pin`, `pos_transition_order` y `pos_close_table_session`, que son los envoltorios auditados de las RPC del POS.

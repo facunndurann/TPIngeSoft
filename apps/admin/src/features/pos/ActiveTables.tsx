@@ -5,11 +5,13 @@ import { formatPrice } from '@/lib/format'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { Badge, Button, EmptyState, ErrorText, Modal, Spinner } from '@/components/ui'
 import { closePosSession, loadBoardOrders, loadOpenSessions, loadRestaurantTables, loadSessionBills } from './api'
+import { useOperatorId } from './operator-context'
 import { useNow } from './useNow'
 import type { PosBill, PosDiningTable, PosOpenSession } from './types'
 
 export function ActiveTables() {
   const restaurant = useRestaurant()
+  const operatorId = useOperatorId()
   const queryClient = useQueryClient()
   const now = useNow()
   const [closing, setClosing] = useState<PosOpenSession | null>(null)
@@ -50,7 +52,7 @@ export function ActiveTables() {
   const groupedFree = groupFreeByBranch(freeTables)
 
   const closeMutation = useMutation({
-    mutationFn: (sessionId: string) => closePosSession(sessionId),
+    mutationFn: (sessionId: string) => closePosSession(sessionId, operatorId),
     onSuccess: () => {
       setClosing(null)
       setError(null)
