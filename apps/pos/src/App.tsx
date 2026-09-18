@@ -19,9 +19,19 @@ export default function App() {
   return <AuthenticatedPos key={session.user.id} userId={session.user.id} />
 }
 
+const storageKey = (userId: string) => `pos-context:${userId}`
+// La elección sobrevive al F5 de la tablet, pero nunca autoriza por sí sola: sólo
+// vale si get_pos_contexts sigue devolviendo ese contexto para esta cuenta.
+function readStoredContext(userId: string) {
+  try { return sessionStorage.getItem(storageKey(userId)) } catch { return null }
+}
+function storeContext(userId: string, value: string) {
+  try { sessionStorage.setItem(storageKey(userId), value) } catch { /* modo privado o storage bloqueado */ }
+}
+
 function AuthenticatedPos({ userId }: { userId: string }) {
   const navigate = useNavigate()
-  const [selected, setSelected] = useState<string | null>(null)
+  const [selected, setSelected] = useState<string | null>(() => readStoredContext(userId))
   const contexts = useQuery({
     queryKey: ['pos-contexts', userId],
     queryFn: async () => {
@@ -43,7 +53,7 @@ function AuthenticatedPos({ userId }: { userId: string }) {
   const active = contexts.data.length === 1 ? contexts.data[0] : contexts.data.find(c => key(c) === selected)
   const selector = <main className="mx-auto max-w-xl space-y-4 p-8">
     <h1 className="text-xl font-semibold">Elegí dónde vas a trabajar</h1>
-    {contexts.data.map(c => <Button key={key(c)} className="w-full" onClick={() => { setSelected(key(c)); navigate('/', { replace: true }) }}>{c.restaurant_name} · {c.branch_name}</Button>)}
+    {contexts.data.map(c => <Button key={key(c)} className="w-full" onClick={() => { setSelected(key(c)); storeContext(userId, key(c)); navigate('/', { replace: true }) }}>{c.restaurant_name} · {c.branch_name}</Button>)}
     <Button variant="secondary" onClick={() => supabase.auth.signOut()}>Cerrar sesión</Button>
   </main>
   if (!active) return <Routes><Route path="/select-context" element={selector} /><Route path="*" element={<Navigate to="/select-context" replace />} /></Routes>

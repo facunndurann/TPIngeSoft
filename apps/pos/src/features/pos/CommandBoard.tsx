@@ -7,9 +7,8 @@ import {
   posBoardColumns,
   type OrderStatus,
 } from '@restaurant-platform/shared'
-import { supabase } from '@/lib/supabase'
 import { useRestaurant } from '@/context/pos-context'
-import { ErrorText, Select, Spinner } from '@/components/ui'
+import { ErrorText, Spinner } from '@/components/ui'
 import { loadBoardOrders, transitionPosOrder } from './api'
 import { OrderTicket } from './OrderTicket'
 import { useNow } from './useNow'
@@ -26,23 +25,8 @@ export function CommandBoard() {
   const restaurant = useRestaurant()
   const queryClient = useQueryClient()
   const now = useNow()
-  const [branchId, setBranchId] = useState<string | 'all'>('all')
   const [pendingId, setPendingId] = useState<string | null>(null)
   const [actionError, setActionError] = useState<{ id: string; message: string } | null>(null)
-
-  const { data: branches } = useQuery({
-    queryKey: ['branches', restaurant.id, restaurant.branchId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('branches')
-        .select('id, name')
-        .eq('restaurant_id', restaurant.id)
-        .eq('id', restaurant.branchId)
-        .order('created_at')
-      if (error) throw error
-      return data
-    },
-  })
 
   const board = useQuery({
     queryKey: ['pos', restaurant.id, restaurant.branchId, 'board'],
@@ -69,14 +53,7 @@ export function CommandBoard() {
     onSettled: () => setPendingId(null),
   })
 
-  const visible = useMemo(() => {
-    const orders = board.data ?? []
-    return branchId === 'all'
-      ? orders
-      : orders.filter((order) => order.table_sessions.tables.branch_id === branchId)
-  }, [board.data, branchId])
-
-  const grouped = useMemo(() => groupOrdersByColumn(visible), [visible])
+  const grouped = useMemo(() => groupOrdersByColumn(board.data ?? []), [board.data])
 
   function handleTransition(order: PosOrder, to: OrderStatus) {
     // Cancelar saca el pedido de la cuenta: es la única acción que pide confirmación.
@@ -87,28 +64,11 @@ export function CommandBoard() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-neutral-900">Comandas</h1>
-          <p className="text-sm text-neutral-500">
-            Pedidos en vivo. Los cambios se reflejan en la mesa del comensal.
-          </p>
-        </div>
-        {branches && branches.length > 1 && (
-          <Select
-            className="w-56"
-            value={branchId}
-            onChange={(event) => setBranchId(event.target.value)}
-            aria-label="Filtrar por sucursal"
-          >
-            <option value="all">Todas las sucursales</option>
-            {branches.map((branch) => (
-              <option key={branch.id} value={branch.id}>
-                {branch.name}
-              </option>
-            ))}
-          </Select>
-        )}
+      <div>
+        <h1 className="text-xl font-bold text-neutral-900">Comandas</h1>
+        <p className="text-sm text-neutral-500">
+          Pedidos en vivo. Los cambios se reflejan en la mesa del comensal.
+        </p>
       </div>
 
       {board.isError && (

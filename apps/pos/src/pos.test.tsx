@@ -45,3 +45,31 @@ test('kitchen cannot deliver, revert or cancel from ticket buttons', () => {
   const ready=renderToStaticMarkup(<AccessContext value={context}><OrderTicket order={{...order,status:'in_preparation'}} now={Date.now()} busy={false} error={null} onTransition={()=>{}} /></AccessContext>)
   assert.match(ready,/Marcar listo/); assert.doesNotMatch(ready,/Cancelar|Volver a nuevo/)
 })
+
+// La elección guardada es una comodidad de la tablet, nunca una autorización:
+// get_pos_contexts sigue siendo la única fuente de verdad.
+function withStoredContext(value: string | null, run: () => string) {
+  const store = new Map<string, string>()
+  if (value) store.set('pos-context:employee', value)
+  Object.defineProperty(globalThis, 'sessionStorage', {
+    configurable: true,
+    value: { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v) },
+  })
+  try { return run() } finally { Reflect.deleteProperty(globalThis, 'sessionStorage') }
+}
+const twoContexts = [context, { ...context, branch_id: 'branch-b', branch_name: 'Branch B' }]
+test('a stored context survives a reload without asking again', () => {
+  const html = withStoredContext('restaurant-a:branch-b', () => app({user:{id:'employee'}} as Session, twoContexts, '/'))
+  assert.match(html, /Pedidos en vivo/)
+  assert.match(html, /Branch B/)
+  assert.doesNotMatch(html, /Elegí dónde vas a trabajar/)
+})
+test('a stored context that is no longer authorized never grants access', () => {
+  const stale = () => app({user:{id:'employee'}} as Session, twoContexts, '/')
+  assert.doesNotMatch(withStoredContext('restaurant-b:branch-z', stale), /Pedidos en vivo|Branch Z/)
+  const selector = () => app({user:{id:'employee'}} as Session, twoContexts, '/select-context')
+  assert.match(withStoredContext('restaurant-b:branch-z', selector), /Elegí dónde vas a trabajar/)
+})
+test('the selector still works where sessionStorage is unavailable', () => {
+  assert.match(app({user:{id:'employee'}} as Session, twoContexts, '/select-context'), /Elegí dónde vas a trabajar/)
+})
