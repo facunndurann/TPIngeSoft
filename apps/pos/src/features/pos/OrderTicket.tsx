@@ -3,11 +3,13 @@ import {
   formatElapsed,
   orderStatusLabels,
   posActions,
+  transitionPermission,
   type OrderStatus,
 } from '@restaurant-platform/shared'
 import { formatPrice } from '@/lib/format'
 import { Badge, Button } from '@/components/ui'
 import type { PosOrder, PosOrderItem } from './types'
+import { usePosContext } from '@/context/pos-context'
 
 function participantName(order: PosOrder, participantId: string | null) {
   return order.table_sessions.session_participants.find((entry) => entry.id === participantId)
@@ -27,7 +29,13 @@ export function OrderTicket({
   error: string | null
   onTransition: (to: OrderStatus) => void
 }) {
-  const { advance, revert, cancel } = posActions[order.status]
+  const { permissions } = usePosContext()
+  const allowed = (step: { to: OrderStatus; label: string } | undefined) =>
+    step && permissions.includes(transitionPermission(order.status, step.to)) ? step : undefined
+  const actions = posActions[order.status]
+  const advance = allowed(actions.advance)
+  const revert = allowed(actions.revert)
+  const cancel = allowed(actions.cancel)
   const table = order.table_sessions.tables
   const branch = table.branch?.name
   const submitter = participantName(order, order.submitted_by)

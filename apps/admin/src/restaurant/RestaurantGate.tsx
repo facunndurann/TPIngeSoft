@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { Button, ErrorText, Field, Input, Spinner, Textarea } from '@/components/ui'
 import { DesignPicker } from '@/features/DesignPicker'
 import { RestaurantContext, type Membership } from './restaurant-context'
+import { useAuth } from '@/auth/useAuth'
 
 /**
  * Carga el restaurante del usuario autenticado y su rol. Si todavía no tiene
@@ -13,21 +14,31 @@ import { RestaurantContext, type Membership } from './restaurant-context'
  * sucursal inicial + POS interno).
  */
 export function RestaurantGate({ children }: { children: ReactNode }) {
-  const { data, isLoading } = useQuery({
-    queryKey: ['my-restaurant'],
+  const { session } = useAuth()
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['my-restaurant', session?.user.id],
     queryFn: async (): Promise<Membership | null> => {
       const { data: memberships, error } = await supabase
         .from('restaurant_members')
         .select('restaurant_id, role, restaurants(*)')
+        .eq('user_id', session!.user.id)
+        .eq('is_active', true)
+        .in('role', ['owner', 'manager'])
         .limit(1)
       if (error) throw error
       const membership = memberships?.[0]
-      if (!membership?.restaurants) return null
+      if (!membership?.restaurants) {
+        const { data: profile, error: profileError } = await supabase.from('profiles').select('id').eq('id', session!.user.id).maybeSingle()
+        if (profileError) throw profileError
+        if (profile) throw new Error('Acceso administrativo no habilitado')
+        return null
+      }
       return { restaurant: membership.restaurants, role: membership.role }
     },
   })
 
   if (isLoading) return <Spinner />
+  if (isError) return <div className="p-8"><ErrorText message="Tu cuenta no tiene acceso administrativo o no pudimos verificarlo." /><Button onClick={() => supabase.auth.signOut()}>Cerrar sesión</Button></div>
   if (!data) return <CreateRestaurantScreen />
 
   return <RestaurantContext value={data}>{children}</RestaurantContext>
@@ -57,29 +68,11 @@ function CreateRestaurantScreen() {
       const { data: user } = await supabase.auth.getUser()
       if (!user.user) throw new Error('Sesión inválida')
 
-      const { data: restaurant, error: rErr } = await supabase
-        .from('restaurants')
-        .insert({ name, slug, description: description || null, menu_design: menuDesign })
-        .select()
-        .single()
-      if (rErr) throw rErr
-
-      const { error: mErr } = await supabase.from('restaurant_members').insert({
-        restaurant_id: restaurant.id,
-        user_id: user.user.id,
-        role: 'owner',
+      const { error: rErr } = await supabase.rpc('create_restaurant', {
+        p_name: name, p_slug: slug, p_description: description,
+        p_menu_design: menuDesign, p_branch_name: branchName,
       })
-      if (mErr) throw mErr
-
-      const { error: bErr } = await supabase
-        .from('branches')
-        .insert({ restaurant_id: restaurant.id, name: branchName })
-      if (bErr) throw bErr
-
-      const { error: pErr } = await supabase
-        .from('pos_integrations')
-        .insert({ restaurant_id: restaurant.id, type: 'internal' })
-      if (pErr) throw pErr
+      if (rErr) throw rErr
 
       await queryClient.invalidateQueries({ queryKey: ['my-restaurant'] })
     } catch (err) {

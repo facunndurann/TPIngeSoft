@@ -52,9 +52,9 @@ async function check(name, fn) {
   console.log(`ok ${passed} - ${name}`)
 }
 
-async function login(email) {
+async function login(email, password = 'demo1234') {
   const result = client()
-  unwrap(await result.auth.signInWithPassword({ email, password: 'demo1234' }), 'Demo admin login')
+  unwrap(await result.auth.signInWithPassword({ email, password }), 'Demo admin login')
   return result
 }
 
@@ -152,7 +152,7 @@ async function waitForEvent(events, predicate) {
 }
 
 try {
-  const [admin, otherAdmin] = await Promise.all([login('admin@esquina.demo'), login('admin@nonna.demo')])
+  const [admin, otherAdmin, operator] = await Promise.all([login('admin@esquina.demo'), login('admin@nonna.demo'), login('pos.esquina@employees.example.com', 'demo-pos1234')])
   const restaurants = unwrap(await admin.from('restaurants').select('id,slug'), 'Read seed restaurants')
   const restaurantId = restaurants.find((row) => row.slug === 'esquina-burger')?.id
   const otherRestaurantId = restaurants.find((row) => row.slug === 'trattoria-nonna')?.id
@@ -393,26 +393,26 @@ try {
     await assertBill(customer, sessionId, { submitted_amount: 0, total_amount: 3800, paid_amount: 0, pending_amount: 3800 })
   })
   await check('only members of the order restaurant can advance its status', async () => {
-    for (const actor of [customer, outsider, otherAdmin]) {
+    for (const actor of [customer, outsider, otherAdmin, admin]) {
       const result = await actor.rpc('transition_order', { p_order_id: orderId, p_status: 'in_preparation' })
       assert.ok(result.error, 'Unauthorized transition must fail')
     }
     assert.equal((await rows(customer, 'orders', 'id', orderId))[0].status, 'accepted')
   })
   await check('order states follow the valid preparation sequence with timestamps', async () => {
-    const invalid = await admin.rpc('transition_order', { p_order_id: orderId, p_status: 'delivered' })
+    const invalid = await operator.rpc('transition_order', { p_order_id: orderId, p_status: 'delivered' })
     assert.ok(invalid.error, 'Skipping preparation and ready must fail')
     for (const [status, timestamp] of [['in_preparation', 'preparing_at'], ['ready', 'ready_at'], ['delivered', 'delivered_at']]) {
-      unwrap(await admin.rpc('transition_order', { p_order_id: orderId, p_status: status }), `Transition to ${status}`)
+      unwrap(await operator.rpc('transition_order', { p_order_id: orderId, p_status: status }), `Transition to ${status}`)
       const order = (await rows(peer, 'orders', 'id', orderId))[0]
       assert.equal(order.status, status)
       assert.ok(order[timestamp], `${timestamp} is recorded`)
     }
-    const terminal = await admin.rpc('transition_order', { p_order_id: orderId, p_status: 'cancelled' })
+    const terminal = await operator.rpc('transition_order', { p_order_id: orderId, p_status: 'cancelled' })
     assert.ok(terminal.error, 'Delivered orders cannot be cancelled')
   })
   await check('orders step back one stage at a time and timestamps follow the current path', async () => {
-    const transition = (status) => admin.rpc('transition_order', { p_order_id: orderId, p_status: status })
+    const transition = (status) => operator.rpc('transition_order', { p_order_id: orderId, p_status: status })
     const current = async () => (await rows(peer, 'orders', 'id', orderId))[0]
     const delivered = await current()
 
@@ -448,16 +448,16 @@ try {
     assert.equal(outsiderEvents.length, 0)
   })
   await check('cancelling an accepted order removes its amount from the account', async () => {
-    unwrap(await admin.rpc('transition_order', { p_order_id: peerOrderId, p_status: 'cancelled' }), 'Cancel order')
+    unwrap(await operator.rpc('transition_order', { p_order_id: peerOrderId, p_status: 'cancelled' }), 'Cancel order')
     const order = (await rows(peer, 'orders', 'id', peerOrderId))[0]
     assert.equal(order.status, 'cancelled')
     assert.ok(order.cancelled_at)
     await assertBill(peer, sessionId, { submitted_amount: 0, total_amount: 2800, paid_amount: 0, pending_amount: 2800, is_settled: false })
-    const retry = await admin.rpc('transition_order', { p_order_id: peerOrderId, p_status: 'accepted' })
+    const retry = await operator.rpc('transition_order', { p_order_id: peerOrderId, p_status: 'accepted' })
     assert.ok(retry.error, 'Cancelled orders cannot be revived')
   })
   await check('diners and other restaurants cannot close a table session', async () => {
-    for (const actor of [customer, outsider, otherAdmin]) {
+    for (const actor of [customer, outsider, otherAdmin, admin]) {
       const result = await actor.rpc('close_table_session', { p_session_id: sessionId })
       assert.ok(result.error, 'Unauthorized session close must fail')
     }
@@ -485,8 +485,8 @@ try {
     })
   })
   await check('closing a session is idempotent, leaves kitchen tickets and the bill, and opens a new QR session', async () => {
-    unwrap(await admin.rpc('close_table_session', { p_session_id: sessionId }), 'Close table session')
-    unwrap(await admin.rpc('close_table_session', { p_session_id: sessionId }), 'Idempotent close')
+    unwrap(await operator.rpc('close_table_session', { p_session_id: sessionId }), 'Close table session')
+    unwrap(await operator.rpc('close_table_session', { p_session_id: sessionId }), 'Idempotent close')
     const closed = (await rows(admin, 'table_sessions', 'id', sessionId))[0]
     assert.equal(closed.status, 'closed')
     assert.ok(closed.closed_at)

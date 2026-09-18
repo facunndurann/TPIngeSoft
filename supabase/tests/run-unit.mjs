@@ -12,7 +12,14 @@ const directory = await mkdtemp(join(tmpdir(), 'orders-tests-'))
 try {
   await build({
     root, configFile: false, ssr: { noExternal: true },
-    build: { ssr: resolve(root, 'supabase/tests/edge.test.ts'), outDir: directory, rollupOptions: { output: { entryFileNames: 'tests.mjs' } } },
+    resolve: { alias: { '@': resolve(root, 'apps/pos/src') } },
+    esbuild: { jsx: 'automatic' },
+    define: {
+      'import.meta.env.VITE_SUPABASE_URL': JSON.stringify('http://127.0.0.1:54321'),
+      'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify('test-public-key'),
+      'import.meta.env.VITE_EMPLOYEE_EMAIL_DOMAIN': JSON.stringify('employees.example.com'),
+    },
+    build: { ssr: resolve(root, process.argv[2] ?? 'supabase/tests/edge.test.ts'), outDir: directory, rollupOptions: { output: { entryFileNames: 'tests.mjs' } } },
   })
   const result = spawnSync(process.execPath, [join(directory, 'tests.mjs')], { stdio: 'inherit' })
   process.exitCode = result.status ?? 1

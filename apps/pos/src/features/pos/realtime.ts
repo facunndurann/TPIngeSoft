@@ -40,11 +40,6 @@ export function subscribeToRestaurantPos(restaurantId: string, onChange: () => v
       { event: '*', schema: 'public', table: 'branches', filter: restaurantFilter },
       onChange,
     )
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'pos_employees', filter: restaurantFilter },
-      onChange,
-    )
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') onChange()
     })

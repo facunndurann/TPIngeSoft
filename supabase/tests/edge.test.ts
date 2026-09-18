@@ -12,7 +12,7 @@ import {
   posErrorCode,
 } from '../../packages/shared/src/pos.ts'
 // Si otra migración vuelve a redefinir transition_order, apuntá este import a esa.
-import transitionOrderSql from '../migrations/20260915130000_pos_transition_table.sql?raw'
+import transitionOrderSql from '../migrations/20260919020000_pos_account_operations.sql?raw'
 import {
   FLOOR_GRID,
   TABLE_SPAN,

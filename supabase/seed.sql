@@ -284,3 +284,23 @@ begin
     (r2, t_postres, 'Tiramisú', 5200, '{vegetariano}', 0),
     (r2, t_postres, 'Panna cotta con frutos rojos', 4800, '{vegetariano,sin-tacc}', 1);
 end $$;
+
+-- Cuentas POS locales independientes de los administradores. No ejecutar en cloud.
+-- Login POS: pos.esquina / demo-pos1234, pos.nonna / demo-pos1234.
+insert into auth.users(instance_id,id,aud,role,email,encrypted_password,email_confirmed_at,
+  raw_app_meta_data,raw_user_meta_data,created_at,updated_at,
+  confirmation_token,recovery_token,email_change_token_new,email_change)
+select '00000000-0000-0000-0000-000000000000'::uuid,id,'authenticated','authenticated',
+  username || '@employees.example.com',crypt('demo-pos1234',gen_salt('bf')),now(),
+  '{"provider":"email","providers":["email"]}'::jsonb,'{}'::jsonb,now(),now(),'','','',''
+from (values ('cccccccc-cccc-cccc-cccc-cccccccccccc'::uuid,'pos.esquina'),
+  ('dddddddd-dddd-dddd-dddd-dddddddddddd'::uuid,'pos.nonna')) u(id,username);
+insert into auth.identities(id,user_id,provider_id,identity_data,provider,last_sign_in_at,created_at,updated_at)
+select gen_random_uuid(),id,id::text,jsonb_build_object('sub',id::text,'email',email,'email_verified',true),
+  'email',now(),now(),now() from auth.users
+where id in ('cccccccc-cccc-cccc-cccc-cccccccccccc','dddddddd-dddd-dddd-dddd-dddddddddddd');
+select public.save_employee_account(m.user_id,r.id,u.id,u.name,array['supervisor']::public.member_role[],
+  array(select b.id from public.branches b where b.restaurant_id=r.id),true,u.username)
+from (values ('cccccccc-cccc-cccc-cccc-cccccccccccc'::uuid,'pos.esquina','Supervisor Esquina','esquina-burger'),
+  ('dddddddd-dddd-dddd-dddd-dddddddddddd'::uuid,'pos.nonna','Supervisor Nonna','trattoria-nonna')) u(id,username,name,slug)
+join public.restaurants r on r.slug=u.slug join public.restaurant_members m on m.restaurant_id=r.id and m.role='owner';

@@ -23,7 +23,7 @@ export function useRestaurant(): Restaurant {
   return useMembership().restaurant
 }
 
-/** Solo el owner administra carta, precios, mesas y configuración (MI-61). */
+/** Roles con admin.manage; la base vuelve a verificar membresía activa y permisos. */
 export function useIsAdmin(): boolean {
-  return useMembership().role === 'owner'
+  return ['owner', 'manager'].includes(useMembership().role)
 }

@@ -14,11 +14,12 @@ function throwIfError(error: { message: string } | null): void {
   if (error) throw new PosActionError(error.message)
 }
 
-export async function loadBoardOrders(restaurantId: string, deliveredSinceIso: string) {
+export async function loadBoardOrders(restaurantId: string, branchId: string, deliveredSinceIso: string) {
   const { data, error } = await supabase
     .from('orders')
     .select(posOrderSelect)
     .eq('restaurant_id', restaurantId)
+    .eq('table_sessions.tables.branch_id', branchId)
     .or(
       `status.in.(submitted,accepted,in_preparation,ready),and(status.eq.delivered,created_at.gte."${deliveredSinceIso}")`,
     )
@@ -27,11 +28,12 @@ export async function loadBoardOrders(restaurantId: string, deliveredSinceIso: s
   return (data ?? []) as PosOrder[]
 }
 
-export async function loadDayOrders(restaurantId: string, startIso: string, endIso: string) {
+export async function loadDayOrders(restaurantId: string, branchId: string, startIso: string, endIso: string) {
   const { data, error } = await supabase
     .from('orders')
     .select(posOrderSelect)
     .eq('restaurant_id', restaurantId)
+    .eq('table_sessions.tables.branch_id', branchId)
     .gte('created_at', startIso)
     .lt('created_at', endIso)
     .order('created_at', { ascending: false })
@@ -39,11 +41,12 @@ export async function loadDayOrders(restaurantId: string, startIso: string, endI
   return (data ?? []) as PosOrder[]
 }
 
-export async function loadOpenSessions(restaurantId: string) {
+export async function loadOpenSessions(restaurantId: string, branchId: string) {
   const { data, error } = await supabase
     .from('table_sessions')
     .select(posSessionSelect)
     .eq('restaurant_id', restaurantId)
+    .eq('tables.branch_id', branchId)
     .eq('status', 'open')
     .order('opened_at', { ascending: true })
   throwIfError(error)
@@ -65,13 +68,14 @@ export async function loadSessionBills(sessionIds: string[]) {
  * las ocultas del plano y las de un sector que el local dio de baja (MI-66).
  * Una mesa sin sector sigue siendo operable: existe y tiene QR.
  */
-export async function loadRestaurantTables(restaurantId: string) {
+export async function loadRestaurantTables(restaurantId: string, branchId: string) {
   const { data, error } = await supabase
     .from('tables')
     .select(
       'id, label, branch_id, is_active, is_visible, section_id, position_x, position_y, seats, shape, width, height, branches (id, name, is_active), floor_sections (id, name, sort_order, is_active)',
     )
     .eq('restaurant_id', restaurantId)
+    .eq('branch_id', branchId)
     .eq('is_active', true)
     .eq('is_visible', true)
     .order('label')
@@ -84,11 +88,12 @@ export async function loadRestaurantTables(restaurantId: string) {
 }
 
 /** Sectores activos que el POS puede recorrer, incluso si todavía están vacíos. */
-export async function loadPosFloorSections(restaurantId: string) {
+export async function loadPosFloorSections(restaurantId: string, branchId: string) {
   const { data, error } = await supabase
     .from('floor_sections')
     .select('id, name, branch_id, sort_order, is_active, branches (id, name, is_active)')
     .eq('restaurant_id', restaurantId)
+    .eq('branch_id', branchId)
     .eq('is_active', true)
     .order('sort_order')
     .order('name')
@@ -103,21 +108,17 @@ export async function loadPosFloorSections(restaurantId: string) {
 export async function transitionPosOrder(
   orderId: string,
   status: OrderStatus,
-  employeeId: string | null,
 ) {
   const { error } = await supabase.rpc('pos_transition_order', {
     p_order_id: orderId,
     p_status: status,
-    // omitir = null en la RPC: la acción queda solo con el usuario del dispositivo
-    p_employee_id: employeeId ?? undefined,
   })
   throwIfError(error)
 }
 
-export async function closePosSession(sessionId: string, employeeId: string | null) {
+export async function closePosSession(sessionId: string) {
   const { error } = await supabase.rpc('pos_close_table_session', {
     p_session_id: sessionId,
-    p_employee_id: employeeId ?? undefined,
   })
   throwIfError(error)
 }

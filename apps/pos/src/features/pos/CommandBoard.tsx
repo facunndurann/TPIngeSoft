@@ -8,10 +8,9 @@ import {
   type OrderStatus,
 } from '@restaurant-platform/shared'
 import { supabase } from '@/lib/supabase'
-import { useRestaurant } from '@/restaurant/restaurant-context'
+import { useRestaurant } from '@/context/pos-context'
 import { ErrorText, Select, Spinner } from '@/components/ui'
 import { loadBoardOrders, transitionPosOrder } from './api'
-import { useOperatorId } from './operator-context'
 import { OrderTicket } from './OrderTicket'
 import { useNow } from './useNow'
 import type { PosOrder } from './types'
@@ -25,7 +24,6 @@ const columnStyles: Record<string, string> = {
 
 export function CommandBoard() {
   const restaurant = useRestaurant()
-  const operatorId = useOperatorId()
   const queryClient = useQueryClient()
   const now = useNow()
   const [branchId, setBranchId] = useState<string | 'all'>('all')
@@ -33,12 +31,13 @@ export function CommandBoard() {
   const [actionError, setActionError] = useState<{ id: string; message: string } | null>(null)
 
   const { data: branches } = useQuery({
-    queryKey: ['branches', restaurant.id],
+    queryKey: ['branches', restaurant.id, restaurant.branchId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('branches')
         .select('id, name')
         .eq('restaurant_id', restaurant.id)
+        .eq('id', restaurant.branchId)
         .order('created_at')
       if (error) throw error
       return data
@@ -46,8 +45,8 @@ export function CommandBoard() {
   })
 
   const board = useQuery({
-    queryKey: ['pos', restaurant.id, 'board'],
-    queryFn: () => loadBoardOrders(restaurant.id, dayRangeUtc(localDateKey()).start),
+    queryKey: ['pos', restaurant.id, restaurant.branchId, 'board'],
+    queryFn: () => loadBoardOrders(restaurant.id, restaurant.branchId, dayRangeUtc(localDateKey()).start),
     refetchInterval: 15000,
   })
 
@@ -55,7 +54,7 @@ export function CommandBoard() {
 
   const transition = useMutation({
     mutationFn: ({ orderId, status }: { orderId: string; status: PosOrder['status'] }) =>
-      transitionPosOrder(orderId, status, operatorId),
+      transitionPosOrder(orderId, status),
     onMutate: ({ orderId }) => {
       setPendingId(orderId)
       setActionError(null)

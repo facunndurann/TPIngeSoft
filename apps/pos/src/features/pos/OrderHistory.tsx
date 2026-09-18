@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { asAmount, dayRangeUtc, localDateKey, orderStatusLabels } from '@restaurant-platform/shared'
 import type { OrderStatus } from '@restaurant-platform/shared'
 import { formatPrice } from '@/lib/format'
-import { useRestaurant } from '@/restaurant/restaurant-context'
+import { useRestaurant } from '@/context/pos-context'
 import { Badge, EmptyState, ErrorText, Input, Modal, Select, Spinner } from '@/components/ui'
 import { loadDayOrders } from './api'
 import type { PosOrder } from './types'
@@ -27,8 +27,8 @@ export function OrderHistory() {
   const range = dayRangeUtc(dateKey)
 
   const history = useQuery({
-    queryKey: ['pos', restaurant.id, 'history', dateKey],
-    queryFn: () => loadDayOrders(restaurant.id, range.start, range.end),
+    queryKey: ['pos', restaurant.id, restaurant.branchId, 'history', dateKey],
+    queryFn: () => loadDayOrders(restaurant.id, restaurant.branchId, range.start, range.end),
     refetchInterval: 15000,
   })
 

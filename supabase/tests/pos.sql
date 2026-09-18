@@ -51,6 +51,10 @@ begin
     (restaurant, staff, 'owner'), (other_restaurant, other_staff, 'owner');
   insert into public.branches(restaurant_id, name) values(restaurant, 'Branch') returning id into branch;
   insert into public.branches(restaurant_id, name) values(other_restaurant, 'Other') returning id into other_branch;
+  insert into public.profiles(id,username_normalized,full_name)
+    values(staff,replace(staff::text,'-',''),'POS test operator');
+  insert into public.branch_memberships(membership_id,restaurant_id,branch_id)
+    select id,restaurant,branch from public.restaurant_members where user_id=staff and restaurant_id=restaurant;
   insert into public.tables(restaurant_id, branch_id, label) values(restaurant, branch, 'Table')
     returning id into dining_table;
   insert into public.tables(restaurant_id, branch_id, label) values(other_restaurant, other_branch, 'Other table')
@@ -74,9 +78,9 @@ begin
   perform pg_temp.expect_close_error(sid, 'FORBIDDEN');
   perform set_config('request.jwt.claim.sub', other_staff::text, true);
   perform pg_temp.expect_close_error(sid, 'FORBIDDEN');
-  perform pg_temp.expect_close_error(gen_random_uuid(), 'SESSION_NOT_FOUND');
+  perform pg_temp.expect_close_error(gen_random_uuid(), 'FORBIDDEN');
   perform set_config('request.jwt.claim.sub', staff::text, true);
-  perform pg_temp.expect_close_error(null, 'INVALID_REQUEST');
+  perform pg_temp.expect_close_error(null, 'FORBIDDEN');
 
   perform set_config('request.jwt.claim.sub', diner::text, true);
   v_order_id := public.submit_order(sid, gen_random_uuid(), items, 10, null);

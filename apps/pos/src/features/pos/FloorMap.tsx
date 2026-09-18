@@ -13,7 +13,7 @@ import {
 import { Clock3, Move, UserRound, Users } from 'lucide-react'
 import { EmptyState, ErrorText, Select, Spinner } from '@/components/ui'
 import { formatPrice } from '@/lib/format'
-import { useRestaurant } from '@/restaurant/restaurant-context'
+import { useRestaurant, usePosContext } from '@/context/pos-context'
 import {
   loadOpenSessions,
   loadPosFloorSections,
@@ -30,28 +30,29 @@ import type { PosBill, PosDiningTable, PosOpenSession } from './types'
  */
 export function FloorMap() {
   const restaurant = useRestaurant()
+  const canPay = usePosContext().permissions.includes('payments.read')
   const now = useNow()
   const [branchChoice, setBranchChoice] = useState<string | null>(null)
   const [sectionChoice, setSectionChoice] = useState<string | null>(null)
 
   const sections = useQuery({
-    queryKey: ['pos', restaurant.id, 'floor-sections'],
-    queryFn: () => loadPosFloorSections(restaurant.id),
+    queryKey: ['pos', restaurant.id, restaurant.branchId, 'floor-sections'],
+    queryFn: () => loadPosFloorSections(restaurant.id, restaurant.branchId),
   })
   const tables = useQuery({
-    queryKey: ['pos', restaurant.id, 'tables'],
-    queryFn: () => loadRestaurantTables(restaurant.id),
+    queryKey: ['pos', restaurant.id, restaurant.branchId, 'tables'],
+    queryFn: () => loadRestaurantTables(restaurant.id, restaurant.branchId),
   })
   const sessions = useQuery({
-    queryKey: ['pos', restaurant.id, 'sessions'],
-    queryFn: () => loadOpenSessions(restaurant.id),
+    queryKey: ['pos', restaurant.id, restaurant.branchId, 'sessions'],
+    queryFn: () => loadOpenSessions(restaurant.id, restaurant.branchId),
     refetchInterval: 15000,
   })
   const sessionIds = (sessions.data ?? []).map((session) => session.id)
   const bills = useQuery({
-    queryKey: ['pos', restaurant.id, 'bills', sessionIds.join(',')],
+    queryKey: ['pos', restaurant.id, restaurant.branchId, 'bills', sessionIds.join(',')],
     queryFn: () => loadSessionBills(sessionIds),
-    enabled: sessions.isSuccess,
+    enabled: sessions.isSuccess && canPay,
     refetchInterval: 15000,
   })
 
@@ -368,7 +369,7 @@ function TableSummary({ entry, now }: { entry: FloorMapEntry; now: number }) {
       {session ? (
         <>
           <SummaryItem icon={Clock3} label="Abierta" value={formatElapsed(session.opened_at, now)} />
-          <SummaryItem label="Total acumulado" value={formatPrice(asAmount(bill?.total_amount))} />
+          <SummaryItem label="Total acumulado" value={bill ? formatPrice(asAmount(bill.total_amount)) : '—'} />
           <SummaryItem label="Pedidos activos" value={String(activeOrders)} />
           <SummaryItem
             icon={UserRound}

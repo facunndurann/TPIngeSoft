@@ -2,39 +2,39 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { asAmount, dayRangeUtc, formatElapsed, isKitchenTicket, localDateKey } from '@restaurant-platform/shared'
 import { formatPrice } from '@/lib/format'
-import { useRestaurant } from '@/restaurant/restaurant-context'
+import { useRestaurant, usePosContext } from '@/context/pos-context'
 import { Badge, Button, EmptyState, ErrorText, Modal, Spinner } from '@/components/ui'
 import { closePosSession, loadBoardOrders, loadOpenSessions, loadRestaurantTables, loadSessionBills } from './api'
-import { useOperatorId } from './operator-context'
 import { useNow } from './useNow'
 import type { PosBill, PosDiningTable, PosOpenSession } from './types'
 
 export function ActiveTables() {
   const restaurant = useRestaurant()
-  const operatorId = useOperatorId()
+  const { permissions } = usePosContext()
+  const canPay = permissions.includes('payments.read')
   const queryClient = useQueryClient()
   const now = useNow()
   const [closing, setClosing] = useState<PosOpenSession | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const sessions = useQuery({
-    queryKey: ['pos', restaurant.id, 'sessions'],
-    queryFn: () => loadOpenSessions(restaurant.id),
+    queryKey: ['pos', restaurant.id, restaurant.branchId, 'sessions'],
+    queryFn: () => loadOpenSessions(restaurant.id, restaurant.branchId),
     refetchInterval: 15000,
   })
   const bills = useQuery({
-    queryKey: ['pos', restaurant.id, 'bills', sessions.data?.map((session) => session.id).join(',')],
+    queryKey: ['pos', restaurant.id, restaurant.branchId, 'bills', sessions.data?.map((session) => session.id).join(',')],
     queryFn: () => loadSessionBills((sessions.data ?? []).map((session) => session.id)),
-    enabled: !!sessions.data,
+    enabled: !!sessions.data && canPay,
     refetchInterval: 15000,
   })
   const tables = useQuery({
-    queryKey: ['pos', restaurant.id, 'tables'],
-    queryFn: () => loadRestaurantTables(restaurant.id),
+    queryKey: ['pos', restaurant.id, restaurant.branchId, 'tables'],
+    queryFn: () => loadRestaurantTables(restaurant.id, restaurant.branchId),
   })
   const board = useQuery({
-    queryKey: ['pos', restaurant.id, 'board'],
-    queryFn: () => loadBoardOrders(restaurant.id, dayRangeUtc(localDateKey()).start),
+    queryKey: ['pos', restaurant.id, restaurant.branchId, 'board'],
+    queryFn: () => loadBoardOrders(restaurant.id, restaurant.branchId, dayRangeUtc(localDateKey()).start),
     refetchInterval: 15000,
   })
 
@@ -52,7 +52,7 @@ export function ActiveTables() {
   const groupedFree = groupFreeByBranch(freeTables)
 
   const closeMutation = useMutation({
-    mutationFn: (sessionId: string) => closePosSession(sessionId, operatorId),
+    mutationFn: (sessionId: string) => closePosSession(sessionId),
     onSuccess: () => {
       setClosing(null)
       setError(null)
@@ -108,15 +108,15 @@ export function ActiveTables() {
                           {formatElapsed(session.opened_at, now)}
                         </p>
                       </div>
-                      <Badge color={asAmount(bill?.pending_amount) > 0 ? 'amber' : 'green'}>
+                      {canPay && <Badge color={asAmount(bill?.pending_amount) > 0 ? 'amber' : 'green'}>
                         {asAmount(bill?.pending_amount) > 0 ? 'Pendiente' : 'Sin saldo'}
-                      </Badge>
+                      </Badge>}
                     </div>
                     <p className="text-xs text-neutral-500 break-words">
                       {session.session_participants.map((participant) => participant.display_name).join(' · ')
                         || 'Sin nombres'}
                     </p>
-                    <dl className="grid grid-cols-2 gap-2 text-xs">
+                    {canPay && <dl className="grid grid-cols-2 gap-2 text-xs">
                       <div>
                         <dt className="text-neutral-500">Por confirmar</dt>
                         <dd className="font-medium text-neutral-900">
@@ -141,15 +141,15 @@ export function ActiveTables() {
                           {formatPrice(asAmount(bill?.pending_amount))}
                         </dd>
                       </div>
-                    </dl>
+                    </dl>}
                     {kitchen > 0 && (
                       <p className="text-xs text-indigo-700">
                         {kitchen} comanda{kitchen === 1 ? '' : 's'} en cocina
                       </p>
                     )}
-                    <Button variant="secondary" className="w-full" onClick={() => { setError(null); setClosing(session) }}>
+                    {permissions.includes('sessions.close') && <Button variant="secondary" className="w-full" onClick={() => { setError(null); setClosing(session) }}>
                       Cerrar sesión
-                    </Button>
+                    </Button>}
                   </article>
                 )
               })}

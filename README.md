@@ -1,6 +1,6 @@
 # Plataforma de autoservicio para restaurantes
 
-Plataforma web multi-restaurante de autoservicio: menú digital por QR de mesa, personalización de platos, pedidos grupales, menú inteligente asistido por LLM, POS propio integrado y pago total o dividido con Mercado Pago.
+Plataforma web multi-restaurante de autoservicio: menú digital por QR de mesa, personalización de platos, pedidos grupales, menú inteligente asistido por LLM, POS independiente y pago total o dividido con Mercado Pago.
 
 > Setup local de Supabase y variables de entorno: **[docs/SETUP.md](docs/SETUP.md)**  
 > Deploy a la nube (Supabase + Vercel), desde cero: **[docs/DEPLOY.md](docs/DEPLOY.md)**
@@ -15,7 +15,7 @@ Plataforma web multi-restaurante de autoservicio: menú digital por QR de mesa, 
 | 3 | App comensal: menú, personalización, carrito, sesión compartida | Implementada; ingreso concurrente y RLS verificados en Supabase local |
 | 4 | Pedidos: validación server-side, estados, realtime, cuenta | Completa; pruebas integradas en Supabase local |
 | 5 | POS propio: tablero de comandas realtime, mesas activas, cierre de sesión | Completa |
-| 5.1 | POS desacoplado del backoffice: roles, empleados con PIN y auditoría (MI-61) | Completa |
+| 5.1 | POS independiente: cuentas globales, permisos por sucursal y auditoría | Completa |
 | 5.2 | Salón: sectores y layout de mesas configurables (MI-66) | Completa |
 | 5.3 | Mapa operativo: estados, tiempos, totales y responsable por mesa (MI-62/MI-63) | Completa |
 | 6 | Menú inteligente (LLM) | Pendiente |
@@ -27,13 +27,13 @@ Plataforma web multi-restaurante de autoservicio: menú digital por QR de mesa, 
 Con el stack local corriendo (ver más abajo), en el **panel admin** (`http://localhost:5174`):
 
 1. **Login** con un usuario demo: `admin@esquina.demo` / `demo1234` (hamburguesería) o `admin@nonna.demo` / `demo1234` (trattoria). También podés registrar una cuenta nueva y crear tu propio restaurante desde cero.
-2. **POS**: tablero de comandas en tiempo real y mapa de salón por sector. El mapa distingue mesas libres, ocupadas, con pedidos, cuenta solicitada o cobro pendiente, y muestra tiempo, total y responsable sin abrir la comanda. El POS pide el PIN de un empleado antes de operar (demo: `1234`), se bloquea por inactividad y registra quién hizo cada acción.
+2. **POS independiente** (`http://localhost:5175`): login con usuario y contraseña, comandas en tiempo real y mapa de salón. Demo: `pos.esquina` / `demo-pos1234`. No requiere sesión administrativa.
 3. **Productos**: crear/editar productos con foto, precio, categoría, etiquetas dietarias, disponibilidad, ingredientes (marcando cuáles se pueden quitar) y grupos de modificadores asignados.
 4. **Categorías**: crear, renombrar, reordenar, activar/desactivar.
 5. **Modificadores**: grupos con reglas mín/máx (ej: "Extras" 0-4 con precio, "Guarnición" exactamente 1) y sus opciones.
 6. **Mesas y QR**: crear mesas por sucursal, ver/copiar/imprimir el QR único de cada una.
 7. **Salón**: modo visualizar (plano de solo lectura con resumen del sector) y modo editar (sectores, mesas arrastrables y redimensionables con ancho y alto libres, capacidad, forma y visibilidad). Es el layout que después usa el POS.
-8. **Empleados**: alta de empleados del POS con PIN, desactivación o eliminación y actividad reciente del salón. Solo para el administrador.
+8. **Empleados**: cuentas globales con username único, roles, sucursales, desactivación y restablecimiento de contraseña; auditoría nueva e histórica.
 9. **Restaurante**: editar información general y sucursales.
 
 La **app del comensal** incluye las Fases 3 y 4. Aplicá las migraciones con `pnpm supabase migration up --local`, iniciá la función con `pnpm dev:functions` y abrí `http://localhost:5173/m/demo-burger-mesa-1` o `http://localhost:5173/m/demo-nonna-mesa-1`.
@@ -46,7 +46,7 @@ La **app del comensal** incluye las Fases 3 y 4. Aplicá las migraciones con `pn
 
 - Revisión y confirmación del carrito; validación transaccional de disponibilidad, personalización y precios reales. Si cambian los precios, se exige revisar y confirmar nuevamente.
 - Envíos persistidos con identificador de reintento: una respuesta perdida o dos solicitudes simultáneas no duplican el pedido.
-- Recepción mediante `InternalPosAdapter`, con estados y registro de transiciones. El personal avanza las comandas desde el **POS** del admin (`/pos`): tablero kanban, mesas activas y historial del día. El cierre de sesión es manual; el cobro digital corresponde a la Fase 7.
+- Recepción mediante `InternalPosAdapter`, con estados y registro de transiciones. El personal avanza las comandas desde el **POS independiente** (`http://localhost:5175`): tablero kanban, mesas activas y historial del día. El cierre de sesión es manual; el cobro digital corresponde a la Fase 7.
 - Pedidos de toda la mesa con nombres, modificaciones y precios conservados, junto con una cuenta que distingue enviado por confirmar, en cuenta, pendiente y pagado. Realtime con respaldo por polling cada 15 segundos.
 
 El menú se actualiza cada minuto y al volver a la ventana. La cuenta incluye pedidos aceptados y descuenta únicamente pagos aprobados; la integración de pagos corresponde a la Fase 7. Ver el recorrido de prueba y las verificaciones ejecutadas en [docs/SETUP.md](docs/SETUP.md#6-probar-pedidos-y-cuenta-fase-4) y el POS en [docs/SETUP.md](docs/SETUP.md#7-probar-el-pos-propio-fase-5).
@@ -56,13 +56,14 @@ El menú se actualiza cada minuto y al volver a la ventana. La cuenta incluye pe
 ```
 apps/
   customer/    App del comensal (mobile-first, se accede escaneando el QR de la mesa)
-  admin/       Panel del restaurante + POS propio (comandas, mesas activas, menú, QR)
+  admin/       Panel administrativo (carta, empleados, sucursales, salón, QR)
+  pos/         Operación independiente (login de empleados, comandas, mesas, historial)
 packages/
   shared/      Tipos de la DB (generados), schemas Zod y lógica de precios compartida
 supabase/
   migrations/  Schema SQL versionado (Postgres)
   seed.sql     Datos demo: 2 restaurantes con menús distintos + usuarios admin
-  functions/   submit-order, validación de entrada y adaptadores POS
+  functions/   submit-order y employee-accounts, provisión segura y adaptadores POS
   tests/       Pruebas de función, SQL e integración local
 ```
 
@@ -89,9 +90,10 @@ pnpm supabase db reset
 # 4. Configurar .env de cada app (ver docs/SETUP.md; en local ya vienen creados)
 
 # 5. Levantar las apps
+pnpm dev:pos        # POS de empleados      -> http://localhost:5175
 pnpm dev:admin      # Panel del restaurante -> http://localhost:5174
 pnpm dev:customer   # App del comensal     -> http://localhost:5173
-pnpm dev:functions  # submit-order         -> http://127.0.0.1:54321/functions/v1/submit-order
+pnpm dev:functions  # submit-order + employee-accounts
 ```
 
 ## Comandos útiles
@@ -100,6 +102,10 @@ pnpm dev:functions  # submit-order         -> http://127.0.0.1:54321/functions/v
 pnpm typecheck        # typecheck de todos los paquetes
 pnpm lint             # lint de todos los paquetes
 pnpm --filter customer test # reglas de personalización, precios y persistencia del carrito
+pnpm test:employees   # provisión Auth, validación, compensación y permisos
+pnpm --filter pos test # login y vistas según permisos
+pnpm test:sql         # SQL transaccional contra el contenedor local
+pnpm test:employees:integration # Auth + Edge + RLS; requiere credenciales locales
 pnpm test:orders      # contrato HTTP, validación de entrada, adaptador POS y tablero
 pnpm test:orders:integration # pruebas contra el stack local + Edge Functions (pedidos y cierre de sesión)
 pnpm build            # build de producción de todas las apps
@@ -110,3 +116,5 @@ pnpm supabase status  # ver URLs y credenciales del stack local
 
 - **Supabase Studio** (explorar la DB visualmente): http://127.0.0.1:54323
 - El CI (GitHub Actions) corre pruebas de lógica del comensal y pedidos, typecheck (incluida la lógica Edge), lint y build en cada push/PR. La suite integrada se ejecuta contra Supabase local.
+
+Modelo, matriz de permisos y transición de empleados legacy: [docs/pos-accounts.md](docs/pos-accounts.md).

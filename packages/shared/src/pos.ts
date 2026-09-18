@@ -213,7 +213,7 @@ export function posErrorCode(message: string): PosErrorCode | 'UNKNOWN' {
 }
 
 export const posErrorMessages: Record<PosErrorCode, string> = {
-  AUTH_REQUIRED: 'Tu sesión de administrador expiró. Volvé a ingresar.',
+  AUTH_REQUIRED: 'Tu sesión expiró. Volvé a ingresar.',
   INVALID_REQUEST: 'La solicitud no es válida.',
   SESSION_NOT_FOUND: 'No encontramos esa sesión de mesa.',
   FORBIDDEN: 'No tenés permiso para esta acción.',
