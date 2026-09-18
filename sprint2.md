@@ -1,310 +1,515 @@
-# Sprint 2 - Historias de Jira
+# Sprint 2 - Plan secuencial para ejecutar historias de Jira
 
-Fuente: Jira, proyecto `MI` ("Menu Interactivo"), sprint `MI Sprint 2`.
+Fuente: Jira `MI Sprint 2`, proyecto `MI` ("Menu Interactivo"). Ultima revision usada: Sprint activo con 15 historias.
 
-Este sprint no apunta a menu inteligente. El alcance real esta dividido en dos bloques:
+Este archivo esta pensado para que un developer pueda decirle a una IA: "ejecuta la fase X leyendo `sprint2.md`" y la IA tenga claro que hacer, en que orden, que historias cubre y que no debe pisar.
 
-1. Beeper digital y modalidad auto-servicio.
-2. Gestion de pagos, pedido de cuenta y division de cuenta.
+## Estado actual importante
 
-## Historias incluidas
+Ya hay una historia avanzada en el repo:
 
-### Beeper / Auto-servicio
+- `MI-43` - Division por porcentaje/ratio arbitrario.
 
-- `MI-16` - Como comensal, quiero ver en mi celular el estado en vivo de mi pedido y recibir alertas del beeper digital, para saber cuando acercarme a retirar mi comida sin esperar de pie. `5 pts`
-- `MI-20` - Como administrador del restaurante, quiero habilitar o deshabilitar la modalidad "Beeper / Auto-servicio" por local o sector, para adaptar el sistema al modelo operativo de mi negocio. `3 pts`
-- `MI-17` - Como personal de cocina/barra, quiero marcar un pedido como "Listo para retirar" con un clic, para hacer sonar el beeper en el celular del comensal y despejar la barra. `3 pts`
-- `MI-18` - Como personal de mostrador/barra, quiero reenviar la alerta sonora del beeper a pedidos demorados, para evitar que la comida se enfrie en el mostrador. `2 pts`
-- `MI-19` - Como personal de mostrador, quiero confirmar la entrega del pedido verificando el numero de orden, para cerrar el ciclo de la comanda y apagar la alerta en el cliente. `2 pts`
+Evidencia local:
 
-### Gestion de pagos
+- `supabase/migrations/20260918000000_bill_splitting.sql`
+- `apps/customer/src/features/SessionOrders.tsx`, componente `BillSplitter`
+- `apps/customer/src/features/orders-api.ts`, RPC `updateSessionSplit`
 
-- `MI-38` - Como comensal, quiero pedir la cuenta desde la aplicacion, para avisarle al restaurante que ya estoy listo para pagar. `3 pts`
-- `MI-40` - Como comensal, quiero pagar desde el celular con un medio electronico, para cerrar la cuenta sin depender de un mozo. `8 pts`
-- `MI-41` - Como comensal, quiero que la cuenta se pueda dividir por cantidad de personas, para repartir el total en partes iguales. `5 pts`
-- `MI-42` - Como comensal, quiero dividir la cuenta por items seleccionados, para que cada persona pague solo lo que consumio. `8 pts`
-- `MI-43` - Como comensal, quiero dividir la cuenta con un porcentaje o ratio arbitrario, para repartir el total de manera flexible segun lo acordado por la mesa. `5 pts`
-- `MI-46` - Como comensal, quiero poder pedir que venga un mozo a cobrarme, para pagar en forma presencial si no quiero hacerlo por celular. `3 pts`
-- `MI-47` - Como mozo, quiero ver las mesas que solicitaron cobro presencial, para acercarme a cobrar sin perder pedidos. `5 pts`
-- `MI-48` - Como administrador, quiero definir que medios de pago estan habilitados por local, para ofrecer solo las opciones compatibles con mi operacion. `3 pts`
-- `MI-49` - Como administrador, quiero registrar el estado de los pagos y su relacion con la cuenta de la mesa, para saber que esta saldado y que sigue pendiente. `5 pts`
+No rehacer `MI-43` desde cero. Si una fase toca division de cuenta, primero revisar esa implementacion y trabajar encima de ella.
 
-## Orden sugerido de implementacion
+## Historias actuales del Sprint 2
 
-1. Configuracion operativa por local/sector:
-   - `MI-20`: activar/desactivar modo Beeper / Auto-servicio.
-   - `MI-48`: definir medios de pago habilitados por local.
-2. Beeper digital:
-   - `MI-17`: accion del personal para marcar "Listo para retirar".
-   - `MI-16`: alerta visual/sonora/vibracion en el celular del comensal.
-   - `MI-18`: re-llamado para pedidos demorados.
-   - `MI-19`: confirmacion de entrega y apagado de alerta.
-3. Pedido de cuenta y cobro presencial:
-   - `MI-38`: pedir la cuenta desde customer.
-   - `MI-46`: pedir que venga un mozo a cobrar.
-   - `MI-47`: vista del mozo/admin con mesas que solicitaron cobro presencial.
-4. Pagos electronicos:
-   - `MI-49`: registrar pagos y relacionarlos con cuenta/sesion.
-   - `MI-40`: pagar desde el celular.
-5. Division de cuenta:
-   - `MI-41`: division por cantidad de personas.
-   - `MI-42`: division por items seleccionados.
-   - `MI-43`: division por porcentaje o ratio arbitrario.
+### POS, salon y mapa de mesas
 
-## 1. Configuracion de Beeper / Auto-servicio (`MI-20`)
+- `MI-61` - Desacoplar POS del panel administrativo con validacion para empleados.
+- `MI-62` - Ver mapa visual de mesas por sector.
+- `MI-63` - Ver estado y datos clave de cada mesa en el mapa.
+- `MI-64` - Abrir o continuar una comanda desde una mesa del mapa.
+- `MI-65` - Mover una comanda de una mesa a otra.
+- `MI-66` - Configurar layout de sectores y mesas.
 
-Objetivo: permitir que el admin active o desactive el modo auto-servicio por local o sector.
+### Cuenta y pagos
 
-Hacer:
+- `MI-38` - Pedir la cuenta desde la aplicacion.
+- `MI-40` - Pagar desde el celular con medio electronico.
+- `MI-41` - Dividir cuenta por cantidad de personas.
+- `MI-42` - Dividir cuenta por items seleccionados.
+- `MI-43` - Dividir cuenta por porcentaje o ratio arbitrario. Ya avanzado, no duplicar.
+- `MI-46` - Pedir que venga un mozo a cobrar presencialmente.
+- `MI-47` - Ver mesas que solicitaron cobro presencial.
+- `MI-48` - Definir medios de pago habilitados por local.
+- `MI-49` - Registrar estado de pagos y relacion con la cuenta.
 
-1. Agregar configuracion para modo `Beeper / Auto-servicio`.
-2. Exponerla en el panel admin, probablemente en configuracion del restaurante/sucursal.
-3. Hacer que customer y POS lean esa configuracion.
-4. Si esta activo:
-   - mostrar numero de retiro/comanda al comensal.
-   - activar ciclo de alertas cuando el pedido este listo.
-5. Si esta desactivado:
-   - mantener flujo tradicional de servicio a mesa.
-   - no disparar beeper ni avisos de retiro.
+## Fase 0 - Relevar base actual y no pisar MI-43
 
-Criterios de aceptacion de Jira:
+Objetivo: entender el estado real del repo antes de implementar otra fase.
 
-- Si el admin activa "Modo Auto-servicio / Beeper", la webapp del comensal asigna un numero de retiro visible y activa avisos sonoros/visuales.
-- Si esta desactivado, el sistema opera en modo servicio a mesa tradicional.
+Jira: preparacion transversal, especialmente `MI-43`.
 
-## 2. Estado en vivo y alerta de beeper (`MI-16`)
+Leer:
 
-Objetivo: que el comensal vea el estado en vivo del pedido y reciba alerta cuando este listo.
+- `README.md`
+- `docs/SETUP.md`
+- `docs/DEPLOY.md`
+- `apps/admin/src/features/pos/*`
+- `apps/customer/src/features/SessionOrders.tsx`
+- `apps/customer/src/features/orders-api.ts`
+- `supabase/migrations/20260918000000_bill_splitting.sql`
+- `packages/shared/src/database.types.ts`
 
 Hacer:
 
-1. Reusar el realtime existente de pedidos.
-2. Mostrar estado claro del pedido en customer.
-3. Cuando el pedido pase a "Listo para retirar" o equivalente:
-   - mostrar alerta visual llamativa.
-   - reproducir sonido continuo o intermitente.
-   - activar vibracion si el navegador lo permite.
-   - mostrar numero de comanda/retiro y punto de retiro.
-4. Agregar accion "Entendido / Voy a retirar".
-5. Al confirmar:
-   - silenciar sonido.
-   - dejar visible numero de comanda y punto de retiro.
-6. Evaluar notificacion del navegador si la pestaña esta en segundo plano.
+1. Confirmar si `MI-43` esta completo o solo parcialmente implementado.
+2. Anotar que existe `split_type = none | equal | percentages`.
+3. Anotar que existe `split_allocations`.
+4. Verificar si la UI de porcentajes valida 100%.
+5. Verificar si la division ya impacta pagos reales o solo muestra montos.
+6. No tocar esta logica salvo para integrarla con pagos o corregir un bug necesario.
 
-Criterios de aceptacion de Jira:
+Criterio de salida:
 
-- Al pasar a "Listo para retirar", el celular muestra alerta visual, reproduce tono y vibra.
-- Al presionar "Entendido / Voy a retirar", se silencia y muestra numero de comanda y punto de retiro.
-- Si la pantalla esta bloqueada o cambia de pestaña, debe recibir push o aviso del navegador.
+- La IA sabe que `MI-43` no debe rehacerse.
+- Queda claro si `MI-41` y `MI-42` siguen pendientes aunque haya UI parcial de division.
 
-## 3. Marcar pedido como listo (`MI-17`)
+## Fase 1 - Desacoplar POS del admin y validar empleados
 
-Objetivo: que cocina/barra pueda llamar al comensal con un clic.
+Objetivo: separar el uso operativo del POS de la administracion sensible del restaurante.
 
-Hacer:
+Jira: `MI-61`.
 
-1. En POS/admin, agregar accion "Llamar comensal" o "Listo para retirar".
-2. Al presionar, cambiar el estado del pedido a "Esperando retiro" o equivalente.
-3. Disparar evento realtime que active el beeper en customer.
-4. Mostrar contador de minutos desde que se llamo al comensal.
+Archivos probables:
 
-Criterios de aceptacion de Jira:
-
-- Al presionar "Llamar Comensal / Listo", el pedido cambia a "Esperando Retiro".
-- El comensal recibe alerta en tiempo real.
-- El panel muestra contador con minutos transcurridos desde la llamada.
-
-## 4. Re-llamar pedido demorado (`MI-18`)
-
-Objetivo: permitir reactivar la alerta cuando un pedido listo no fue retirado.
+- `apps/admin/src/App.tsx`
+- `apps/admin/src/pages/AdminLayout.tsx`
+- `apps/admin/src/features/pos/*`
+- `apps/admin/src/auth/*`
+- `apps/admin/src/restaurant/*`
+- nueva migracion si hace falta modelar empleados/PIN/auditoria
+- `packages/shared/src/database.types.ts`
 
 Hacer:
 
-1. Detectar pedidos en "Esperando retiro" hace mas de X minutos.
-2. Mostrar accion "Re-llamar" en POS/admin.
-3. Al presionar, volver a disparar sonido/vibracion/alerta en customer.
-4. Registrar cantidad de re-llamados del pedido.
-5. Mostrar ese conteo en el panel para auditoria.
+1. Revisar rutas actuales del admin y POS.
+2. Definir roles minimos:
+   - administrador: puede editar carta, precios, mesas, configuracion.
+   - empleado POS: solo puede operar salon, comandas, pedidos y cobros.
+3. Agregar modelo o configuracion para empleados/PIN si no existe.
+4. Crear pantalla o modal de validacion PIN para operar POS.
+5. Bloquear rutas administrativas para usuario operativo.
+6. Asegurar que un empleado no vea ni edite productos, precios ni configuracion.
+7. Agregar bloqueo por inactividad o al finalizar una transaccion si el alcance da.
+8. Registrar auditoria basica cuando un empleado opera una comanda.
 
-Criterios de aceptacion de Jira:
+Criterios de aceptacion:
 
-- Si un pedido lleva mas de X minutos en "Esperando Retiro", el personal puede presionar "Re-llamar".
-- El celular del comensal vuelve a sonar y vibrar.
-- El sistema registra la cantidad de re-llamados.
+- Un empleado puede operar POS sin entrar al backoffice.
+- Un empleado no puede acceder a rutas de administracion sensible.
+- Acciones operativas quedan asociadas al empleado validado o al menos al operador actual.
+- Si no hay validacion, el POS pide PIN antes de operar.
 
-## 5. Confirmar entrega (`MI-19`)
+## Fase 2 - Configurar layout de sectores y mesas
 
-Objetivo: cerrar el ciclo de retiro verificando el numero de orden.
+Objetivo: permitir al administrador representar el salon real del restaurante.
 
-Hacer:
+Jira: `MI-66`.
 
-1. Mostrar numero de orden/comanda en customer.
-2. En POS/admin, permitir confirmar entrega.
-3. Idealmente pedir o mostrar verificacion del numero de orden antes de entregar.
-4. Al entregar:
-   - archivar o mover la comanda al estado final.
-   - apagar alerta en customer.
-   - mostrar mensaje final tipo "Buen provecho".
+Archivos probables:
 
-Criterios de aceptacion de Jira:
-
-- Al presionar "Entregado", el pedido se archiva en KDS/POS.
-- La pantalla del comensal pasa a estado final.
-- Se desactiva sonido, vibracion o bloqueo visual de alerta.
-
-## 6. Pedir la cuenta (`MI-38`)
-
-Objetivo: que el comensal avise desde la app que quiere pagar.
+- `apps/admin/src/pages/TablesPage.tsx`
+- `apps/admin/src/pages/SettingsPage.tsx`
+- nuevos componentes en `apps/admin/src/features/floor/*` o similar
+- nueva migracion para sectores/layout si el schema actual de `branches`/`tables` no alcanza
+- `supabase/seed.sql`
+- `packages/shared/src/database.types.ts`
 
 Hacer:
 
-1. Agregar accion "Pedir cuenta" en la vista de pedidos/cuenta.
-2. Registrar la solicitud asociada a la sesion de mesa.
-3. Reflejar esa solicitud en admin/POS o mesas activas.
-4. Evitar solicitudes duplicadas innecesarias.
-5. Mostrar estado al comensal: cuenta solicitada / esperando confirmacion / listo para pagar.
+1. Revisar el modelo actual de `branches` y `tables`.
+2. Agregar sectores/salones si no existen.
+3. Agregar a cada mesa datos de layout:
+   - sector
+   - posicion X/Y
+   - capacidad
+   - forma/tamano basico
+   - visible/oculta para operacion
+4. Crear UI admin para crear/editar sectores.
+5. Crear UI admin para posicionar mesas dentro de un sector.
+6. Validar identificadores duplicados dentro del local/sector.
+7. Actualizar seed demo para tener al menos un sector con varias mesas.
 
-Criterio de aceptacion:
+Criterios de aceptacion:
 
-- El restaurante ve que la mesa pidio la cuenta.
-- El comensal ve que su solicitud fue registrada.
+- El admin puede crear/editar sectores.
+- El admin puede ubicar mesas visualmente.
+- Una mesa oculta o inactiva no aparece disponible para operar.
+- El layout guardado se refleja luego en el mapa operativo.
 
-## 7. Cobro presencial (`MI-46`, `MI-47`)
+## Fase 3 - Mapa visual de mesas por sector
 
-Objetivo: permitir que el comensal pida pagar presencialmente y que el mozo vea esas mesas.
+Objetivo: mostrar al mozo/cajero un plano operativo del salon.
+
+Jira: `MI-62`, base para `MI-63` y `MI-64`.
+
+Archivos probables:
+
+- `apps/admin/src/features/pos/PosPage.tsx`
+- nuevos componentes `apps/admin/src/features/pos/FloorMap.tsx`
+- `apps/admin/src/features/pos/api.ts`
+- `apps/admin/src/features/pos/realtime.ts`
+- `apps/admin/src/features/pos/types.ts`
 
 Hacer:
 
-1. En customer, agregar opcion "Que venga un mozo a cobrarme".
-2. Registrar la solicitud con sesion, mesa, restaurante y timestamp.
-3. Mostrar confirmacion al comensal.
-4. En admin/POS, agregar vista o indicador de mesas que pidieron cobro presencial.
-5. Permitir marcar la solicitud como atendida.
+1. Agregar tab o ruta del POS para "Salon" / "Mapa".
+2. Cargar sectores del restaurante.
+3. Permitir cambiar de sector.
+4. Renderizar mesas segun X/Y, forma y tamano.
+5. Mostrar identificador o numero de mesa.
+6. Ocultar mesas inactivas/no operativas.
+7. Permitir scroll/pan si el mapa no entra en pantalla.
 
-Criterio de aceptacion:
+Criterios de aceptacion:
 
+- El POS muestra un mapa visual por sector.
+- Cambiar de sector actualiza las mesas visibles.
+- Las mesas inactivas no aparecen como operables.
+- La vista es usable en notebook/tablet.
+
+## Fase 4 - Estados y datos clave de mesas en el mapa
+
+Objetivo: que el mapa sirva para priorizar atencion durante el servicio.
+
+Jira: `MI-63`.
+
+Depende de: Fase 3.
+
+Archivos probables:
+
+- `apps/admin/src/features/pos/ActiveTables.tsx`
+- `apps/admin/src/features/pos/FloorMap.tsx`
+- `apps/admin/src/features/pos/api.ts`
+- `packages/shared/src/pos.ts`
+- vistas/RPC SQL si faltan datos agregados por mesa
+
+Hacer:
+
+1. Para cada mesa, calcular estado:
+   - libre
+   - ocupada
+   - con pedidos pendientes/preparacion
+   - cuenta solicitada
+   - cobro pendiente
+2. Mostrar colores o indicadores claros por estado.
+3. Mostrar datos minimos:
+   - mesa
+   - tiempo desde apertura
+   - total acumulado
+   - mozo/empleado asignado si existe
+4. Refrescar con realtime o invalidacion existente del POS.
+5. Asegurar que los cambios de pedido/cuenta actualicen el mapa.
+
+Criterios de aceptacion:
+
+- Una mesa libre se distingue de una ocupada.
+- Una mesa con pedidos pendientes se distingue de una mesa solo ocupada.
+- Una mesa con cuenta/cobro solicitado se ve claramente.
+- Total acumulado y tiempo de apertura aparecen sin abrir la comanda.
+
+## Fase 5 - Abrir o continuar comanda desde el mapa
+
+Objetivo: que la operacion diaria del POS pueda empezar desde una mesa del mapa.
+
+Jira: `MI-64`.
+
+Depende de: Fases 1, 3 y 4.
+
+Archivos probables:
+
+- `apps/admin/src/features/pos/FloorMap.tsx`
+- `apps/admin/src/features/pos/ActiveTables.tsx`
+- `apps/admin/src/features/pos/CommandBoard.tsx`
+- `apps/admin/src/features/pos/api.ts`
+- migracion/RPC para abrir sesion/comanda desde POS si no existe
+
+Hacer:
+
+1. Al seleccionar una mesa libre, permitir abrir nueva sesion/comanda.
+2. Al seleccionar una mesa ocupada, abrir o continuar comanda existente.
+3. Asociar la comanda a la mesa correcta.
+4. Conservar el sector al volver desde la comanda al mapa.
+5. Respetar validacion de empleado/PIN de Fase 1.
+6. Manejar errores de permisos o conflictos de sesion.
+
+Criterios de aceptacion:
+
+- Mesa libre permite iniciar comanda.
+- Mesa ocupada abre comanda existente.
+- Volver al mapa conserva contexto.
+- Un usuario sin permiso no puede operar la mesa.
+
+## Fase 6 - Mover comanda de una mesa a otra
+
+Objetivo: reflejar cambios reales del salon sin perder pedidos ni cuenta.
+
+Jira: `MI-65`.
+
+Depende de: Fases 3, 4 y 5.
+
+Archivos probables:
+
+- `apps/admin/src/features/pos/FloorMap.tsx`
+- `apps/admin/src/features/pos/api.ts`
+- nueva migracion/RPC `move_table_session` o similar
+- tests SQL en `supabase/tests/pos.sql`
+
+Hacer:
+
+1. Agregar accion "Mover comanda" desde mesa ocupada.
+2. Permitir seleccionar mesa destino disponible.
+3. Bloquear destino con comanda abierta, salvo que se implemente combinacion explicita.
+4. Mover la sesion/comanda a la mesa destino en transaccion.
+5. Actualizar mapa: origen queda libre, destino queda ocupado.
+6. Registrar auditoria con origen, destino, usuario y timestamp.
+7. Mostrar error claro si hay conflicto o falta permiso.
+
+Criterios de aceptacion:
+
+- La comanda queda asociada a la mesa destino.
+- La mesa origen deja de figurar activa.
+- No se pierden pedidos, estados ni importes.
+- La operacion queda auditada.
+
+## Fase 7 - Pedir cuenta y cobro presencial
+
+Objetivo: que el comensal pueda avisar que quiere pagar y que el mozo lo vea.
+
+Jira: `MI-38`, `MI-46`, `MI-47`.
+
+Archivos probables:
+
+- `apps/customer/src/features/SessionOrders.tsx`
+- `apps/customer/src/features/SessionPanel.tsx`
+- `apps/customer/src/features/orders-api.ts`
+- `apps/admin/src/features/pos/ActiveTables.tsx`
+- `apps/admin/src/features/pos/FloorMap.tsx`
+- nueva migracion para solicitudes de cuenta/cobro si no alcanza `table_sessions`
+
+Hacer:
+
+1. En customer, agregar accion "Pedir cuenta".
+2. Registrar la solicitud asociada a sesion/mesa/restaurante.
+3. Mostrar estado al comensal: cuenta solicitada.
+4. En customer, agregar opcion "Que venga un mozo a cobrarme".
+5. Registrar solicitud de cobro presencial.
+6. En POS/admin, mostrar mesas que pidieron cuenta o cobro presencial.
+7. Integrar indicador con mapa de Fase 4.
+8. Permitir marcar solicitud como atendida.
+9. Evitar duplicados innecesarios si ya hay solicitud activa.
+
+Criterios de aceptacion:
+
+- El comensal puede pedir cuenta.
 - El comensal puede pedir cobro presencial.
-- El mozo/admin ve la mesa en una lista clara.
-- La solicitud no se mezcla con pedidos de comida ni con pagos electronicos.
+- El mozo ve esas mesas desde POS.
+- El mapa marca esas mesas como prioridad de atencion.
 
-## 8. Medios de pago habilitados (`MI-48`)
+## Fase 8 - Medios de pago habilitados por local
 
-Objetivo: que el admin configure que formas de pago ofrece cada local.
+Objetivo: que el admin controle que metodos de pago ofrece el local.
+
+Jira: `MI-48`.
+
+Archivos probables:
+
+- `apps/admin/src/pages/SettingsPage.tsx`
+- `apps/customer/src/features/SessionOrders.tsx`
+- `apps/customer/src/features/orders-api.ts`
+- nueva migracion para configuracion de pagos por branch/restaurante
 
 Hacer:
 
-1. Agregar configuracion de medios de pago por local/sucursal.
-2. Opciones minimas:
-   - electronico desde celular.
-   - presencial / mozo.
-   - efectivo o externo si aplica.
-3. Customer debe mostrar solo las opciones habilitadas.
-4. Admin debe poder cambiar esta configuracion.
+1. Modelar configuracion de medios de pago por local/sucursal.
+2. Incluir opciones minimas:
+   - pago electronico desde celular
+   - cobro presencial/mozo
+   - efectivo o pago externo si aplica
+3. Exponer configuracion en admin.
+4. Customer debe mostrar solo metodos habilitados.
+5. POS debe respetar la configuracion al registrar cobros.
 
-Criterio de aceptacion:
+Criterios de aceptacion:
 
-- Cada local ofrece solo los medios de pago configurados.
+- Un local puede habilitar/deshabilitar medios de pago.
 - Customer no muestra opciones deshabilitadas.
+- POS/admin refleja la configuracion vigente.
 
-## 9. Registro de pagos y relacion con cuenta (`MI-49`)
+## Fase 9 - Registro de pagos y relacion con la cuenta
 
-Objetivo: saber que parte de la cuenta esta saldada y que sigue pendiente.
+Objetivo: dejar una base consistente para pagos parciales, electronicos y presenciales.
 
-Hacer:
+Jira: `MI-49`.
 
-1. Revisar tabla/vista actual de `payments` y `session_bills`.
-2. Registrar pagos con:
-   - sesion de mesa.
-   - participante si corresponde.
-   - monto.
-   - estado.
-   - metodo.
-   - modo de division.
-   - referencia externa si hay proveedor.
-3. Hacer que la cuenta compute:
-   - total consumido.
-   - total pagado aprobado.
-   - pendiente.
-4. Asegurar que pagos rechazados o pendientes no descuenten saldo.
-5. Mostrar estado de pagos en admin y customer.
+Depende de: Fases 7 y 8.
 
-Criterio de aceptacion:
+Archivos probables:
 
-- Admin puede saber que esta saldado y que sigue pendiente.
-- La cuenta se calcula con pagos aprobados.
-
-## 10. Pago electronico desde el celular (`MI-40`)
-
-Objetivo: permitir pagar la cuenta con un medio electronico.
+- `supabase/migrations/*`
+- `supabase/tests/orders.sql`
+- `packages/shared/src/database.types.ts`
+- `apps/customer/src/features/orders-api.ts`
+- `apps/admin/src/features/pos/api.ts`
+- `apps/customer/src/features/SessionOrders.tsx`
+- `apps/admin/src/features/pos/ActiveTables.tsx`
 
 Hacer:
 
-1. Crear flujo de pago desde customer.
-2. Calcular monto del lado servidor.
-3. Crear pago pendiente.
-4. Integrar proveedor sandbox si corresponde al alcance tecnico actual.
-5. Actualizar estado del pago cuando se aprueba/rechaza.
+1. Revisar tabla `payments` y vista `session_bills`.
+2. Asegurar campos necesarios:
+   - sesion
+   - restaurante
+   - participante opcional
+   - monto
+   - estado
+   - metodo
+   - modo de division
+   - referencia externa si hay proveedor
+3. Crear RPCs si hace falta para registrar pagos sin permitir escrituras directas inseguras.
+4. Hacer que `session_bills` compute:
+   - total en cuenta
+   - pagado aprobado
+   - pendiente
+   - saldado
+5. Mostrar pagos y saldo en customer.
+6. Mostrar pagos y saldo en POS/admin.
+7. Probar que pagos pendientes/rechazados no descuentan saldo.
+
+Criterios de aceptacion:
+
+- El admin ve que esta saldado y que queda pendiente.
+- Customer ve pagado y pendiente.
+- Solo pagos aprobados reducen la cuenta.
+
+## Fase 10 - Pago electronico desde celular
+
+Objetivo: permitir iniciar y confirmar un pago electronico desde customer.
+
+Jira: `MI-40`.
+
+Depende de: Fases 8 y 9.
+
+Archivos probables:
+
+- nuevas Supabase Functions si se usa proveedor externo
+- `apps/customer/src/features/SessionOrders.tsx`
+- `apps/customer/src/features/orders-api.ts`
+- `supabase/migrations/*`
+- `docs/SETUP.md`
+- `docs/DEPLOY.md`
+
+Hacer:
+
+1. Agregar accion "Pagar desde el celular".
+2. Calcular monto del lado servidor segun el modo de pago elegido.
+3. Crear pago `pending`.
+4. Integrar proveedor sandbox o simulador controlado, segun alcance definido por el equipo.
+5. Actualizar pago a `approved` o `rejected`.
 6. Refrescar cuenta al volver del pago.
+7. Evitar pagar sesiones cerradas o montos mayores al pendiente.
 
-Criterio de aceptacion:
+Criterios de aceptacion:
 
-- El comensal puede iniciar un pago electronico.
-- El pago aprobado impacta en la cuenta.
-- El pago rechazado no salda nada.
+- El comensal puede iniciar pago electronico.
+- Pago aprobado reduce pendiente.
+- Pago rechazado no reduce pendiente.
+- La cuenta se actualiza sin recargar manualmente o con reintento claro.
 
-## 11. Division por cantidad de personas (`MI-41`)
+## Fase 11 - Division por cantidad de personas
 
-Objetivo: repartir el total en partes iguales.
+Objetivo: repartir el total pendiente en partes iguales.
 
-Hacer:
+Jira: `MI-41`.
 
-1. En customer, ofrecer "Dividir en partes iguales".
-2. Permitir ingresar cantidad de personas.
-3. Calcular monto por persona.
-4. Registrar pagos parciales contra la misma sesion.
-5. Mostrar pendiente restante.
+Depende de: Fase 9. Revisar `BillSplitter` antes de tocar.
 
-Criterio de aceptacion:
+Archivos probables:
 
-- La app calcula la parte correspondiente.
-- Varios pagos parciales reducen el saldo de la cuenta.
-
-## 12. Division por items (`MI-42`)
-
-Objetivo: que cada persona pague items concretos de la cuenta.
+- `apps/customer/src/features/SessionOrders.tsx`
+- `apps/customer/src/features/orders-api.ts`
+- `supabase/migrations/20260918000000_bill_splitting.sql`
 
 Hacer:
 
-1. Mostrar pedidos/items de la sesion.
-2. Permitir seleccionar items o porciones de items compartidos si el modelo lo permite.
-3. Calcular subtotal de lo seleccionado.
+1. Revisar el modo `equal` ya presente en `BillSplitter`.
+2. Completar lo que falte para que sea una historia cerrada, no solo visual.
+3. Permitir elegir cantidad de personas si no coincide con participantes activos.
+4. Calcular monto por persona.
+5. Integrar con creacion de pago parcial cuando exista Fase 10.
+6. Mostrar pendiente restante tras cada pago.
+
+Criterios de aceptacion:
+
+- El total se divide en partes iguales.
+- El usuario entiende cuanto paga cada persona.
+- Varios pagos parciales reducen el saldo.
+
+## Fase 12 - Division por items seleccionados
+
+Objetivo: permitir que cada persona pague items especificos.
+
+Jira: `MI-42`.
+
+Depende de: Fase 9.
+
+Archivos probables:
+
+- `apps/customer/src/features/SessionOrders.tsx`
+- `apps/customer/src/features/orders-api.ts`
+- `supabase/migrations/*`
+
+Hacer:
+
+1. Mostrar items cobrables de pedidos en cuenta.
+2. Permitir seleccionar items propios, compartidos o de toda la mesa segun el alcance.
+3. Calcular subtotal de items seleccionados.
 4. Crear pago por ese subtotal.
-5. Marcar o representar items ya cubiertos para evitar confusion.
+5. Representar que items ya fueron cubiertos total o parcialmente, si se modela esa trazabilidad.
+6. Si no se modela trazabilidad por item en DB, documentar la limitacion y descontar solo por monto aprobado.
 
-Criterio de aceptacion:
+Criterios de aceptacion:
 
-- El comensal puede elegir que items paga.
-- El monto coincide con los items seleccionados.
-- La cuenta muestra que queda pendiente.
+- El comensal elige items a pagar.
+- El monto coincide con seleccion.
+- La cuenta muestra pendiente luego del pago.
 
-## 13. Division por porcentaje o ratio (`MI-43`)
+## Fase 13 - Integrar y cerrar MI-43 sin rehacerlo
 
-Objetivo: permitir reparto flexible acordado por la mesa.
+Objetivo: terminar la historia de porcentaje/ratio sobre la base ya hecha.
+
+Jira: `MI-43`, ya avanzada.
+
+Archivos existentes:
+
+- `supabase/migrations/20260918000000_bill_splitting.sql`
+- `apps/customer/src/features/SessionOrders.tsx`
+- `apps/customer/src/features/orders-api.ts`
 
 Hacer:
 
-1. Agregar modo "Porcentaje / ratio".
-2. Permitir definir porcentaje o proporcion.
-3. Validar que el monto no exceda el saldo pendiente.
-4. Crear pago por el monto calculado.
-5. Mostrar resumen antes de confirmar.
+1. Revisar si el modo `percentages` cumple la historia.
+2. Validar que no se puedan guardar porcentajes distintos de 100%.
+3. Integrar el porcentaje con pagos reales de Fase 10.
+4. Mostrar resumen claro: porcentaje, monto a pagar y pendiente restante.
+5. Agregar prueba o recorrido manual especifico.
 
-Criterio de aceptacion:
+Criterios de aceptacion:
 
-- El comensal puede pagar una proporcion custom del total.
-- La app muestra claramente cuanto paga y cuanto queda pendiente.
+- El comensal puede definir porcentaje/ratio.
+- La app muestra cuanto paga cada uno.
+- El pago usa el monto calculado por servidor o RPC, no solo por UI.
+- No se duplica la implementacion existente.
 
-## Checklist final
+## Verificacion final del Sprint 2
 
 Comandos sugeridos:
 
@@ -317,7 +522,7 @@ pnpm lint
 pnpm build
 ```
 
-Si se tocaron funciones SQL, RLS, pagos, pedidos o POS:
+Si se tocaron SQL/RLS/RPC/POS:
 
 ```bash
 docker exec -i supabase_db_TP psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/tests/orders.sql
@@ -326,34 +531,38 @@ docker exec -i supabase_db_TP psql -U postgres -d postgres -v ON_ERROR_STOP=1 < 
 
 Recorrido manual minimo:
 
-1. Activar modo Beeper / Auto-servicio desde admin.
-2. Entrar a una mesa desde customer.
-3. Enviar un pedido.
-4. Marcarlo como listo desde POS.
-5. Ver alerta en customer.
-6. Silenciar con "Entendido / Voy a retirar".
-7. Re-llamar desde POS.
-8. Confirmar entrega.
-9. Pedir la cuenta desde customer.
-10. Pedir cobro presencial y verlo en admin.
-11. Configurar medios de pago habilitados.
-12. Registrar o ejecutar pago electronico.
-13. Probar division en partes iguales.
-14. Probar division por items.
-15. Probar division por porcentaje/ratio.
-16. Verificar pendiente y pagado en customer y admin.
+1. Admin configura sectores y layout de mesas.
+2. Empleado/POS entra con validacion operativa.
+3. POS ve mapa por sector.
+4. Mesa libre aparece libre.
+5. Abrir comanda desde mesa libre.
+6. Mesa pasa a ocupada con total y tiempo.
+7. Continuar comanda desde esa mesa.
+8. Mover comanda a otra mesa disponible.
+9. Customer pide cuenta.
+10. POS/mapa muestra cuenta solicitada.
+11. Customer pide cobro presencial.
+12. POS/mapa muestra cobro presencial pendiente.
+13. Admin configura medios de pago.
+14. Customer solo ve medios habilitados.
+15. Registrar pago aprobado y rechazado.
+16. Verificar saldo pendiente.
+17. Probar division partes iguales.
+18. Probar division por items.
+19. Probar porcentaje/ratio usando la implementacion ya existente.
 
-## Nota para agentes IA
+## Formato de cierre para agentes IA
 
-Cuando un agente tome una historia, que cierre su trabajo con:
+Cuando una IA ejecute una fase, debe cerrar con:
 
 ```md
-### Resultado
-- Jira:
+### Resultado fase X
+- Jira cubierto:
 - Archivos modificados:
-- Que se implemento:
+- Migraciones/RPCs:
 - Pruebas ejecutadas:
-- Pendientes o riesgos:
+- Recorrido manual:
+- Pendientes/riesgos:
 ```
 
-Prioridad: implementar las historias de `MI Sprint 2` tal como estan en Jira. No agregar menu inteligente en este sprint salvo que Jira cambie.
+
