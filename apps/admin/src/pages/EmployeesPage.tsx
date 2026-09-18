@@ -15,6 +15,7 @@ import { Badge, Button, EmptyState, ErrorText, Field, Input, Modal, Spinner, Tog
 const auditLabels: Record<string, string> = {
   'pos.unlocked': 'Ingresó al POS',
   'order.transition': 'Cambió el estado de una comanda',
+  'session.moved': 'Movió una comanda de mesa',
   'session.closed': 'Cerró una sesión de mesa',
   'employee.created': 'Alta de empleado',
   'employee.updated': 'Edición de empleado',

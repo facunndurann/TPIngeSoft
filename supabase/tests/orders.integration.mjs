@@ -456,6 +456,39 @@ try {
     const retry = await admin.rpc('transition_order', { p_order_id: peerOrderId, p_status: 'accepted' })
     assert.ok(retry.error, 'Cancelled orders cannot be revived')
   })
+  await check('concurrent POS moves to one destination preserve both sessions and audit only the winner', async () => {
+    const moveTables = await Promise.all(['source-a', 'source-b', 'destination'].map((suffix) =>
+      createFixture(admin, 'tables', {
+        restaurant_id: restaurantId, branch_id: branch.id,
+        label: `${title}-${suffix}`, qr_token: `integration-${runId}-${suffix}`,
+      })))
+    const sourceIds = await Promise.all(moveTables.slice(0, 2).map(async (source) =>
+      unwrap(await admin.rpc('pos_open_table_session', { p_table_id: source.id }), 'Open move source')))
+    const results = await Promise.all(sourceIds.map((id, index) =>
+      admin.rpc('pos_move_table_session', {
+        p_session_id: id, p_source_table_id: moveTables[index].id,
+        p_destination_table_id: moveTables[2].id,
+      })))
+    assert.equal(results.filter((result) => !result.error).length, 1)
+    const winner = results.findIndex((result) => !result.error)
+    const loser = 1 - winner
+    assert.equal(results[loser].error.message, 'TABLE_OCCUPIED')
+    const moved = (await rows(admin, 'table_sessions', 'id', sourceIds[winner]))[0]
+    const unchanged = (await rows(admin, 'table_sessions', 'id', sourceIds[loser]))[0]
+    assert.equal(moved.table_id, moveTables[2].id)
+    assert.equal(unchanged.table_id, moveTables[loser].id)
+    assert.equal(moved.status, 'open')
+    assert.equal(unchanged.status, 'open')
+    assert.equal((await rows(admin, 'table_sessions', 'table_id', moveTables[winner].id)).length, 0)
+    const audit = (await rows(admin, 'pos_audit_log', 'session_id', moved.id))
+      .filter((entry) => entry.action === 'session.moved')
+    assert.equal(audit.length, 1)
+    assert.equal(audit[0].details.sourceTableId, moveTables[winner].id)
+    assert.equal(audit[0].details.destinationTableId, moveTables[2].id)
+    assert.equal((await rows(admin, 'pos_audit_log', 'session_id', unchanged.id))
+      .filter((entry) => entry.action === 'session.moved').length, 0)
+  })
+
   await check('diners and other restaurants cannot close a table session', async () => {
     for (const actor of [customer, outsider, otherAdmin]) {
       const result = await actor.rpc('close_table_session', { p_session_id: sessionId })

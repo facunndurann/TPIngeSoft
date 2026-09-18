@@ -21,6 +21,7 @@ import {
   loadRestaurantTables,
   loadSessionBills,
 } from './api'
+import { MoveTableSession } from './MoveTableSession'
 import { useNow } from './useNow'
 import type { PosBill, PosDiningTable, PosOpenSession } from './types'
 
@@ -36,6 +37,7 @@ import type { PosBill, PosDiningTable, PosOpenSession } from './types'
 export function FloorMap() {
   const restaurant = useRestaurant()
   const now = useNow()
+  const [moving, setMoving] = useState<FloorMapEntry | null>(null)
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const branchChoice = searchParams.get('sucursal')
@@ -122,6 +124,10 @@ export function FloorMap() {
 
   return (
     <div className="min-w-0 space-y-4">
+      {moving?.session && (
+        <MoveTableSession source={moving.table} sessionId={moving.session.id}
+          onClose={() => setMoving(null)} />
+      )}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-neutral-900">Salón</h1>
@@ -202,6 +208,7 @@ export function FloorMap() {
                 key={activeSection.id}
                 entries={entries}
                 now={now}
+                onMoveTable={setMoving}
                 onOpenTable={(tableId) =>
                   navigate({
                     pathname: `/pos/salon/${tableId}`,
@@ -289,17 +296,19 @@ function FloorSurface({
   entries,
   now,
   onOpenTable,
+  onMoveTable,
 }: {
   entries: FloorMapEntry[]
   now: number
   onOpenTable: (tableId: string) => void
+  onMoveTable: (entry: FloorMapEntry) => void
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const selected = entries.find((entry) => entry.table.id === selectedId)
 
   return (
     <div className="min-w-0 space-y-2">
-      {selected && <TableSummary entry={selected} now={now} onOpen={onOpenTable} />}
+      {selected && <TableSummary entry={selected} now={now} onOpen={onOpenTable} onMove={onMoveTable} />}
       <div
         className="max-h-[calc(100dvh-18rem)] min-h-80 overflow-auto overscroll-contain rounded-xl border border-neutral-200 bg-white p-3 shadow-sm"
         tabIndex={0}
@@ -385,10 +394,12 @@ function TableSummary({
   entry,
   now,
   onOpen,
+  onMove,
 }: {
   entry: FloorMapEntry
   now: number
   onOpen: (tableId: string) => void
+  onMove: (entry: FloorMapEntry) => void
 }) {
   const { table, session, bill, state } = entry
   const activeOrders = session?.orders.filter((order) =>
@@ -416,6 +427,11 @@ function TableSummary({
         </>
       ) : (
         <SummaryItem icon={Users} label="Capacidad" value={`${table.seats} lugares`} />
+      )}
+      {session && (
+        <Button variant="secondary" onClick={() => onMove(entry)}>
+          <Move size={15} /> Mover comanda
+        </Button>
       )}
       <Button onClick={() => onOpen(table.id)}>
         <ClipboardList size={15} />

@@ -412,3 +412,30 @@ pnpm build
 ```
 
 La apertura usa el mismo orden de bloqueo mesa → sesión que `join_table_session` y `close_table_session`, así que dos aperturas simultáneas se serializan y el índice único de una sesión abierta por mesa nunca se viola.
+
+
+### Mover una comanda desde el mapa (Sprint 2, fase 6 / MI-65)
+
+Aplicar `pnpm supabase migration up --local`. En POS → Salón, seleccionar una mesa
+ocupada y pulsar **Mover comanda**. Elegir una mesa libre de la misma sucursal
+(el selector incluye otros sectores) y confirmar. El origen queda libre y el
+destino conserva la misma sesión, pedidos, cuenta, responsable y reparto.
+La actividad del empleado registra `session.moved` con origen, destino, usuario y fecha.
+No se combinan comandas ni se trasladan entre sucursales.
+
+Recorrido manual de verificación:
+
+1. Abrir una mesa y enviar un pedido desde su QR; anotar total y estado.
+2. Moverla a otra mesa libre, incluso de otro sector. Verificar ambos estados en el mapa.
+3. Continuar la comanda destino: comprobar pedidos, total y responsable.
+4. Escanear el QR destino: debe sumarse a la misma sesión. El QR origen ahora permite abrir otra cuenta.
+5. Comprobar la actividad en Empleados y el detalle en `pos_audit_log`.
+6. Con dos dispositivos, ocupar el destino antes de confirmar el traslado: debe mostrar
+   un conflicto sin modificar la cuenta. Si otro operador mueve o cierra la sesión de origen,
+   la solicitud desactualizada también debe rechazarse.
+
+Prueba SQL (fixtures aislados con rollback):
+
+```bash
+docker exec -i supabase_db_TP psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/tests/pos.sql
+```

@@ -1225,6 +1225,15 @@ export type Database = {
         Args: { p_employee_id?: string; p_session_id: string }
         Returns: string
       }
+      pos_move_table_session: {
+        Args: {
+          p_session_id: string
+          p_source_table_id: string
+          p_destination_table_id: string
+          p_employee_id?: string
+        }
+        Returns: string
+      }
       pos_open_table_session: {
         Args: { p_employee_id?: string; p_table_id: string }
         Returns: string

@@ -158,3 +158,19 @@ export async function closePosSession(sessionId: string, employeeId: string | nu
   })
   throwIfError(error)
 }
+
+/** Traslada la misma sesión; el origen esperado protege contra un plano desactualizado. */
+export async function movePosTableSession(
+  sessionId: string,
+  sourceTableId: string,
+  destinationTableId: string,
+  employeeId: string | null,
+) {
+  const { error } = await supabase.rpc('pos_move_table_session', {
+    p_session_id: sessionId,
+    p_source_table_id: sourceTableId,
+    p_destination_table_id: destinationTableId,
+    p_employee_id: employeeId ?? undefined,
+  })
+  throwIfError(error)
+}

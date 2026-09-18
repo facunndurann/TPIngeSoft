@@ -19,6 +19,7 @@ Plataforma web multi-restaurante de autoservicio: menú digital por QR de mesa, 
 | 5.2 | Salón: sectores y layout de mesas configurables (MI-66) | Completa |
 | 5.3 | Mapa operativo: estados, tiempos, totales y responsable por mesa (MI-62/MI-63) | Completa |
 | 5.4 | Abrir y continuar comandas desde el mapa (MI-64) | Completa |
+| 5.5 | Mover comandas entre mesas libres de la misma sucursal (MI-65) | Completa |
 | 6 | Menú inteligente (LLM) | Pendiente |
 | 7 | Pagos (Mercado Pago sandbox, división) | Pendiente |
 | 8 | Pulido y demo | Pendiente |
