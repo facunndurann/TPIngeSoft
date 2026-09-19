@@ -152,25 +152,29 @@ begin
   if unlocked.id <> employee then raise exception 'Reactivated employee lost its PIN'; end if;
 
   -- ---------- Operación auditada ----------
+  -- submit_order ya acepta el pedido cuando el POS es interno; el primer avance
+  -- auditado del tablero es accepted → in_preparation.
   perform set_config('request.jwt.claim.sub', diner::text, true);
-  v_order_id := public.submit_order(sid, gen_random_uuid(), items, 10, null);
+  v_order_id := (public.submit_order(sid, gen_random_uuid(), items, 10, null)).id;
+  if (select status from public.orders where id = v_order_id) <> 'accepted' then
+    raise exception 'Internal POS must accept the order on submit'; end if;
 
   perform set_config('request.jwt.claim.sub', staff_user::text, true);
   perform pg_temp.expect_error(
-    format('select public.pos_transition_order(%L, %L, %L)', v_order_id, 'accepted', other_employee),
+    format('select public.pos_transition_order(%L, %L, %L)', v_order_id, 'in_preparation', other_employee),
     'EMPLOYEE_NOT_FOUND');
-  if (select status from public.orders where id = v_order_id) <> 'submitted' then
+  if (select status from public.orders where id = v_order_id) <> 'accepted' then
     raise exception 'A rejected audit must roll back the transition'; end if;
 
-  if public.pos_transition_order(v_order_id, 'accepted', employee) <> v_order_id then
+  if public.pos_transition_order(v_order_id, 'in_preparation', employee) <> v_order_id then
     raise exception 'Audited transition returned another order'; end if;
-  if (select status from public.orders where id = v_order_id) <> 'accepted' then
+  if (select status from public.orders where id = v_order_id) <> 'in_preparation' then
     raise exception 'Audited transition did not apply'; end if;
   if (select assigned_employee_id from public.table_sessions where id = sid) <> employee then
     raise exception 'POS operator was not assigned to the table session'; end if;
   select count(*) into log_count from public.pos_audit_log
     where restaurant_id = restaurant and action = 'order.transition' and employee_id = employee
-      and order_id = v_order_id and session_id = sid and details->>'to' = 'accepted';
+      and order_id = v_order_id and session_id = sid and details->>'to' = 'in_preparation';
   if log_count <> 1 then raise exception 'Order transition was not audited'; end if;
 
   -- El operador queda registrado aun sin empleado (administrador sin altas).

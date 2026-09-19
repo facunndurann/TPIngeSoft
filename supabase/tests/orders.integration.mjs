@@ -1,12 +1,13 @@
 // Run against the seeded local stack with submit-order being served:
 //   pnpm supabase functions serve submit-order
-//   node supabase/tests/orders.integration.mjs
+//   pnpm test:orders:integration
 // Optional: SUPABASE_SERVICE_ROLE_KEY also removes the three anonymous test users.
 // Fixtures are isolated and removed in finally; existing menus/orders are untouched.
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
+import { posActions } from '../../packages/shared/src/pos.ts'
 
 const require = createRequire(new URL('../../apps/customer/package.json', import.meta.url))
 const { createClient } = require('@supabase/supabase-js')
@@ -122,22 +123,31 @@ async function assertBill(actor, sessionId, expected) {
   }
 }
 
-async function subscribe(actor, sessionId) {
+// Resolves once Realtime is actually streaming the requested changes. SUBSCRIBED only
+// means the channel joined: the server confirms the Postgres listener later with a
+// `system` event ("Subscribed to PostgreSQL"). On a freshly started Realtime, as in CI,
+// that takes seconds, and a change written in between is never delivered.
+async function listen(actor, changes) {
   const events = []
-  const channel = actor.channel(`integration-orders-${randomUUID()}`).on('postgres_changes', {
-    event: '*', schema: 'public', table: 'orders', filter: `session_id=eq.${sessionId}`,
-  }, (event) => events.push(event))
+  const channel = actor.channel(`integration-${changes.table}-${randomUUID()}`)
+    .on('postgres_changes', { schema: 'public', ...changes }, (event) => events.push(event))
   await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('Realtime subscription timed out')), 12_000)
-    channel.subscribe((status, error) => {
-      if (status === 'SUBSCRIBED') {
-        clearTimeout(timer)
-        resolve()
-      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-        clearTimeout(timer)
-        reject(new Error(`Realtime ${status}: ${error?.message ?? 'check local Realtime service'}`))
-      }
-    })
+    const settle = (error) => {
+      clearTimeout(timer)
+      if (error) reject(error)
+      else resolve()
+    }
+    const timer = setTimeout(() => settle(new Error(`Realtime did not start streaming ${changes.table} changes within 30 seconds`)), 30_000)
+    channel
+      .on('system', {}, (payload) => {
+        if (payload.extension !== 'postgres_changes') return
+        settle(payload.status === 'ok' ? undefined : new Error(`Realtime postgres_changes: ${payload.message}`))
+      })
+      .subscribe((status, error) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          settle(new Error(`Realtime ${status}: ${error?.message ?? 'check local Realtime service'}`))
+        }
+      })
   })
   return events
 }
@@ -175,6 +185,22 @@ try {
   const extraOption = await createFixture(admin, 'modifier_options', { restaurant_id: restaurantId, group_id: group.id, name: `${title} second option`, price_delta: 0 })
   const removable = await createFixture(admin, 'product_ingredients', { restaurant_id: restaurantId, product_id: product.id, name: `${title} removable`, is_removable: true })
   const fixed = await createFixture(admin, 'product_ingredients', { restaurant_id: restaurantId, product_id: product.id, name: `${title} fixed`, is_removable: false })
+
+  await check('members cannot attach rows to another restaurant, even with their own restaurant_id', async () => {
+    const attempts = [
+      ['product_ingredients', { restaurant_id: otherRestaurantId, product_id: product.id, name: `${title} foreign` }],
+      ['product_modifier_groups', { restaurant_id: otherRestaurantId, product_id: simple.id, group_id: group.id }],
+      ['modifier_options', { restaurant_id: otherRestaurantId, group_id: group.id, name: `${title} foreign` }],
+      ['products', { restaurant_id: otherRestaurantId, category_id: category.id, name: `${title} foreign`, base_price: 1 }],
+      ['tables', { restaurant_id: otherRestaurantId, branch_id: branch.id, label: `${title} foreign` }],
+    ]
+    for (const [table, values] of attempts) {
+      const result = await otherAdmin.from(table).insert(values).select('id')
+      // Si la base lo aceptara, la fila queda registrada para limpiarla antes de fallar.
+      for (const row of result.data ?? []) fixtures.push({ admin: otherAdmin, table, id: row.id })
+      assert.equal(result.error?.code, '23503', `${table} must reject a parent from another restaurant`)
+    }
+  })
 
   const [customer, peer, outsider] = await Promise.all([anonymous(), anonymous(), anonymous()])
   let sessionId
@@ -241,12 +267,24 @@ try {
   await check('invalid requests leave no partial orders', async () => {
     assert.equal((await rows(admin, 'orders', 'session_id', sessionId)).length, 0)
   })
+  await check('an inactive POS rejects the submission without leaving an order', async () => {
+    const [integration] = await rows(admin, 'pos_integrations', 'restaurant_id', restaurantId)
+    assert.ok(integration, 'The demo restaurant needs a POS integration row.')
+    await update(admin, 'pos_integrations', integration.id, { is_active: false })
+    try {
+      rejected(await edge(customer, basicRequest()), [503], 'POS_UNAVAILABLE')
+      assert.equal((await rows(admin, 'orders', 'session_id', sessionId)).length, 0)
+    } finally {
+      await update(admin, 'pos_integrations', integration.id, { is_active: integration.is_active })
+    }
+  })
 
-  const peerEvents = await subscribe(peer, sessionId)
-  const outsiderEvents = await subscribe(outsider, sessionId)
+  const sessionOrders = { event: '*', table: 'orders', filter: `session_id=eq.${sessionId}` }
+  const peerEvents = await listen(peer, sessionOrders)
+  const outsiderEvents = await listen(outsider, sessionOrders)
   const originalRequest = request()
   let orderId
-  await check('concurrent retries create and dispatch exactly one order', async () => {
+  await check('concurrent retries create and accept exactly one order', async () => {
     const results = await Promise.all(Array.from({ length: 3 }, () => edge(customer, originalRequest)))
     const orders = results.map(successful)
     orderId = orders[0].orderId
@@ -319,12 +357,19 @@ try {
     assert.ok(ticket.table_sessions.session_participants.length >= 2)
     assert.equal(ticket.order_items[0].product_name, product.name)
     assert.equal(ticket.order_items[0].order_item_modifiers[0].option_name, option.name)
+    // Mismo filtro que el tablero del admin: entregas del día por local_date.
     const board = unwrap(await admin.from('orders').select(posOrderSelect)
       .eq('restaurant_id', restaurantId)
-      .or('status.in.(submitted,accepted,in_preparation,ready),and(status.eq.delivered,created_at.gte."2020-01-01T00:00:00.000Z")'), 'POS board filter')
+      .or(`status.in.(submitted,accepted,in_preparation,ready),and(status.eq.delivered,local_date.eq.${ticket.local_date})`), 'POS board filter')
     assert.ok(board.some((row) => row.id === orderId))
-    const openSessions = unwrap(await admin.from('table_sessions').select('*,session_participants(id,display_name),tables!inner(id,label,branch_id,branch:branches(id,name))').eq('id', sessionId).single(), 'POS session')
-    assert.equal(openSessions.tables.branch.name, branch.name)
+    const history = unwrap(await admin.from('orders').select('id').eq('restaurant_id', restaurantId).eq('local_date', ticket.local_date), 'POS history by day')
+    assert.ok(history.some((row) => row.id === orderId))
+    const openSession = unwrap(await admin.from('pos_open_sessions').select('*').eq('id', sessionId).single(), 'POS open session')
+    assert.equal(openSession.table_label, title)
+    assert.equal(openSession.branch_name, branch.name)
+    assert.ok(openSession.participant_names.length >= 2)
+    assert.equal(openSession.kitchen_tickets, 1)
+    assert.equal(openSession.total_amount, 2800)
   })
   await check('both diners read the shared order and account', async () => {
     assert.equal((await rows(peer, 'orders', 'id', orderId)).length, 1)
@@ -338,6 +383,7 @@ try {
       assert.deepEqual(await rows(actor, 'order_item_modifiers', 'order_item_id', savedItem.id), [])
       assert.deepEqual(await rows(actor, 'order_item_removed_ingredients', 'order_item_id', savedItem.id), [])
       assert.deepEqual(await rows(actor, 'session_bills', 'session_id', sessionId), [])
+      assert.deepEqual(await rows(actor, 'pos_open_sessions', 'id', sessionId), [])
     }
   })
   await check('diners cannot insert orders or alter prices and states directly', async () => {
@@ -375,22 +421,35 @@ try {
 
   const peerRequest = basicRequest()
   let peerOrderId
-  await check('submitted orders appear separately before POS acceptance', async () => {
-    peerOrderId = unwrap(await peer.rpc('submit_order', {
+  await check('submit_order creates and accepts the order in one transaction', async () => {
+    const order = unwrap(await peer.rpc('submit_order', {
       p_session_id: sessionId,
       p_request_id: peerRequest.requestId,
       p_items: peerRequest.items,
       p_expected_total: peerRequest.expectedTotal,
       p_notes: peerRequest.notes,
     }), 'Submit order RPC')
-    assert.equal((await rows(peer, 'orders', 'id', peerOrderId))[0].status, 'submitted')
-    await assertBill(peer, sessionId, { submitted_amount: 1000, total_amount: 2800, paid_amount: 0, pending_amount: 2800 })
+    assert.equal(order.status, 'accepted')
+    assert.equal(Number(order.total_amount), 1000)
+    assert.ok(order.accepted_at)
+    peerOrderId = order.id
+    await assertBill(peer, sessionId, { submitted_amount: 0, total_amount: 3800, paid_amount: 0, pending_amount: 3800 })
   })
-  await check('Edge retries dispatch an existing submitted order without duplicating it', async () => {
+  await check('Edge replays an existing order without duplicating it', async () => {
     const result = successful(await edge(peer, peerRequest))
     assert.equal(result.orderId, peerOrderId)
+    assert.equal(Number(result.totalAmount), 1000)
     assert.equal((await rows(customer, 'orders', 'session_id', sessionId)).length, 2)
-    await assertBill(customer, sessionId, { submitted_amount: 0, total_amount: 3800, paid_amount: 0, pending_amount: 3800 })
+    const logs = await rows(admin, 'integration_logs', 'order_id', peerOrderId)
+    assert.equal(logs.filter((row) => row.event === 'pos.internal.accepted').length, 1)
+  })
+  await check('order_status_transitions holds exactly the actions the POS board offers', async () => {
+    const transitions = unwrap(await admin.from('order_status_transitions').select('from_status,to_status,kind'), 'Read order transitions')
+    const allowed = transitions.map((row) => `${row.from_status} -${row.kind}-> ${row.to_status}`).sort()
+    const offered = Object.entries(posActions)
+      .flatMap(([from, actions]) => Object.entries(actions).map(([kind, step]) => `${from} -${kind}-> ${step.to}`))
+      .sort()
+    assert.deepEqual(allowed, offered)
   })
   await check('only members of the order restaurant can advance its status', async () => {
     for (const actor of [customer, outsider, otherAdmin]) {
@@ -501,28 +560,14 @@ try {
     assert.ok(result.error || result.data.length === 0)
     assert.equal((await rows(admin, 'table_sessions', 'id', sessionId))[0].status, 'open')
   })
-  const sessionEvents = []
-  const sessionChannel = customer.channel(`integration-session-${randomUUID()}`).on('postgres_changes', {
-    event: 'UPDATE', schema: 'public', table: 'table_sessions', filter: `id=eq.${sessionId}`,
-  }, (event) => sessionEvents.push(event))
-  await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('Session Realtime subscription timed out')), 12_000)
-    sessionChannel.subscribe((status, error) => {
-      if (status === 'SUBSCRIBED') {
-        clearTimeout(timer)
-        resolve()
-      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-        clearTimeout(timer)
-        reject(new Error(`Realtime ${status}: ${error?.message ?? 'check local Realtime service'}`))
-      }
-    })
-  })
+  const sessionEvents = await listen(customer, { event: 'UPDATE', table: 'table_sessions', filter: `id=eq.${sessionId}` })
   await check('closing a session is idempotent, leaves kitchen tickets and the bill, and opens a new QR session', async () => {
     unwrap(await admin.rpc('close_table_session', { p_session_id: sessionId }), 'Close table session')
     unwrap(await admin.rpc('close_table_session', { p_session_id: sessionId }), 'Idempotent close')
     const closed = (await rows(admin, 'table_sessions', 'id', sessionId))[0]
     assert.equal(closed.status, 'closed')
     assert.ok(closed.closed_at)
+    assert.deepEqual(await rows(admin, 'pos_open_sessions', 'id', sessionId), [])
     const logs = await rows(admin, 'integration_logs', 'restaurant_id', restaurantId)
     assert.equal(logs.filter((row) => row.event === 'session.closed' && row.payload?.sessionId === sessionId).length, 1)
     assert.equal((await rows(customer, 'orders', 'id', orderId))[0].status, 'delivered')

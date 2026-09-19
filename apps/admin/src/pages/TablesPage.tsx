@@ -6,10 +6,14 @@ import { Link } from 'react-router'
 import type { Tables } from '@restaurant-platform/shared'
 import { customerAppUrl } from '@/lib/customer-app'
 import { supabase } from '@/lib/supabase'
+import { branchesQuery } from '@/queries/branches'
+import { branchTablesQuery } from '@/queries/tables'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { Badge, Button, EmptyState, ErrorText, Input, Modal, Select, Spinner, Toggle } from '@/components/ui'
 
-type DiningTable = Tables<'tables'>
+type DiningTable = Tables<'tables'> & {
+  floor_sections: Pick<Tables<'floor_sections'>, 'id' | 'name'> | null
+}
 
 function tableUrl(table: DiningTable) {
   return customerAppUrl(`/m/${table.qr_token}`)
@@ -23,36 +27,14 @@ export function TablesPage() {
   const [qrTable, setQrTable] = useState<DiningTable | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const { data: branches } = useQuery({
-    queryKey: ['branches', restaurant.id],
-    queryFn: async () => {
-      const { data, error: qErr } = await supabase
-        .from('branches')
-        .select('*')
-        .eq('restaurant_id', restaurant.id)
-        .order('created_at')
-      if (qErr) throw qErr
-      return data
-    },
-  })
+  const { data: branches } = useQuery(branchesQuery(restaurant.id))
 
   const branchId = selectedBranchId ?? branches?.[0]?.id ?? null
 
-  const { data: tables, isLoading } = useQuery({
-    queryKey: ['tables', branchId],
-    enabled: !!branchId,
-    queryFn: async () => {
-      const { data, error: qErr } = await supabase
-        .from('tables')
-        .select('*, floor_sections (id, name)')
-        .eq('branch_id', branchId!)
-        .order('created_at')
-      if (qErr) throw qErr
-      return data
-    },
-  })
+  const tablesQuery = branchTablesQuery(branchId ?? '')
+  const { data: tables, isLoading } = useQuery({ ...tablesQuery, enabled: !!branchId })
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['tables', branchId] })
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: tablesQuery.queryKey })
 
   const createMutation = useMutation({
     mutationFn: async (label: string) => {

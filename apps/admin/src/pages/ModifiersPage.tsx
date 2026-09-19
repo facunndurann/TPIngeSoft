@@ -1,17 +1,15 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
-import type { Tables } from '@restaurant-platform/shared'
 import { supabase } from '@/lib/supabase'
 import { formatPrice } from '@/lib/format'
+import { rpcError } from '@/lib/rpc-error'
+import { modifierGroupsQuery, type ModifierGroupWithOptions } from '@/queries/modifier-groups'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { Badge, Button, EmptyState, ErrorText, Field, Input, Modal, Spinner, Toggle } from '@/components/ui'
 
-type ModifierGroup = Tables<'modifier_groups'>
-type ModifierOption = Tables<'modifier_options'>
-type GroupWithOptions = ModifierGroup & { modifier_options: ModifierOption[] }
-
-interface OptionDraft {
+/** Opción tal como se envía a save_modifier_group; sin `id` es una opción nueva. */
+type OptionDraft = {
   id?: string
   name: string
   price_delta: number
@@ -21,27 +19,15 @@ interface OptionDraft {
 export function ModifiersPage() {
   const restaurant = useRestaurant()
   const queryClient = useQueryClient()
-  const [editing, setEditing] = useState<GroupWithOptions | 'new' | null>(null)
+  const [editing, setEditing] = useState<ModifierGroupWithOptions | 'new' | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const { data: groups, isLoading } = useQuery({
-    queryKey: ['modifier-groups', restaurant.id],
-    queryFn: async () => {
-      const { data, error: qErr } = await supabase
-        .from('modifier_groups')
-        .select('*, modifier_options(*)')
-        .eq('restaurant_id', restaurant.id)
-        .order('created_at')
-        .order('sort_order', { referencedTable: 'modifier_options' })
-      if (qErr) throw qErr
-      return data as GroupWithOptions[]
-    },
-  })
+  const { data: groups, isLoading } = useQuery(modifierGroupsQuery(restaurant.id))
 
   const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ['modifier-groups', restaurant.id] })
+    queryClient.invalidateQueries({ queryKey: modifierGroupsQuery(restaurant.id).queryKey })
 
-  async function deleteGroup(group: GroupWithOptions) {
+  async function deleteGroup(group: ModifierGroupWithOptions) {
     if (!confirm(`¿Eliminar el grupo "${group.name}" y todas sus opciones?`)) return
     const { error: dErr } = await supabase.from('modifier_groups').delete().eq('id', group.id)
     if (dErr) setError(dErr.message)
@@ -142,7 +128,7 @@ function GroupEditor({
   onClose,
   onSaved,
 }: {
-  group: GroupWithOptions | null
+  group: ModifierGroupWithOptions | null
   restaurantId: string
   onClose: () => void
   onSaved: () => void
@@ -159,7 +145,6 @@ function GroupEditor({
       is_available: o.is_available,
     })) ?? [],
   )
-  const [removedOptionIds, setRemovedOptionIds] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -168,8 +153,6 @@ function GroupEditor({
   }
 
   function removeOption(index: number) {
-    const option = options[index]
-    if (option.id) setRemovedOptionIds((prev) => [...prev, option.id!])
     setOptions((prev) => prev.filter((_, i) => i !== index))
   }
 
@@ -182,61 +165,18 @@ function GroupEditor({
 
     setSaving(true)
     try {
-      let groupId = group?.id
-      if (groupId) {
-        const { error: uErr } = await supabase
-          .from('modifier_groups')
-          .update({ name, min_select: minSelect, max_select: maxSelect, is_available: isAvailable })
-          .eq('id', groupId)
-        if (uErr) throw uErr
-      } else {
-        const { data, error: iErr } = await supabase
-          .from('modifier_groups')
-          .insert({
-            restaurant_id: restaurantId,
-            name,
-            min_select: minSelect,
-            max_select: maxSelect,
-            is_available: isAvailable,
-          })
-          .select()
-          .single()
-        if (iErr) throw iErr
-        groupId = data.id
-      }
-
-      if (removedOptionIds.length) {
-        const { error: dErr } = await supabase
-          .from('modifier_options')
-          .delete()
-          .in('id', removedOptionIds)
-        if (dErr) throw dErr
-      }
-
-      for (const [index, option] of options.entries()) {
-        if (option.id) {
-          const { error: oErr } = await supabase
-            .from('modifier_options')
-            .update({
-              name: option.name,
-              price_delta: option.price_delta,
-              is_available: option.is_available,
-              sort_order: index,
-            })
-            .eq('id', option.id)
-          if (oErr) throw oErr
-        } else {
-          const { error: oErr } = await supabase.from('modifier_options').insert({
-            restaurant_id: restaurantId,
-            group_id: groupId,
-            name: option.name,
-            price_delta: option.price_delta,
-            is_available: option.is_available,
-            sort_order: index,
-          })
-          if (oErr) throw oErr
-        }
-      }
+      // El grupo y su lista completa de opciones (en este orden) se guardan en una
+      // transacción: las opciones que ya no están en la lista se eliminan.
+      const { error: rpcErr } = await supabase.rpc('save_modifier_group', {
+        p_restaurant_id: restaurantId,
+        p_group_id: group?.id,
+        p_name: name,
+        p_min_select: minSelect,
+        p_max_select: maxSelect,
+        p_is_available: isAvailable,
+        p_options: options,
+      })
+      if (rpcErr) throw rpcError(rpcErr)
 
       onSaved()
     } catch (err) {

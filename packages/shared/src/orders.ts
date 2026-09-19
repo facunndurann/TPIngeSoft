@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { Database } from './database.types.ts';
+import { Constants, type Database } from './database.types.ts';
 
 const uuid = z.string().uuid().transform(value => value.toLowerCase());
 const selectionIds = z.array(uuid).max(100).refine(
@@ -38,4 +38,16 @@ export const orderStatusLabels: Record<OrderStatus, string> = {
   cancelled: 'Cancelado',
 };
 
-export type SubmitOrderResult = { orderId: string; status: OrderStatus; totalAmount: number };
+/** Respuesta exitosa de submit-order: la función la arma y el comensal la valida. */
+export const submitOrderResultSchema = z.object({
+  orderId: z.string().uuid(),
+  status: z.enum(Constants.public.Enums.order_status),
+  totalAmount: z.number().finite(),
+});
+export type SubmitOrderResult = z.infer<typeof submitOrderResultSchema>;
+
+/** Respuesta de error de submit-order. `code` es un código de `appErrors` (errors.ts). */
+export const submitOrderErrorSchema = z.object({
+  error: z.object({ code: z.string(), message: z.string() }),
+});
+export type SubmitOrderError = z.infer<typeof submitOrderErrorSchema>;

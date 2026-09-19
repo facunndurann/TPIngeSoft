@@ -62,6 +62,7 @@ declare
   before_bill jsonb;
   before_payments jsonb;
   before_items jsonb;
+  open_row public.pos_open_sessions;
 begin
   insert into auth.users(id, aud, role) values
     (staff, 'authenticated', 'authenticated'),
@@ -104,8 +105,34 @@ begin
   perform pg_temp.expect_close_error(null, 'INVALID_REQUEST');
 
   perform set_config('request.jwt.claim.sub', diner::text, true);
-  v_order_id := public.submit_order(sid, gen_random_uuid(), items, 10, null);
-  perform public.dispatch_internal_order(v_order_id);
+  v_order_id := (public.submit_order(sid, gen_random_uuid(), items, 10, null)).id;
+
+  -- local_date es el día del restaurante (UTC-3): el día cambia a las 03:00 UTC.
+  update public.orders set created_at = '2026-09-06 02:59:59+00' where id = v_order_id;
+  if (select local_date from public.orders where id = v_order_id) <> date '2026-09-05' then
+    raise exception 'local_date must use the restaurant day, not the UTC day'; end if;
+  update public.orders set created_at = '2026-09-06 03:00:00+00' where id = v_order_id;
+  if (select local_date from public.orders where id = v_order_id) <> date '2026-09-06' then
+    raise exception 'local_date must change at restaurant midnight'; end if;
+
+  -- pos_open_sessions arma la tarjeta de mesa activa en una lectura, con el RLS
+  -- de quien consulta (security_invoker): el personal ve sus mesas y nada más.
+  perform set_config('role', 'authenticated', true);
+  perform set_config('request.jwt.claim.sub', staff::text, true);
+  select * into open_row from public.pos_open_sessions where id = sid;
+  if open_row.id is null
+    or open_row.table_label <> 'Table' or open_row.branch_name <> 'Branch'
+    or open_row.participant_names <> array['Diner']
+    or open_row.submitted_amount <> 0 or open_row.total_amount <> 10
+    or open_row.paid_amount <> 0 or open_row.pending_amount <> 10
+    or open_row.kitchen_tickets <> 1 then
+    raise exception 'Unexpected pos_open_sessions row: %', to_jsonb(open_row); end if;
+  if exists (select 1 from public.pos_open_sessions where id = other_sid) then
+    raise exception 'pos_open_sessions leaked another restaurant session'; end if;
+  perform set_config('request.jwt.claim.sub', other_staff::text, true);
+  if exists (select 1 from public.pos_open_sessions where id = sid) then
+    raise exception 'Other restaurant staff can read pos_open_sessions'; end if;
+  perform set_config('role', 'postgres', true);
 
   perform set_config('request.jwt.claim.sub', staff::text, true);
   -- MI-65: traslado, integridad y rollback ante errores.
@@ -198,6 +225,8 @@ begin
     raise exception 'Session was not closed'; end if;
   if (select closed_at from public.table_sessions where id = sid) is null then
     raise exception 'closed_at was not recorded'; end if;
+  if exists (select 1 from public.pos_open_sessions where id = sid) then
+    raise exception 'A closed session is still listed as active'; end if;
   select count(*) into log_count from public.integration_logs
     where restaurant_id = restaurant and event = 'session.closed'
       and payload->>'sessionId' = sid::text;
@@ -227,7 +256,7 @@ begin
     or has_table_privilege('authenticated', 'public.table_sessions', 'DELETE') then
     raise exception 'Authenticated role can bypass close_table_session'; end if;
 
-  raise notice 'POS SQL assertions passed (auth, isolation, idempotent close, lock reuse, privileges, move integrity, move conflicts, move audit)';
+  raise notice 'POS SQL assertions passed (auth, isolation, local date, open sessions view, idempotent close, lock reuse, privileges, move integrity, move conflicts, move audit)';
 end;
 $$;
 

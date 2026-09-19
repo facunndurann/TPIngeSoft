@@ -2,10 +2,12 @@ import { useState, type FormEvent, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Store } from 'lucide-react'
 import { DEFAULT_MENU_DESIGN } from '@restaurant-platform/shared'
+import { rpcError } from '@/lib/rpc-error'
+import { myRestaurantQuery } from '@/queries/restaurant'
 import { supabase } from '@/lib/supabase'
 import { Button, ErrorText, Field, Input, Spinner, Textarea } from '@/components/ui'
 import { DesignPicker } from '@/features/DesignPicker'
-import { RestaurantContext, type Membership } from './restaurant-context'
+import { RestaurantContext } from './restaurant-context'
 
 /**
  * Carga el restaurante del usuario autenticado y su rol. Si todavía no tiene
@@ -13,24 +15,22 @@ import { RestaurantContext, type Membership } from './restaurant-context'
  * sucursal inicial + POS interno).
  */
 export function RestaurantGate({ children }: { children: ReactNode }) {
-  const { data, isLoading } = useQuery({
-    queryKey: ['my-restaurant'],
-    queryFn: async (): Promise<Membership | null> => {
-      const { data: memberships, error } = await supabase
-        .from('restaurant_members')
-        .select('restaurant_id, role, restaurants(*)')
-        .limit(1)
-      if (error) throw error
-      const membership = memberships?.[0]
-      if (!membership?.restaurants) return null
-      return { restaurant: membership.restaurants, role: membership.role }
-    },
-  })
+  const { data, isLoading } = useQuery(myRestaurantQuery)
 
   if (isLoading) return <Spinner />
   if (!data) return <CreateRestaurantScreen />
 
   return <RestaurantContext value={data}>{children}</RestaurantContext>
+}
+
+/** "La Ñata Café" → "la-nata-cafe". */
+function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '')
 }
 
 function CreateRestaurantScreen() {
@@ -47,41 +47,17 @@ function CreateRestaurantScreen() {
     setError(null)
     setSubmitting(true)
     try {
-      const slug = name
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/(^-|-$)/g, '')
-
-      const { data: user } = await supabase.auth.getUser()
-      if (!user.user) throw new Error('Sesión inválida')
-
-      const { data: restaurant, error: rErr } = await supabase
-        .from('restaurants')
-        .insert({ name, slug, description: description || null, menu_design: menuDesign })
-        .select()
-        .single()
-      if (rErr) throw rErr
-
-      const { error: mErr } = await supabase.from('restaurant_members').insert({
-        restaurant_id: restaurant.id,
-        user_id: user.user.id,
-        role: 'owner',
+      // Restaurante, membresía owner, sucursal y POS interno se crean juntos o no se crea nada.
+      const { error: rpcErr } = await supabase.rpc('create_restaurant', {
+        p_name: name,
+        p_slug: slugify(name),
+        p_description: description,
+        p_menu_design: menuDesign,
+        p_branch_name: branchName,
       })
-      if (mErr) throw mErr
+      if (rpcErr) throw rpcError(rpcErr)
 
-      const { error: bErr } = await supabase
-        .from('branches')
-        .insert({ restaurant_id: restaurant.id, name: branchName })
-      if (bErr) throw bErr
-
-      const { error: pErr } = await supabase
-        .from('pos_integrations')
-        .insert({ restaurant_id: restaurant.id, type: 'internal' })
-      if (pErr) throw pErr
-
-      await queryClient.invalidateQueries({ queryKey: ['my-restaurant'] })
+      await queryClient.invalidateQueries({ queryKey: myRestaurantQuery.queryKey })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error creando el restaurante')
     } finally {

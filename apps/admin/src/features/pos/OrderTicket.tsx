@@ -1,13 +1,9 @@
 import { Undo2 } from 'lucide-react'
-import {
-  formatElapsed,
-  orderStatusLabels,
-  posActions,
-  type OrderStatus,
-} from '@restaurant-platform/shared'
+import { orderStatusLabels, posActions, type OrderStatus } from '@restaurant-platform/shared'
 import { formatPrice } from '@/lib/format'
 import { Badge, Button } from '@/components/ui'
-import type { PosOrder, PosOrderItem } from './types'
+import type { PosOrder, PosOrderItem } from './api'
+import { formatElapsed } from './time'
 
 function participantName(order: PosOrder, participantId: string | null) {
   return order.table_sessions.session_participants.find((entry) => entry.id === participantId)

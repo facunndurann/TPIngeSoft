@@ -17,15 +17,12 @@ export function MenuBrowse({ token, menu, canEdit }: MenuBrowseProps) {
   const { search: locationSearch } = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const { category, search } = parseMenuFilters(searchParams)
-  const visibleCategories = menu.categories.filter(
-    (entry) => category === 'all' || entry.id === category,
-  )
-  const hasResults = menu.products.some(
-    (product) =>
-      menu.categories.some((entry) => entry.id === product.category_id) &&
-      (category === 'all' || product.category_id === category) &&
-      matchesSearch(product, search),
-  )
+  // Secciones a mostrar: la categoría elegida (o todas) con los platos que coinciden
+  // con la búsqueda. Una sección sin platos no se muestra.
+  const sections = menu.categories
+    .filter((entry) => category === 'all' || entry.id === category)
+    .map((entry) => ({ ...entry, products: entry.products.filter((product) => matchesSearch(product, search)) }))
+    .filter((entry) => entry.products.length > 0)
 
   return (
     <>
@@ -67,30 +64,23 @@ export function MenuBrowse({ token, menu, canEdit }: MenuBrowseProps) {
         ))}
       </div>
 
-      {visibleCategories.map((entry) => {
-        const products = menu.products.filter(
-          (product) => product.category_id === entry.id && matchesSearch(product, search),
-        )
-        if (products.length === 0) return null
+      {sections.map((entry) => (
+        <section key={entry.id}>
+          <h2>{entry.name}</h2>
+          <div className="product-grid">
+            {entry.products.map((product) => (
+              <ProductCard
+                key={product.id}
+                product={product}
+                disabled={!product.is_available || !canEdit}
+                to={productPath(token, product.id, locationSearch)}
+              />
+            ))}
+          </div>
+        </section>
+      ))}
 
-        return (
-          <section key={entry.id}>
-            <h2>{entry.name}</h2>
-            <div className="product-grid">
-              {products.map((product) => (
-                <ProductCard
-                  key={product.id}
-                  product={product}
-                  disabled={!product.is_available || !canEdit}
-                  to={productPath(token, product.id, locationSearch)}
-                />
-              ))}
-            </div>
-          </section>
-        )
-      })}
-
-      {!hasResults && (
+      {sections.length === 0 && (
         <p className="empty">No hay platos para mostrar. Probá otra búsqueda o categoría.</p>
       )}
     </>

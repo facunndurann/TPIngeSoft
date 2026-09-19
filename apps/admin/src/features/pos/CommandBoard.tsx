@@ -1,20 +1,14 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  dayRangeUtc,
-  groupOrdersByColumn,
-  localDateKey,
-  posBoardColumns,
-  type OrderStatus,
-} from '@restaurant-platform/shared'
-import { supabase } from '@/lib/supabase'
+import type { OrderStatus } from '@restaurant-platform/shared'
+import { branchesQuery } from '@/queries/branches'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { ErrorText, Select, Spinner } from '@/components/ui'
-import { loadBoardOrders, transitionPosOrder } from './api'
+import { posBoardQuery, posQueryKey, transitionPosOrder, type PosOrder } from './api'
+import { groupOrdersByColumn, posBoardColumns } from './board'
 import { useOperatorId } from './operator-context'
 import { OrderTicket } from './OrderTicket'
 import { useNow } from './useNow'
-import type { PosOrder } from './types'
 
 const columnStyles: Record<string, string> = {
   new: 'border-amber-200 bg-amber-50',
@@ -32,26 +26,10 @@ export function CommandBoard() {
   const [pendingId, setPendingId] = useState<string | null>(null)
   const [actionError, setActionError] = useState<{ id: string; message: string } | null>(null)
 
-  const { data: branches } = useQuery({
-    queryKey: ['branches', restaurant.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('branches')
-        .select('id, name')
-        .eq('restaurant_id', restaurant.id)
-        .order('created_at')
-      if (error) throw error
-      return data
-    },
-  })
+  const { data: branches } = useQuery(branchesQuery(restaurant.id))
+  const board = useQuery(posBoardQuery(restaurant.id))
 
-  const board = useQuery({
-    queryKey: ['pos', restaurant.id, 'board'],
-    queryFn: () => loadBoardOrders(restaurant.id, dayRangeUtc(localDateKey()).start),
-    refetchInterval: 15000,
-  })
-
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['pos', restaurant.id] })
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: posQueryKey(restaurant.id) })
 
   const transition = useMutation({
     mutationFn: ({ orderId, status }: { orderId: string; status: PosOrder['status'] }) =>

@@ -4,8 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { productMedia, type Tables } from '@restaurant-platform/shared'
 import { MediaThumb } from '@/features/MediaThumb'
-import { groupProductsByCategory } from '@/features/product-groups'
 import { supabase } from '@/lib/supabase'
+import { productsByCategoryQuery } from '@/queries/products'
 import { formatPrice } from '@/lib/format'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { Badge, Button, EmptyState, ErrorText, Spinner, Toggle } from '@/components/ui'
@@ -16,33 +16,10 @@ export function ProductsPage() {
   const [categoryFilter, setCategoryFilter] = useState<string | 'all'>('all')
   const [error, setError] = useState<string | null>(null)
 
-  const { data: categories, isLoading: categoriesLoading } = useQuery({
-    queryKey: ['categories', restaurant.id],
-    queryFn: async () => {
-      const { data, error: qErr } = await supabase
-        .from('menu_categories')
-        .select('*')
-        .eq('restaurant_id', restaurant.id)
-        .order('sort_order')
-      if (qErr) throw qErr
-      return data
-    },
-  })
+  const { data: categories, isLoading } = useQuery(productsByCategoryQuery(restaurant.id))
 
-  const { data: products, isLoading: productsLoading } = useQuery({
-    queryKey: ['products', restaurant.id],
-    queryFn: async () => {
-      const { data, error: qErr } = await supabase
-        .from('products')
-        .select('*')
-        .eq('restaurant_id', restaurant.id)
-        .order('sort_order')
-      if (qErr) throw qErr
-      return data
-    },
-  })
-
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['products', restaurant.id] })
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: productsByCategoryQuery(restaurant.id).queryKey })
 
   const availabilityMutation = useMutation({
     mutationFn: async ({ id, is_available }: { id: string; is_available: boolean }) => {
@@ -62,10 +39,10 @@ export function ProductsPage() {
     onError: (e) => setError(e.message),
   })
 
-  // Se agrupa primero y se filtra después: un producto con categoría desconocida (o
-  // mientras cargan las categorías) aparece en "Sin categoría" en vez de desaparecer.
-  const groups = groupProductsByCategory(products ?? [], categories ?? [])
-    .filter((group) => categoryFilter === 'all' || group.id === categoryFilter)
+  const groups = (categories ?? []).filter(
+    (category) =>
+      category.products.length > 0 && (categoryFilter === 'all' || category.id === categoryFilter),
+  )
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
@@ -100,7 +77,7 @@ export function ProductsPage() {
 
       <ErrorText message={error} />
 
-      {productsLoading || categoriesLoading ? (
+      {isLoading ? (
         <Spinner />
       ) : groups.length === 0 ? (
         <EmptyState message="No hay productos en esta vista. Creá uno con “Nuevo producto”." />

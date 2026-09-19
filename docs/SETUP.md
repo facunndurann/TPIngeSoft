@@ -159,7 +159,7 @@ Recorrido de aceptación:
 Pruebas automáticas de lógica, sin backend:
 
 ```bash
-pnpm --filter customer test
+pnpm test
 pnpm typecheck
 pnpm lint
 pnpm build
@@ -201,11 +201,9 @@ Recorrido de aceptación:
 Pruebas reproducibles:
 
 ```bash
-pnpm --filter customer test
-pnpm test:orders
+pnpm test
 pnpm test:orders:integration
-docker exec -i supabase_db_TP psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/tests/orders.sql
-docker exec -i supabase_db_TP psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/tests/pos.sql
+pnpm test:sql
 pnpm typecheck
 pnpm lint
 pnpm build
@@ -221,7 +219,7 @@ El contrato compartido limita cada envío a 50 ítems, cantidades de 1 a 99, opc
 
 `submit_order` toma una captura consistente del menú y guarda pedido y detalles en una transacción. El `requestId` identifica el intento: el mismo contenido recupera el pedido existente, incluso después de cambiar la carta o cerrar la sesión; otro contenido con esa misma clave se rechaza. Si el importe real difiere del total revisado, se revierte todo.
 
-El adaptador interno confirma recepción mediante `dispatch_internal_order`, con estado, timestamp y log en otra transacción idempotente. Si ese paso falla, el pedido queda **enviado, por confirmar** y un reintento completa el despacho. Una integración inactiva o `fudo` devuelve un error explícito; los adaptadores externos se implementarán a futuro. Los navegadores, incluido el admin, no pueden escribir directamente precios, snapshots o estados de pedidos.
+Con el POS interno, la misma transacción registra la recepción (estado **aceptado**, timestamp y log). Si la integración está inactiva o es `fudo`, se revierte todo con un error explícito y el mismo envío se puede reintentar más tarde; los POS externos se integrarán a futuro. El estado **enviado, por confirmar** queda para pedidos anteriores a este flujo. Los navegadores, incluido el admin, no pueden escribir directamente precios, snapshots o estados de pedidos.
 
 La vista `session_bills` usa `security_invoker` para respetar las [políticas RLS de sus tablas](https://supabase.com/docs/guides/database/postgres/row-level-security). Agrega pedidos y pagos por separado para evitar multiplicar importes. No implementa cobros ni repartos; corresponden a la Fase 7.
 
@@ -238,7 +236,7 @@ En terminales separadas: `pnpm dev:functions`, `pnpm dev:customer` y `pnpm dev:a
 Recorrido de aceptación:
 
 1. Desde el comensal, enviar un pedido personalizado (con modificadores, ingrediente quitado y nota). En **Comandas** debe aparecer en **Nuevo** con mesa, comensal, detalle de opciones y total, sin recargar.
-2. **Aceptar** solo si quedó *enviado, por confirmar*. Si el adaptador interno ya lo recibió, usar **Preparar** → **Marcar listo** → **Entregar**. El comensal debe ver cada estado. **Cancelar** un pedido no entregado lo saca de la cuenta.
+2. Con el POS interno el pedido llega **aceptado**: usar **Preparar** → **Marcar listo** → **Entregar**. El comensal debe ver cada estado. **Cancelar** un pedido no entregado lo saca de la cuenta.
 3. En **Mesas activas**, la mesa ocupada muestra comensales, por confirmar / en cuenta / pagado / pendiente y las comandas en cocina. Las mesas sin sesión aparecen como libres.
 4. Cerrar la sesión con saldo pendiente: el diálogo advierte que el efectivo no se registra todavía. Tras cerrar, el comensal no puede enviar más pedidos en esa cuenta y puede abrir una sesión nueva. Las comandas en cocina siguen en el tablero, marcadas como sesión cerrada.
 5. Un segundo perfil en el mismo QR entra a la sesión nueva, con cuenta vacía. El historial del día conserva ambos pedidos.
@@ -248,9 +246,9 @@ Recorrido de aceptación:
 Pruebas reproducibles (además de las de la sección 6):
 
 ```bash
-pnpm test:orders
+pnpm test
 pnpm test:orders:integration
-docker exec -i supabase_db_TP psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/tests/pos.sql
+pnpm test:sql
 pnpm typecheck
 pnpm lint
 pnpm build
@@ -439,3 +437,15 @@ Prueba SQL (fixtures aislados con rollback):
 ```bash
 docker exec -i supabase_db_TP psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/tests/pos.sql
 ```
+
+---
+
+## 12. Probar los guardados del panel
+
+Los formularios del admin guardan con RPCs transaccionales: `create_restaurant`, `reorder_categories`, `save_modifier_group` y `save_product`. Si un paso falla, no queda nada guardado y reintentar no duplica filas. Con el stack local y las migraciones aplicadas (`pnpm supabase migration up --local`):
+
+```bash
+pnpm test:sql
+```
+
+Las aserciones cubren permisos (los comensales anónimos no pueden crear restaurantes), fallas a mitad de guardado, datos desactualizados y el orden de las listas. Corren dentro de `BEGIN … ROLLBACK`, junto con las de pedidos y POS.

@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Lock, UserCheck } from 'lucide-react'
 import { Button } from '@/components/ui'
 import { useRestaurant } from '@/restaurant/restaurant-context'
+import { posQueryKey } from './api'
 import { usePosOperator } from './operator-context'
 import { subscribeToRestaurantPos } from './realtime'
 
@@ -21,7 +22,7 @@ export function PosPage() {
 
   useEffect(() => {
     return subscribeToRestaurantPos(restaurant.id, () => {
-      void queryClient.invalidateQueries({ queryKey: ['pos', restaurant.id] })
+      void queryClient.invalidateQueries({ queryKey: posQueryKey(restaurant.id) })
     })
   }, [restaurant.id, queryClient])
 

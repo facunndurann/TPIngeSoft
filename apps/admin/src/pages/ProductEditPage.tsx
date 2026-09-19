@@ -3,7 +3,11 @@ import { Link, useNavigate, useParams } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
 import { PRODUCT_MEDIA_LIMIT } from '@restaurant-platform/shared'
+import { rpcError } from '@/lib/rpc-error'
 import { supabase } from '@/lib/supabase'
+import { categoriesQuery } from '@/queries/categories'
+import { modifierGroupsQuery } from '@/queries/modifier-groups'
+import { productQuery, productsByCategoryQuery } from '@/queries/products'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { MediaUploader } from '@/features/MediaUploader'
 import { savedMediaDrafts, uploadMediaDrafts, type MediaDraft } from '@/features/product-media'
@@ -16,7 +20,8 @@ const DIETARY_TAGS = [
   { value: 'picante', label: 'Picante' },
 ]
 
-interface IngredientDraft {
+/** Ingrediente tal como se envía a save_product; sin `id` es un ingrediente nuevo. */
+type IngredientDraft = {
   id?: string
   name: string
   is_removable: boolean
@@ -40,51 +45,14 @@ export function ProductEditPage() {
   const [isAvailable, setIsAvailable] = useState(true)
   const [media, setMedia] = useState<MediaDraft[]>([])
   const [ingredients, setIngredients] = useState<IngredientDraft[]>([])
-  const [removedIngredientIds, setRemovedIngredientIds] = useState<string[]>([])
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([])
   const [loadedProduct, setLoadedProduct] = useState(isNew)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
-  const { data: categories } = useQuery({
-    queryKey: ['categories', restaurant.id],
-    queryFn: async () => {
-      const { data, error: qErr } = await supabase
-        .from('menu_categories')
-        .select('*')
-        .eq('restaurant_id', restaurant.id)
-        .order('sort_order')
-      if (qErr) throw qErr
-      return data
-    },
-  })
-
-  const { data: allGroups } = useQuery({
-    queryKey: ['modifier-groups', restaurant.id],
-    queryFn: async () => {
-      const { data, error: qErr } = await supabase
-        .from('modifier_groups')
-        .select('*')
-        .eq('restaurant_id', restaurant.id)
-        .order('created_at')
-      if (qErr) throw qErr
-      return data
-    },
-  })
-
-  const { data: existing, isLoading } = useQuery({
-    queryKey: ['product', productId],
-    enabled: !isNew,
-    queryFn: async () => {
-      const { data, error: qErr } = await supabase
-        .from('products')
-        .select('*, product_ingredients(*), product_modifier_groups(group_id)')
-        .eq('id', productId!)
-        .single()
-      if (qErr) throw qErr
-      return data
-    },
-  })
+  const { data: categories } = useQuery(categoriesQuery(restaurant.id))
+  const { data: allGroups } = useQuery(modifierGroupsQuery(restaurant.id))
+  const { data: existing, isLoading } = useQuery({ ...productQuery(productId ?? ''), enabled: !isNew })
 
   useEffect(() => {
     if (!existing || loadedProduct) return
@@ -125,8 +93,6 @@ export function ProductEditPage() {
   }
 
   function removeIngredient(index: number) {
-    const ingredient = ingredients[index]
-    if (ingredient.id) setRemovedIngredientIds((prev) => [...prev, ingredient.id!])
     setIngredients((prev) => prev.filter((_, i) => i !== index))
   }
 
@@ -140,98 +106,33 @@ export function ProductEditPage() {
 
     setSaving(true)
     try {
-      // 1. Fotos y videos: los archivos nuevos se suben en paralelo, respetando el orden.
+      // Storage no participa de la transacción: los archivos nuevos se suben antes, en paralelo.
       const { urls: mediaUrls, discardUploads } = await uploadMediaDrafts(restaurant.id, media)
 
-      // 2. Producto
-      const productData = {
-        restaurant_id: restaurant.id,
-        category_id: categoryId,
-        name: name.trim(),
-        description: description.trim() || null,
-        base_price: price,
-        food_info: foodInfo.trim() || null,
-        dietary_tags: dietaryTags,
-        is_available: isAvailable,
-        media_urls: mediaUrls,
-      }
-
-      let savedId = productId
-      try {
-        if (isNew) {
-          const { data, error: iErr } = await supabase
-            .from('products')
-            .insert(productData)
-            .select()
-            .single()
-          if (iErr) throw iErr
-          savedId = data.id
-        } else {
-          const { error: uErr } = await supabase.from('products').update(productData).eq('id', productId)
-          if (uErr) throw uErr
-        }
-      } catch (productError) {
-        // El producto no se guardó, así que nada referencia los archivos recién subidos.
-        // (Si falla un paso posterior, los archivos se conservan: el producto ya los usa.)
+      // Producto, ingredientes y grupos (listas completas, en orden) se guardan juntos:
+      // si algo falla no queda nada guardado y reintentar no duplica el producto.
+      const { data: savedId, error: rpcErr } = await supabase.rpc('save_product', {
+        p_restaurant_id: restaurant.id,
+        p_product_id: productId,
+        p_category_id: categoryId,
+        p_name: name,
+        p_description: description,
+        p_base_price: price,
+        p_food_info: foodInfo,
+        p_dietary_tags: dietaryTags,
+        p_is_available: isAvailable,
+        p_media_urls: mediaUrls,
+        p_ingredients: ingredients,
+        p_group_ids: selectedGroupIds,
+      })
+      if (rpcErr) {
+        // No se guardó nada, así que ningún producto referencia los archivos recién subidos.
         await discardUploads()
-        throw productError
+        throw rpcError(rpcErr)
       }
 
-      // 3. Ingredientes: eliminar los quitados, upsert del resto
-      if (removedIngredientIds.length) {
-        const { error: dErr } = await supabase
-          .from('product_ingredients')
-          .delete()
-          .in('id', removedIngredientIds)
-        if (dErr) throw dErr
-      }
-      for (const [index, ingredient] of ingredients.entries()) {
-        const row = {
-          restaurant_id: restaurant.id,
-          product_id: savedId!,
-          name: ingredient.name.trim(),
-          is_removable: ingredient.is_removable,
-          is_available: ingredient.is_available,
-          sort_order: index,
-        }
-        if (ingredient.id) {
-          const { error: iErr } = await supabase
-            .from('product_ingredients')
-            .update(row)
-            .eq('id', ingredient.id)
-          if (iErr) throw iErr
-        } else {
-          const { error: iErr } = await supabase.from('product_ingredients').insert(row)
-          if (iErr) throw iErr
-        }
-      }
-
-      // 4. Grupos de modificadores: sincronizar asignaciones
-      const previousGroupIds = existing?.product_modifier_groups.map((g) => g.group_id) ?? []
-      const toRemove = previousGroupIds.filter((id) => !selectedGroupIds.includes(id))
-      const toAdd = selectedGroupIds.filter((id) => !previousGroupIds.includes(id))
-      if (toRemove.length) {
-        const { error: dErr } = await supabase
-          .from('product_modifier_groups')
-          .delete()
-          .eq('product_id', savedId!)
-          .in('group_id', toRemove)
-        if (dErr) throw dErr
-      }
-      if (toAdd.length) {
-        const { error: aErr } = await supabase.from('product_modifier_groups').insert(
-          toAdd.map((groupId, index) => ({
-            restaurant_id: restaurant.id,
-            product_id: savedId!,
-            group_id: groupId,
-            sort_order: previousGroupIds.length + index,
-          })),
-        )
-        if (aErr) throw aErr
-      }
-
-      await queryClient.invalidateQueries({ queryKey: ['products', restaurant.id] })
-      await queryClient.invalidateQueries({ queryKey: ['product', savedId] })
+      await queryClient.invalidateQueries({ queryKey: productsByCategoryQuery(restaurant.id).queryKey })
+      await queryClient.invalidateQueries({ queryKey: productQuery(savedId).queryKey })
       navigate('/productos')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error guardando el producto')

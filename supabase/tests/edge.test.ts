@@ -1,18 +1,15 @@
-import { test } from 'node:test'
+import { test } from 'vitest'
 import assert from 'node:assert/strict'
-import { submitOrderSchema } from '../../packages/shared/src/orders.ts'
+import { submitOrderErrorSchema, submitOrderResultSchema, submitOrderSchema } from '../../packages/shared/src/orders.ts'
+import { appErrorMessage, appErrors, isRetryableError } from '../../packages/shared/src/errors.ts'
 import {
   dayRangeUtc,
   formatElapsed,
-  groupOrdersByColumn,
   getPosTableState,
   isKitchenTicket,
   posActions,
-  posColumnFor,
   posErrorCode,
 } from '../../packages/shared/src/pos.ts'
-// Si otra migración vuelve a redefinir transition_order, apuntá este import a esa.
-import transitionOrderSql from '../migrations/20260915130000_pos_transition_table.sql?raw'
 import {
   FLOOR_GRID,
   TABLE_SPAN,
@@ -31,8 +28,8 @@ import { DEFAULT_MENU_DESIGN } from '../../packages/shared/src/designs.ts'
 // Si otra migración cambia el default de restaurants.menu_design, apuntá este import a esa.
 import menuDesignEnumSql from '../migrations/20260915150000_menu_design_enum.sql?raw'
 import { createSubmitOrderHandler } from '../functions/submit-order/handler.ts'
-import { databaseError } from '../functions/_shared/errors.ts'
-import type { OrderGateway, PosOrder } from '../functions/_shared/pos/adapter.ts'
+import { databaseError, OrderError } from '../functions/_shared/errors.ts'
+import type { OrderGateway } from '../functions/_shared/order-gateway.ts'
 
 const input = {
   sessionId: '00000000-0000-4000-8000-000000000001',
@@ -41,17 +38,13 @@ const input = {
   expectedTotal: 20.2,
 }
 const request = (body: unknown = input, headers: Record<string, string> = { Authorization: 'Bearer valid-user', 'Content-Type': 'application/json' }) => new Request('http://local/submit-order', { method: 'POST', headers, body: JSON.stringify(body) })
+const accepted = { orderId: input.requestId, status: 'accepted', totalAmount: 20.2 } as const
 function fixture() {
-  let status: PosOrder['status'] = 'submitted'
-  let sends = 0
   let creates = 0
   const gateway: OrderGateway = {
-    submit: async () => { creates++; return input.requestId },
-    loadOrder: async () => ({ id: input.requestId, status, total_amount: 20.2 } as PosOrder),
-    posType: async () => 'internal',
-    dispatchInternal: async () => { sends++; status = 'accepted' },
+    submit: async () => { creates++; return accepted },
   }
-  return { gateway, sends: () => sends, creates: () => creates }
+  return { gateway, creates: () => creates }
 }
 
 test('schema rejects forged amounts, attribution, invalid quantities and duplicate selections', () => {
@@ -76,7 +69,7 @@ test('preflight and wrong method never authenticate or create orders', async () 
 test('requires a verified identity and valid bounded JSON', async () => {
   const { gateway, creates } = fixture()
   const handler = createSubmitOrderHandler(async jwt => {
-    if (jwt !== 'valid-user') throw databaseError({ message: 'AUTH_REQUIRED' })
+    if (jwt !== 'valid-user') throw new OrderError('AUTH_REQUIRED')
     return gateway
   })
   assert.equal((await handler(request(input, { 'Content-Type': 'application/json' }))).status, 401)
@@ -88,91 +81,53 @@ test('requires a verified identity and valid bounded JSON', async () => {
   assert.equal(creates(), 0)
 })
 
-test('dispatches through the internal adapter and returns server prices and status', async () => {
-  const { gateway, sends } = fixture()
-  const handler = createSubmitOrderHandler(async () => gateway)
-  const result = await handler(request())
+test('returns the order status and total confirmed by submit_order', async () => {
+  const { gateway, creates } = fixture()
+  const result = await createSubmitOrderHandler(async () => gateway)(request())
   assert.equal(result.status, 200)
-  assert.deepEqual(await result.json(), { orderId: input.requestId, status: 'accepted', totalAmount: 20.2 })
-  await handler(request())
-  assert.equal(sends(), 1, 'an already received order must not be dispatched again')
+  assert.deepEqual(await result.json(), accepted)
+  assert.equal(creates(), 1)
 })
 
-test('price changes do not dispatch, errors retain a safe actionable code', async () => {
-  const { gateway, sends } = fixture()
-  gateway.submit = async () => { throw databaseError({ message: 'PRICE_CHANGED' }) }
-  const response = await createSubmitOrderHandler(async () => gateway)(request())
-  assert.equal(response.status, 409)
-  assert.equal((await response.json()).error.code, 'PRICE_CHANGED')
-  assert.equal(sends(), 0)
-})
-
-test('adapter failure preserves submission and retry delivers the same order', async () => {
-  const { gateway, sends } = fixture()
-  const dispatch = gateway.dispatchInternal
-  gateway.dispatchInternal = async () => { throw new Error('private backend detail') }
+test('database errors answer with the status, code and message of the shared catalog', async () => {
+  const { gateway } = fixture()
   const handler = createSubmitOrderHandler(async () => gateway)
-  const failed = await handler(request())
-  assert.equal(failed.status, 503)
-  assert.doesNotMatch(await failed.text(), /private backend detail/)
-  gateway.dispatchInternal = dispatch
-  const retry = await handler(request())
-  assert.equal((await retry.json()).orderId, input.requestId)
-  assert.equal(sends(), 1)
+  for (const code of ['PRICE_CHANGED', 'REQUEST_ABANDONED', 'POS_UNAVAILABLE'] as const) {
+    gateway.submit = async () => { throw databaseError({ message: code }) }
+    const response = await handler(request())
+    assert.equal(response.status, appErrors[code].status)
+    const body = submitOrderErrorSchema.parse(await response.json())
+    assert.deepEqual(body.error, { code, message: appErrors[code].message })
+  }
 })
 
-test('unsupported POS is explicit and never silently falls back to internal', async () => {
-  const { gateway, sends } = fixture()
-  gateway.posType = async () => 'fudo'
+test('successful responses match the shared result schema', async () => {
+  const { gateway } = fixture()
   const response = await createSubmitOrderHandler(async () => gateway)(request())
-  assert.equal(response.status, 503)
-  assert.equal((await response.json()).error.code, 'POS_UNSUPPORTED')
-  assert.equal(sends(), 0)
+  assert.deepEqual(submitOrderResultSchema.parse(await response.json()), accepted)
+  assert.equal(submitOrderResultSchema.safeParse({ ...accepted, status: 'lost' }).success, false)
+  assert.equal(submitOrderResultSchema.safeParse({ ...accepted, totalAmount: '20.2' }).success, false)
 })
 
-test('POS board groups kitchen columns, FIFO in prep/ready, and newest first otherwise', () => {
-  const orders = [
-    { id: 'd', status: 'delivered', created_at: '2026-09-05T12:00:00.000Z' },
-    { id: 'n2', status: 'accepted', created_at: '2026-09-05T12:05:00.000Z' },
-    { id: 'p-old', status: 'in_preparation', created_at: '2026-09-05T11:00:00.000Z' },
-    { id: 'p-new', status: 'in_preparation', created_at: '2026-09-05T11:30:00.000Z' },
-    { id: 'n1', status: 'submitted', created_at: '2026-09-05T12:01:00.000Z' },
-    { id: 'r', status: 'ready', created_at: '2026-09-05T10:00:00.000Z' },
-    { id: 'c', status: 'cancelled', created_at: '2026-09-05T12:00:00.000Z' },
-  ] as const
-  const grouped = groupOrdersByColumn([...orders])
-  assert.deepEqual(grouped.new.map((order) => order.id), ['n2', 'n1'])
-  assert.deepEqual(grouped.in_preparation.map((order) => order.id), ['p-old', 'p-new'])
-  assert.deepEqual(grouped.ready.map((order) => order.id), ['r'])
-  assert.deepEqual(grouped.delivered.map((order) => order.id), ['d'])
-  assert.equal(posColumnFor('cancelled'), null)
+test('unexpected failures never leak backend details', async () => {
+  const { gateway } = fixture()
+  gateway.submit = async () => { throw new Error('private backend detail') }
+  const failed = await createSubmitOrderHandler(async () => gateway)(request())
+  assert.equal(failed.status, 503)
+  const body = await failed.text()
+  assert.doesNotMatch(body, /private backend detail/)
+  assert.equal(JSON.parse(body).error.code, 'SERVER_ERROR')
+})
+
+test('POS actions advance and cancel until delivery, and nothing leaves cancelled', () => {
   assert.equal(posActions.accepted.advance?.to, 'in_preparation')
   assert.equal(posActions.ready.cancel?.to, 'cancelled')
+  assert.equal(posActions.delivered.advance, undefined)
   assert.equal(posActions.delivered.cancel, undefined)
-  assert.equal(posActions.cancelled.cancel, undefined)
+  assert.deepEqual(posActions.cancelled, {})
   assert.equal(isKitchenTicket('ready'), true)
   assert.equal(isKitchenTicket('delivered'), false)
   assert.equal(isKitchenTicket('cancelled'), false)
-})
-
-test('transition_order accepts exactly the transitions posActions offers', () => {
-  const offered = Object.entries(posActions)
-    .flatMap(([from, actions]) => Object.values(actions).map((step) => `${from} -> ${step.to}`))
-    .sort()
-
-  // Pares ('desde', 'hacia') del bloque `not in (values …) then` de la migración.
-  const valuesBlock = transitionOrderSql.match(/not in \(values([\s\S]*?)\)\s*then/)?.[1]
-  assert.ok(valuesBlock, 'transition_order must list its allowed pairs in a VALUES block')
-  const allowed = [...valuesBlock.matchAll(/\('(\w+)'(?:::[\w.]+)?,\s*'(\w+)'/g)]
-    .map(([, from, to]) => `${from} -> ${to}`)
-    .sort()
-
-  assert.deepEqual(allowed, offered)
-  // Revertir retrocede exactamente una etapa: nunca a submitted ni desde cancelled.
-  assert.deepEqual(
-    Object.entries(posActions).flatMap(([from, { revert }]) => (revert ? [`${from} -> ${revert.to}`] : [])),
-    ['in_preparation -> accepted', 'ready -> in_preparation', 'delivered -> ready'],
-  )
 })
 
 test('restaurant day bounds use Argentina time and POS errors stay coded', () => {
@@ -184,6 +139,28 @@ test('restaurant day bounds use Argentina time and POS errors stay coded', () =>
   assert.equal(formatElapsed('2026-09-05T12:00:00.000Z', Date.parse('2026-09-05T13:05:00.000Z')), 'Hace 1 h 5 min')
   assert.equal(posErrorCode('FORBIDDEN'), 'FORBIDDEN')
   assert.equal(posErrorCode('P0001: INVALID_TRANSITION'), 'INVALID_TRANSITION')
+})
+
+test('reverting steps back exactly one stage, never to submitted nor from cancelled', () => {
+  // Que estos pares coincidan con la tabla order_status_transitions lo verifica
+  // supabase/tests/orders.integration.mjs contra la base.
+  assert.deepEqual(
+    Object.entries(posActions).flatMap(([from, { revert }]) => (revert ? [`${from} -> ${revert.to}`] : [])),
+    ['in_preparation -> accepted', 'ready -> in_preparation', 'delivered -> ready'],
+  )
+})
+
+test('the error catalog decides which failures keep a submission for retry', () => {
+  // Rechazos definitivos: liberan el envío para que el comensal revise el carrito.
+  for (const code of ['PRICE_CHANGED', 'SESSION_CLOSED', 'IDEMPOTENCY_CONFLICT', 'REQUEST_ABANDONED']) {
+    assert.equal(isRetryableError(code), false, code)
+  }
+  // Fallas transitorias y códigos desconocidos (red caída): el envío se conserva.
+  for (const code of ['POS_UNAVAILABLE', 'SERVER_ERROR', 'AUTH_REQUIRED', 'CONNECTION_ERROR']) {
+    assert.equal(isRetryableError(code), true, code)
+  }
+  assert.equal(appErrorMessage('STALE_DATA', 'fallback'), appErrors.STALE_DATA.message)
+  assert.equal(appErrorMessage('P0001: INVALID_TRANSITION', 'fallback'), 'fallback')
 })
 
 test('table map states follow operational priority without inventing occupancy', () => {

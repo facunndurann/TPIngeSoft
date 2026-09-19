@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { SubmitOrderInput } from '@restaurant-platform/shared'
+import { sameCartItem } from '../features/cart'
 import type { Selection } from '../features/menu'
 
 export type CartItem = Selection & { id: string; productId: string }
@@ -75,10 +76,7 @@ export const useCart = create<CartState>()(
           if (submission?.input.requestId !== requestId) return state
           // Retain any draft that changed while the response was in flight.
           const remaining = (state.carts[key] ?? []).filter(
-            (item) =>
-              !submission.snapshot.some(
-                (sent) => sent.id === item.id && JSON.stringify(sent) === JSON.stringify(item),
-              ),
+            (item) => !submission.snapshot.some((sent) => sameCartItem(sent, item)),
           )
           return {
             carts: { ...state.carts, [key]: remaining },

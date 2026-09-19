@@ -1,8 +1,12 @@
-import type { OrderStatus } from '@restaurant-platform/shared'
+import { queryOptions } from '@tanstack/react-query'
+import type { OrderStatus, Tables } from '@restaurant-platform/shared'
 import { isOperable, posErrorMessage } from '@restaurant-platform/shared'
 import { supabase } from '@/lib/supabase'
+import { localDateKey } from './time'
 import type { PosBill, PosDiningTable, PosFloorSection, PosOpenSession, PosOrder } from './types'
 import { posOrderSelect, posSessionSelect } from './types'
+
+export type { PosBill, PosDiningTable, PosFloorSection, PosOpenSession, PosOrder, PosOrderItem } from './types'
 
 export class PosActionError extends Error {
   constructor(message: string) {
@@ -14,30 +18,73 @@ function throwIfError(error: { message: string } | null): void {
   if (error) throw new PosActionError(error.message)
 }
 
-export async function loadBoardOrders(restaurantId: string, deliveredSinceIso: string) {
-  const { data, error } = await supabase
-    .from('orders')
-    .select(posOrderSelect)
-    .eq('restaurant_id', restaurantId)
-    .or(
-      `status.in.(submitted,accepted,in_preparation,ready),and(status.eq.delivered,created_at.gte."${deliveredSinceIso}")`,
-    )
-    .order('created_at', { ascending: false })
+async function rowsOf<Row>(
+  query: PromiseLike<{ data: Row[] | null; error: { message: string } | null }>,
+): Promise<Row[]> {
+  const { data, error } = await query
   throwIfError(error)
-  return (data ?? []) as PosOrder[]
+  return data ?? []
 }
 
-export async function loadDayOrders(restaurantId: string, startIso: string, endIso: string) {
-  const { data, error } = await supabase
-    .from('orders')
-    .select(posOrderSelect)
-    .eq('restaurant_id', restaurantId)
-    .gte('created_at', startIso)
-    .lt('created_at', endIso)
-    .order('created_at', { ascending: false })
-  throwIfError(error)
-  return (data ?? []) as PosOrder[]
+/** Raíz de las queries del POS: invalidarla refresca tablero, mesas, plano e historial. */
+export const posQueryKey = (restaurantId: string) => ['pos', restaurantId] as const
+
+/** Comandas activas y las entregadas hoy (día del restaurante, columna local_date). */
+export const posBoardQuery = (restaurantId: string) =>
+  queryOptions({
+    queryKey: [...posQueryKey(restaurantId), 'board'],
+    queryFn: () =>
+      rowsOf(
+        supabase
+          .from('orders')
+          .select(posOrderSelect)
+          .eq('restaurant_id', restaurantId)
+          .or(`status.in.(submitted,accepted,in_preparation,ready),and(status.eq.delivered,local_date.eq.${localDateKey()})`)
+          .order('created_at', { ascending: false }),
+      ) as Promise<PosOrder[]>,
+    refetchInterval: 15_000,
+  })
+
+export const posHistoryQuery = (restaurantId: string, dateKey: string) =>
+  queryOptions({
+    queryKey: [...posQueryKey(restaurantId), 'history', dateKey],
+    queryFn: () =>
+      rowsOf(
+        supabase
+          .from('orders')
+          .select(posOrderSelect)
+          .eq('restaurant_id', restaurantId)
+          .eq('local_date', dateKey)
+          .order('created_at', { ascending: false }),
+      ) as Promise<PosOrder[]>,
+    refetchInterval: 15_000,
+  })
+
+/**
+ * Fila de la vista pos_open_sessions: sesión abierta con mesa, sucursal, comensales,
+ * cuenta y comandas en cocina. Distinta de PosOpenSession (sesión completa del plano).
+ * Postgres no propaga NOT NULL a las columnas de una vista; esta nunca devuelve null
+ * (joins internos, coalesce y count), así que se declaran requeridas.
+ */
+export type PosOpenSessionCard = {
+  [Column in keyof Tables<'pos_open_sessions'>]-?: NonNullable<Tables<'pos_open_sessions'>[Column]>
 }
+
+const openSessionCardsOf = (restaurantId: string) =>
+  supabase
+    .from('pos_open_sessions')
+    .select('*')
+    .eq('restaurant_id', restaurantId)
+    .order('opened_at', { ascending: true })
+    .overrideTypes<PosOpenSessionCard[], { merge: false }>()
+
+/** Mesas activas: una sola lectura de la vista, con cuenta y comandas en cocina. */
+export const posOpenSessionsQuery = (restaurantId: string) =>
+  queryOptions({
+    queryKey: [...posQueryKey(restaurantId), 'session-cards'],
+    queryFn: () => rowsOf(openSessionCardsOf(restaurantId)),
+    refetchInterval: 15_000,
+  })
 
 export async function loadOpenSessions(restaurantId: string) {
   const { data, error } = await supabase

@@ -1,24 +1,22 @@
 import { useState } from 'react'
 import { productMedia } from '@restaurant-platform/shared'
 import { MediaCarousel } from '@/features/MediaCarousel'
-import { money, price, productGroups, selectionErrors } from '@/features/menu'
-import type { Menu, Product } from '@/features/menu'
+import { money, price, selectionErrors } from '@/features/menu'
+import type { ModifierGroup, ModifierOption, Product } from '@/features/menu'
 import { useMenuDesign } from '@/features/menu-design'
 import type { CartItem } from '@/stores/cart'
 
 type ProductEditorProps = {
-  menu: Menu
   product: Product
   initial?: CartItem
   onSave: (item: CartItem) => void
   onClose: () => void
 }
 
-export function ProductEditor({ menu, product, initial, onSave, onClose }: ProductEditorProps) {
+export function ProductEditor({ product, initial, onSave, onClose }: ProductEditorProps) {
   const { copy } = useMenuDesign()
-  const [item, setItem] = useState<CartItem>(initial ?? defaultItem(menu, product))
-  const errors = selectionErrors(menu, product, item)
-  const ingredients = menu.ingredients.filter((ingredient) => ingredient.product_id === product.id)
+  const [item, setItem] = useState<CartItem>(initial ?? defaultItem(product))
+  const errors = selectionErrors(product, item)
 
   return (
     <section className="editor" aria-labelledby="product-title">
@@ -33,10 +31,10 @@ export function ProductEditor({ menu, product, initial, onSave, onClose }: Produ
       {product.food_info && <p className="notice">{product.food_info}</p>}
       {product.dietary_tags.length > 0 && <p>{product.dietary_tags.join(' · ')}</p>}
 
-      {ingredients.length > 0 && (
+      {product.ingredients.length > 0 && (
         <fieldset>
           <legend>Ingredientes</legend>
-          {ingredients.map((ingredient) => (
+          {product.ingredients.map((ingredient) => (
             <IngredientChoice
               key={ingredient.id}
               name={ingredient.name}
@@ -54,7 +52,7 @@ export function ProductEditor({ menu, product, initial, onSave, onClose }: Produ
         </fieldset>
       )}
 
-      {productGroups(menu, product.id).map((group) => (
+      {product.groups.map((group) => (
         <fieldset key={group.id}>
           <legend>{group.name}</legend>
           <p className="muted">
@@ -62,30 +60,28 @@ export function ProductEditor({ menu, product, initial, onSave, onClose }: Produ
             {group.max_select}
             {!group.is_available && ' · Agotado'}
           </p>
-          {menu.options
-            .filter((option) => option.group_id === group.id)
-            .map((option) => (
-              <label className="choice" key={option.id}>
-                <span>
-                  {option.name}
-                  <small>
-                    {option.is_available
-                      ? option.price_delta === 0
-                        ? 'Sin cargo'
-                        : money(option.price_delta)
-                      : 'Agotado'}
-                  </small>
-                </span>
-                <input
-                  type="checkbox"
-                  checked={item.optionIds.includes(option.id)}
-                  disabled={isOptionDisabled(menu, group, option, item.optionIds)}
-                  onChange={(event) => {
-                    setItem(toggleOption(item, menu, group, option.id, event.target.checked))
-                  }}
-                />
-              </label>
-            ))}
+          {group.options.map((option) => (
+            <label className="choice" key={option.id}>
+              <span>
+                {option.name}
+                <small>
+                  {option.is_available
+                    ? option.price_delta === 0
+                      ? 'Sin cargo'
+                      : money(option.price_delta)
+                    : 'Agotado'}
+                </small>
+              </span>
+              <input
+                type="checkbox"
+                checked={item.optionIds.includes(option.id)}
+                disabled={isOptionDisabled(group, option, item.optionIds)}
+                onChange={(event) => {
+                  setItem(toggleOption(item, group, option.id, event.target.checked))
+                }}
+              />
+            </label>
+          ))}
         </fieldset>
       ))}
 
@@ -122,20 +118,20 @@ export function ProductEditor({ menu, product, initial, onSave, onClose }: Produ
         disabled={errors.length > 0}
         onClick={() => onSave(item)}
       >
-        {initial ? 'Guardar cambios' : 'Agregar al carrito'} · {money(price(menu, product, item))}
+        {initial ? 'Guardar cambios' : 'Agregar al carrito'} · {money(price(product, item))}
       </button>
     </section>
   )
 }
 
-function defaultItem(menu: Menu, product: Product): CartItem {
+function defaultItem(product: Product): CartItem {
   return {
     id: crypto.randomUUID(),
     productId: product.id,
     quantity: 1,
     optionIds: [],
-    removedIds: menu.ingredients
-      .filter((ingredient) => ingredient.product_id === product.id && !ingredient.is_available && ingredient.is_removable)
+    removedIds: product.ingredients
+      .filter((ingredient) => !ingredient.is_available && ingredient.is_removable)
       .map((ingredient) => ingredient.id),
     isShared: false,
   }
@@ -174,35 +170,21 @@ function IngredientChoice({
   )
 }
 
-function selectedInGroup(menu: Menu, groupId: string, optionIds: string[]) {
-  return menu.options.filter((option) => option.group_id === groupId && optionIds.includes(option.id))
-}
-
-function isOptionDisabled(
-  menu: Menu,
-  group: { id: string; is_available: boolean; max_select: number },
-  option: { id: string; is_available: boolean },
-  optionIds: string[],
-) {
+function isOptionDisabled(group: ModifierGroup, option: ModifierOption, optionIds: string[]) {
   const selected = optionIds.includes(option.id)
   const unavailable = !option.is_available || !group.is_available
-  const atMax =
-    group.max_select > 1 && selectedInGroup(menu, group.id, optionIds).length >= group.max_select
+  const selectedInGroup = group.options.filter((entry) => optionIds.includes(entry.id)).length
+  const atMax = group.max_select > 1 && selectedInGroup >= group.max_select
 
   return (unavailable && !selected) || (!selected && atMax)
 }
 
-function toggleOption(
-  item: CartItem,
-  menu: Menu,
-  group: { id: string; max_select: number },
-  optionId: string,
-  checked: boolean,
-): CartItem {
+function toggleOption(item: CartItem, group: ModifierGroup, optionId: string, checked: boolean): CartItem {
+  // En un grupo de selección única, elegir una opción reemplaza a la anterior del grupo.
   const others = item.optionIds.filter((id) => {
     if (id === optionId) return false
     if (group.max_select !== 1) return true
-    return !menu.options.some((option) => option.id === id && option.group_id === group.id)
+    return !group.options.some((option) => option.id === id)
   })
 
   return { ...item, optionIds: checked ? [...others, optionId] : others }

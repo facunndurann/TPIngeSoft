@@ -10,6 +10,7 @@ import {
 import { MENU_DESIGNS } from '@restaurant-platform/shared'
 import { ErrorMessage } from '@/components/ErrorMessage'
 import { TOAST_DURATION_MS, Toast } from '@/components/Toast'
+import { cartKeyFor } from '@/features/cart'
 import { CartPanel } from '@/features/CartPanel'
 import { MenuBrowse } from '@/features/MenuBrowse'
 import { cartPrice, money } from '@/features/menu'
@@ -75,7 +76,7 @@ function TableApp({ token }: { token: string }) {
   const location = useLocation()
   const [announcement, setAnnouncement] = useState('')
   const cart = useCart()
-  const cartKey = `${sessionId ?? ''}:${joined.data?.userId ?? ''}`
+  const cartKey = cartKeyFor(sessionId, joined.data?.userId)
   const items = cart.carts[cartKey] ?? []
   const sessionOpen = session.data?.status === 'open' && !session.isError
   const canEdit = sessionOpen && !cart.submissions[cartKey]
@@ -207,7 +208,7 @@ export function TableCartPage({ reviewing = false }: { reviewing?: boolean }) {
       cartKey={cartKey}
       sessionId={sessionId}
       menu={menu.data}
-      canEdit={sessionOpen}
+      sessionOpen={sessionOpen}
       reviewing={reviewing}
       refreshMenu={() => menu.refetch({ throwOnError: true })}
       onSubmitted={() => {
@@ -228,7 +229,7 @@ export function TableProductPage() {
   const location = useLocation()
   const back = useTableBack(`${menuPath(token)}${location.search}`)
   const cart = useCart()
-  const product = menu.data?.products.find((entry) => entry.id === productId)
+  const product = menu.data?.productsById.get(productId)
 
   if (!menu.data) return null
   if (!product) {
@@ -258,7 +259,6 @@ export function TableProductPage() {
   return (
     <ProductEditor
       key={product.id}
-      menu={menu.data}
       product={product}
       onClose={back}
       onSave={(item) => {
@@ -276,7 +276,7 @@ export function TableCartItemPage() {
   const back = useTableBack(cartPath(token))
   const cart = useCart()
   const item = items.find((entry) => entry.id === itemId)
-  const product = menu.data?.products.find((entry) => entry.id === item?.productId)
+  const product = item && menu.data?.productsById.get(item.productId)
 
   if (!item) return <Navigate to={cartPath(token)} replace />
   if (!menu.data) return null
@@ -299,7 +299,6 @@ export function TableCartItemPage() {
   return (
     <ProductEditor
       key={item.id}
-      menu={menu.data}
       product={product}
       initial={item}
       onClose={back}
