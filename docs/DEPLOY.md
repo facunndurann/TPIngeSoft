@@ -89,8 +89,10 @@ Never put the **service_role** key in a frontend `.env`, in Vercel, or in git. R
 
 7. Open **Project Settings → Data API** (older dashboards: **Settings → API**). Copy:
 
-   - **Project URL** → `https://<ref>.supabase.co`
+   - **Project URL** → `https://<ref>.supabase.co` — this host only, **without** `/rest/v1`
    - **anon public** / **publishable** key → long JWT starting with `eyJ...`
+
+   Do **not** paste the Data API / REST URL (`https://<ref>.supabase.co/rest/v1`) into `VITE_SUPABASE_URL`. The JS client appends `/auth/v1` and `/rest/v1` itself. A REST base sends login to PostgREST (`PGRST125`: *Invalid path specified in request URL*).
 
    Ignore **service_role** for this whole guide.
 
@@ -359,6 +361,7 @@ You can point **local** Vite apps at the **cloud** project by putting the cloud 
 | Symptom | Likely cause |
 |---------|----------------|
 | Admin: “Faltan las variables VITE_SUPABASE_…” | Env vars missing on that Vercel project, or added after the last build → Redeploy. |
+| POS login: “usuario o contraseña incorrectos” but Network shows `PGRST125` / `…/rest/v1/auth/v1/token` | `VITE_SUPABASE_URL` on the POS Vercel project is the Data API URL. Set it to `https://<ref>.supabase.co` and **Redeploy**. |
 | Signup succeeds but you never enter the app | **Confirm email** still enabled. |
 | Diner QR: cannot join session / auth error | Anonymous sign-ins off. |
 | Direct QR URL is 404, home page works | `vercel.json` rewrite missing or not on the branch Vercel built. |
@@ -385,7 +388,7 @@ You can point **local** Vite apps at the **cloud** project by putting the cloud 
 
 Create a third Vercel project with root directory `apps/pos`, build `pnpm build`, output `dist`. Its `vercel.json` handles SPA routes. Configure:
 
-- `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`: the same backend/public key.
+- `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`: the same **Project URL** (`https://<ref>.supabase.co`, no `/rest/v1`) and anon/publishable key as admin.
 - `VITE_EMPLOYEE_EMAIL_DOMAIN`: exactly the backend's `EMPLOYEE_EMAIL_DOMAIN`.
 
 Use a controlled subdomain for internal Auth identifiers. The backend uses confirmed Auth creation and administrative password resets. Before rollout, confirm that SMTP and password-change notifications do not deliver mail to internal employee addresses; POS has no email recovery flow. No service key belongs in any frontend.

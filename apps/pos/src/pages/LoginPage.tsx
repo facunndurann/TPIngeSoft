@@ -13,7 +13,13 @@ export function LoginPage() {
     try {
       const email = employeeEmail(username, import.meta.env.VITE_EMPLOYEE_EMAIL_DOMAIN ?? '')
       const { error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error) throw new Error('Usuario o contraseña incorrectos.')
+      if (error) {
+        throw new Error(
+          error.message === 'Invalid login credentials'
+            ? 'Usuario o contraseña incorrectos.'
+            : 'No pudimos iniciar sesión. Intentá de nuevo o pedí ayuda a tu administrador.',
+        )
+      }
     } catch (err) { setError(err instanceof Error ? err.message : 'No pudimos iniciar sesión.') }
     finally { setBusy(false); setPassword('') }
   }
