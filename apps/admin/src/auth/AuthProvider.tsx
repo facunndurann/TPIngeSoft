@@ -9,14 +9,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    let userId: string | null | undefined
+
     supabase.auth.getSession().then(({ data }) => {
+      userId = data.session?.user.id ?? null
       setSession(data.session)
       setLoading(false)
     })
 
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      queryClient.clear()
+      const nextUserId = newSession?.user.id ?? null
+      // Supabase re-emite la sesión al volver a la pestaña (token refresh).
+      // Vaciar el cache ahí remonta todo el panel como si hubiera un F5.
+      if (userId !== undefined && userId !== nextUserId) {
+        queryClient.clear()
+      }
+      userId = nextUserId
       setSession(newSession)
+      setLoading(false)
     })
 
     return () => subscription.subscription.unsubscribe()
