@@ -9,6 +9,7 @@ import { LoginPage } from '@/pages/LoginPage'
 import { PosPage } from '@/features/pos/PosPage'
 import { CommandBoard } from '@/features/pos/CommandBoard'
 import { FloorMap } from '@/features/pos/FloorMap'
+import { TableCommand } from '@/features/pos/TableCommand'
 import { ActiveTables } from '@/features/pos/ActiveTables'
 import { OrderHistory } from '@/features/pos/OrderHistory'
 
@@ -63,6 +64,7 @@ function AuthenticatedPos({ userId }: { userId: string }) {
       <Route path="/" element={<PosPage multipleContexts={contexts.data.length > 1} />}>
         <Route index element={<CommandBoard />} />
         <Route path="salon" element={<Permission name="floor.read"><FloorMap /></Permission>} />
+        <Route path="salon/:tableId" element={<Permission name="floor.read"><TableCommand /></Permission>} />
         <Route path="mesas" element={<Permission name="floor.read"><ActiveTables /></Permission>} />
         <Route path="historial" element={<Permission name="history.read"><OrderHistory /></Permission>} />
       </Route>

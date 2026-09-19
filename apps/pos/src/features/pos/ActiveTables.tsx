@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { asAmount, dayRangeUtc, formatElapsed, isKitchenTicket, localDateKey } from '@restaurant-platform/shared'
 import { formatPrice } from '@/lib/format'
@@ -147,9 +148,18 @@ export function ActiveTables() {
                         {kitchen} comanda{kitchen === 1 ? '' : 's'} en cocina
                       </p>
                     )}
-                    {permissions.includes('sessions.close') && <Button variant="secondary" className="w-full" onClick={() => { setError(null); setClosing(session) }}>
-                      Cerrar sesión
-                    </Button>}
+                    <div className="flex gap-2">
+                      <Link to={`/salon/${session.table_id}`} className="flex-1">
+                        <Button className="w-full">Continuar comanda</Button>
+                      </Link>
+                      {permissions.includes('sessions.close') && <Button
+                        variant="secondary"
+                        className="flex-1"
+                        onClick={() => { setError(null); setClosing(session) }}
+                      >
+                        Cerrar sesión
+                      </Button>}
+                    </div>
                   </article>
                 )
               })}
@@ -166,11 +176,13 @@ export function ActiveTables() {
               <p className="mb-2 text-xs text-neutral-500">{branch}</p>
               <ul className="flex flex-wrap gap-2">
                 {branchTables.map((table) => (
-                  <li
-                    key={table.id}
-                    className="rounded-lg border border-dashed border-neutral-300 bg-white px-3 py-1.5 text-sm text-neutral-600"
-                  >
-                    {table.label}
+                  <li key={table.id}>
+                    <Link
+                      to={`/salon/${table.id}`}
+                      className="block rounded-lg border border-dashed border-neutral-300 bg-white px-3 py-1.5 text-sm text-neutral-600 hover:border-indigo-400 hover:text-indigo-700"
+                    >
+                      {table.label}
+                    </Link>
                   </li>
                 ))}
               </ul>

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import {
   FLOOR_GRID,
@@ -10,8 +11,8 @@ import {
   tableFootprint,
   type PosTableState,
 } from '@restaurant-platform/shared'
-import { Clock3, Move, UserRound, Users } from 'lucide-react'
-import { EmptyState, ErrorText, Select, Spinner } from '@/components/ui'
+import { ClipboardList, Clock3, Move, UserRound, Users } from 'lucide-react'
+import { Button, EmptyState, ErrorText, Select, Spinner } from '@/components/ui'
 import { formatPrice } from '@/lib/format'
 import { useRestaurant, usePosContext } from '@/context/pos-context'
 import {
@@ -20,20 +21,35 @@ import {
   loadRestaurantTables,
   loadSessionBills,
 } from './api'
+import { MoveTableSession } from './MoveTableSession'
 import { useNow } from './useNow'
 import type { PosBill, PosDiningTable, PosOpenSession } from './types'
 
 /**
- * Plano operativo del salón (MI-62/MI-63). El layout viene de la configuración
- * administrativa y el estado de pedidos/cuenta se compone desde la sesión
- * abierta; seleccionar una mesa solo muestra el resumen, no abre la comanda.
+ * Plano operativo del salón (MI-62/MI-63/MI-64). El layout viene de la
+ * configuración administrativa y el estado de pedidos/cuenta se compone desde
+ * la sesión abierta. Tocar una mesa abre su comanda (MI-64).
+ *
+ * La sucursal y el sector viven en la query, no en estado local: así volver
+ * desde la comanda deja el plano en el mismo sector, y recargar o compartir el
+ * link también.
  */
 export function FloorMap() {
   const restaurant = useRestaurant()
   const canPay = usePosContext().permissions.includes('payments.read')
   const now = useNow()
-  const [branchChoice, setBranchChoice] = useState<string | null>(null)
-  const [sectionChoice, setSectionChoice] = useState<string | null>(null)
+  const [moving, setMoving] = useState<FloorMapEntry | null>(null)
+  const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const branchChoice = searchParams.get('sucursal')
+  const sectionChoice = searchParams.get('sector')
+
+  const chooseBranch = (id: string) => setSearchParams({ sucursal: id }, { replace: true })
+  const chooseSection = (id: string) =>
+    setSearchParams(
+      branchChoice ? { sucursal: branchChoice, sector: id } : { sector: id },
+      { replace: true },
+    )
 
   const sections = useQuery({
     queryKey: ['pos', restaurant.id, restaurant.branchId, 'floor-sections'],
@@ -109,6 +125,10 @@ export function FloorMap() {
 
   return (
     <div className="min-w-0 space-y-4">
+      {moving?.session && (
+        <MoveTableSession source={moving.table} sessionId={moving.session.id}
+          onClose={() => setMoving(null)} />
+      )}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-neutral-900">Salón</h1>
@@ -121,10 +141,7 @@ export function FloorMap() {
             <span className="mb-1 block text-xs font-medium text-neutral-600">Sucursal</span>
             <Select
               value={branchId ?? ''}
-              onChange={(event) => {
-                setBranchChoice(event.target.value)
-                setSectionChoice(null)
-              }}
+              onChange={(event) => chooseBranch(event.target.value)}
             >
               {branches.map((branch) => (
                 <option key={branch.id} value={branch.id}>
@@ -155,7 +172,7 @@ export function FloorMap() {
                   type="button"
                   role="tab"
                   aria-selected={selected}
-                  onClick={() => setSectionChoice(section.id)}
+                  onClick={() => chooseSection(section.id)}
                   className={`shrink-0 cursor-pointer rounded-lg px-4 py-2 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none ${
                     selected
                       ? 'bg-indigo-600 text-white'
@@ -184,11 +201,22 @@ export function FloorMap() {
                 </div>
                 <p className="inline-flex items-center gap-1.5 text-xs text-neutral-500">
                   <Move size={14} aria-hidden="true" />
-                  Deslizá para recorrer el plano
+                  Deslizá para recorrer · tocá una mesa para ver su comanda
                 </p>
               </div>
               <StateLegend />
-              <FloorSurface key={activeSection.id} entries={entries} now={now} />
+              <FloorSurface
+                key={activeSection.id}
+                entries={entries}
+                now={now}
+                onMoveTable={setMoving}
+                onOpenTable={(tableId) =>
+                  navigate({
+                    pathname: `/salon/${tableId}`,
+                    search: searchParams.toString(),
+                  })
+                }
+              />
             </section>
           )}
         </>
@@ -265,13 +293,23 @@ function StateLegend() {
   )
 }
 
-function FloorSurface({ entries, now }: { entries: FloorMapEntry[]; now: number }) {
+function FloorSurface({
+  entries,
+  now,
+  onOpenTable,
+  onMoveTable,
+}: {
+  entries: FloorMapEntry[]
+  now: number
+  onOpenTable: (tableId: string) => void
+  onMoveTable: (entry: FloorMapEntry) => void
+}) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const selected = entries.find((entry) => entry.table.id === selectedId)
 
   return (
     <div className="min-w-0 space-y-2">
-      {selected && <TableSummary entry={selected} now={now} />}
+      {selected && <TableSummary entry={selected} now={now} onOpen={onOpenTable} onMove={onMoveTable} />}
       <div
         className="max-h-[calc(100dvh-18rem)] min-h-80 overflow-auto overscroll-contain rounded-xl border border-neutral-200 bg-white p-3 shadow-sm"
         tabIndex={0}
@@ -302,7 +340,8 @@ function FloorSurface({ entries, now }: { entries: FloorMapEntry[]; now: number 
               <button
                 key={table.id}
                 type="button"
-                onClick={() => setSelectedId(selectedTable ? null : table.id)}
+                onClick={() => setSelectedId(table.id)}
+                onDoubleClick={() => onOpenTable(table.id)}
                 aria-pressed={selectedTable}
                 aria-label={`${table.label}, ${posTableStateLabels[state]}, ${summary}`}
                 className={`absolute flex cursor-pointer flex-col items-center justify-center overflow-hidden border-2 text-center shadow-sm transition hover:brightness-95 focus-visible:ring-2 focus-visible:ring-indigo-600 focus-visible:ring-offset-2 focus-visible:outline-none ${stateStyles[state].table} ${
@@ -352,7 +391,18 @@ function FloorSurface({ entries, now }: { entries: FloorMapEntry[]; now: number 
   )
 }
 
-function TableSummary({ entry, now }: { entry: FloorMapEntry; now: number }) {
+function TableSummary({
+  entry,
+  now,
+  onOpen,
+  onMove,
+}: {
+  entry: FloorMapEntry
+  now: number
+  onOpen: (tableId: string) => void
+  onMove: (entry: FloorMapEntry) => void
+}) {
+  const { permissions } = usePosContext()
   const { table, session, bill, state } = entry
   const activeOrders = session?.orders.filter((order) =>
     ['submitted', 'accepted', 'in_preparation', 'ready'].includes(order.status),
@@ -380,6 +430,15 @@ function TableSummary({ entry, now }: { entry: FloorMapEntry; now: number }) {
       ) : (
         <SummaryItem icon={Users} label="Capacidad" value={`${table.seats} lugares`} />
       )}
+      {session && permissions.includes('sessions.move') && (
+        <Button variant="secondary" onClick={() => onMove(entry)}>
+          <Move size={15} /> Mover comanda
+        </Button>
+      )}
+      <Button onClick={() => onOpen(table.id)}>
+        <ClipboardList size={15} />
+        {session ? 'Continuar comanda' : 'Abrir comanda'}
+      </Button>
     </div>
   )
 }

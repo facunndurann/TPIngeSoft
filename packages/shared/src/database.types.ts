@@ -1385,6 +1385,18 @@ export type Database = {
         Args: { p_session_id: string }
         Returns: string
       }
+      pos_move_table_session: {
+        Args: {
+          p_session_id: string
+          p_source_table_id: string
+          p_destination_table_id: string
+        }
+        Returns: string
+      }
+      pos_open_table_session: {
+        Args: { p_table_id: string }
+        Returns: string
+      }
       pos_transition_order: {
         Args: {
           p_order_id: string
@@ -1633,3 +1645,4 @@ export const Constants = {
     },
   },
 } as const
+

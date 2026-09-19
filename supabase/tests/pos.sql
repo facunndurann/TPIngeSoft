@@ -16,6 +16,20 @@ begin
 end;
 $$;
 
+create function pg_temp.expect_move_error(sid uuid, src uuid, dest uuid, expected text)
+returns void language plpgsql as $$
+declare actual text;
+begin
+  begin
+    perform public.pos_move_table_session(sid, src, dest);
+  exception when others then actual := sqlerrm;
+  end;
+  if actual is distinct from expected then
+    raise exception 'Expected %, got %', expected, coalesce(actual, 'success');
+  end if;
+end;
+$$;
+
 do $$
 declare
   staff uuid := gen_random_uuid();
@@ -37,6 +51,16 @@ declare
   items jsonb;
   closed_id uuid;
   log_count integer;
+  destination uuid;
+  occupied uuid;
+  second_branch uuid;
+  cross_branch_table uuid;
+  section uuid;
+  before_session jsonb;
+  before_order jsonb;
+  before_bill jsonb;
+  before_payments jsonb;
+  before_items jsonb;
 begin
   insert into auth.users(id, aud, role) values
     (staff, 'authenticated', 'authenticated'),
@@ -87,6 +111,91 @@ begin
   perform public.dispatch_internal_order(v_order_id);
 
   perform set_config('request.jwt.claim.sub', staff::text, true);
+  -- MI-65: traslado, integridad y rollback ante errores.
+  insert into public.tables(restaurant_id, branch_id, label) values(restaurant, branch, 'Destino')
+    returning id into destination;
+  insert into public.tables(restaurant_id, branch_id, label) values(restaurant, branch, 'Ocupada')
+    returning id into occupied;
+  perform public.pos_open_table_session(occupied);
+  insert into public.branches(restaurant_id, name) values(restaurant, 'Otra sucursal')
+    returning id into second_branch;
+  insert into public.tables(restaurant_id, branch_id, label) values(restaurant, second_branch, 'Otra')
+    returning id into cross_branch_table;
+  insert into public.floor_sections(restaurant_id, branch_id, name)
+    values(restaurant, branch, 'Destino sector') returning id into section;
+  update public.tables set section_id = section where id = destination;
+  update public.table_sessions set split_type = 'percentages',
+    split_allocations = jsonb_build_object(participant::text, 100), assigned_user_id = staff,
+    bill_requested_at = now() where id = sid;
+  insert into public.payments(restaurant_id, session_id, participant_id, amount, mode, status)
+    values(restaurant, sid, participant, 3, 'custom', 'approved'),
+          (restaurant, sid, participant, 2, 'custom', 'pending');
+  select jsonb_agg(to_jsonb(p) order by id) into before_payments from public.payments p where session_id = sid;
+  select jsonb_agg(to_jsonb(i) order by id) into before_items from public.order_items i where order_id = v_order_id;
+  select to_jsonb(s) - 'table_id' into before_session from public.table_sessions s where id = sid;
+  select to_jsonb(o) into before_order from public.orders o where id = v_order_id;
+  select to_jsonb(b) into before_bill from public.session_bills b where session_id = sid;
+
+  perform set_config('request.jwt.claim.sub', '', true);
+  perform pg_temp.expect_move_error(sid, dining_table, destination, 'AUTH_REQUIRED');
+  perform set_config('request.jwt.claim.sub', diner::text, true);
+  perform pg_temp.expect_move_error(sid, dining_table, destination, 'FORBIDDEN');
+  perform set_config('request.jwt.claim.sub', other_staff::text, true);
+  perform pg_temp.expect_move_error(sid, dining_table, destination, 'FORBIDDEN');
+  perform set_config('request.jwt.claim.sub', staff::text, true);
+  perform pg_temp.expect_move_error(sid, dining_table, other_table, 'FORBIDDEN');
+  perform pg_temp.expect_move_error(sid, dining_table, cross_branch_table, 'TABLE_BRANCH_MISMATCH');
+  perform pg_temp.expect_move_error(sid, dining_table, occupied, 'TABLE_OCCUPIED');
+  perform pg_temp.expect_move_error(sid, dining_table, dining_table, 'INVALID_REQUEST');
+  perform pg_temp.expect_move_error(null, dining_table, destination, 'INVALID_REQUEST');
+  perform pg_temp.expect_move_error(gen_random_uuid(), dining_table, destination, 'SESSION_NOT_FOUND');
+  perform pg_temp.expect_move_error(sid, dining_table, gen_random_uuid(), 'TABLE_NOT_FOUND');
+  update public.tables set is_visible = false where id = destination;
+  perform pg_temp.expect_move_error(sid, dining_table, destination, 'TABLE_UNAVAILABLE');
+  update public.tables set is_visible = true, is_active = false where id = destination;
+  perform pg_temp.expect_move_error(sid, dining_table, destination, 'TABLE_UNAVAILABLE');
+  update public.tables set is_active = true where id = destination;
+  update public.floor_sections set is_active = false where id = section;
+  perform pg_temp.expect_move_error(sid, dining_table, destination, 'TABLE_UNAVAILABLE');
+  update public.floor_sections set is_active = true where id = section;
+  update public.branches set is_active = false where id = branch;
+  -- Una sucursal dada de baja ya no otorga permiso: corta por alcance, no por mesa.
+  perform pg_temp.expect_move_error(sid, dining_table, destination, 'FORBIDDEN');
+  update public.branches set is_active = true where id = branch;
+  update public.restaurant_members set is_active = false where user_id = staff and restaurant_id = restaurant;
+  perform pg_temp.expect_move_error(sid, dining_table, destination, 'FORBIDDEN');
+  update public.restaurant_members set is_active = true where user_id = staff and restaurant_id = restaurant;
+  if (select table_id from public.table_sessions where id = sid) <> dining_table
+    or exists (select 1 from public.pos_audit_log where session_id = sid and action = 'session.moved') then
+    raise exception 'Rejected move changed the session or audit'; end if;
+
+  if public.pos_move_table_session(sid, dining_table, destination) <> sid then
+    raise exception 'Move returned another session'; end if;
+  if (select table_id from public.table_sessions where id = sid) <> destination
+    or exists (select 1 from public.table_sessions where table_id = dining_table and status = 'open') then
+    raise exception 'Move did not free the source and occupy the destination'; end if;
+  if (select to_jsonb(s) - 'table_id' from public.table_sessions s where id = sid) <> before_session
+    or (select to_jsonb(o) from public.orders o where id = v_order_id) <> before_order
+    or (select to_jsonb(b) from public.session_bills b where session_id = sid) <> before_bill
+    or (select jsonb_agg(to_jsonb(p) order by id) from public.payments p where session_id = sid) <> before_payments
+    or (select jsonb_agg(to_jsonb(i) order by id) from public.order_items i where order_id = v_order_id) <> before_items
+    or not exists (select 1 from public.session_participants where id = participant and session_id = sid) then
+    raise exception 'Move changed session data, orders, participants or bill'; end if;
+  if (select count(*) from public.pos_audit_log where session_id = sid and action = 'session.moved'
+    and actor_user_id = staff and branch_id = branch and created_at is not null
+    and details->>'sourceTableId' = dining_table::text
+    and details->>'destinationTableId' = destination::text) <> 1 then
+    raise exception 'Missing move audit'; end if;
+  perform pg_temp.expect_move_error(sid, dining_table, occupied, 'SESSION_MOVE_CONFLICT');
+  -- El QR destino continúa la misma cuenta y sus pedidos.
+  perform set_config('request.jwt.claim.sub', diner::text, true);
+  if public.join_table_session((select qr_token from public.tables where id = destination), 'Diner') <> sid then
+    raise exception 'Destination QR did not join moved session'; end if;
+  perform set_config('request.jwt.claim.sub', staff::text, true);
+  if has_function_privilege('anon', 'public.pos_move_table_session(uuid,uuid,uuid)', 'EXECUTE')
+    or not has_function_privilege('authenticated', 'public.pos_move_table_session(uuid,uuid,uuid)', 'EXECUTE') then
+    raise exception 'Wrong move privileges'; end if;
+
   closed_id := public.close_table_session(sid);
   if closed_id <> sid then raise exception 'Close returned a different session'; end if;
   if (select status from public.table_sessions where id = sid) <> 'closed' then
@@ -97,6 +206,8 @@ begin
     where restaurant_id = restaurant and event = 'session.closed'
       and payload->>'sessionId' = sid::text;
   if log_count <> 1 then raise exception 'Missing session.closed log'; end if;
+
+  perform pg_temp.expect_move_error(sid, destination, dining_table, 'SESSION_MOVE_CONFLICT');
 
   -- Idempotent retry does not duplicate the log or reopen the table.
   if public.close_table_session(sid) <> sid then raise exception 'Idempotent close failed'; end if;
@@ -120,7 +231,7 @@ begin
     or has_table_privilege('authenticated', 'public.table_sessions', 'DELETE') then
     raise exception 'Authenticated role can bypass close_table_session'; end if;
 
-  raise notice 'POS SQL assertions passed (auth, isolation, idempotent close, lock reuse, privileges)';
+  raise notice 'POS SQL assertions passed (auth, isolation, idempotent close, lock reuse, privileges, move integrity, move conflicts, move audit)';
 end;
 $$;
 
