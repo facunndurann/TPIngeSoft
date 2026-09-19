@@ -7,3 +7,4 @@ export * from './floor';
 export * from './designs';
 export * from './product-media';
 export * from './errors';
+export * from './employees';

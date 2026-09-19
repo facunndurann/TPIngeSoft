@@ -1,11 +1,9 @@
 import { NavLink, Outlet } from 'react-router'
-import { ClipboardList, LayoutGrid, ListTree, LogOut, Map, QrCode, Settings, SlidersHorizontal, Users, UtensilsCrossed } from 'lucide-react'
+import { LayoutGrid, ListTree, LogOut, Map, QrCode, Settings, SlidersHorizontal, Users, UtensilsCrossed } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { usePosOperator } from '@/features/pos/operator-context'
 import { useMembership } from '@/restaurant/restaurant-context'
 
 const navigation = [
-  { to: '/pos', label: 'POS', icon: ClipboardList, adminOnly: false },
   { to: '/productos', label: 'Productos', icon: UtensilsCrossed, adminOnly: true },
   { to: '/categorias', label: 'Categorías', icon: ListTree, adminOnly: true },
   { to: '/modificadores', label: 'Modificadores', icon: SlidersHorizontal, adminOnly: true },
@@ -16,11 +14,7 @@ const navigation = [
 ]
 
 export function AdminLayout() {
-  const { restaurant, role } = useMembership()
-  const { operator } = usePosOperator()
-  // Con un empleado operando, el dispositivo está en el salón: solo POS.
-  const canAdminister = role === 'owner' && !operator
-  const visible = navigation.filter((item) => canAdminister || !item.adminOnly)
+  const { restaurant } = useMembership()
 
   return (
     <div className="flex min-h-dvh bg-neutral-100">
@@ -32,12 +26,12 @@ export function AdminLayout() {
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-neutral-900">{restaurant.name}</p>
             <p className="text-xs text-neutral-500">
-              {canAdminister ? 'Panel de administración' : 'Operación de salón'}
+              Panel de administración
             </p>
           </div>
         </div>
         <nav className="flex-1 space-y-1 p-3">
-          {visible.map(({ to, label, icon: Icon }) => (
+          {navigation.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}

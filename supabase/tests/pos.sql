@@ -16,12 +16,12 @@ begin
 end;
 $$;
 
-create function pg_temp.expect_move_error(sid uuid, src uuid, dest uuid, eid uuid, expected text)
+create function pg_temp.expect_move_error(sid uuid, src uuid, dest uuid, expected text)
 returns void language plpgsql as $$
 declare actual text;
 begin
   begin
-    perform public.pos_move_table_session(sid, src, dest, eid);
+    perform public.pos_move_table_session(sid, src, dest);
   exception when others then actual := sqlerrm;
   end;
   if actual is distinct from expected then
@@ -56,7 +56,6 @@ declare
   second_branch uuid;
   cross_branch_table uuid;
   section uuid;
-  employee uuid;
   before_session jsonb;
   before_order jsonb;
   before_bill jsonb;
@@ -77,6 +76,10 @@ begin
     (restaurant, staff, 'owner'), (other_restaurant, other_staff, 'owner');
   insert into public.branches(restaurant_id, name) values(restaurant, 'Branch') returning id into branch;
   insert into public.branches(restaurant_id, name) values(other_restaurant, 'Other') returning id into other_branch;
+  insert into public.profiles(id,username_normalized,full_name)
+    values(staff,replace(staff::text,'-',''),'POS test operator');
+  insert into public.branch_memberships(membership_id,restaurant_id,branch_id)
+    select id,restaurant,branch from public.restaurant_members where user_id=staff and restaurant_id=restaurant;
   insert into public.tables(restaurant_id, branch_id, label) values(restaurant, branch, 'Table')
     returning id into dining_table;
   insert into public.tables(restaurant_id, branch_id, label) values(other_restaurant, other_branch, 'Other table')
@@ -100,9 +103,9 @@ begin
   perform pg_temp.expect_close_error(sid, 'FORBIDDEN');
   perform set_config('request.jwt.claim.sub', other_staff::text, true);
   perform pg_temp.expect_close_error(sid, 'FORBIDDEN');
-  perform pg_temp.expect_close_error(gen_random_uuid(), 'SESSION_NOT_FOUND');
+  perform pg_temp.expect_close_error(gen_random_uuid(), 'FORBIDDEN');
   perform set_config('request.jwt.claim.sub', staff::text, true);
-  perform pg_temp.expect_close_error(null, 'INVALID_REQUEST');
+  perform pg_temp.expect_close_error(null, 'FORBIDDEN');
 
   perform set_config('request.jwt.claim.sub', diner::text, true);
   v_order_id := (public.submit_order(sid, gen_random_uuid(), items, 10, null)).id;
@@ -148,10 +151,8 @@ begin
   insert into public.floor_sections(restaurant_id, branch_id, name)
     values(restaurant, branch, 'Destino sector') returning id into section;
   update public.tables set section_id = section where id = destination;
-  insert into public.pos_employees(restaurant_id, full_name, pin_hash)
-    values(restaurant, 'Operador', 'unused') returning id into employee;
   update public.table_sessions set split_type = 'percentages',
-    split_allocations = jsonb_build_object(participant::text, 100), assigned_employee_id = employee,
+    split_allocations = jsonb_build_object(participant::text, 100), assigned_user_id = staff,
     bill_requested_at = now() where id = sid;
   insert into public.payments(restaurant_id, session_id, participant_id, amount, mode, status)
     values(restaurant, sid, participant, 3, 'custom', 'approved'),
@@ -163,36 +164,39 @@ begin
   select to_jsonb(b) into before_bill from public.session_bills b where session_id = sid;
 
   perform set_config('request.jwt.claim.sub', '', true);
-  perform pg_temp.expect_move_error(sid, dining_table, destination, employee, 'AUTH_REQUIRED');
+  perform pg_temp.expect_move_error(sid, dining_table, destination, 'AUTH_REQUIRED');
   perform set_config('request.jwt.claim.sub', diner::text, true);
-  perform pg_temp.expect_move_error(sid, dining_table, destination, employee, 'FORBIDDEN');
+  perform pg_temp.expect_move_error(sid, dining_table, destination, 'FORBIDDEN');
   perform set_config('request.jwt.claim.sub', other_staff::text, true);
-  perform pg_temp.expect_move_error(sid, dining_table, destination, employee, 'FORBIDDEN');
+  perform pg_temp.expect_move_error(sid, dining_table, destination, 'FORBIDDEN');
   perform set_config('request.jwt.claim.sub', staff::text, true);
-  perform pg_temp.expect_move_error(sid, dining_table, other_table, employee, 'FORBIDDEN');
-  perform pg_temp.expect_move_error(sid, dining_table, cross_branch_table, employee, 'TABLE_BRANCH_MISMATCH');
-  perform pg_temp.expect_move_error(sid, dining_table, occupied, employee, 'TABLE_OCCUPIED');
-  perform pg_temp.expect_move_error(sid, dining_table, dining_table, employee, 'INVALID_REQUEST');
-  perform pg_temp.expect_move_error(null, dining_table, destination, employee, 'INVALID_REQUEST');
-  perform pg_temp.expect_move_error(gen_random_uuid(), dining_table, destination, employee, 'SESSION_NOT_FOUND');
-  perform pg_temp.expect_move_error(sid, dining_table, gen_random_uuid(), employee, 'TABLE_NOT_FOUND');
+  perform pg_temp.expect_move_error(sid, dining_table, other_table, 'FORBIDDEN');
+  perform pg_temp.expect_move_error(sid, dining_table, cross_branch_table, 'TABLE_BRANCH_MISMATCH');
+  perform pg_temp.expect_move_error(sid, dining_table, occupied, 'TABLE_OCCUPIED');
+  perform pg_temp.expect_move_error(sid, dining_table, dining_table, 'INVALID_REQUEST');
+  perform pg_temp.expect_move_error(null, dining_table, destination, 'INVALID_REQUEST');
+  perform pg_temp.expect_move_error(gen_random_uuid(), dining_table, destination, 'SESSION_NOT_FOUND');
+  perform pg_temp.expect_move_error(sid, dining_table, gen_random_uuid(), 'TABLE_NOT_FOUND');
   update public.tables set is_visible = false where id = destination;
-  perform pg_temp.expect_move_error(sid, dining_table, destination, employee, 'TABLE_UNAVAILABLE');
+  perform pg_temp.expect_move_error(sid, dining_table, destination, 'TABLE_UNAVAILABLE');
   update public.tables set is_visible = true, is_active = false where id = destination;
-  perform pg_temp.expect_move_error(sid, dining_table, destination, employee, 'TABLE_UNAVAILABLE');
+  perform pg_temp.expect_move_error(sid, dining_table, destination, 'TABLE_UNAVAILABLE');
   update public.tables set is_active = true where id = destination;
   update public.floor_sections set is_active = false where id = section;
-  perform pg_temp.expect_move_error(sid, dining_table, destination, employee, 'TABLE_UNAVAILABLE');
+  perform pg_temp.expect_move_error(sid, dining_table, destination, 'TABLE_UNAVAILABLE');
   update public.floor_sections set is_active = true where id = section;
   update public.branches set is_active = false where id = branch;
-  perform pg_temp.expect_move_error(sid, dining_table, destination, employee, 'TABLE_UNAVAILABLE');
+  -- Una sucursal dada de baja ya no otorga permiso: corta por alcance, no por mesa.
+  perform pg_temp.expect_move_error(sid, dining_table, destination, 'FORBIDDEN');
   update public.branches set is_active = true where id = branch;
-  perform pg_temp.expect_move_error(sid, dining_table, destination, gen_random_uuid(), 'EMPLOYEE_NOT_FOUND');
+  update public.restaurant_members set is_active = false where user_id = staff and restaurant_id = restaurant;
+  perform pg_temp.expect_move_error(sid, dining_table, destination, 'FORBIDDEN');
+  update public.restaurant_members set is_active = true where user_id = staff and restaurant_id = restaurant;
   if (select table_id from public.table_sessions where id = sid) <> dining_table
     or exists (select 1 from public.pos_audit_log where session_id = sid and action = 'session.moved') then
     raise exception 'Rejected move changed the session or audit'; end if;
 
-  if public.pos_move_table_session(sid, dining_table, destination, employee) <> sid then
+  if public.pos_move_table_session(sid, dining_table, destination) <> sid then
     raise exception 'Move returned another session'; end if;
   if (select table_id from public.table_sessions where id = sid) <> destination
     or exists (select 1 from public.table_sessions where table_id = dining_table and status = 'open') then
@@ -205,18 +209,18 @@ begin
     or not exists (select 1 from public.session_participants where id = participant and session_id = sid) then
     raise exception 'Move changed session data, orders, participants or bill'; end if;
   if (select count(*) from public.pos_audit_log where session_id = sid and action = 'session.moved'
-    and user_id = staff and employee_id = employee and created_at is not null
+    and actor_user_id = staff and branch_id = branch and created_at is not null
     and details->>'sourceTableId' = dining_table::text
     and details->>'destinationTableId' = destination::text) <> 1 then
     raise exception 'Missing move audit'; end if;
-  perform pg_temp.expect_move_error(sid, dining_table, occupied, employee, 'SESSION_MOVE_CONFLICT');
+  perform pg_temp.expect_move_error(sid, dining_table, occupied, 'SESSION_MOVE_CONFLICT');
   -- El QR destino continúa la misma cuenta y sus pedidos.
   perform set_config('request.jwt.claim.sub', diner::text, true);
   if public.join_table_session((select qr_token from public.tables where id = destination), 'Diner') <> sid then
     raise exception 'Destination QR did not join moved session'; end if;
   perform set_config('request.jwt.claim.sub', staff::text, true);
-  if has_function_privilege('anon', 'public.pos_move_table_session(uuid,uuid,uuid,uuid)', 'EXECUTE')
-    or not has_function_privilege('authenticated', 'public.pos_move_table_session(uuid,uuid,uuid,uuid)', 'EXECUTE') then
+  if has_function_privilege('anon', 'public.pos_move_table_session(uuid,uuid,uuid)', 'EXECUTE')
+    or not has_function_privilege('authenticated', 'public.pos_move_table_session(uuid,uuid,uuid)', 'EXECUTE') then
     raise exception 'Wrong move privileges'; end if;
 
   closed_id := public.close_table_session(sid);
@@ -232,7 +236,7 @@ begin
       and payload->>'sessionId' = sid::text;
   if log_count <> 1 then raise exception 'Missing session.closed log'; end if;
 
-  perform pg_temp.expect_move_error(sid, destination, dining_table, employee, 'SESSION_MOVE_CONFLICT');
+  perform pg_temp.expect_move_error(sid, destination, dining_table, 'SESSION_MOVE_CONFLICT');
 
   -- Idempotent retry does not duplicate the log or reopen the table.
   if public.close_table_session(sid) <> sid then raise exception 'Idempotent close failed'; end if;

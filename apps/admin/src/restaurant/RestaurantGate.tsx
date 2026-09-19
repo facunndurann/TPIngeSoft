@@ -8,16 +8,31 @@ import { supabase } from '@/lib/supabase'
 import { Button, ErrorText, Field, Input, Spinner, Textarea } from '@/components/ui'
 import { DesignPicker } from '@/features/DesignPicker'
 import { RestaurantContext } from './restaurant-context'
+import { useAuth } from '@/auth/useAuth'
 
 /**
- * Carga el restaurante del usuario autenticado y su rol. Si todavía no tiene
- * uno, muestra el onboarding para crearlo (restaurante + membresía owner +
- * sucursal inicial + POS interno).
+ * Carga el restaurante del usuario autenticado y su rol. Solo owner/manager
+ * administran. Un empleado con profile y sin rol admin se echa. Si todavía no
+ * tiene restaurante, muestra el onboarding.
  */
 export function RestaurantGate({ children }: { children: ReactNode }) {
-  const { data, isLoading } = useQuery(myRestaurantQuery)
+  const { session } = useAuth()
+  const userId = session?.user.id ?? ''
+  const { data, isLoading, isError } = useQuery({
+    ...myRestaurantQuery,
+    queryKey: ['my-restaurant', userId],
+    enabled: Boolean(userId),
+  })
 
   if (isLoading) return <Spinner />
+  if (isError) {
+    return (
+      <div className="p-8">
+        <ErrorText message="Tu cuenta no tiene acceso administrativo o no pudimos verificarlo." />
+        <Button onClick={() => supabase.auth.signOut()}>Cerrar sesión</Button>
+      </div>
+    )
+  }
   if (!data) return <CreateRestaurantScreen />
 
   return <RestaurantContext value={data}>{children}</RestaurantContext>
@@ -47,7 +62,6 @@ function CreateRestaurantScreen() {
     setError(null)
     setSubmitting(true)
     try {
-      // Restaurante, membresía owner, sucursal y POS interno se crean juntos o no se crea nada.
       const { error: rpcErr } = await supabase.rpc('create_restaurant', {
         p_name: name,
         p_slug: slugify(name),
@@ -57,7 +71,7 @@ function CreateRestaurantScreen() {
       })
       if (rpcErr) throw rpcError(rpcErr)
 
-      await queryClient.invalidateQueries({ queryKey: myRestaurantQuery.queryKey })
+      await queryClient.invalidateQueries({ queryKey: ['my-restaurant'] })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error creando el restaurante')
     } finally {

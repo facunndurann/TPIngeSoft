@@ -221,7 +221,7 @@ export function posErrorCode(message: string): PosErrorCode | 'UNKNOWN' {
 }
 
 export const posErrorMessages: Record<PosErrorCode, string> = {
-  AUTH_REQUIRED: 'Tu sesión de administrador expiró. Volvé a ingresar.',
+  AUTH_REQUIRED: 'Tu sesión expiró. Volvé a ingresar.',
   INVALID_REQUEST: 'La solicitud no es válida.',
   SESSION_NOT_FOUND: 'No encontramos esa sesión de mesa.',
   FORBIDDEN: 'No tenés permiso para esta acción.',
@@ -232,7 +232,7 @@ export const posErrorMessages: Record<PosErrorCode, string> = {
   TABLE_OCCUPIED: 'La mesa destino ya tiene una comanda abierta. Elegí otra mesa.',
   TABLE_BRANCH_MISMATCH: 'La mesa destino debe estar en la misma sucursal.',
   SESSION_MOVE_CONFLICT: 'La comanda fue movida o cerrada por otro operador. Actualizá el plano.',
-  EMPLOYEE_NOT_FOUND: 'Tu usuario del POS ya no está habilitado. Volvé a ingresar el PIN.',
+  EMPLOYEE_NOT_FOUND: 'Tu cuenta ya no está habilitada en esta sucursal. Volvé a ingresar.',
   INVALID_TRANSITION: 'Ese cambio de estado no está permitido. Actualizá el tablero e intentá de nuevo.',
   POS_UNAVAILABLE: 'El POS no está activo para este restaurante.',
   POS_UNSUPPORTED: 'Este restaurante usa un POS externo que todavía no está conectado.',

@@ -1,339 +1,126 @@
-import { useState, type FormEvent } from 'react'
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { KeyRound, Plus, Trash2, Users } from 'lucide-react'
-import { useRestaurant } from '@/restaurant/restaurant-context'
-import {
-  loadPosAudit,
-  loadPosEmployees,
-  deletePosEmployee,
-  savePosEmployee,
-  type PosAuditEntry,
-  type PosEmployee,
-} from '@/features/pos/employees-api'
-import { Badge, Button, EmptyState, ErrorText, Field, Input, Modal, Spinner, Toggle } from '@/components/ui'
-
-const auditLabels: Record<string, string> = {
-  'pos.unlocked': 'Ingresó al POS',
-  'order.transition': 'Cambió el estado de una comanda',
-  'session.moved': 'Movió una comanda de mesa',
-  'session.closed': 'Cerró una sesión de mesa',
-  'employee.created': 'Alta de empleado',
-  'employee.updated': 'Edición de empleado',
-  'employee.deleted': 'Baja de empleado',
-}
+import { employeeRoles, employeeRoleLabels, type EmployeeRole } from '@restaurant-platform/shared'
+import { useMembership } from '@/restaurant/restaurant-context'
+import { supabase } from '@/lib/supabase'
+import { auditActorLabel, changeEmployee, loadEmployees, type Employee } from '@/features/employees/api'
+import { Badge, Button, ErrorText, Field, Input, Modal, Select, Spinner } from '@/components/ui'
 
 export function EmployeesPage() {
-  const restaurant = useRestaurant()
-  const queryClient = useQueryClient()
-  const [newName, setNewName] = useState('')
-  const [newPin, setNewPin] = useState('')
-  const [editing, setEditing] = useState<PosEmployee | null>(null)
-  const [deleting, setDeleting] = useState<PosEmployee | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  const employees = useQuery({
-    queryKey: ['pos', restaurant.id, 'employees'],
-    queryFn: () => loadPosEmployees(restaurant.id),
-  })
-
+  const { restaurant, role } = useMembership()
+  const qc = useQueryClient()
+  const [editing, setEditing] = useState<Employee | 'new' | null>(null)
+  const [resetting, setResetting] = useState<Employee | null>(null)
+  const [password, setPassword] = useState('')
+  const employees = useQuery({ queryKey: ['employees', restaurant.id], queryFn: () => loadEmployees(restaurant.id) })
   const audit = useQuery({
-    queryKey: ['pos', restaurant.id, 'audit'],
-    queryFn: () => loadPosAudit(restaurant.id),
+    queryKey: ['employee-audit', restaurant.id],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('pos_audit_log').select('*, legacy_employee:pos_employees(full_name)').eq('restaurant_id', restaurant.id).order('created_at', { ascending: false }).limit(100)
+      if (error) throw error
+      return data
+    },
     refetchInterval: 30000,
   })
-
-  const invalidate = () => {
-    void queryClient.invalidateQueries({ queryKey: ['pos', restaurant.id, 'employees'] })
-    void queryClient.invalidateQueries({ queryKey: ['pos', restaurant.id, 'audit'] })
+  function invalidate() {
+    void qc.invalidateQueries({ queryKey: ['employees'] })
+    void qc.invalidateQueries({ queryKey: ['employee-audit'] })
+    void qc.invalidateQueries({ queryKey: ['legacy-employees'] })
   }
-
-  const createMutation = useMutation({
-    mutationFn: () =>
-      savePosEmployee({ restaurantId: restaurant.id, fullName: newName, pin: newPin }),
-    onSuccess: () => {
-      setNewName('')
-      setNewPin('')
-      setError(null)
-      invalidate()
-    },
-    onError: (err) => setError(err instanceof Error ? err.message : 'No pudimos crear el empleado.'),
+  const reset = useMutation({
+    mutationFn: () => changeEmployee({ action: 'reset-password', restaurantId: restaurant.id, userId: resetting!.user_id, password }),
+    onSuccess: () => { setResetting(null); setPassword(''); invalidate() },
   })
-
-  const toggleMutation = useMutation({
-    mutationFn: (employee: PosEmployee) =>
-      savePosEmployee({
-        restaurantId: restaurant.id,
-        employeeId: employee.id,
-        fullName: employee.full_name,
-        pin: null,
-        isActive: !employee.is_active,
-      }),
-    onSuccess: () => {
-      setError(null)
-      invalidate()
-    },
-    onError: (err) => setError(err instanceof Error ? err.message : 'No pudimos actualizar el empleado.'),
-  })
-
-  const deleteMutation = useMutation({
-    mutationFn: (employee: PosEmployee) => deletePosEmployee(restaurant.id, employee.id),
-    onSuccess: () => {
-      setDeleting(null)
-      setError(null)
-      invalidate()
-    },
-    onError: (err) => setError(err instanceof Error ? err.message : 'No pudimos eliminar el empleado.'),
-  })
-
-  function handleCreate(event: FormEvent) {
-    event.preventDefault()
-    setError(null)
-    createMutation.mutate()
-  }
-
-  const employeeName = (entry: PosAuditEntry) => {
-    const current = employees.data?.find((employee) => employee.id === entry.employee_id)?.full_name
-    if (current) return current
-    const snapshot = auditEmployeeName(entry.details)
-    return snapshot ?? (entry.employee_id ? 'Empleado eliminado' : 'Administrador')
-  }
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-neutral-900">Empleados del POS</h1>
-        <p className="text-sm text-neutral-500">
-          Cada empleado desbloquea el POS con su PIN y sus acciones quedan registradas. Mientras no
-          haya ninguno activo, el POS lo opera el administrador.
-        </p>
-      </div>
-
-      <ErrorText message={error} />
-
-      <form onSubmit={handleCreate} className="flex flex-wrap items-end gap-3 rounded-xl border border-neutral-200 bg-white p-4">
-        <div className="min-w-48 flex-1">
-          <Field label="Nombre">
-            <Input
-              value={newName}
-              onChange={(event) => setNewName(event.target.value)}
-              placeholder="Ana Pérez"
-              required
-            />
-          </Field>
+  return <div className="space-y-6">
+    <header className="flex flex-wrap items-center justify-between gap-3">
+      <div><h1 className="text-xl font-bold">Empleados</h1><p className="text-sm text-neutral-500">Cuentas personales, permisos y sucursales de trabajo.</p></div>
+      <Button onClick={() => setEditing('new')}>Agregar empleado</Button>
+    </header>
+    {employees.isError && <ErrorText message="No pudimos cargar los empleados." />}
+    {employees.isPending ? <Spinner /> : <ul className="divide-y rounded-xl bg-white">
+      {employees.data?.map(e => <li key={e.user_id} className="flex flex-wrap items-center justify-between gap-3 p-4">
+        <div><p className="font-medium">{e.full_name} <span className="text-neutral-500">@{e.username}</span></p><p className="text-sm text-neutral-500">{e.roles.map(r => employeeRoleLabels[r as EmployeeRole] ?? r).join(' · ')}</p></div>
+        <div className="flex items-center gap-2"><Badge color={e.is_active ? 'green' : 'neutral'}>{e.is_active ? 'Habilitado' : 'Desactivado'}</Badge>
+          <Button variant="secondary" onClick={() => setEditing(e)}>Editar acceso</Button>
+          <Button variant="secondary" onClick={() => { setPassword(''); reset.reset(); setResetting(e) }}>Restablecer contraseña</Button>
         </div>
-        <div className="w-40">
-          <Field label="PIN (4 a 8 dígitos)">
-            <Input
-              value={newPin}
-              onChange={(event) => setNewPin(event.target.value.replace(/\D/g, '').slice(0, 8))}
-              inputMode="numeric"
-              placeholder="1234"
-              minLength={4}
-              required
-            />
-          </Field>
-        </div>
-        <Button type="submit" disabled={createMutation.isPending || newPin.length < 4}>
-          <Plus size={16} />
-          {createMutation.isPending ? 'Agregando…' : 'Agregar'}
-        </Button>
+      </li>)}
+      {!employees.data?.length && <li className="p-4 text-neutral-500">Todavía no hay cuentas de empleados.</li>}
+    </ul>}
+    <section className="space-y-3">
+      <h2 className="font-semibold">Auditoría POS</h2>
+      {audit.isError && <ErrorText message="No pudimos cargar la auditoría." />}
+      <ul className="divide-y rounded-xl bg-white text-sm">{audit.data?.map(e => {
+        const details = e.details && typeof e.details === 'object' && !Array.isArray(e.details) ? e.details : {}
+        const actor = auditActorLabel(e, employees.data ?? [])
+        const subject = typeof details.fullName === 'string' ? details.fullName : null
+        return <li key={e.id} className="p-3"><p>{actor} · {e.action}{subject ? ` · ${subject}` : ''}</p><p className="text-xs text-neutral-500">{new Date(e.created_at).toLocaleString('es-AR')}{e.branch_id ? ` · Sucursal ${e.branch_id.slice(0, 8)}` : ''}</p></li>
+      })}</ul>
+    </section>
+    {editing && <EmployeeForm key={editing === 'new' ? 'new' : editing.user_id} employee={editing === 'new' ? null : editing} restaurantId={restaurant.id} owner={role === 'owner'} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); invalidate() }} />}
+    {resetting && <Modal title={`Restablecer contraseña de ${resetting.full_name}`} onClose={() => { setResetting(null); setPassword('') }}>
+      <form className="space-y-4" onSubmit={e => { e.preventDefault(); reset.mutate() }}>
+        <Field label="Nueva contraseña"><Input type="password" autoComplete="new-password" minLength={10} maxLength={128} value={password} onChange={e => setPassword(e.target.value)} required /></Field>
+        <p className="text-sm text-neutral-500">La contraseña cambia para todos los restaurantes de esta cuenta.</p>
+        <ErrorText message={reset.error?.message ?? null} /><Button disabled={reset.isPending}>Restablecer</Button>
       </form>
-
-      {employees.isLoading ? (
-        <Spinner />
-      ) : (employees.data?.length ?? 0) === 0 ? (
-        <EmptyState message="Todavía no hay empleados con PIN. El POS lo opera el administrador." />
-      ) : (
-        <ul className="divide-y divide-neutral-200 overflow-hidden rounded-xl border border-neutral-200 bg-white">
-          {employees.data?.map((employee) => (
-            <li key={employee.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
-              <div className="flex items-center gap-2.5">
-                <div className="rounded-lg bg-neutral-100 p-2 text-neutral-500">
-                  <Users size={16} />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-neutral-900">{employee.full_name}</p>
-                  <p className="text-xs text-neutral-500">
-                    {employee.is_active ? 'Puede operar el POS' : 'No puede operar el POS'}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <Badge color={employee.is_active ? 'green' : 'neutral'}>
-                  {employee.is_active ? 'Activo' : 'Inactivo'}
-                </Badge>
-                <Toggle
-                  checked={employee.is_active}
-                  onChange={() => toggleMutation.mutate(employee)}
-                  label="Habilitado"
-                />
-                <Button variant="secondary" onClick={() => { setError(null); setEditing(employee) }}>
-                  <KeyRound size={15} />
-                  Cambiar PIN
-                </Button>
-                <Button
-                  variant="ghost"
-                  className="text-red-600 hover:bg-red-50"
-                  onClick={() => {
-                    setError(null)
-                    setDeleting(employee)
-                  }}
-                >
-                  <Trash2 size={15} />
-                  Eliminar
-                </Button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-neutral-700">Actividad reciente del POS</h2>
-        {audit.isLoading ? (
-          <Spinner />
-        ) : (audit.data?.length ?? 0) === 0 ? (
-          <EmptyState message="Todavía no hay actividad registrada." />
-        ) : (
-          <ul className="divide-y divide-neutral-200 overflow-hidden rounded-xl border border-neutral-200 bg-white text-sm">
-            {audit.data?.map((entry) => (
-              <AuditRow key={entry.id} entry={entry} employeeName={employeeName} />
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {editing && (
-        <ChangePinModal
-          employee={editing}
-          restaurantId={restaurant.id}
-          onClose={() => setEditing(null)}
-          onSaved={() => {
-            setEditing(null)
-            invalidate()
-          }}
-        />
-      )}
-
-      {deleting && (
-        <Modal title={`Eliminar a ${deleting.full_name}`} onClose={() => setDeleting(null)}>
-          <div className="space-y-4 text-sm text-neutral-700">
-            <p>
-              Esta persona dejará de poder ingresar al POS con su PIN. Su actividad anterior seguirá
-              visible en la auditoría.
-            </p>
-            <p className="rounded-lg bg-red-50 px-3 py-2 text-red-800">
-              Esta acción no se puede deshacer. Si solo querés bloquear temporalmente el acceso,
-              desactivá “Habilitado”.
-            </p>
-            <ErrorText message={error} />
-            <div className="flex gap-2">
-              <Button
-                variant="secondary"
-                className="flex-1"
-                onClick={() => setDeleting(null)}
-                disabled={deleteMutation.isPending}
-              >
-                Cancelar
-              </Button>
-              <Button
-                variant="danger"
-                className="flex-1"
-                onClick={() => deleteMutation.mutate(deleting)}
-                disabled={deleteMutation.isPending}
-              >
-                {deleteMutation.isPending ? 'Eliminando…' : 'Eliminar empleado'}
-              </Button>
-            </div>
-          </div>
-        </Modal>
-      )}
-    </div>
-  )
+    </Modal>}
+  </div>
 }
 
-function AuditRow({
-  entry,
-  employeeName,
-}: {
-  entry: PosAuditEntry
-  employeeName: (entry: PosAuditEntry) => string
+function EmployeeForm({ employee, restaurantId, owner, onClose, onSaved }: {
+  employee: Employee | null; restaurantId: string; owner: boolean; onClose: () => void; onSaved: () => void
 }) {
-  const when = new Intl.DateTimeFormat('es-AR', { dateStyle: 'short', timeStyle: 'short' }).format(
-    new Date(entry.created_at),
-  )
-  return (
-    <li className="flex flex-wrap items-center justify-between gap-2 p-3">
-      <span className="text-neutral-900">
-        {employeeName(entry)} · {auditLabels[entry.action] ?? entry.action}
-      </span>
-      <span className="text-xs text-neutral-500">{when}</span>
-    </li>
-  )
-}
-
-function auditEmployeeName(details: unknown): string | null {
-  if (!details || typeof details !== 'object' || Array.isArray(details)) return null
-  const value = (details as Record<string, unknown>).employeeName
-  return typeof value === 'string' && value.trim() ? value : null
-}
-
-function ChangePinModal({
-  employee,
-  restaurantId,
-  onClose,
-  onSaved,
-}: {
-  employee: PosEmployee
-  restaurantId: string
-  onClose: () => void
-  onSaved: () => void
-}) {
-  const [pin, setPin] = useState('')
-  const [error, setError] = useState<string | null>(null)
-
-  const mutation = useMutation({
-    mutationFn: () =>
-      savePosEmployee({
-        restaurantId,
-        employeeId: employee.id,
-        fullName: employee.full_name,
-        pin,
-        isActive: employee.is_active,
-      }),
+  const [fullName, setFullName] = useState(employee?.full_name ?? '')
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [roles, setRoles] = useState<EmployeeRole[]>(employee?.roles.filter((r): r is EmployeeRole => employeeRoles.includes(r as EmployeeRole)) ?? ['waiter'])
+  const [branchIds, setBranchIds] = useState<string[]>(employee?.branch_ids ?? [])
+  const [active, setActive] = useState(employee?.is_active ?? true)
+  const [legacyId, setLegacyId] = useState('')
+  const [existingId, setExistingId] = useState('')
+  const branches = useQuery({
+    queryKey: ['branches', restaurantId],
+    queryFn: async () => { const { data, error } = await supabase.from('branches').select('id,name').eq('restaurant_id', restaurantId).eq('is_active', true); if (error) throw error; return data },
+  })
+  const legacy = useQuery({
+    queryKey: ['legacy-employees', restaurantId],
+    queryFn: async () => { const { data, error } = await supabase.from('pos_employees').select('id,full_name').eq('restaurant_id', restaurantId).is('migrated_user_id', null); if (error) throw error; return data },
+  })
+  const accounts = useQuery({
+    queryKey: ['managed-accounts'],
+    queryFn: async () => { const { data, error } = await supabase.from('profiles').select('id,full_name,username_normalized'); if (error) throw error; return data },
+    enabled: !employee,
+  })
+  const save = useMutation({
+    mutationFn: () => changeEmployee({
+      action: employee || existingId ? 'update' : 'create', restaurantId,
+      ...(employee || existingId ? { userId: employee?.user_id ?? existingId } : { username, password }),
+      fullName, roles, branchIds, active, ...(legacyId ? { legacyId } : {}),
+    }),
     onSuccess: onSaved,
-    onError: (err) => setError(err instanceof Error ? err.message : 'No pudimos cambiar el PIN.'),
   })
-
-  return (
-    <Modal title={`PIN de ${employee.full_name}`} onClose={onClose}>
-      <form
-        className="space-y-4"
-        onSubmit={(event) => {
-          event.preventDefault()
-          setError(null)
-          mutation.mutate()
-        }}
-      >
-        <Field label="Nuevo PIN (4 a 8 dígitos)">
-          <Input
-            value={pin}
-            onChange={(event) => setPin(event.target.value.replace(/\D/g, '').slice(0, 8))}
-            inputMode="numeric"
-            autoFocus
-            required
-          />
-        </Field>
-        <ErrorText message={error} />
-        <div className="flex gap-2">
-          <Button variant="secondary" type="button" className="flex-1" onClick={onClose}>
-            Cancelar
-          </Button>
-          <Button type="submit" className="flex-1" disabled={pin.length < 4 || mutation.isPending}>
-            {mutation.isPending ? 'Guardando…' : 'Guardar PIN'}
-          </Button>
-        </div>
-      </form>
-    </Modal>
-  )
+  return <Modal title={employee ? 'Editar empleado' : 'Agregar empleado'} onClose={onClose}>
+    <form className="space-y-4" onSubmit={e => { e.preventDefault(); save.mutate() }}>
+      {!employee && <Field label="Cuenta"><Select value={existingId} onChange={e => { setExistingId(e.target.value); const p = accounts.data?.find(p => p.id === e.target.value); if (p) setFullName(p.full_name) }}>
+        <option value="">Crear cuenta nueva</option>{accounts.data?.map(p => <option key={p.id} value={p.id}>Vincular: {p.full_name} (@{p.username_normalized})</option>)}
+      </Select></Field>}
+      <Field label="Nombre visible"><Input value={fullName} onChange={e => setFullName(e.target.value)} required maxLength={100} /></Field>
+      {!employee && !existingId && <>
+        <Field label="Usuario global"><Input autoComplete="off" value={username} onChange={e => setUsername(e.target.value)} minLength={3} maxLength={32} required /></Field>
+        <Field label="Contraseña inicial"><Input type="password" autoComplete="new-password" value={password} onChange={e => setPassword(e.target.value)} minLength={10} maxLength={128} required /></Field>
+      </>}
+      <fieldset><legend className="mb-2 text-sm font-medium">Roles</legend><div className="flex flex-wrap gap-3">
+        {employeeRoles.filter(r => owner || r !== 'manager').map(r => <label key={r} className="flex items-center gap-1 text-sm"><input type="checkbox" checked={roles.includes(r)} onChange={e => setRoles(e.target.checked ? r === 'manager' ? ['manager'] : [...roles.filter(x => x !== 'manager'), r] : roles.filter(x => x !== r))} />{employeeRoleLabels[r]}</label>)}
+      </div></fieldset>
+      <fieldset><legend className="mb-2 text-sm font-medium">Sucursales habilitadas</legend><div className="flex flex-wrap gap-3">
+        {branches.data?.map(b => <label key={b.id} className="flex items-center gap-1 text-sm"><input type="checkbox" checked={branchIds.includes(b.id)} onChange={e => setBranchIds(e.target.checked ? [...branchIds, b.id] : branchIds.filter(id => id !== b.id))} />{b.name}</label>)}
+      </div></fieldset>
+      {legacy.data && legacy.data.length > 0 && <Field label="Vincular registro de empleado anterior (opcional)"><Select value={legacyId} onChange={e => setLegacyId(e.target.value)}><option value="">Sin vincular</option>{legacy.data.map(e => <option key={e.id} value={e.id}>{e.full_name}</option>)}</Select></Field>}
+      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} />Acceso habilitado en este restaurante</label>
+      <p className="text-xs text-neutral-500">Desactivar conserva la cuenta y su historial. El nombre es compartido por todos sus restaurantes.</p>
+      <ErrorText message={save.error?.message ?? (branches.isError || legacy.isError || accounts.isError ? 'No pudimos cargar los datos del formulario.' : null)} />
+      <Button disabled={save.isPending || !roles.length || !branchIds.length}>{save.isPending ? 'Guardando…' : 'Guardar'}</Button>
+    </form>
+  </Modal>
 }

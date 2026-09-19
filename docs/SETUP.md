@@ -56,9 +56,8 @@ pnpm dev:functions  # necesario para que el comensal pueda enviar pedidos
   - `admin@nonna.demo` / `demo1234`
 - **QR tokens de mesas demo**: `demo-burger-mesa-1` a `4` y `demo-nonna-mesa-1` a `3`. La URL de una mesa es `http://localhost:5173/m/<token>`.
 - **Sectores del salón**: La Esquina Burger tiene `Salón principal` (Mesas 1-3 y una `Barra de apoyo` oculta de 8 × 1 celdas) y `Terraza` (Mesa 4); Trattoria Nonna tiene `Salón` con sus 3 mesas, incluida una de 7 × 3 para 8 personas.
-- **Empleados del POS con PIN** (desbloquean el salón, no tienen cuenta propia):
-  - La Esquina Burger: `Ana (mozo)` → `1234`, `Bruno (cajero)` → `5678`
-  - Trattoria Nonna: `Carla (mozo)` → `1234`
+- **Cuentas POS independientes**: `pos.esquina` / `demo-pos1234` y `pos.nonna` / `demo-pos1234`, con rol supervisor. Dominio interno local: `employees.example.com`.
+- Los empleados legacy del seed se conservan para probar su vinculación desde Empleados; sus PIN ya no permiten ingresar.
 
 Para volver a un estado limpio en cualquier momento: `pnpm supabase db reset` (reaplica migraciones + seed).
 
@@ -76,6 +75,16 @@ VITE_SUPABASE_ANON_KEY=<anon key que imprime supabase start>
 # URL base de la app del comensal: se usa para armar los links de los QR
 VITE_CUSTOMER_APP_URL=http://localhost:5173
 ```
+
+### `apps/pos/.env`
+
+```bash
+VITE_SUPABASE_URL=http://127.0.0.1:54321
+VITE_SUPABASE_ANON_KEY=<anon key local>
+VITE_EMPLOYEE_EMAIL_DOMAIN=employees.example.com
+```
+
+`pnpm dev:pos` abre el POS en `http://localhost:5175`. `pnpm dev:functions` sirve ambas funciones usando `supabase/functions/.env.example`. Para otro dominio interno, usar un archivo de entorno propio y el mismo dominio en POS.
 
 ### `apps/customer/.env`
 
@@ -195,7 +204,7 @@ Recorrido de aceptación:
 4. Cambiar un precio desde admin después de revisar el carrito y antes de confirmar. El servidor debe rechazar el total anterior, actualizar la carta y exigir una nueva revisión. No debe quedar un pedido parcial.
 5. Simular pérdida de conexión al enviar. El carrito conserva el intento y bloquea ediciones; **Reintentar el mismo envío** recupera el resultado sin duplicar el pedido, incluso tras recargar.
 6. Cambiar el nombre, precio u opciones de un producto después de pedirlo. El pedido ya enviado conserva sus snapshots.
-7. Avanzar el pedido desde el **POS** del admin (`http://localhost:5174/pos`): **Preparar**, **Marcar listo** y **Entregar**. Deben actualizarse ambos comensales. Solo miembros del restaurante pueden hacerlo. La secuencia es `submitted → accepted → in_preparation → ready → delivered`; `cancelled` se permite antes de entregar y elimina ese importe de la cuenta. Repetir un estado no duplica sus registros.
+7. Avanzar el pedido desde el **POS independiente** (`http://localhost:5175`): **Preparar**, **Marcar listo** y **Entregar**. Deben actualizarse ambos comensales. Solo miembros del restaurante pueden hacerlo. La secuencia es `submitted → accepted → in_preparation → ready → delivered`; `cancelled` se permite antes de entregar y elimina ese importe de la cuenta. Repetir un estado no duplica sus registros.
 8. Consultar **Pedidos y cuenta**: **Enviado, por confirmar** corresponde a pedidos todavía sin recepción del POS; **En cuenta** incluye los aceptados y posteriores; **Pagado** suma solo pagos aprobados; **Pendiente de pago** es la diferencia, con mínimo cero. La cuenta saldada requiere consumo positivo, saldo cero y ningún pedido esperando recepción. El cierre de sesión se hace desde el POS (Fase 5, abajo).
 
 Pruebas reproducibles:
@@ -211,7 +220,7 @@ pnpm build
 
 La suite integrada necesita el seed demo y la función activa. Usa 32 verificaciones HTTP/Realtime con fixtures propios que elimina al terminar, sin modificar los menús existentes. Crea tres usuarios Auth anónimos locales; si se proporciona `SUPABASE_SERVICE_ROLE_KEY` solo al proceso de pruebas, también los elimina. No colocar esa clave en un `.env` del frontend. Las pruebas SQL crean fixtures dentro de `BEGIN … ROLLBACK` e incluyen pagos aprobados/rechazados, sin invocar proveedores de pago.
 
-**Resultado de implementación:** migración aplicada; 28 verificaciones integradas, aserciones SQL y 16 pruebas de lógica correctas; typecheck, lint y build verificados. También se comprobó en Chrome a 390 × 844 px el flujo QR → carrito → confirmación → cuenta, sin errores de consola ni desbordamiento horizontal. Se simuló una respuesta perdida y el cierre de sesión: recargar y reintentar recuperó el pedido existente sin duplicarlo. La aceptación manual completa de todos los escenarios queda como recorrido adicional.
+La suite de integración completa requiere Supabase local (Auth, Edge, PostgREST y Realtime). El cobro con Mercado Pago sigue pendiente.
 
 ### Cómo se confirma un pedido
 
@@ -231,7 +240,7 @@ Con el stack local iniciado, aplicar la migración del POS sin borrar datos:
 pnpm supabase migration up --local
 ```
 
-En terminales separadas: `pnpm dev:functions`, `pnpm dev:customer` y `pnpm dev:admin`. El panel abre en el POS (`http://localhost:5174/pos`).
+En terminales separadas: `pnpm dev:functions`, `pnpm dev:customer`, `pnpm dev:admin` y `pnpm dev:pos`. Admin abre Productos; POS abre en `http://localhost:5175`. Ingresar al POS con `pos.esquina` / `demo-pos1234`.
 
 Recorrido de aceptación:
 
@@ -254,45 +263,39 @@ pnpm lint
 pnpm build
 ```
 
-`close_table_session` es exclusiva de miembros del restaurante, idempotente y usa el mismo orden de bloqueo mesa → sesión que el ingreso por QR. Los navegadores no pueden cambiar el estado de una sesión con un `update` directo.
+`close_table_session` requiere una cuenta empleada activa, sucursal asignada y permiso `sessions.close`, idempotente y usa el mismo orden de bloqueo mesa → sesión que el ingreso por QR. Los navegadores no pueden cambiar el estado de una sesión con un `update` directo.
 
 **Resultado de implementación:** migración aplicada; 32 verificaciones integradas (incluye consulta anidada del tablero, cierre por RPC, aislamiento y Realtime de cierre); aserciones SQL de POS y pedidos; 18 pruebas de lógica (9 de pedidos/POS + 9 del comensal); typecheck, lint y build verificados. El cobro con Mercado Pago y el cierre automático al saldar siguen en la Fase 7.
 
 ---
 
-## 8. Probar el POS desacoplado del admin (MI-61)
+## 8. Cuentas globales y permisos POS
 
-El POS ya no comparte permisos con el backoffice. Hay dos capas:
+Aplicar las migraciones con `pnpm supabase migration up --local`. No hace falta resetear datos existentes. Ver [matriz y transición](pos-accounts.md).
 
-- **Rol de la cuenta** (`restaurant_members.role`): `owner` administra carta, precios, mesas y configuración; `staff` solo opera el salón. La RLS aplica esta regla en la base, no solo en la UI.
-- **Empleado del POS** (`pos_employees`): la persona que atiende, identificada por PIN sobre el dispositivo compartido. Sus acciones quedan en `pos_audit_log`.
+1. Ingresar en admin y abrir Empleados. Crear nombre visible, username global, contraseña, roles y sucursales. Vincular opcionalmente un registro legacy.
+2. En otra ventana, sin sesión administrativa, abrir `http://localhost:5175` e ingresar con ese username y contraseña.
+3. Con una sucursal habilitada se entra directamente; con varias aparece un selector limitado a las asignaciones propias.
+4. Probar `waiter`: puede aceptar/entregar, no preparar/cancelar/cerrar. Probar `kitchen`: sólo comandas y preparar/marcar listo. Probar `cashier`: caja/mesas y cierre, sin transiciones de cocina.
+5. Desactivar la membresía desde admin: las RPC y RLS rechazan inmediatamente el JWT existente. El frontend verifica contextos cada 15 segundos.
+6. Restablecer la contraseña desde admin. La contraseña anterior ya no permite iniciar sesión; no se envía recuperación a emails internos.
+7. Revisar auditoría: los eventos nuevos tienen cuenta autenticada y sucursal; los históricos conservan referencias legacy. Sin cuentas activas no hay fallback de administrador.
 
-Aplicar la migración sin borrar datos:
-
-```bash
-pnpm supabase migration up --local
-```
-
-Recorrido de aceptación:
-
-1. Ingresar como `admin@esquina.demo` y abrir `http://localhost:5174/pos`: el POS pide PIN antes de mostrar comandas.
-2. Ingresar `1234`: el encabezado muestra `Ana (mozo)` y se habilitan comandas, mesas e historial.
-3. Avanzar una comanda y cerrar una sesión de mesa. En **Empleados → Actividad reciente del POS** aparecen ambas acciones con el nombre del empleado.
-4. Tocar **Bloquear**: el POS vuelve a pedir PIN. Tras 10 minutos sin actividad se bloquea solo.
-5. Un PIN incorrecto no desbloquea. Desactivar a `Ana` desde **Empleados** y comprobar que su PIN deja de servir.
-6. Con un usuario de rol `staff` (se crea insertando una fila en `restaurant_members` con `role = 'staff'`), la barra lateral solo muestra **POS** y entrar a mano a `/productos` redirige a `/pos`. Un `update` directo sobre productos o precios lo rechaza la RLS.
-7. Si el restaurante no tiene empleados activos, el administrador puede operar el POS con un aviso, y las acciones quedan asociadas a su usuario.
-
-Pruebas reproducibles:
+Pruebas:
 
 ```bash
-docker exec -i supabase_db_TP psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/tests/pos-employees.sql
+pnpm test:employees
+pnpm --filter pos test
+pnpm test:sql
+# Exportar ANON_KEY y SERVICE_ROLE_KEY del stack LOCAL (pnpm supabase status -o env).
+pnpm test:employees:integration
+pnpm test:orders:integration
 pnpm typecheck
 pnpm lint
 pnpm build
 ```
 
-El PIN se guarda con bcrypt y el hash queda fuera del `grant` de columnas, así que no sale por PostgREST. `pos_audit_log` es de solo lectura para la app: las entradas las escriben `verify_pos_pin`, `pos_transition_order` y `pos_close_table_session`, que son los envoltorios auditados de las RPC del POS.
+La API `employee-accounts` verifica el JWT y permisos antes de usar Auth Admin API. `service_role` existe sólo en Edge y en pruebas locales del backend.
 
 ---
 
@@ -331,7 +334,7 @@ Recorrido de aceptación (como `admin@esquina.demo`, en **Salón**):
 7. Apagar **Sector en uso**: todas las mesas de ese sector salen de la operación, y en **Visualizar** el resumen lo advierte.
 8. Agregar una mesa al sector: aparece en el primer hueco libre, sin pisar a las existentes.
 9. Eliminar un sector con mesas: las mesas no se borran, quedan en **Mesas sin sector** y se pueden reubicar con un clic.
-10. Con un usuario de rol `staff`, `/salon` redirige a `/pos` y la RLS rechaza cualquier escritura sobre sectores o layout.
+10. Con una cuenta operativa, admin deniega el ingreso y la RLS rechaza escrituras sobre sectores o layout.
 
 Pruebas reproducibles:
 
@@ -358,7 +361,7 @@ Recorrido de aceptación:
 1. Abrir **POS → Salón**, cambiar de sector y comprobar que las mesas conservan posición, forma y tamaño.
 2. Abrir el QR de una mesa sin sesión: figura **Libre**. Al ingresar desde el comensal pasa a **Ocupada**.
 3. Enviar un pedido y recorrer sus estados desde **Comandas**. El mapa cambia entre **Pedido pendiente**, **En preparación** y **Listo para servir** sin recargar.
-4. Confirmar que, al operar con PIN, el nombre del empleado aparece como responsable de la mesa.
+4. Confirmar que, al operar con una cuenta de empleado, el nombre del empleado aparece como responsable de la mesa.
 5. Verificar que tiempo y total se actualizan en el bloque de la mesa y en el resumen táctil.
 6. Crear un pago `pending` de prueba: la mesa pasa a **Cobro pendiente**; un pago rechazado o cancelado no conserva ese estado.
 7. Hasta incorporar las acciones del comensal de MI-38/MI-46, marcar desde Studio `bill_requested_at = now()` o `in_person_payment_requested_at = now()` en una sesión abierta y comprobar los estados **Cuenta solicitada** y **Cobro pendiente**.
@@ -381,22 +384,23 @@ pnpm build
 
 ## 11. Abrir y continuar comandas desde el plano (MI-64)
 
-Tocar una mesa del plano abre su **comanda**: `/pos/salon/<tableId>`. Es la misma pantalla para una mesa libre y una ocupada, porque la RPC `pos_open_table_session` es idempotente — si la mesa ya tiene sesión abierta la devuelve en lugar de fallar, así dos mozos que tocan la misma mesa a la vez terminan en la misma comanda.
+Tocar una mesa del plano abre su **comanda**: `/salon/<tableId>` en la app del POS. Es la misma pantalla para una mesa libre y una ocupada, porque la RPC `pos_open_table_session` es idempotente — si la mesa ya tiene sesión abierta la devuelve en lugar de fallar, así dos mozos que tocan la misma mesa a la vez terminan en la misma comanda.
 
 A diferencia de `join_table_session` (el ingreso por QR), abrir desde el POS **no suma al mozo como comensal** de la mesa.
 
-La sucursal y el sector viajan en la query (`/pos/salon?sucursal=…&sector=…`), así que **Volver al plano** deja el mapa en el mismo sector desde el que se entró. También sobrevive a recargar la página o compartir el link.
+La sucursal y el sector viajan en la query (`/salon?sucursal=…&sector=…`), así que **Volver al plano** deja el mapa en el mismo sector desde el que se entró. También sobrevive a recargar la página o compartir el link.
 
-Recorrido de aceptación (como `admin@esquina.demo`, PIN `1234`):
+Recorrido de aceptación (en el POS, como `pos.esquina` / `demo-pos1234`):
 
-1. En **POS → Salón**, tocar una mesa verde: el resumen ofrece **Abrir comanda**.
+1. En **Salón**, tocar una mesa verde: el resumen ofrece **Abrir comanda**.
 2. Abrir: la mesa pasa a ocupada en el plano, con tiempo, total y responsable.
 3. **Volver al plano**: vuelve al mismo sector, no al primero.
 4. Tocar la misma mesa: el botón dice **Continuar comanda** y entra a la sesión que ya existía, sin crear otra.
 5. Que un comensal escanee el QR de esa mesa: entra a la comanda que abrió el mozo, no a una nueva.
 6. Desde la comanda, avanzar el estado de un pedido y cerrar la sesión.
-7. En **Empleados → Actividad reciente**, figuran `session.opened` y `session.resumed` con el empleado del PIN.
-8. Una mesa fuera de servicio, oculta, o de un sector/sucursal dado de baja no se puede abrir: la RPC responde `TABLE_UNAVAILABLE` aunque se la llame a mano.
+7. En el panel, **Empleados → Auditoría POS** muestra `session.opened` y `session.resumed` con la cuenta que operó y su sucursal.
+8. Con una cuenta `kitchen` o `cashier` el botón **Abrir comanda** no aparece, y la RPC responde `FORBIDDEN` si se la llama a mano.
+9. Una mesa fuera de servicio, oculta o de un sector dado de baja no se puede abrir: la RPC responde `TABLE_UNAVAILABLE` aunque se la llame a mano.
 
 También se llega a la comanda desde **Mesas activas**: las mesas ocupadas tienen **Continuar comanda** y las libres son un link para abrirla.
 

@@ -13,14 +13,6 @@ import { TablesPage } from '@/pages/TablesPage'
 import { FloorPlanPage } from '@/pages/FloorPlanPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { EmployeesPage } from '@/pages/EmployeesPage'
-import { PosGate } from '@/features/pos/PosGate'
-import { PosOperatorProvider } from '@/features/pos/PosOperatorProvider'
-import { PosPage } from '@/features/pos/PosPage'
-import { CommandBoard } from '@/features/pos/CommandBoard'
-import { ActiveTables } from '@/features/pos/ActiveTables'
-import { OrderHistory } from '@/features/pos/OrderHistory'
-import { FloorMap } from '@/features/pos/FloorMap'
-import { TableCommand } from '@/features/pos/TableCommand'
 
 function App() {
   const { session, loading } = useAuth()
@@ -35,32 +27,17 @@ function App() {
         element={
           session ? (
             <RestaurantGate>
-              <PosOperatorProvider>
+              <RequireAdmin>
                 <AdminLayout />
-              </PosOperatorProvider>
+              </RequireAdmin>
             </RestaurantGate>
           ) : (
             <Navigate to="/login" replace />
           )
         }
       >
-        <Route index element={<Navigate to="/pos" replace />} />
-        {/* Operación: cualquier miembro, con empleado validado por PIN. */}
-        <Route
-          path="pos"
-          element={
-            <PosGate>
-              <PosPage />
-            </PosGate>
-          }
-        >
-          <Route index element={<CommandBoard />} />
-          <Route path="salon" element={<FloorMap />} />
-          <Route path="salon/:tableId" element={<TableCommand />} />
-          <Route path="mesas" element={<ActiveTables />} />
-          <Route path="historial" element={<OrderHistory />} />
-        </Route>
-        {/* Administración sensible: solo el owner (la RLS aplica lo mismo). */}
+        <Route index element={<Navigate to="/productos" replace />} />
+        {/* Administración: owner/manager; la RLS aplica los permisos de la cuenta. */}
         <Route path="productos" element={<RequireAdmin><ProductsPage /></RequireAdmin>} />
         <Route path="productos/nuevo" element={<RequireAdmin><ProductEditPage /></RequireAdmin>} />
         <Route path="productos/:productId" element={<RequireAdmin><ProductEditPage /></RequireAdmin>} />

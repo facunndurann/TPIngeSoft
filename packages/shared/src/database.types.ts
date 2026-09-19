@@ -7,31 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       abandoned_order_requests: {
@@ -57,6 +32,39 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "session_participants"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      branch_memberships: {
+        Row: {
+          branch_id: string
+          membership_id: string
+          restaurant_id: string
+        }
+        Insert: {
+          branch_id: string
+          membership_id: string
+          restaurant_id: string
+        }
+        Update: {
+          branch_id?: string
+          membership_id?: string
+          restaurant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "branch_memberships_branch_id_restaurant_id_fkey"
+            columns: ["branch_id", "restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id", "restaurant_id"]
+          },
+          {
+            foreignKeyName: "branch_memberships_membership_id_restaurant_id_fkey"
+            columns: ["membership_id", "restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurant_members"
+            referencedColumns: ["id", "restaurant_id"]
           },
         ]
       }
@@ -641,8 +649,10 @@ export type Database = {
       pos_audit_log: {
         Row: {
           action: string
+          actor_user_id: string | null
+          branch_id: string | null
           created_at: string
-          details: Json
+          details: NonNullable<Json>
           employee_id: string | null
           id: string
           order_id: string | null
@@ -652,8 +662,10 @@ export type Database = {
         }
         Insert: {
           action: string
+          actor_user_id?: string | null
+          branch_id?: string | null
           created_at?: string
-          details?: Json
+          details?: NonNullable<Json>
           employee_id?: string | null
           id?: string
           order_id?: string | null
@@ -663,8 +675,10 @@ export type Database = {
         }
         Update: {
           action?: string
+          actor_user_id?: string | null
+          branch_id?: string | null
           created_at?: string
-          details?: Json
+          details?: NonNullable<Json>
           employee_id?: string | null
           id?: string
           order_id?: string | null
@@ -673,6 +687,13 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "pos_audit_log_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "pos_audit_log_employee_id_fkey"
             columns: ["employee_id"]
@@ -716,6 +737,7 @@ export type Database = {
           full_name: string
           id: string
           is_active: boolean
+          migrated_user_id: string | null
           pin_hash: string
           restaurant_id: string
           updated_at: string
@@ -725,6 +747,7 @@ export type Database = {
           full_name: string
           id?: string
           is_active?: boolean
+          migrated_user_id?: string | null
           pin_hash: string
           restaurant_id: string
           updated_at?: string
@@ -734,11 +757,19 @@ export type Database = {
           full_name?: string
           id?: string
           is_active?: boolean
+          migrated_user_id?: string | null
           pin_hash?: string
           restaurant_id?: string
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "pos_employees_migrated_user_id_fkey"
+            columns: ["migrated_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "pos_employees_restaurant_id_fkey"
             columns: ["restaurant_id"]
@@ -751,7 +782,7 @@ export type Database = {
       pos_integrations: {
         Row: {
           created_at: string
-          credentials: Json
+          credentials: NonNullable<Json>
           id: string
           is_active: boolean
           restaurant_id: string
@@ -759,7 +790,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
-          credentials?: Json
+          credentials?: NonNullable<Json>
           id?: string
           is_active?: boolean
           restaurant_id: string
@@ -767,7 +798,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
-          credentials?: Json
+          credentials?: NonNullable<Json>
           id?: string
           is_active?: boolean
           restaurant_id?: string
@@ -970,24 +1001,54 @@ export type Database = {
           },
         ]
       }
-      restaurant_members: {
+      profiles: {
         Row: {
           created_at: string
+          full_name: string
           id: string
+          updated_at: string
+          username_normalized: string
+        }
+        Insert: {
+          created_at?: string
+          full_name: string
+          id: string
+          updated_at?: string
+          username_normalized: string
+        }
+        Update: {
+          created_at?: string
+          full_name?: string
+          id?: string
+          updated_at?: string
+          username_normalized?: string
+        }
+        Relationships: []
+      }
+      restaurant_members: {
+        Row: {
+          additional_roles: Database["public"]["Enums"]["member_role"][]
+          created_at: string
+          id: string
+          is_active: boolean
           restaurant_id: string
           role: Database["public"]["Enums"]["member_role"]
           user_id: string
         }
         Insert: {
+          additional_roles?: Database["public"]["Enums"]["member_role"][]
           created_at?: string
           id?: string
+          is_active?: boolean
           restaurant_id: string
           role?: Database["public"]["Enums"]["member_role"]
           user_id: string
         }
         Update: {
+          additional_roles?: Database["public"]["Enums"]["member_role"][]
           created_at?: string
           id?: string
+          is_active?: boolean
           restaurant_id?: string
           role?: Database["public"]["Enums"]["member_role"]
           user_id?: string
@@ -1029,6 +1090,21 @@ export type Database = {
           menu_design?: Database["public"]["Enums"]["menu_design"]
           name?: string
           slug?: string
+        }
+        Relationships: []
+      }
+      role_permissions: {
+        Row: {
+          permission: string
+          role: Database["public"]["Enums"]["member_role"]
+        }
+        Insert: {
+          permission: string
+          role: Database["public"]["Enums"]["member_role"]
+        }
+        Update: {
+          permission?: string
+          role?: Database["public"]["Enums"]["member_role"]
         }
         Relationships: []
       }
@@ -1081,39 +1157,42 @@ export type Database = {
       table_sessions: {
         Row: {
           assigned_employee_id: string | null
+          assigned_user_id: string | null
           bill_requested_at: string | null
           closed_at: string | null
           id: string
           in_person_payment_requested_at: string | null
           opened_at: string
           restaurant_id: string
-          split_allocations: Json
+          split_allocations: NonNullable<Json>
           split_type: string
           status: Database["public"]["Enums"]["session_status"]
           table_id: string
         }
         Insert: {
           assigned_employee_id?: string | null
+          assigned_user_id?: string | null
           bill_requested_at?: string | null
           closed_at?: string | null
           id?: string
           in_person_payment_requested_at?: string | null
           opened_at?: string
           restaurant_id: string
-          split_allocations?: Json
+          split_allocations?: NonNullable<Json>
           split_type?: string
           status?: Database["public"]["Enums"]["session_status"]
           table_id: string
         }
         Update: {
           assigned_employee_id?: string | null
+          assigned_user_id?: string | null
           bill_requested_at?: string | null
           closed_at?: string | null
           id?: string
           in_person_payment_requested_at?: string | null
           opened_at?: string
           restaurant_id?: string
-          split_allocations?: Json
+          split_allocations?: NonNullable<Json>
           split_type?: string
           status?: Database["public"]["Enums"]["session_status"]
           table_id?: string
@@ -1124,6 +1203,13 @@ export type Database = {
             columns: ["assigned_employee_id"]
             isOneToOne: false
             referencedRelation: "pos_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "table_sessions_assigned_user_id_fkey"
+            columns: ["assigned_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
@@ -1222,6 +1308,7 @@ export type Database = {
     Views: {
       pos_open_sessions: {
         Row: {
+          branch_id: string | null
           branch_name: string | null
           id: string | null
           kitchen_tickets: number | null
@@ -1278,6 +1365,31 @@ export type Database = {
         Args: { p_request_id: string; p_session_id: string }
         Returns: string
       }
+      audit_employee_password_reset: {
+        Args: {
+          p_actor: string
+          p_completed?: boolean
+          p_restaurant: string
+          p_user: string
+        }
+        Returns: undefined
+      }
+      authorize_employee_change: {
+        Args: {
+          p_actor: string
+          p_global?: boolean
+          p_restaurant: string
+          p_roles?: Database["public"]["Enums"]["member_role"][]
+          p_user?: string
+        }
+        Returns: boolean
+      }
+      can_manage_media: { Args: { object_name: string }; Returns: boolean }
+      can_read_coworker: { Args: { uid: string }; Returns: boolean }
+      can_read_session: {
+        Args: { permission_name?: string; sid: string }
+        Returns: boolean
+      }
       close_table_session: { Args: { p_session_id: string }; Returns: string }
       create_restaurant: {
         Args: {
@@ -1289,14 +1401,42 @@ export type Database = {
         }
         Returns: string
       }
+      customer_dispatch_internal_order: {
+        Args: { p_order_id: string }
+        Returns: string
+      }
+      customer_join_table_session: {
+        Args: { participant_name?: string; qr: string }
+        Returns: string
+      }
       delete_pos_employee: {
         Args: { p_employee_id: string; p_restaurant_id: string }
         Returns: string
       }
       dispatch_internal_order: { Args: { p_order_id: string }; Returns: string }
+      employee_catalog_access: {
+        Args: { bid?: string; rid: string }
+        Returns: boolean
+      }
+      employee_email_exists: { Args: { p_email: string }; Returns: boolean }
       get_order_pos_type: {
         Args: { p_order_id: string }
         Returns: Database["public"]["Enums"]["pos_type"]
+      }
+      get_pos_contexts: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          branch_id: string
+          branch_name: string
+          full_name: string
+          permissions: string[]
+          restaurant_id: string
+          restaurant_name: string
+        }[]
+      }
+      has_permission: {
+        Args: { bid?: string; permission_name: string; rid: string }
+        Returns: boolean
       }
       is_restaurant_admin: { Args: { rid: string }; Returns: boolean }
       is_restaurant_member: { Args: { rid: string }; Returns: boolean }
@@ -1305,26 +1445,35 @@ export type Database = {
         Args: { participant_name?: string; qr: string }
         Returns: string
       }
+      list_employee_accounts: {
+        Args: { p_restaurant: string }
+        Returns: {
+          branch_ids: string[]
+          full_name: string
+          is_active: boolean
+          roles: Database["public"]["Enums"]["member_role"][]
+          user_id: string
+          username: string
+        }[]
+      }
       pos_close_table_session: {
-        Args: { p_employee_id?: string; p_session_id: string }
+        Args: { p_session_id: string }
         Returns: string
       }
       pos_move_table_session: {
         Args: {
           p_destination_table_id: string
-          p_employee_id?: string
           p_session_id: string
           p_source_table_id: string
         }
         Returns: string
       }
       pos_open_table_session: {
-        Args: { p_employee_id?: string; p_table_id: string }
+        Args: { p_table_id: string }
         Returns: string
       }
       pos_transition_order: {
         Args: {
-          p_employee_id?: string
           p_order_id: string
           p_status: Database["public"]["Enums"]["order_status"]
         }
@@ -1333,17 +1482,31 @@ export type Database = {
       record_pos_action: {
         Args: {
           p_action: string
+          p_branch_id: string
           p_details?: Json
-          p_employee_id: string
-          p_order_id?: string
+          p_order_id: string
           p_restaurant_id: string
-          p_session_id?: string
+          p_session_id: string
         }
         Returns: undefined
       }
       reorder_categories: {
         Args: { p_category_ids: string[]; p_restaurant_id: string }
         Returns: undefined
+      }
+      save_employee_account: {
+        Args: {
+          p_active: boolean
+          p_actor: string
+          p_branches: string[]
+          p_full_name: string
+          p_legacy?: string
+          p_restaurant: string
+          p_roles: Database["public"]["Enums"]["member_role"][]
+          p_user: string
+          p_username?: string
+        }
+        Returns: string
       }
       save_modifier_group: {
         Args: {
@@ -1441,7 +1604,14 @@ export type Database = {
       }
     }
     Enums: {
-      member_role: "owner" | "staff"
+      member_role:
+        | "owner"
+        | "staff"
+        | "manager"
+        | "supervisor"
+        | "waiter"
+        | "cashier"
+        | "kitchen"
       menu_design: "oliva" | "brasas" | "linterna"
       order_status:
         | "submitted"
@@ -1470,12 +1640,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1499,11 +1669,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1524,11 +1694,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1549,11 +1719,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1566,11 +1736,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1580,12 +1750,17 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
-      member_role: ["owner", "staff"],
+      member_role: [
+        "owner",
+        "staff",
+        "manager",
+        "supervisor",
+        "waiter",
+        "cashier",
+        "kitchen",
+      ],
       menu_design: ["oliva", "brasas", "linterna"],
       order_status: [
         "submitted",

@@ -2,33 +2,35 @@
 
 This is a first-time guide. You do **not** need a Supabase account yet. Follow the parts in order. After the first deploy, skip to [Part 7 — Pushing updates](#part-7--pushing-updates).
 
-Local development (`pnpm supabase start`) stays on your machine. Cloud deploy is a **separate** environment: a hosted database + two public websites.
+Local development (`pnpm supabase start`) stays on your machine. Cloud deploy is a **separate** environment: a hosted database + three public websites.
 
 ---
 
 ## What you are deploying
 
-This repo is **not** a single website. It is three hosted pieces:
+This repo is **not** a single website. It is four hosted pieces:
 
 ```
 Phones / browsers
         │
         ├── apps/customer  ──►  Vercel site A   (QR links, e.g. https://mesa.vercel.app/m/...)
-        └── apps/admin     ──►  Vercel site B   (staff: POS, menu, tables)
+        ├── apps/admin     ──►  Vercel site B   (administration)
+        └── apps/pos       ──►  Vercel site C   (employee operations)
                     │
-                    └── both talk to ──►  Supabase Cloud
+                    └── all talk to ──►  Supabase Cloud
                                             ├── Postgres + RLS
-                                            ├── Auth (email staff + anonymous diners)
+                                            ├── Auth (admins + global employee accounts + anonymous diners)
                                             ├── Realtime
                                             ├── Storage (product photos)
-                                            └── Edge Function: submit-order
+                                            └── Edge Functions: submit-order, employee-accounts
 ```
 
 | Piece | Who hosts it | Why |
 |-------|----------------|-----|
 | Database, Auth, Realtime, Storage, `submit-order` | **Supabase** (free plan is enough for a demo) | This is the backend. The plan chose Supabase over Firebase. |
 | App del comensal (`apps/customer`) | **Vercel** (static Vite build) | Supabase does not host React apps. QR codes must point at a public HTTPS URL. |
-| Panel + POS (`apps/admin`) | **Vercel** (second project, same GitHub repo) | Separate site, as required by the product. |
+| Panel (`apps/admin`) | **Vercel** (second project) | Administrative accounts only. |
+| POS (`apps/pos`) | **Vercel** (third project, same repo) | Employee login, independent deployment and Auth storage. |
 
 You will **not** deploy Docker, and you will **not** run `seed.sql` in the cloud. Demo users (`admin@esquina.demo`) exist only in local Docker. In the cloud you register a real account and create the restaurant from the admin onboarding screen.
 
@@ -134,12 +136,7 @@ This applies every file in `supabase/migrations/` to the cloud Postgres (tables,
 pnpm supabase db push
 ```
 
-Confirm when asked. You should see the four migrations apply in order:
-
-1. `20260828190000_initial_schema.sql`
-2. `20260905180000_customer_sessions.sql`
-3. `20260905200000_orders.sql`
-4. `20260905220000_internal_pos.sql`
+Confirm when asked. Apply all pending migrations in timestamp order, including the employee roles, accounts, operations, provisioning and read-scope migrations. Preserve the existing database and historical audit.
 
 Optional check: dashboard → **Table Editor**. You should see `restaurants`, `branches`, `tables`, `products`, `orders`, etc.
 
@@ -153,6 +150,8 @@ Orders are **not** written straight from the browser. The customer app calls the
 
 ```bash
 pnpm supabase functions deploy submit-order
+pnpm supabase secrets set EMPLOYEE_EMAIL_DOMAIN=employees.your-controlled-domain.com
+pnpm supabase functions deploy employee-accounts
 ```
 
 `SUPABASE_URL` and `SUPABASE_ANON_KEY` are injected automatically. You do not set secrets for this function today.
@@ -294,7 +293,7 @@ git commit -m "..."
 git push origin main
 ```
 
-Vercel rebuilds both projects. If you only changed `apps/customer`, the admin project still may rebuild (same repo); that is normal.
+Vercel rebuilds the three projects. A shared-code change can rebuild customer, admin and POS.
 
 If you changed a `VITE_*` value in the Vercel dashboard, click **Redeploy** on that project. A new git commit is not enough if only env vars changed.
 
@@ -381,3 +380,14 @@ You can point **local** Vite apps at the **cloud** project by putting the cloud 
 - **Phase 7** Mercado Pago functions and webhooks — not in the repo.
 - Custom domains — optional later in Vercel (Domains) and then update `VITE_CUSTOMER_APP_URL` + Auth Site URL + redeploy admin.
 - Running `seed.sql` in production — do not.
+
+## Independent POS deployment
+
+Create a third Vercel project with root directory `apps/pos`, build `pnpm build`, output `dist`. Its `vercel.json` handles SPA routes. Configure:
+
+- `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`: the same backend/public key.
+- `VITE_EMPLOYEE_EMAIL_DOMAIN`: exactly the backend's `EMPLOYEE_EMAIL_DOMAIN`.
+
+Use a controlled subdomain for internal Auth identifiers. The backend uses confirmed Auth creation and administrative password resets. Before rollout, confirm that SMTP and password-change notifications do not deliver mail to internal employee addresses; POS has no email recovery flow. No service key belongs in any frontend.
+
+Create employee accounts from admin and assign roles/branches before switching operators to the new POS domain. Legacy PIN endpoints are retired by the migrations; preserve legacy records and audit. The admin session cannot operate POS. See [rollout and permission matrix](pos-accounts.md).

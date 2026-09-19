@@ -18,7 +18,13 @@ export default defineConfig({
       {
         // Contrato HTTP de submit-order, catálogo de errores y máquina de estados.
         // orders.integration.mjs queda afuera: necesita el stack local (`pnpm test:orders:integration`).
-        test: { name: 'orders', root: 'supabase', include: ['tests/**/*.test.ts'] },
+        test: {
+          name: 'orders',
+          root: 'supabase',
+          include: ['tests/**/*.test.ts'],
+          // employees.test.ts usa node:test y se corre con `pnpm test:employees`.
+          exclude: ['tests/employees.test.ts'],
+        },
       },
     ],
   },

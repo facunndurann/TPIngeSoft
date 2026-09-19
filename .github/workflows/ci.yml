@@ -25,6 +25,12 @@ jobs:
       - name: Unit tests
         run: pnpm test
 
+      - name: Employee account tests
+        run: pnpm test:employees
+
+      - name: POS frontend tests
+        run: pnpm --filter pos test
+
       - name: Typecheck
         run: pnpm typecheck
 
