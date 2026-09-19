@@ -3,7 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { employeeRoles, employeeRoleLabels, type EmployeeRole } from '@restaurant-platform/shared'
 import { useMembership } from '@/restaurant/restaurant-context'
 import { supabase } from '@/lib/supabase'
-import { auditActorLabel, changeEmployee, loadEmployees, type Employee } from '@/features/employees/api'
+import { changeEmployee, loadEmployees, type Employee } from '@/features/employees/api'
+import { auditActorLabel } from '@/features/employees/audit'
 import { Badge, Button, ErrorText, Field, Input, Modal, Select, Spinner } from '@/components/ui'
 
 export function EmployeesPage() {

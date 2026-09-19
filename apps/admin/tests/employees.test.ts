@@ -1,6 +1,6 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
-import { auditActorLabel } from '../src/features/employees/api'
+import { auditActorLabel } from '../src/features/employees/audit'
 
 const supervisor = { user_id: 'cccccccc-cccc-cccc-cccc-cccccccccccc', full_name: 'Supervisor Esquina' }
 
