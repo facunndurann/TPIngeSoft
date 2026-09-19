@@ -7,6 +7,31 @@ export type Json =
   | Json[]
 
 export type Database = {
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       abandoned_order_requests: {
@@ -485,7 +510,7 @@ export type Database = {
           created_at: string
           delivered_at: string | null
           id: string
-          local_date: string
+          local_date: string | null
           notes: string | null
           preparing_at: string | null
           ready_at: string | null
@@ -503,7 +528,7 @@ export type Database = {
           created_at?: string
           delivered_at?: string | null
           id?: string
-          local_date?: string
+          local_date?: string | null
           notes?: string | null
           preparing_at?: string | null
           ready_at?: string | null
@@ -521,7 +546,7 @@ export type Database = {
           created_at?: string
           delivered_at?: string | null
           id?: string
-          local_date?: string
+          local_date?: string | null
           notes?: string | null
           preparing_at?: string | null
           ready_at?: string | null
@@ -652,7 +677,7 @@ export type Database = {
           actor_user_id: string | null
           branch_id: string | null
           created_at: string
-          details: NonNullable<Json>
+          details: Json
           employee_id: string | null
           id: string
           order_id: string | null
@@ -665,7 +690,7 @@ export type Database = {
           actor_user_id?: string | null
           branch_id?: string | null
           created_at?: string
-          details?: NonNullable<Json>
+          details?: Json
           employee_id?: string | null
           id?: string
           order_id?: string | null
@@ -678,7 +703,7 @@ export type Database = {
           actor_user_id?: string | null
           branch_id?: string | null
           created_at?: string
-          details?: NonNullable<Json>
+          details?: Json
           employee_id?: string | null
           id?: string
           order_id?: string | null
@@ -713,6 +738,13 @@ export type Database = {
             columns: ["restaurant_id"]
             isOneToOne: false
             referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_audit_log_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "pos_open_sessions"
             referencedColumns: ["id"]
           },
           {
@@ -782,7 +814,7 @@ export type Database = {
       pos_integrations: {
         Row: {
           created_at: string
-          credentials: NonNullable<Json>
+          credentials: Json
           id: string
           is_active: boolean
           restaurant_id: string
@@ -790,7 +822,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
-          credentials?: NonNullable<Json>
+          credentials?: Json
           id?: string
           is_active?: boolean
           restaurant_id: string
@@ -798,7 +830,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
-          credentials?: NonNullable<Json>
+          credentials?: Json
           id?: string
           is_active?: boolean
           restaurant_id?: string
@@ -1164,7 +1196,7 @@ export type Database = {
           in_person_payment_requested_at: string | null
           opened_at: string
           restaurant_id: string
-          split_allocations: NonNullable<Json>
+          split_allocations: Json
           split_type: string
           status: Database["public"]["Enums"]["session_status"]
           table_id: string
@@ -1178,7 +1210,7 @@ export type Database = {
           in_person_payment_requested_at?: string | null
           opened_at?: string
           restaurant_id: string
-          split_allocations?: NonNullable<Json>
+          split_allocations?: Json
           split_type?: string
           status?: Database["public"]["Enums"]["session_status"]
           table_id: string
@@ -1192,7 +1224,7 @@ export type Database = {
           in_person_payment_requested_at?: string | null
           opened_at?: string
           restaurant_id?: string
-          split_allocations?: NonNullable<Json>
+          split_allocations?: Json
           split_type?: string
           status?: Database["public"]["Enums"]["session_status"]
           table_id?: string
@@ -1424,7 +1456,7 @@ export type Database = {
         Returns: Database["public"]["Enums"]["pos_type"]
       }
       get_pos_contexts: {
-        Args: Record<PropertyKey, never>
+        Args: never
         Returns: {
           branch_id: string
           branch_name: string
@@ -1468,10 +1500,7 @@ export type Database = {
         }
         Returns: string
       }
-      pos_open_table_session: {
-        Args: { p_table_id: string }
-        Returns: string
-      }
+      pos_open_table_session: { Args: { p_table_id: string }; Returns: string }
       pos_transition_order: {
         Args: {
           p_order_id: string
@@ -1551,7 +1580,7 @@ export type Database = {
           created_at: string
           delivered_at: string | null
           id: string
-          local_date: string
+          local_date: string | null
           notes: string | null
           preparing_at: string | null
           ready_at: string | null
@@ -1640,12 +1669,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1669,11 +1698,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1694,11 +1723,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1719,11 +1748,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1736,11 +1765,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never) = never,
+    : never = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1750,6 +1779,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       member_role: [
