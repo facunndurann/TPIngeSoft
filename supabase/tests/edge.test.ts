@@ -3,7 +3,6 @@ import assert from 'node:assert/strict'
 import { type OrderStatus, submitOrderErrorSchema, submitOrderResultSchema, submitOrderSchema } from '../../packages/shared/src/orders.ts'
 import { AppError, appErrorMessage, appErrors, fromPostgres, isRetryableError } from '../../packages/shared/src/errors.ts'
 import {
-  dayRangeUtc,
   formatElapsed,
   getPosTableState,
   isKitchenTicket,
@@ -128,11 +127,7 @@ test('POS actions advance and cancel until delivery, and nothing leaves cancelle
   assert.equal(isKitchenTicket('cancelled'), false)
 })
 
-test('restaurant day bounds use Argentina time and POS errors stay coded', () => {
-  assert.deepEqual(dayRangeUtc('2026-09-05'), {
-    start: '2026-09-05T03:00:00.000Z',
-    end: '2026-09-06T03:00:00.000Z',
-  })
+test('elapsed time reads naturally and POS errors stay coded', () => {
   assert.equal(formatElapsed('2026-09-05T12:00:00.000Z', Date.parse('2026-09-05T12:00:30.000Z')), 'Ahora')
   assert.equal(formatElapsed('2026-09-05T12:00:00.000Z', Date.parse('2026-09-05T13:05:00.000Z')), 'Hace 1 h 5 min')
   // Un solo traductor para las tres formas en que llega un error de Postgres.

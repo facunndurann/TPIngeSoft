@@ -113,7 +113,8 @@ export function posColumnFor(status: OrderStatus): PosBoardColumnId | null {
   return null
 }
 
-export function sortColumnOrders<T extends { created_at: string }>(
+/** Cocina y barra atienden por orden de llegada; el resto muestra lo último primero. */
+function sortColumnOrders<T extends { created_at: string }>(
   columnId: PosBoardColumnId,
   orders: T[],
 ): T[] {
@@ -167,41 +168,6 @@ export function localDateKey(now: Date = new Date(), timeZone = POS_TIME_ZONE): 
     month: '2-digit',
     day: '2-digit',
   }).format(now)
-}
-
-function wallTimeUtcMs(date: Date, timeZone: string): number {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hourCycle: 'h23',
-  }).formatToParts(date)
-  const num = (type: Intl.DateTimeFormatPartTypes) =>
-    Number(parts.find((part) => part.type === type)?.value)
-  return Date.UTC(num('year'), num('month') - 1, num('day'), num('hour'), num('minute'), num('second'))
-}
-
-/** UTC bounds of a YYYY-MM-DD calendar day in the restaurant timezone. */
-export function dayRangeUtc(dateKey: string, timeZone = POS_TIME_ZONE): { start: string; end: string } {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
-    throw new Error('Invalid date key')
-  }
-  const startOf = (key: string) => {
-    const utcMidnight = Date.parse(`${key}T00:00:00.000Z`)
-    let instant = utcMidnight
-    for (let i = 0; i < 3; i += 1) {
-      instant = utcMidnight - (wallTimeUtcMs(new Date(instant), timeZone) - instant)
-    }
-    return instant
-  }
-  const [year, month, day] = dateKey.split('-').map(Number)
-  const next = new Date(Date.UTC(year, month - 1, day + 1))
-  const nextKey = `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, '0')}-${String(next.getUTCDate()).padStart(2, '0')}`
-  return { start: new Date(startOf(dateKey)).toISOString(), end: new Date(startOf(nextKey)).toISOString() }
 }
 
 export function formatElapsed(fromIso: string, nowMs = Date.now()): string {
