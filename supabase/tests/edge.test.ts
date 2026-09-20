@@ -7,7 +7,19 @@ import {
   getPosTableState,
   isKitchenTicket,
   posActions,
+  sessionRequestKinds,
+  sessionRequestLabels,
+  sessionRequestsOf,
+  sessionRequestState,
 } from '../../packages/shared/src/pos.ts'
+import { splitPercentageAmounts } from '../../packages/shared/src/split.ts'
+import {
+  acceptsPaymentMethod,
+  enabledPaymentMethods,
+  paymentMethodDescriptions,
+  paymentMethodLabels,
+  paymentMethods,
+} from '../../packages/shared/src/payments.ts'
 import {
   FLOOR_GRID,
   TABLE_SPAN,
@@ -27,6 +39,7 @@ import { DEFAULT_MENU_DESIGN } from '../../packages/shared/src/designs.ts'
 import menuDesignEnumSql from '../migrations/20260915150000_menu_design_enum.sql?raw'
 import { createSubmitOrderHandler } from '../functions/submit-order/handler.ts'
 import type { OrderGateway } from '../functions/_shared/order-gateway.ts'
+import { createMobilePaymentHandler, type MobilePaymentGateway } from '../functions/mobile-payment/handler.ts'
 
 const input = {
   sessionId: '00000000-0000-4000-8000-000000000001',
@@ -119,6 +132,47 @@ test('unexpected failures never leak backend details', async () => {
   assert.equal(message, 'No pudimos confirmar el resultado. Reintentá el mismo envío para evitar duplicados.')
 })
 
+test('mobile payment endpoint creates and confirms only validated requests', async () => {
+  const calls: string[]=[]
+  const gateway: MobilePaymentGateway={execute:async input => {
+    calls.push(input.action)
+    return {paymentId:input.action==='create'?input.requestId:input.paymentId,amount:1250,status:input.action==='create'?'pending':input.outcome}
+  }}
+  const handler=createMobilePaymentHandler(async token => {
+    if (token!=='valid-user') throw new AppError('AUTH_REQUIRED')
+    return gateway
+  })
+  const paymentId='00000000-0000-4000-8000-000000000010'
+  const mobileRequest=(body:unknown,token='valid-user') => new Request('http://local/mobile-payment',{
+    method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify(body),
+  })
+  const created=await handler(mobileRequest({action:'create',sessionId:input.sessionId,requestId:paymentId}))
+  assert.equal(created.status,201)
+  assert.deepEqual(await created.json(),{paymentId,amount:1250,status:'pending'})
+  const approved=await handler(mobileRequest({action:'confirm',paymentId,outcome:'approved'}))
+  assert.equal(approved.status,200)
+  assert.deepEqual(await approved.json(),{paymentId,amount:1250,status:'approved'})
+  const byItems=await handler(mobileRequest({
+    action:'create',sessionId:input.sessionId,requestId:paymentId,mode:'custom',itemIds:[input.sessionId],
+  }))
+  assert.equal(byItems.status,201)
+  assert.deepEqual(calls,['create','confirm','create'])
+  assert.equal((await handler(mobileRequest({action:'create',sessionId:'bad',requestId:paymentId}))).status,400)
+  assert.equal((await handler(mobileRequest({action:'confirm',paymentId,outcome:'invented'}))).status,400)
+  assert.equal((await handler(mobileRequest({action:'create',sessionId:input.sessionId,requestId:paymentId,mode:'custom'}))).status,400)
+  assert.equal((await handler(mobileRequest({action:'create',sessionId:input.sessionId,requestId:paymentId,mode:'full',itemIds:[paymentId]}))).status,400)
+  assert.equal((await handler(mobileRequest({action:'create',sessionId:input.sessionId,requestId:paymentId},'forged'))).status,401)
+})
+
+test('mobile payment endpoint handles preflight and never leaks provider failures', async () => {
+  const handler=createMobilePaymentHandler(async () => ({execute:async () => {throw new Error('provider secret')}}))
+  assert.equal((await handler(new Request('http://local',{method:'OPTIONS'}))).status,204)
+  assert.equal((await handler(new Request('http://local'))).status,405)
+  const response=await handler(new Request('http://local',{method:'POST',headers:{Authorization:'Bearer x','Content-Type':'application/json'},body:'{' }))
+  assert.equal(response.status,400)
+  assert.doesNotMatch(await response.text(),/provider secret/)
+})
+
 test('POS actions advance and cancel until delivery, and nothing leaves cancelled', () => {
   assert.equal(posActions.accepted.advance?.to, 'in_preparation')
   assert.equal(posActions.ready.cancel?.to, 'cancelled')
@@ -160,7 +214,8 @@ test('reverting steps back exactly one stage, never to submitted nor from cancel
 
 test('the error catalog decides which failures keep a submission for retry', () => {
   // Rechazos definitivos: liberan el envío para que el comensal revise el carrito.
-  for (const code of ['PRICE_CHANGED', 'SESSION_CLOSED', 'IDEMPOTENCY_CONFLICT', 'REQUEST_ABANDONED']) {
+  for (const code of ['PRICE_CHANGED', 'SESSION_CLOSED', 'IDEMPOTENCY_CONFLICT', 'REQUEST_ABANDONED',
+    'PAYMENT_METHOD_DISABLED']) {
     assert.equal(isRetryableError(code), false, code)
   }
   // Fallas transitorias y códigos desconocidos (red caída): el envío se conserva.
@@ -188,16 +243,116 @@ test('table map states follow operational priority without inventing occupancy',
     bill_requested_at: '2026-09-18T12:00:00Z',
     payments: [{ status: 'pending' }],
   }), 'payment_pending')
-  // Una mano levantada pasa delante de la cuenta pedida, pero no del cobro.
-  assert.equal(getPosTableState({ attention_requested_at: '2026-09-18' }), 'attention_requested')
+  // Llamar al mozo para que cobre manda a alguien a la mesa; un pago electrónico
+  // a medio confirmar, no. Por eso son dos estados y ese va primero.
   assert.equal(getPosTableState({
-    attention_requested_at: '2026-09-18T12:00:00Z',
-    bill_requested_at: '2026-09-18T12:05:00Z',
-  }), 'attention_requested')
-  assert.equal(getPosTableState({
-    attention_requested_at: '2026-09-18T12:00:00Z',
+    in_person_payment_requested_at: '2026-09-18T12:00:00Z',
     payments: [{ status: 'pending' }],
-  }), 'payment_pending')
+    orders: orders('ready'),
+  }), 'in_person_payment')
+})
+
+test('a table waits with the requests it made, oldest first', () => {
+  assert.deepEqual(sessionRequestsOf(null), [])
+  assert.deepEqual(sessionRequestsOf({ bill_requested_at: null }), [])
+  assert.deepEqual(
+    sessionRequestsOf({
+      bill_requested_at: '2026-09-18T12:05:00Z',
+      in_person_payment_requested_at: '2026-09-18T12:00:00Z',
+    }),
+    [
+      { kind: 'in_person_payment', requestedAt: '2026-09-18T12:00:00Z' },
+      { kind: 'bill', requestedAt: '2026-09-18T12:05:00Z' },
+    ],
+  )
+  // Cada tipo tiene rótulo propio: el plano no puede mostrar una clave cruda.
+  for (const kind of sessionRequestKinds) assert.ok(sessionRequestLabels[kind])
+})
+
+test('percentage shares come from the whole bill and add up to it', () => {
+  // MI-43: mismo caso que supabase/tests/percentage-payments.sql, para que el
+  // celular no muestre un centavo distinto del que cobra session_percentage_share.
+  const participants = [{ id: 'c' }, { id: 'a' }, { id: 'b' }]
+  const shares = splitPercentageAmounts(100.01, participants, { a: 33.33, b: 33.33, c: 33.34 })
+  // El orden del resultado es el recibido, no el del desempate.
+  assert.deepEqual(shares.map((share) => share.participantId), ['c', 'a', 'b'])
+  assert.deepEqual(shares.map((share) => share.amount), [33.35, 33.33, 33.33])
+  assert.equal(shares.reduce((total, share) => total + share.amountCents, 0), 10001)
+
+  // Empate de fracciones: el centavo va al id menor, como el `order by
+  // remainder desc, participant_id` de la RPC.
+  assert.deepEqual(
+    splitPercentageAmounts(10.01, [{ id: 'b' }, { id: 'a' }], { a: 50, b: 50 })
+      .map((share) => share.amount),
+    [5, 5.01],
+  )
+
+  // El porcentaje se aplica al total, no al pendiente: lo que ya pagó otro no
+  // le cambia la parte a nadie.
+  assert.deepEqual(
+    splitPercentageAmounts(100, [{ id: 'a' }, { id: 'b' }], { a: 40, b: 60 })
+      .map((share) => share.amount),
+    [40, 60],
+  )
+
+  // Sin asignaciones no se reparte parejo: no hay porcentaje que cobrar.
+  assert.deepEqual(
+    splitPercentageAmounts(100, [{ id: 'a' }, { id: 'b' }], {}).map((share) => share.amount),
+    [0, 0],
+  )
+  assert.deepEqual(
+    splitPercentageAmounts(0, [{ id: 'a' }], { a: 100 }).map((share) => share.amount),
+    [0],
+  )
+})
+
+test('a branch offers only the payment methods it enabled', () => {
+  assert.deepEqual(enabledPaymentMethods(null), [])
+  assert.deepEqual(enabledPaymentMethods({ payment_methods: null }), [])
+  // Se recorre el catálogo, no la columna: el orden guardado y un repetido no
+  // llegan a la pantalla.
+  assert.deepEqual(enabledPaymentMethods({ payment_methods: ['external', 'mobile', 'external'] }), [
+    'mobile',
+    'external',
+  ])
+  assert.equal(acceptsPaymentMethod({ payment_methods: ['in_person'] }, 'in_person'), true)
+  assert.equal(acceptsPaymentMethod({ payment_methods: ['in_person'] }, 'mobile'), false)
+  // Un local puede no cobrar por la app: el comensal solo pide la cuenta.
+  assert.deepEqual(enabledPaymentMethods({ payment_methods: [] }), [])
+
+  for (const method of paymentMethods) {
+    assert.ok(paymentMethodLabels[method])
+    assert.ok(paymentMethodDescriptions[method])
+  }
+})
+
+test('a diner reads, per request, whether nobody asked, they wait, or they were attended', () => {
+  const empty = {}
+  assert.deepEqual(sessionRequestState(empty, 'bill'), { status: 'idle' })
+  assert.deepEqual(
+    sessionRequestState({ in_person_payment_requested_at: '2026-09-20T12:00:00Z' }, 'in_person_payment'),
+    { status: 'waiting', since: '2026-09-20T12:00:00Z' },
+  )
+  // Atender no borra el aviso: lo convierte en la confirmación que responde
+  // «¿ya está, me puedo ir?», y sobrevive a recargar o cambiar de pantalla.
+  assert.deepEqual(
+    sessionRequestState({ in_person_payment_attended_at: '2026-09-20T12:09:00Z' }, 'in_person_payment'),
+    { status: 'attended', at: '2026-09-20T12:09:00Z' },
+  )
+  // Los tipos no se pisan entre sí.
+  assert.deepEqual(sessionRequestState({ bill_attended_at: '2026-09-20T12:09:00Z' }, 'in_person_payment'), {
+    status: 'idle',
+  })
+  // Si la base quedara con las dos fechas manda la espera: es la que pide acción.
+  assert.deepEqual(
+    sessionRequestState(
+      { bill_requested_at: '2026-09-20T12:10:00Z', bill_attended_at: '2026-09-20T12:00:00Z' },
+      'bill',
+    ),
+    { status: 'waiting', since: '2026-09-20T12:10:00Z' },
+  )
+  // Una mesa ya atendida no le queda al salón como pendiente.
+  assert.deepEqual(sessionRequestsOf({ bill_attended_at: '2026-09-20T12:09:00Z' }), [])
 })
 
 test('the database default menu design matches DEFAULT_MENU_DESIGN', () => {

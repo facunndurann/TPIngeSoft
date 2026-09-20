@@ -1,27 +1,42 @@
 import { useQuery } from '@tanstack/react-query'
-import { formatPrice, orderStatusLabels, parseSessionSplit } from '@restaurant-platform/shared'
-import { plateCount } from '@/features/cart'
+import {
+  formatPrice,
+  orderStatusLabels,
+  parseSessionSplit,
+  paymentMethodLabels,
+  paymentModeLabels,
+  paymentStatusLabels,
+  type PaymentMethod,
+} from '@restaurant-platform/shared'
 import { FreshnessNote } from '@/components/FreshnessNote'
 import { BillSplitter } from '@/features/BillSplitter'
+import { plateCount } from '@/features/cart'
 import { oldestUpdate } from '@/features/freshness'
-
-import { loadBill, loadOrders } from '@/features/orders-api'
+import { MobilePayment } from '@/features/MobilePayment'
+import { loadBill, loadOrders, loadPayments } from '@/features/orders-api'
+import { ServiceRequests } from '@/features/ServiceRequests'
 import { useTable } from '@/features/table-context'
 
 type Order = Awaited<ReturnType<typeof loadOrders>>[number]
 type OrderItem = Order['order_items'][number]
 type Bill = Awaited<ReturnType<typeof loadBill>>
+type Payment = Awaited<ReturnType<typeof loadPayments>>[number]
 
 type SessionOrdersProps = {
+  /** Medios de pago que habilitó la sucursal. */
+  paymentMethods: PaymentMethod[]
   /** Repite un pedido en el carrito. Ausente cuando la mesa no admite pedir. */
   onReorder?: (order: Order) => void
 }
 
-export function SessionOrders({ onReorder }: SessionOrdersProps) {
+export function SessionOrders({ paymentMethods, onReorder }: SessionOrdersProps) {
   const { sessionId, session: sessionQuery, userId } = useTable()
   const session = sessionQuery.data
   const participants = session?.participants ?? []
   const closed = session?.status === 'closed'
+  const sessionSplit = session
+    ? parseSessionSplit(session.split_type, session.split_allocations, session.split_equal_parts)
+    : null
 
   const orders = useQuery({
     queryKey: ['orders', sessionId],
@@ -35,12 +50,19 @@ export function SessionOrders({ onReorder }: SessionOrdersProps) {
     enabled: !!sessionId,
     refetchInterval: 15000,
   })
+  const payments = useQuery({
+    queryKey: ['payments', sessionId],
+    queryFn: () => loadPayments(sessionId!),
+    enabled: !!sessionId,
+    refetchInterval: 15000,
+  })
 
   const participantName = (id: string | null) => {
     const participant = participants.find((entry) => entry.id === id)
     const suffix = participant?.user_id === userId ? ' (vos)' : ''
     return `${participant?.display_name ?? 'Comensal'}${suffix}`
   }
+  const currentParticipantId = participants.find(participant => participant.user_id === userId)?.id
 
   if (!sessionId) {
     return (
@@ -77,6 +99,35 @@ export function SessionOrders({ onReorder }: SessionOrdersProps) {
         </div>
       )}
       {bill.data && <BillSummary bill={bill.data} />}
+      {bill.data && session && currentParticipantId && paymentMethods.includes('mobile') && (
+        <MobilePayment
+          sessionId={session.id}
+          pending={Number(bill.data.pending_amount ?? 0)}
+          accountTotal={Number(bill.data.total_amount ?? 0)}
+          participantId={currentParticipantId}
+          participants={participants}
+          payments={payments.data ?? []}
+          closed={closed}
+          split={sessionSplit!}
+          orders={orders.data ?? []}
+          participantName={participantName}
+        />
+      )}
+      <PaymentHistory
+        payments={payments.data}
+        loading={payments.isPending}
+        error={payments.isError}
+        participantName={participantName}
+        retry={() => { void payments.refetch() }}
+      />
+      {session && (
+        <ServiceRequests
+          sessionId={session.id}
+          session={session}
+          closed={closed}
+          paymentMethods={paymentMethods}
+        />
+      )}
 
       {orders.isPending && <p role="status">Cargando los pedidos…</p>}
       {orders.isError && (
@@ -100,7 +151,7 @@ export function SessionOrders({ onReorder }: SessionOrdersProps) {
       {bill.data && session && participants.length > 0 && (
         <BillSplitter
           sessionId={session.id}
-          split={parseSessionSplit(session.split_type, session.split_allocations)}
+          split={sessionSplit!}
           bill={bill.data}
           orders={orders.data ?? []}
           participants={participants}
@@ -110,6 +161,55 @@ export function SessionOrders({ onReorder }: SessionOrdersProps) {
         />
       )}
     </section>
+  )
+}
+
+function PaymentHistory({
+  payments,
+  loading,
+  error,
+  participantName,
+  retry,
+}: {
+  payments?: Payment[]
+  loading: boolean
+  error: boolean
+  participantName: (id: string | null) => string
+  retry: () => void
+}) {
+  if (loading) return <p role="status">Actualizando los pagos…</p>
+  if (error) {
+    return (
+      <div className="notice" role="alert">
+        <p>No pudimos actualizar el historial de pagos.</p>
+        <button onClick={retry}>Reintentar pagos</button>
+      </div>
+    )
+  }
+  if (!payments?.length) return null
+
+  return (
+    <div className="bill-panel" aria-label="Historial de pagos">
+      <h3>Pagos registrados</h3>
+      {payments.map((payment) => (
+        <div className="line" key={payment.id}>
+          <div>
+            <strong>{formatPrice(payment.amount)}</strong>{' '}
+            <span>{paymentStatusLabels[payment.status]}</span>
+            <p className="muted">
+              {paymentMethodLabels[payment.method]} · {paymentModeLabels[payment.mode]}
+              {payment.participant_id ? ` · ${participantName(payment.participant_id)}` : ''}
+            </p>
+          </div>
+          <time dateTime={payment.created_at}>
+            {new Intl.DateTimeFormat('es-AR', {
+              day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+            }).format(new Date(payment.created_at))}
+          </time>
+        </div>
+      ))}
+      <p className="muted">Los pagos pendientes o rechazados se muestran, pero no reducen el saldo.</p>
+    </div>
   )
 }
 

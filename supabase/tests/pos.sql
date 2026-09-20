@@ -154,9 +154,9 @@ begin
   update public.table_sessions set split_type = 'percentages',
     split_allocations = jsonb_build_object(participant::text, 100), assigned_user_id = staff,
     bill_requested_at = now() where id = sid;
-  insert into public.payments(restaurant_id, session_id, participant_id, amount, mode, status)
-    values(restaurant, sid, participant, 3, 'custom', 'approved'),
-          (restaurant, sid, participant, 2, 'custom', 'pending');
+  insert into public.payments(restaurant_id, session_id, participant_id, amount, mode, method, status)
+    values(restaurant, sid, participant, 3, 'custom', 'external', 'approved'),
+          (restaurant, sid, participant, 2, 'custom', 'mobile', 'pending');
   select jsonb_agg(to_jsonb(p) order by id) into before_payments from public.payments p where session_id = sid;
   select jsonb_agg(to_jsonb(i) order by id) into before_items from public.order_items i where order_id = v_order_id;
   select to_jsonb(s) - 'table_id' into before_session from public.table_sessions s where id = sid;

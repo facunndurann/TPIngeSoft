@@ -7,7 +7,7 @@ import {
   useNavigate,
   useParams,
 } from 'react-router'
-import { formatPrice, MENU_DESIGNS } from '@restaurant-platform/shared'
+import { enabledPaymentMethods, formatPrice, MENU_DESIGNS } from '@restaurant-platform/shared'
 import { ErrorMessage } from '@/components/ErrorMessage'
 import { FreshnessNote } from '@/components/FreshnessNote'
 import { Toast } from '@/components/Toast'
@@ -20,6 +20,7 @@ import { cartPrice } from '@/features/menu'
 import { ProductEditor } from '@/features/ProductEditor'
 import { SessionOrders } from '@/features/SessionOrders'
 import { type Failure, SessionPanel } from '@/features/SessionPanel'
+import { useAttentionAnnouncements } from '@/features/service-requests'
 import { TableContext, useTable } from '@/features/table-context'
 import { TableHeader } from '@/features/TableHeader'
 import { TableNav } from '@/features/TableNav'
@@ -36,7 +37,6 @@ import { AGE_TICK_MS } from '@/features/freshness'
 import { MenuDesignContext } from '@/features/menu-design'
 import { rememberTable } from '@/features/last-table'
 import { useReorder } from '@/features/reorder'
-import { TableService } from '@/features/TableService'
 import { useTableSession } from '@/hooks/useTableSession'
 import { useCart } from '@/stores/cart'
 
@@ -102,6 +102,9 @@ function TableApp({ token }: { token: string }) {
     setAnnouncement((current) => ({ id: (current?.id ?? 0) + 1, message, undo }))
   }, [])
 
+  // «Ya te cobramos» tiene que llegar aunque el comensal esté mirando la carta.
+  useAttentionAnnouncements(session.data, announce)
+
   useEffect(() => {
     window.scrollTo(0, 0)
   }, [location.pathname])
@@ -160,6 +163,7 @@ function TableApp({ token }: { token: string }) {
             userId: joined.data?.userId,
             cartKey,
             items,
+            paymentMethods: enabledPaymentMethods(branch),
             sessionOpen,
             named,
             canEdit,
@@ -218,13 +222,6 @@ function TableApp({ token }: { token: string }) {
                 Ver mi carrito <strong>{formatPrice(total)}</strong>
               </Link>
             )}
-
-            <TableService
-              sessionId={sessionId}
-              session={session.data}
-              onAnnounce={announce}
-              onDone={() => { void session.refetch() }}
-            />
 
             <footer>{design.copy.footer}</footer>
           </MenuShell>
@@ -370,9 +367,9 @@ export function TableCartItemPage() {
 }
 
 export function TableOrdersPage() {
-  const { menu, canEdit, cartKey, announce } = useTable()
+  const { menu, canEdit, cartKey, announce, paymentMethods } = useTable()
   const reorder = useReorder({ cartKey, menu: menu.data, canEdit, announce })
-  return <SessionOrders onReorder={reorder} />
+  return <SessionOrders paymentMethods={paymentMethods} onReorder={reorder} />
 }
 
 export function TableCatchAll() {

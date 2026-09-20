@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { formatElapsed, formatPrice } from '@restaurant-platform/shared'
+import { formatElapsed, formatPrice, sessionRequestsOf } from '@restaurant-platform/shared'
 import { useCan, useRestaurant } from '@/context/pos-context'
 import { Badge, Button, EmptyState, ErrorText, Modal, Spinner, useSaveErrors } from '@restaurant-platform/ui'
 import {
@@ -11,6 +11,7 @@ import {
   posQueryKey,
   type PosOpenSessionCard,
 } from './api'
+import { AttendRequestButtons, ChargedBadge, SessionRequestBadges } from './ServiceRequests'
 import { useNow } from './useNow'
 
 export function ActiveTables() {
@@ -31,6 +32,15 @@ export function ActiveTables() {
   const occupiedIds = new Set((sessions.data ?? []).map((session) => session.table_id))
   const freeTables = (tables.data ?? []).filter((table) => !occupiedIds.has(table.id))
 
+  // Mesas que llamaron (MI-47), las que esperan hace más tiempo primero: es la
+  // cola de atención del salón, aunque la tarjeta de la mesa esté más abajo.
+  const calling = (sessions.data ?? [])
+    .flatMap((session) => {
+      const [oldest] = sessionRequestsOf(session)
+      return oldest ? [{ session, since: oldest.requestedAt }] : []
+    })
+    .sort((a, b) => a.since.localeCompare(b.since))
+
   const closeMutation = useMutation(errors.saving('No pudimos cerrar la sesión.', {
     mutationFn: (sessionId: string) => closePosSession(sessionId),
     onSuccess: () => {
@@ -44,13 +54,38 @@ export function ActiveTables() {
       <div>
         <h1 className="text-xl font-bold text-neutral-900">Mesas activas</h1>
         <p className="text-sm text-neutral-500">
-          Consumo acumulado, estado de pago y cierre manual de sesión. El cobro digital corresponde a la
-          siguiente fase.
+          Mesas que llamaron, consumo acumulado, estado de pago y cierre manual de sesión. El cobro
+          digital corresponde a la siguiente fase; los cobros presenciales se registran desde la comanda.
         </p>
       </div>
 
       {(sessions.isError || tables.isError) && (
         <ErrorText message="No pudimos actualizar el estado de las mesas." />
+      )}
+
+      {calling.length > 0 && (
+        <section className="space-y-3" aria-labelledby="calling-heading">
+          <h2 id="calling-heading" className="text-sm font-semibold text-neutral-700">
+            Mesas que llamaron
+          </h2>
+          <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {calling.map(({ session }) => (
+              <li
+                key={session.id}
+                className="space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-semibold text-neutral-900">{session.table_label}</p>
+                  <Link to={`/salon/${session.table_id}`} className="text-sm text-indigo-700">
+                    Ver comanda
+                  </Link>
+                </div>
+                <SessionRequestBadges session={session} now={now} />
+                <AttendRequestButtons sessionId={session.id} session={session} />
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       {sessions.isLoading ? (
@@ -84,6 +119,9 @@ export function ActiveTables() {
                 <p className="text-xs text-neutral-500 break-words">
                   {session.participant_names.join(' · ') || 'Sin nombres'}
                 </p>
+                <SessionRequestBadges session={session} now={now} />
+                {/* Cobrada y todavía abierta: es la mesa que hay que liberar. */}
+                <ChargedBadge session={session} now={now} />
                 {canPay && (
                   <dl className="grid grid-cols-2 gap-2 text-xs">
                     <div>
@@ -164,8 +202,8 @@ export function ActiveTables() {
             </p>
             {canPay && closing.pending_amount > 0 && (
               <p className="rounded-lg bg-amber-50 px-3 py-2 text-amber-950">
-                Queda {formatPrice(closing.pending_amount)} pendiente. El pago en efectivo no
-                se registra todavía en el sistema.
+                Queda {formatPrice(closing.pending_amount)} pendiente. Registrá el cobro desde la
+                comanda antes de cerrar si la mesa ya pagó.
               </p>
             )}
             {closing.kitchen_tickets > 0 && (

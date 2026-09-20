@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query'
-import { AppError, fromPostgres, isOperable, localDateKey, type OrderStatus, type Tables } from '@restaurant-platform/shared'
+import { AppError, fromPostgres, isOperable, localDateKey, type OrderStatus, type PaymentMethod, type PaymentMode, type SessionRequestKind, type Tables } from '@restaurant-platform/shared'
 import { supabase } from '@/lib/supabase'
 import type { PosBill, PosDiningTable, PosFloorSection, PosOpenSession, PosOrder } from './types'
 import { posOrderSelect, posSessionSelect } from './types'
@@ -55,13 +55,24 @@ export const posHistoryQuery = (restaurantId: string, branchId: string, dateKey:
     refetchInterval: 15_000,
   })
 
+/** Columnas de la vista cuyo null significa algo: no pidió, o no se atendió. */
+type OpenSessionRequestColumn =
+  | 'bill_requested_at'
+  | 'bill_attended_at'
+  | 'in_person_payment_requested_at'
+  | 'in_person_payment_attended_at'
+
 /**
  * Fila de la vista pos_open_sessions: sesión abierta con mesa, sucursal, comensales,
- * cuenta y comandas en cocina. Distinta de PosOpenSession (sesión completa del plano).
+ * cuenta, solicitudes y comandas en cocina. Distinta de PosOpenSession (sesión
+ * completa del plano). El generador marca todas las columnas de una vista como
+ * nullable; las únicas que de verdad lo son acá son las dos solicitudes.
  */
 export type PosOpenSessionCard = {
-  [Column in keyof Tables<'pos_open_sessions'>]-?: NonNullable<Tables<'pos_open_sessions'>[Column]>
-}
+  [Column in Exclude<keyof Tables<'pos_open_sessions'>, OpenSessionRequestColumn>]-?: NonNullable<
+    Tables<'pos_open_sessions'>[Column]
+  >
+} & { [Column in OpenSessionRequestColumn]: string | null }
 
 const openSessionCardsOf = (restaurantId: string, branchId: string) =>
   supabase
@@ -102,6 +113,34 @@ export async function loadSessionBills(sessionIds: string[]) {
   return (data ?? []) as PosBill[]
 }
 
+export async function loadSessionPayments(sessionId: string) {
+  const { data, error } = await supabase
+    .from('payments')
+    .select('id, participant_id, amount, mode, method, status, external_reference, created_at')
+    .eq('session_id', sessionId)
+    .order('created_at', { ascending: false })
+  throwIfError(error)
+  return data ?? []
+}
+
+export async function recordPosPayment(input: {
+  sessionId: string
+  amount: number
+  method: PaymentMethod
+  mode: PaymentMode
+  externalReference?: string
+}) {
+  const { data, error } = await supabase.rpc('pos_record_payment', {
+    p_session_id: input.sessionId,
+    p_amount: input.amount,
+    p_method: input.method,
+    p_mode: input.mode,
+    p_external_reference: input.externalReference || undefined,
+  })
+  throwIfError(error)
+  return data
+}
+
 /**
  * Mesas que el POS puede operar en la sucursal. Quedan afuera las que están
  * fuera de servicio, las ocultas del plano y las de un sector dado de baja.
@@ -110,7 +149,7 @@ export async function loadRestaurantTables(restaurantId: string, branchId: strin
   const { data, error } = await supabase
     .from('tables')
     .select(
-      'id, label, branch_id, is_active, is_visible, section_id, position_x, position_y, seats, shape, width, height, branches (id, name, is_active), floor_sections (id, name, sort_order, is_active)',
+      'id, label, branch_id, is_active, is_visible, section_id, position_x, position_y, seats, shape, width, height, branches (id, name, is_active, payment_methods), floor_sections (id, name, sort_order, is_active)',
     )
     .eq('restaurant_id', restaurantId)
     .eq('branch_id', branchId)
@@ -184,6 +223,18 @@ export async function loadSessionOrders(sessionId: string) {
 export async function closePosSession(sessionId: string) {
   const { error } = await supabase.rpc('pos_close_table_session', {
     p_session_id: sessionId,
+  })
+  throwIfError(error)
+}
+
+/**
+ * Marca atendida la solicitud de una mesa (MI-47). Idempotente: si otro mozo se
+ * adelantó, la RPC devuelve null y no audita una atención de más.
+ */
+export async function resolvePosSessionRequest(sessionId: string, kind: SessionRequestKind) {
+  const { error } = await supabase.rpc('pos_resolve_session_request', {
+    p_session_id: sessionId,
+    p_kind: kind,
   })
   throwIfError(error)
 }

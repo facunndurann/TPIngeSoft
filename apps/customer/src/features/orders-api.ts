@@ -5,9 +5,14 @@ import {
   isAppErrorCode,
   submitOrderErrorSchema,
   submitOrderResultSchema,
+  type SessionRequestKind,
   type SessionSplit,
   type SubmitOrderInput,
   type SubmitOrderResult,
+  mobilePaymentErrorSchema,
+  mobilePaymentResultSchema,
+  type MobilePaymentRequest,
+  type MobilePaymentResult,
 } from '@restaurant-platform/shared'
 import { supabase } from '@/lib/supabase'
 
@@ -84,11 +89,52 @@ export async function loadBill(sessionId: string) {
   return data
 }
 
+/** Movimientos de la cuenta. El saldo se calcula aparte en session_bills. */
+export async function loadPayments(sessionId: string) {
+  const { data, error } = await supabase
+    .from('payments')
+    .select('id, participant_id, amount, mode, method, status, external_reference, created_at, payment_order_items(order_item_id)')
+    .eq('session_id', sessionId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+
+export async function runMobilePayment(input: MobilePaymentRequest): Promise<MobilePaymentResult> {
+  const { data, error } = await supabase.functions.invoke<unknown>('mobile-payment', { body: input })
+  if (error) {
+    if (error instanceof FunctionsHttpError) {
+      const body = mobilePaymentErrorSchema.safeParse(await error.context.json().catch(() => null))
+      if (body.success) {
+        const code = body.data.error.code
+        throw new AppError(isAppErrorCode(code) ? code : 'SERVER_ERROR')
+      }
+    }
+    throw new AppError('CONNECTION_ERROR')
+  }
+  const parsed = mobilePaymentResultSchema.safeParse(data)
+  if (!parsed.success) throw new AppError('SERVER_ERROR')
+  return parsed.data
+}
+
+/**
+ * Pide la cuenta o que un mozo venga a cobrar (MI-38/MI-46). Es idempotente:
+ * si ya había una solicitud viva devuelve su hora original sin crear otra.
+ */
+export async function requestSessionService(sessionId: string, kind: SessionRequestKind) {
+  const { error } = await supabase.rpc('request_session_service', {
+    p_session_id: sessionId,
+    p_kind: kind,
+  })
+  if (error) throw fromPostgres(error)
+}
+
 export async function updateSessionSplit(sessionId: string, split: SessionSplit) {
   const { error } = await supabase.rpc('update_session_split', {
     p_session_id: sessionId,
     p_split_type: split.type,
     p_allocations: split.allocations,
+    p_equal_parts: split.equalParts,
   })
   if (error) throw fromPostgres(error)
 }

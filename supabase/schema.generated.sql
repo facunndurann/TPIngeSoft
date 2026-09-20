@@ -70,11 +70,26 @@ CREATE TYPE "public"."order_transition_kind" AS ENUM (
 ALTER TYPE "public"."order_transition_kind" OWNER TO "postgres";
 
 
+CREATE TYPE "public"."payment_method" AS ENUM (
+    'mobile',
+    'in_person',
+    'external'
+);
+
+
+ALTER TYPE "public"."payment_method" OWNER TO "postgres";
+
+
+COMMENT ON TYPE "public"."payment_method" IS 'Medios con los que un local acepta que se salde la cuenta: mobile = pago electrónico desde la app (MI-40), in_person = un mozo cobra en la mesa (MI-46), external = se arregla fuera de la app (caja, efectivo, transferencia).';
+
+
+
 CREATE TYPE "public"."payment_mode" AS ENUM (
     'full',
     'own',
     'equal_split',
-    'custom'
+    'custom',
+    'percentage_split'
 );
 
 
@@ -99,6 +114,15 @@ CREATE TYPE "public"."pos_type" AS ENUM (
 
 
 ALTER TYPE "public"."pos_type" OWNER TO "postgres";
+
+
+CREATE TYPE "public"."session_request_kind" AS ENUM (
+    'bill',
+    'in_person_payment'
+);
+
+
+ALTER TYPE "public"."session_request_kind" OWNER TO "postgres";
 
 
 CREATE TYPE "public"."session_status" AS ENUM (
@@ -267,6 +291,149 @@ ALTER FUNCTION "public"."close_table_session"("p_session_id" "uuid") OWNER TO "p
 
 COMMENT ON FUNCTION "public"."close_table_session"("p_session_id" "uuid") IS 'Tenant members close a table session. Idempotent if already closed. Errors: AUTH_REQUIRED, INVALID_REQUEST, SESSION_NOT_FOUND, FORBIDDEN.';
 
+
+
+CREATE OR REPLACE FUNCTION "public"."create_mobile_payment"("p_session_id" "uuid", "p_request_id" "uuid", "p_mode" "public"."payment_mode" DEFAULT 'full'::"public"."payment_mode", "p_item_ids" "uuid"[] DEFAULT NULL::"uuid"[]) RETURNS TABLE("payment_id" "uuid", "amount" numeric, "status" "public"."payment_status")
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  target public.table_sessions;
+  diner_id uuid;
+  methods public.payment_method[];
+  due numeric;
+  available_due numeric;
+  payment_amount numeric;
+  allocated_equal_parts integer;
+  reserved_equal_amount numeric;
+  remaining_parts integer;
+  requested_count integer;
+  saved_count integer;
+  percentage_share numeric;
+  settled_by_diner numeric;
+  saved public.payments;
+  reference text := 'mobile-request:' || p_request_id::text;
+begin
+  if auth.uid() is null then raise exception 'AUTH_REQUIRED'; end if;
+  if p_session_id is null or p_request_id is null or p_mode is null
+    or p_mode not in ('full','equal_split','percentage_split','custom')
+    then raise exception 'INVALID_REQUEST'; end if;
+  if p_mode = 'custom' and (
+    coalesce(cardinality(p_item_ids),0)=0 or cardinality(p_item_ids)>100
+  )
+    then raise exception 'INVALID_PAYMENT_ITEMS'; end if;
+  if p_mode <> 'custom' and p_item_ids is not null
+    then raise exception 'INVALID_PAYMENT_ITEMS'; end if;
+  if exists(select 1 from public.profiles where id=auth.uid()) then raise exception 'FORBIDDEN'; end if;
+
+  select * into target from public.table_sessions where id=p_session_id for update;
+  if not found then raise exception 'SESSION_NOT_FOUND'; end if;
+  if target.status <> 'open' then raise exception 'SESSION_CLOSED'; end if;
+  select id into diner_id from public.session_participants
+    where session_id=target.id and user_id=auth.uid();
+  if diner_id is null then raise exception 'NOT_PARTICIPANT'; end if;
+  select b.payment_methods into methods from public.tables t
+    join public.branches b on b.id=t.branch_id and b.restaurant_id=t.restaurant_id
+    where t.id=target.table_id and t.restaurant_id=target.restaurant_id;
+  if not ('mobile'=any(methods)) then raise exception 'PAYMENT_METHOD_DISABLED'; end if;
+
+  select * into saved from public.payments
+    where restaurant_id=target.restaurant_id and method='mobile'
+      and external_reference=reference;
+  if found then
+    if saved.session_id <> target.id or saved.participant_id <> diner_id or saved.mode <> p_mode
+      then raise exception 'IDEMPOTENCY_CONFLICT'; end if;
+    if p_mode='custom' then
+      select count(*) into saved_count from public.payment_order_items poi
+        where poi.payment_id=saved.id;
+      if saved_count <> cardinality(p_item_ids) or exists (
+        select 1 from unnest(p_item_ids) requested(id)
+        where not exists (
+          select 1 from public.payment_order_items poi
+          where poi.payment_id=saved.id and poi.order_item_id=requested.id
+        )
+      ) then raise exception 'IDEMPOTENCY_CONFLICT'; end if;
+    end if;
+    return query select saved.id,saved.amount,saved.status; return;
+  end if;
+  if exists(select 1 from public.payments p where p.session_id=target.id
+    and p.participant_id=diner_id and p.method='mobile' and p.status='pending')
+    then raise exception 'PAYMENT_ALREADY_PENDING'; end if;
+
+  select greatest(
+    coalesce((select sum(o.total_amount) from public.orders o where o.session_id=target.id
+      and o.restaurant_id=target.restaurant_id
+      and o.status in ('accepted','in_preparation','ready','delivered')),0)
+    - coalesce((select sum(p.amount) from public.payments p where p.session_id=target.id
+      and p.restaurant_id=target.restaurant_id and p.status='approved'),0), 0
+  ) into due;
+  if due=0 then raise exception 'NOTHING_TO_PAY'; end if;
+
+  if p_mode = 'equal_split' then
+    if target.split_type <> 'equal' or target.split_equal_parts is null
+      then raise exception 'INVALID_SPLIT'; end if;
+    select count(*), coalesce(sum(p.amount) filter (where p.status='pending'),0)
+      into allocated_equal_parts, reserved_equal_amount
+      from public.payments p
+      where p.session_id=target.id and p.restaurant_id=target.restaurant_id
+        and p.mode='equal_split' and p.status in ('pending','approved');
+    available_due := greatest(due - reserved_equal_amount, 0);
+    if available_due=0 then raise exception 'PAYMENT_ALREADY_PENDING'; end if;
+    remaining_parts := greatest(target.split_equal_parts - allocated_equal_parts, 1);
+    payment_amount := ceil(available_due * 100 / remaining_parts) / 100;
+  elsif p_mode = 'percentage_split' then
+    if target.split_type <> 'percentages' then raise exception 'INVALID_SPLIT'; end if;
+    percentage_share := public.session_percentage_share(target.id, diner_id);
+    -- Sin asignación, o con 0%, no hay nada que este comensal deba pagar por
+    -- porcentaje: la división es lo que hay que revisar, no el saldo.
+    if coalesce(percentage_share, 0) <= 0 then raise exception 'INVALID_SPLIT'; end if;
+    select coalesce(sum(p.amount),0) into settled_by_diner
+      from public.payments p
+      where p.session_id=target.id and p.restaurant_id=target.restaurant_id
+        and p.participant_id=diner_id and p.status='approved';
+    -- Lo que le falta de su parte, nunca más que lo que la mesa todavía debe:
+    -- si otro pagó de más, el porcentaje no lo vuelve a cobrar.
+    payment_amount := least(greatest(percentage_share - settled_by_diner, 0), due);
+    if payment_amount <= 0 then raise exception 'NOTHING_TO_PAY'; end if;
+  elsif p_mode = 'custom' then
+    select count(*), coalesce(sum(oi.total_price),0)
+      into requested_count, payment_amount
+    from unnest(p_item_ids) requested(id)
+    join public.order_items oi on oi.id=requested.id
+    join public.orders o on o.id=oi.order_id
+    where o.session_id=target.id and o.restaurant_id=target.restaurant_id
+      and o.status in ('accepted','in_preparation','ready','delivered')
+      and oi.total_price>0;
+    if requested_count <> cardinality(p_item_ids)
+      or requested_count <> (select count(distinct id) from unnest(p_item_ids) chosen(id))
+      then raise exception 'INVALID_PAYMENT_ITEMS'; end if;
+    if exists (
+      select 1 from public.payment_order_items poi
+      join public.payments p on p.id=poi.payment_id
+      where poi.order_item_id=any(p_item_ids) and p.status in ('pending','approved')
+    ) then raise exception 'PAYMENT_ITEMS_UNAVAILABLE'; end if;
+    if payment_amount > due then raise exception 'PAYMENT_EXCEEDS_BALANCE'; end if;
+  else
+    payment_amount := due;
+  end if;
+
+  insert into public.payments(
+    restaurant_id,session_id,participant_id,amount,mode,method,status,external_reference
+  ) values(
+    target.restaurant_id,target.id,diner_id,payment_amount,p_mode,'mobile','pending',reference
+  ) returning * into saved;
+
+  if p_mode='custom' then
+    insert into public.payment_order_items(payment_id,order_item_id,amount)
+    select saved.id,oi.id,oi.total_price
+    from public.order_items oi where oi.id=any(p_item_ids);
+  end if;
+  return query select saved.id,saved.amount,saved.status;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."create_mobile_payment"("p_session_id" "uuid", "p_request_id" "uuid", "p_mode" "public"."payment_mode", "p_item_ids" "uuid"[]) OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."create_restaurant"("p_name" "text", "p_slug" "text", "p_menu_design" "public"."menu_design", "p_branch_name" "text", "p_description" "text" DEFAULT NULL::"text") RETURNS "uuid"
@@ -734,6 +901,156 @@ $$;
 ALTER FUNCTION "public"."pos_open_table_session"("p_table_id" "uuid") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."pos_record_payment"("p_session_id" "uuid", "p_amount" numeric, "p_method" "public"."payment_method", "p_mode" "public"."payment_mode" DEFAULT 'full'::"public"."payment_mode", "p_participant_id" "uuid" DEFAULT NULL::"uuid", "p_external_reference" "text" DEFAULT NULL::"text") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  target public.table_sessions;
+  target_branch uuid;
+  enabled_methods public.payment_method[];
+  account_total numeric := 0;
+  approved_total numeric := 0;
+  pending_total numeric := 0;
+  payment_id uuid;
+  normalized_reference text := nullif(btrim(p_external_reference), '');
+begin
+  if auth.uid() is null then raise exception 'AUTH_REQUIRED'; end if;
+  if p_session_id is null or p_amount is null or p_method is null or p_mode is null
+    then raise exception 'INVALID_REQUEST'; end if;
+  if p_amount in ('NaN'::numeric, 'Infinity'::numeric, '-Infinity'::numeric)
+    or p_amount <= 0 or p_amount <> round(p_amount, 2)
+    then raise exception 'INVALID_PAYMENT_AMOUNT'; end if;
+  if normalized_reference is not null and length(normalized_reference) > 200
+    then raise exception 'INVALID_REQUEST'; end if;
+
+  -- Todas las registraciones de la sesión toman el mismo lock. Dos cajas no
+  -- pueden acreditar simultáneamente más que el saldo disponible.
+  select * into target from public.table_sessions
+  where id = p_session_id for update;
+  if not found then raise exception 'SESSION_NOT_FOUND'; end if;
+  if target.status <> 'open' then raise exception 'SESSION_CLOSED'; end if;
+
+  select t.branch_id, b.payment_methods into target_branch, enabled_methods
+  from public.tables t
+  join public.branches b on b.id = t.branch_id and b.restaurant_id = t.restaurant_id
+  where t.id = target.table_id and t.restaurant_id = target.restaurant_id;
+  if target_branch is null then raise exception 'TABLE_NOT_FOUND'; end if;
+  if not exists(select 1 from public.profiles where id = auth.uid())
+    or not public.has_permission(target.restaurant_id, 'payments.write', target_branch)
+    then raise exception 'FORBIDDEN'; end if;
+  if not (p_method = any(enabled_methods)) then raise exception 'PAYMENT_METHOD_DISABLED'; end if;
+  -- El pago mobile sólo se confirma desde la integración de la fase 10. El POS
+  -- no puede fabricar una aprobación que el proveedor nunca confirmó.
+  if p_method = 'mobile' then raise exception 'PAYMENT_METHOD_UNAVAILABLE'; end if;
+
+  if p_participant_id is not null and not exists(
+    select 1 from public.session_participants
+    where id = p_participant_id and session_id = target.id
+  ) then raise exception 'INVALID_PARTICIPANT'; end if;
+
+  select coalesce(sum(total_amount), 0) into account_total
+  from public.orders
+  where session_id = target.id and restaurant_id = target.restaurant_id
+    and status in ('accepted','in_preparation','ready','delivered');
+  select coalesce(sum(amount), 0) into approved_total
+  from public.payments
+  where session_id = target.id and restaurant_id = target.restaurant_id
+    and status = 'approved';
+  pending_total := greatest(account_total - approved_total, 0);
+  if pending_total = 0 then raise exception 'NOTHING_TO_PAY'; end if;
+  if p_amount > pending_total then raise exception 'PAYMENT_EXCEEDS_BALANCE'; end if;
+
+  begin
+    insert into public.payments(
+      restaurant_id, session_id, participant_id, amount, mode, method,
+      status, external_reference
+    ) values (
+      target.restaurant_id, target.id, p_participant_id, p_amount, p_mode,
+      p_method, 'approved', normalized_reference
+    ) returning id into payment_id;
+  exception when unique_violation then
+    raise exception 'PAYMENT_REFERENCE_CONFLICT';
+  end;
+
+  perform public.record_pos_action(
+    target.restaurant_id, target_branch, 'payment.recorded', null, target.id,
+    jsonb_build_object(
+      'paymentId', payment_id,
+      'amount', p_amount,
+      'method', p_method,
+      'mode', p_mode,
+      'participantId', p_participant_id
+    )
+  );
+  return payment_id;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."pos_record_payment"("p_session_id" "uuid", "p_amount" numeric, "p_method" "public"."payment_method", "p_mode" "public"."payment_mode", "p_participant_id" "uuid", "p_external_reference" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."pos_resolve_session_request"("p_session_id" "uuid", "p_kind" "public"."session_request_kind") RETURNS timestamp with time zone
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  target public.table_sessions;
+  bid uuid;
+  requested timestamptz;
+begin
+  if auth.uid() is null then raise exception 'AUTH_REQUIRED'; end if;
+  if p_session_id is null or p_kind is null then raise exception 'INVALID_REQUEST'; end if;
+  -- Igual que el cierre: la autorización se resuelve antes de informar si la
+  -- sesión existe, y antes de bloquear la fila.
+  if not exists (select 1 from profiles where id = auth.uid())
+    or not public.can_read_session(p_session_id, 'sessions.attend')
+    then raise exception 'FORBIDDEN'; end if;
+
+  select * into target from public.table_sessions where id = p_session_id for update;
+  if not found then raise exception 'SESSION_NOT_FOUND'; end if;
+  select branch_id into bid from public.tables
+    where id = target.table_id and restaurant_id = target.restaurant_id;
+  if bid is null or not public.has_permission(target.restaurant_id, 'sessions.attend', bid)
+    then raise exception 'FORBIDDEN'; end if;
+
+  requested := case p_kind
+    when 'bill' then target.bill_requested_at
+    else target.in_person_payment_requested_at end;
+  -- Nada que atender: sin fila de auditoría, para que dos mozos tocando el
+  -- mismo botón no registren dos atenciones de una sola solicitud. Tampoco se
+  -- pisa la confirmación que ya está viendo la mesa.
+  if requested is null then return null; end if;
+
+  update public.table_sessions set
+    bill_requested_at = case
+      when p_kind = 'bill' then null else bill_requested_at end,
+    bill_attended_at = case
+      when p_kind = 'bill' then now() else bill_attended_at end,
+    in_person_payment_requested_at = case
+      when p_kind = 'in_person_payment' then null else in_person_payment_requested_at end,
+    in_person_payment_attended_at = case
+      when p_kind = 'in_person_payment' then now() else in_person_payment_attended_at end,
+    -- Atender la mesa es operarla: queda como responsable quien fue.
+    assigned_user_id = auth.uid()
+  where id = target.id;
+
+  perform public.record_pos_action(
+    target.restaurant_id, bid, 'session.request_attended', null, target.id,
+    jsonb_build_object('kind', p_kind, 'requestedAt', requested));
+  return requested;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."pos_resolve_session_request"("p_session_id" "uuid", "p_kind" "public"."session_request_kind") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."pos_resolve_session_request"("p_session_id" "uuid", "p_kind" "public"."session_request_kind") IS 'MI-47: marca atendida la solicitud de una mesa y la audita. Devuelve la hora que tenía la solicitud, o null si no había ninguna. Errores: AUTH_REQUIRED, INVALID_REQUEST, FORBIDDEN, SESSION_NOT_FOUND.';
+
+
+
 CREATE OR REPLACE FUNCTION "public"."pos_transition_order"("p_order_id" "uuid", "p_status" "public"."order_status") RETURNS "uuid"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -863,40 +1180,113 @@ COMMENT ON FUNCTION "public"."reorder_categories"("p_restaurant_id" "uuid", "p_c
 
 
 
-CREATE OR REPLACE FUNCTION "public"."request_table_service"("p_session_id" "uuid", "p_kind" "text", "p_requested" boolean DEFAULT true) RETURNS "void"
+CREATE OR REPLACE FUNCTION "public"."request_session_service"("p_session_id" "uuid", "p_kind" "public"."session_request_kind") RETURNS timestamp with time zone
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
     AS $$
 declare
   target public.table_sessions;
-  -- Null apaga el aviso; al encenderlo se conserva el momento del primero, así
-  -- dos comensales pidiendo lo mismo no reinician la espera que ve el mozo.
-  stamp timestamptz;
+  requested timestamptz;
 begin
   if auth.uid() is null then raise exception 'AUTH_REQUIRED'; end if;
-  if p_kind not in ('attention', 'bill') then raise exception 'INVALID_REQUEST'; end if;
+  if p_session_id is null or p_kind is null then raise exception 'INVALID_REQUEST'; end if;
+  -- Pedir la cuenta es del comensal. Un empleado atiende la mesa desde el POS,
+  -- igual que no puede sumarse a una sesión por QR (join_table_session).
+  if exists (select 1 from profiles where id = auth.uid()) then raise exception 'FORBIDDEN'; end if;
 
+  -- Se bloquea la fila: dos comensales tocando el botón a la vez dejan una sola
+  -- solicitud, con la hora del primero.
   select * into target from public.table_sessions where id = p_session_id for update;
   if not found then raise exception 'SESSION_NOT_FOUND'; end if;
   if target.status <> 'open' then raise exception 'SESSION_CLOSED'; end if;
-
   if not exists (
     select 1 from public.session_participants
     where session_id = p_session_id and user_id = auth.uid()
   ) then raise exception 'NOT_PARTICIPANT'; end if;
 
-  if p_kind = 'attention' then
-    stamp := case when p_requested then coalesce(target.attention_requested_at, now()) end;
-    update public.table_sessions set attention_requested_at = stamp where id = p_session_id;
-  else
-    stamp := case when p_requested then coalesce(target.bill_requested_at, now()) end;
-    update public.table_sessions set bill_requested_at = stamp where id = p_session_id;
-  end if;
+  -- Pedir la cuenta no es pagar: eso se puede siempre. Que venga un mozo a
+  -- cobrar sí es un medio de pago, y la sucursal puede no ofrecerlo (MI-48).
+  if p_kind = 'in_person_payment' and not exists (
+    select 1 from public.tables t
+    join public.branches b on b.id = t.branch_id
+    where t.id = target.table_id and 'in_person' = any (b.payment_methods)
+  ) then raise exception 'PAYMENT_METHOD_DISABLED'; end if;
+
+  requested := case p_kind
+    when 'bill' then target.bill_requested_at
+    else target.in_person_payment_requested_at end;
+  -- Ya hay una solicitud viva de este tipo: se devuelve la misma hora sin
+  -- escribir, así el plano tampoco se despierta por un toque repetido.
+  if requested is not null then return requested; end if;
+
+  requested := now();
+  -- Pedir de nuevo borra la confirmación anterior: lo último que pasó es que la
+  -- mesa volvió a llamar.
+  update public.table_sessions set
+    bill_requested_at = case
+      when p_kind = 'bill' then requested else bill_requested_at end,
+    bill_attended_at = case
+      when p_kind = 'bill' then null else bill_attended_at end,
+    in_person_payment_requested_at = case
+      when p_kind = 'in_person_payment' then requested else in_person_payment_requested_at end,
+    in_person_payment_attended_at = case
+      when p_kind = 'in_person_payment' then null else in_person_payment_attended_at end
+  where id = target.id;
+  return requested;
 end;
 $$;
 
 
-ALTER FUNCTION "public"."request_table_service"("p_session_id" "uuid", "p_kind" "text", "p_requested" boolean) OWNER TO "postgres";
+ALTER FUNCTION "public"."request_session_service"("p_session_id" "uuid", "p_kind" "public"."session_request_kind") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."request_session_service"("p_session_id" "uuid", "p_kind" "public"."session_request_kind") IS 'MI-38/MI-46: un comensal de la mesa pide la cuenta o cobro presencial. Idempotente: devuelve la hora de la solicitud viva. Errores: AUTH_REQUIRED, INVALID_REQUEST, FORBIDDEN, SESSION_NOT_FOUND, SESSION_CLOSED, NOT_PARTICIPANT.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."resolve_mobile_payment"("p_payment_id" "uuid", "p_user_id" "uuid", "p_status" "public"."payment_status") RETURNS TABLE("payment_id" "uuid", "amount" numeric, "status" "public"."payment_status")
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  saved public.payments;
+  target public.table_sessions;
+  due numeric;
+  final_status public.payment_status;
+begin
+  if p_payment_id is null or p_user_id is null or p_status not in ('approved','rejected')
+    then raise exception 'INVALID_REQUEST'; end if;
+  select * into saved from public.payments where id=p_payment_id for update;
+  if not found then raise exception 'PAYMENT_NOT_FOUND'; end if;
+  if saved.method <> 'mobile' then raise exception 'INVALID_REQUEST'; end if;
+  if not exists(select 1 from public.session_participants where id=saved.participant_id
+    and session_id=saved.session_id and user_id=p_user_id)
+    then raise exception 'FORBIDDEN'; end if;
+  if saved.status <> 'pending' then
+    return query select saved.id,saved.amount,saved.status; return;
+  end if;
+
+  select * into target from public.table_sessions where id=saved.session_id for update;
+  final_status := p_status;
+  if target.status <> 'open' then final_status := 'rejected'; end if;
+  if final_status='approved' then
+    select greatest(
+      coalesce((select sum(o.total_amount) from public.orders o where o.session_id=target.id
+        and o.restaurant_id=target.restaurant_id
+        and o.status in ('accepted','in_preparation','ready','delivered')),0)
+      - coalesce((select sum(p.amount) from public.payments p where p.session_id=target.id
+        and p.restaurant_id=target.restaurant_id and p.status='approved'),0), 0
+    ) into due;
+    if due=0 or saved.amount>due then final_status := 'rejected'; end if;
+  end if;
+  update public.payments set status=final_status,updated_at=now() where id=saved.id
+    returning * into saved;
+  return query select saved.id,saved.amount,saved.status;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."resolve_mobile_payment"("p_payment_id" "uuid", "p_user_id" "uuid", "p_status" "public"."payment_status") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."save_employee_account"("p_actor" "uuid", "p_restaurant" "uuid", "p_user" "uuid", "p_full_name" "text", "p_roles" "public"."member_role"[], "p_branches" "uuid"[], "p_active" boolean, "p_username" "text" DEFAULT NULL::"text", "p_legacy" "uuid" DEFAULT NULL::"uuid") RETURNS "uuid"
@@ -1094,6 +1484,54 @@ ALTER FUNCTION "public"."save_product"("p_restaurant_id" "uuid", "p_category_id"
 
 
 COMMENT ON FUNCTION "public"."save_product"("p_restaurant_id" "uuid", "p_category_id" "uuid", "p_name" "text", "p_base_price" numeric, "p_dietary_tags" "text"[], "p_is_available" boolean, "p_media_urls" "text"[], "p_ingredients" "jsonb", "p_group_ids" "uuid"[], "p_product_id" "uuid", "p_description" "text", "p_food_info" "text") IS 'Members only; creates or replaces a product with its full ingredient list and group assignments atomically. Errors: AUTH_REQUIRED, FORBIDDEN, INVALID_REQUEST, STALE_DATA.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."session_percentage_share"("p_session_id" "uuid", "p_participant_id" "uuid") RETURNS numeric
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+  with session_row as (
+    select s.id, s.restaurant_id, s.split_type, s.split_allocations
+    from public.table_sessions s
+    where s.id = p_session_id and s.split_type = 'percentages'
+  ),
+  account as (
+    select round(coalesce(sum(o.total_amount), 0) * 100)::bigint as cents
+    from session_row s
+    left join public.orders o
+      on o.session_id = s.id and o.restaurant_id = s.restaurant_id
+      and o.status in ('accepted', 'in_preparation', 'ready', 'delivered')
+  ),
+  shares as (
+    select
+      allocation.key::uuid as participant_id,
+      floor(account.cents * (allocation.value)::numeric / 100) as cents,
+      account.cents * (allocation.value)::numeric / 100
+        - floor(account.cents * (allocation.value)::numeric / 100) as remainder
+    from session_row s
+    cross join account
+    cross join lateral jsonb_each_text(s.split_allocations) as allocation
+  ),
+  ranked as (
+    select participant_id, cents,
+      row_number() over (order by remainder desc, participant_id) as position
+    from shares
+  ),
+  leftover as (
+    select (select cents from account) - coalesce(sum(cents), 0) as cents from ranked
+  )
+  select (ranked.cents + case when ranked.position <= (select cents from leftover) then 1 else 0 end)
+    / 100::numeric
+  from ranked
+  where ranked.participant_id = p_participant_id;
+$$;
+
+
+ALTER FUNCTION "public"."session_percentage_share"("p_session_id" "uuid", "p_participant_id" "uuid") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."session_percentage_share"("p_session_id" "uuid", "p_participant_id" "uuid") IS 'MI-43: parte de un comensal según split_allocations, sobre el total de la cuenta y por resto mayor. Null si la sesión no divide por porcentajes o si no tiene asignación.';
 
 
 SET default_tablespace = '';
@@ -1362,77 +1800,80 @@ COMMENT ON FUNCTION "public"."transition_order"("p_order_id" "uuid", "p_status" 
 
 
 
-CREATE OR REPLACE FUNCTION "public"."update_session_split"("p_session_id" "uuid", "p_split_type" "public"."split_type", "p_allocations" "jsonb" DEFAULT '{}'::"jsonb") RETURNS "void"
+CREATE OR REPLACE FUNCTION "public"."update_session_split"("p_session_id" "uuid", "p_split_type" "public"."split_type", "p_allocations" "jsonb" DEFAULT '{}'::"jsonb", "p_equal_parts" integer DEFAULT NULL::integer) RETURNS "void"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
     AS $$
 declare
   target public.table_sessions;
   allocations jsonb := coalesce(p_allocations, '{}'::jsonb);
+  author uuid;
   total numeric;
 begin
   if auth.uid() is null then raise exception 'AUTH_REQUIRED'; end if;
-
-  -- Se bloquea la fila: dos comensales no pueden pisarse la división.
   select * into target from public.table_sessions where id = p_session_id for update;
   if not found then raise exception 'SESSION_NOT_FOUND'; end if;
   if target.status <> 'open' then raise exception 'SESSION_CLOSED'; end if;
-
-  if not exists (
-    select 1 from public.session_participants
-    where session_id = p_session_id and user_id = auth.uid()
-  ) then raise exception 'NOT_PARTICIPANT'; end if;
-
+  select id into author from public.session_participants
+    where session_id = p_session_id and user_id = auth.uid();
+  if author is null then raise exception 'NOT_PARTICIPANT'; end if;
   if jsonb_typeof(allocations) <> 'object' then raise exception 'INVALID_SPLIT'; end if;
 
-  -- Fuera de `percentages` no hay asignaciones que puedan quedar viejas y
-  -- reaparecer apuntando a comensales que ya no están en la mesa.
-  if p_split_type <> 'percentages' then
-    if allocations <> '{}'::jsonb then raise exception 'INVALID_SPLIT'; end if;
-    update public.table_sessions
-      set split_type = p_split_type,
-          split_allocations = '{}'::jsonb,
-          split_updated_by = auth.uid(),
-          split_updated_at = now()
-      where id = p_session_id;
+  if p_split_type = 'equal' then
+    if allocations <> '{}'::jsonb or p_equal_parts is null
+      or p_equal_parts < 2 or p_equal_parts > 50
+      then raise exception 'INVALID_SPLIT'; end if;
+    update public.table_sessions set
+      split_type = p_split_type,
+      split_allocations = '{}'::jsonb,
+      split_equal_parts = p_equal_parts,
+      split_updated_by = author,
+      split_updated_at = now()
+    where id = p_session_id;
     return;
   end if;
 
-  -- Los tres chequeos van separados: en un solo `or` Postgres podría evaluar el
-  -- casteo a numeric de un valor que no es número y levantar 22P02 en vez de
-  -- INVALID_SPLIT.
+  if p_equal_parts is not null then raise exception 'INVALID_SPLIT'; end if;
+  if p_split_type <> 'percentages' then
+    if allocations <> '{}'::jsonb then raise exception 'INVALID_SPLIT'; end if;
+    update public.table_sessions set
+      split_type = p_split_type,
+      split_allocations = '{}'::jsonb,
+      split_equal_parts = null,
+      split_updated_by = author,
+      split_updated_at = now()
+    where id = p_session_id;
+    return;
+  end if;
+
   if exists (
     select 1 from jsonb_each(allocations) a where jsonb_typeof(a.value) <> 'number'
   ) then raise exception 'INVALID_SPLIT'; end if;
-
   if exists (
     select 1 from jsonb_each(allocations) a
     where (a.value)::numeric < 0 or (a.value)::numeric > 100
   ) then raise exception 'INVALID_SPLIT'; end if;
-
-  -- Las claves se comparan como texto: una clave que no sea uuid tiene que dar
-  -- INVALID_SPLIT, no un error de casteo.
   if exists (
     select 1 from jsonb_object_keys(allocations) as k(id)
     where k.id not in (
       select sp.id::text from public.session_participants sp where sp.session_id = p_session_id
     )
   ) then raise exception 'INVALID_SPLIT'; end if;
-
   select coalesce(sum((a.value)::numeric), 0) into total from jsonb_each(allocations) a;
   if total <> 100 then raise exception 'INVALID_SPLIT'; end if;
 
-  update public.table_sessions
-    set split_type = p_split_type,
-        split_allocations = allocations,
-        split_updated_by = auth.uid(),
-        split_updated_at = now()
-    where id = p_session_id;
+  update public.table_sessions set
+    split_type = p_split_type,
+    split_allocations = allocations,
+    split_equal_parts = null,
+    split_updated_by = author,
+    split_updated_at = now()
+  where id = p_session_id;
 end;
 $$;
 
 
-ALTER FUNCTION "public"."update_session_split"("p_session_id" "uuid", "p_split_type" "public"."split_type", "p_allocations" "jsonb") OWNER TO "postgres";
+ALTER FUNCTION "public"."update_session_split"("p_session_id" "uuid", "p_split_type" "public"."split_type", "p_allocations" "jsonb", "p_equal_parts" integer) OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."upsert_pos_employee"("p_restaurant_id" "uuid", "p_full_name" "text", "p_pin" "text" DEFAULT NULL::"text", "p_employee_id" "uuid" DEFAULT NULL::"uuid", "p_is_active" boolean DEFAULT true) RETURNS "uuid"
@@ -1565,11 +2006,16 @@ CREATE TABLE IF NOT EXISTS "public"."branches" (
     "name" "text" NOT NULL,
     "address" "text",
     "is_active" boolean DEFAULT true NOT NULL,
-    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "payment_methods" "public"."payment_method"[] DEFAULT '{in_person,external}'::"public"."payment_method"[] NOT NULL
 );
 
 
 ALTER TABLE "public"."branches" OWNER TO "postgres";
+
+
+COMMENT ON COLUMN "public"."branches"."payment_methods" IS 'Medios de pago habilitados en la sucursal (MI-48). Vacío es válido: el local no cobra por la app, el comensal solo puede pedir la cuenta.';
+
 
 
 CREATE TABLE IF NOT EXISTS "public"."floor_sections" (
@@ -1701,6 +2147,17 @@ CREATE TABLE IF NOT EXISTS "public"."order_status_transitions" (
 ALTER TABLE "public"."order_status_transitions" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."payment_order_items" (
+    "payment_id" "uuid" NOT NULL,
+    "order_item_id" "uuid" NOT NULL,
+    "amount" numeric(10,2) NOT NULL,
+    CONSTRAINT "payment_order_items_amount_check" CHECK (("amount" > (0)::numeric))
+);
+
+
+ALTER TABLE "public"."payment_order_items" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."payments" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "restaurant_id" "uuid" NOT NULL,
@@ -1712,11 +2169,26 @@ CREATE TABLE IF NOT EXISTS "public"."payments" (
     "mp_payment_id" "text",
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    CONSTRAINT "payments_amount_check" CHECK (("amount" > (0)::numeric))
+    "method" "public"."payment_method" NOT NULL,
+    "external_reference" "text",
+    CONSTRAINT "payments_amount_check" CHECK (("amount" > (0)::numeric)),
+    CONSTRAINT "payments_external_reference_length" CHECK ((("external_reference" IS NULL) OR ("length"("external_reference") <= 200)))
 );
 
 
 ALTER TABLE "public"."payments" OWNER TO "postgres";
+
+
+COMMENT ON COLUMN "public"."payments"."mp_payment_id" IS 'Compatibilidad histórica. Las integraciones nuevas deben usar external_reference.';
+
+
+
+COMMENT ON COLUMN "public"."payments"."method" IS 'Medio concreto usado para pagar. Es independiente de mode, que describe cómo se dividió la cuenta.';
+
+
+
+COMMENT ON COLUMN "public"."payments"."external_reference" IS 'Identificador opcional del proveedor, transferencia, recibo o terminal. No contiene credenciales.';
+
 
 
 CREATE TABLE IF NOT EXISTS "public"."pos_audit_log" (
@@ -1778,9 +2250,12 @@ CREATE TABLE IF NOT EXISTS "public"."table_sessions" (
     "bill_requested_at" timestamp with time zone,
     "in_person_payment_requested_at" timestamp with time zone,
     "assigned_user_id" "uuid",
+    "bill_attended_at" timestamp with time zone,
+    "in_person_payment_attended_at" timestamp with time zone,
+    "split_equal_parts" smallint,
     "split_updated_by" "uuid",
     "split_updated_at" timestamp with time zone,
-    "attention_requested_at" timestamp with time zone
+    CONSTRAINT "table_sessions_equal_parts_valid" CHECK (((("split_type" = 'equal'::"public"."split_type") AND (("split_equal_parts" >= 2) AND ("split_equal_parts" <= 50))) OR (("split_type" <> 'equal'::"public"."split_type") AND ("split_equal_parts" IS NULL))))
 );
 
 
@@ -1799,15 +2274,23 @@ COMMENT ON COLUMN "public"."table_sessions"."in_person_payment_requested_at" IS 
 
 
 
-COMMENT ON COLUMN "public"."table_sessions"."split_updated_by" IS 'Comensal que cambió la división por última vez; la app lo muestra como autor del cambio.';
+COMMENT ON COLUMN "public"."table_sessions"."bill_attended_at" IS 'Momento en que el salón dio por entregada la cuenta que la mesa pidió.';
 
 
 
-COMMENT ON COLUMN "public"."table_sessions"."split_updated_at" IS 'Momento del último cambio de división. Null mientras la mesa nunca la cambió.';
+COMMENT ON COLUMN "public"."table_sessions"."in_person_payment_attended_at" IS 'Momento en que el salón dio por cobrada la mesa en persona. El pago todavía no se registra como tal: eso llega con MI-49.';
 
 
 
-COMMENT ON COLUMN "public"."table_sessions"."attention_requested_at" IS 'Momento en que la mesa llamó al mozo. Null cuando no hay llamado pendiente.';
+COMMENT ON COLUMN "public"."table_sessions"."split_equal_parts" IS 'Cantidad de partes cuando split_type=equal; no depende de teléfonos conectados.';
+
+
+
+COMMENT ON COLUMN "public"."table_sessions"."split_updated_by" IS 'Comensal que guardó la división vigente. Null si la guardó alguien que ya no está en la mesa.';
+
+
+
+COMMENT ON COLUMN "public"."table_sessions"."split_updated_at" IS 'Momento del último guardado de la división, aunque no haya cambiado ningún valor.';
 
 
 
@@ -1902,15 +2385,19 @@ CREATE OR REPLACE VIEW "public"."pos_open_sessions" WITH ("security_invoker"='tr
     "t"."branch_id",
     "b"."name" AS "branch_name",
     COALESCE("p"."names", '{}'::"text"[]) AS "participant_names",
-    "bill"."submitted_amount",
-    "bill"."total_amount",
-    "bill"."paid_amount",
-    "bill"."pending_amount",
+    COALESCE("bill"."submitted_amount", (0)::numeric) AS "submitted_amount",
+    COALESCE("bill"."total_amount", (0)::numeric) AS "total_amount",
+    COALESCE("bill"."paid_amount", (0)::numeric) AS "paid_amount",
+    COALESCE("bill"."pending_amount", (0)::numeric) AS "pending_amount",
+    "s"."bill_requested_at",
+    "s"."bill_attended_at",
+    "s"."in_person_payment_requested_at",
+    "s"."in_person_payment_attended_at",
     "k"."tickets" AS "kitchen_tickets"
    FROM ((((("public"."table_sessions" "s"
      JOIN "public"."tables" "t" ON (("t"."id" = "s"."table_id")))
      JOIN "public"."branches" "b" ON (("b"."id" = "t"."branch_id")))
-     JOIN "public"."session_bills" "bill" ON (("bill"."session_id" = "s"."id")))
+     LEFT JOIN "public"."session_bills" "bill" ON (("bill"."session_id" = "s"."id")))
      LEFT JOIN LATERAL ( SELECT "array_agg"("sp"."display_name" ORDER BY "sp"."joined_at") AS "names"
            FROM "public"."session_participants" "sp"
           WHERE ("sp"."session_id" = "s"."id")) "p" ON (true))
@@ -2145,6 +2632,11 @@ ALTER TABLE ONLY "public"."orders"
 
 
 
+ALTER TABLE ONLY "public"."payment_order_items"
+    ADD CONSTRAINT "payment_order_items_pkey" PRIMARY KEY ("payment_id", "order_item_id");
+
+
+
 ALTER TABLE ONLY "public"."payments"
     ADD CONSTRAINT "payments_pkey" PRIMARY KEY ("id");
 
@@ -2333,6 +2825,18 @@ CREATE INDEX "orders_session_id_idx" ON "public"."orders" USING "btree" ("sessio
 
 
 
+CREATE INDEX "payment_order_items_order_item_id_idx" ON "public"."payment_order_items" USING "btree" ("order_item_id");
+
+
+
+CREATE UNIQUE INDEX "payments_external_reference_unique" ON "public"."payments" USING "btree" ("restaurant_id", "method", "external_reference") WHERE ("external_reference" IS NOT NULL);
+
+
+
+CREATE INDEX "payments_session_created_idx" ON "public"."payments" USING "btree" ("session_id", "created_at" DESC);
+
+
+
 CREATE INDEX "payments_session_id_idx" ON "public"."payments" USING "btree" ("session_id");
 
 
@@ -2505,6 +3009,16 @@ ALTER TABLE ONLY "public"."orders"
 
 ALTER TABLE ONLY "public"."orders"
     ADD CONSTRAINT "orders_submitted_by_fkey" FOREIGN KEY ("submitted_by") REFERENCES "public"."session_participants"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."payment_order_items"
+    ADD CONSTRAINT "payment_order_items_order_item_id_fkey" FOREIGN KEY ("order_item_id") REFERENCES "public"."order_items"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."payment_order_items"
+    ADD CONSTRAINT "payment_order_items_payment_id_fkey" FOREIGN KEY ("payment_id") REFERENCES "public"."payments"("id") ON DELETE CASCADE;
 
 
 
@@ -2826,6 +3340,9 @@ ALTER TABLE "public"."order_status_transitions" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."orders" ENABLE ROW LEVEL SECURITY;
 
 
+ALTER TABLE "public"."payment_order_items" ENABLE ROW LEVEL SECURITY;
+
+
 ALTER TABLE "public"."payments" ENABLE ROW LEVEL SECURITY;
 
 
@@ -2964,6 +3481,12 @@ CREATE POLICY "scoped read sessions" ON "public"."table_sessions" FOR SELECT USI
 
 
 
+CREATE POLICY "session participants and payment readers read payment items" ON "public"."payment_order_items" FOR SELECT USING ((EXISTS ( SELECT 1
+   FROM "public"."payments" "p"
+  WHERE (("p"."id" = "payment_order_items"."payment_id") AND ("public"."is_session_participant"("p"."session_id") OR "public"."can_read_session"("p"."session_id", 'payments.read'::"text"))))));
+
+
+
 ALTER TABLE "public"."session_participants" ENABLE ROW LEVEL SECURITY;
 
 
@@ -3017,6 +3540,12 @@ GRANT ALL ON FUNCTION "public"."can_read_session"("sid" "uuid", "permission_name
 REVOKE ALL ON FUNCTION "public"."close_table_session"("p_session_id" "uuid") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."close_table_session"("p_session_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."close_table_session"("p_session_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."create_mobile_payment"("p_session_id" "uuid", "p_request_id" "uuid", "p_mode" "public"."payment_mode", "p_item_ids" "uuid"[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."create_mobile_payment"("p_session_id" "uuid", "p_request_id" "uuid", "p_mode" "public"."payment_mode", "p_item_ids" "uuid"[]) TO "service_role";
+GRANT ALL ON FUNCTION "public"."create_mobile_payment"("p_session_id" "uuid", "p_request_id" "uuid", "p_mode" "public"."payment_mode", "p_item_ids" "uuid"[]) TO "authenticated";
 
 
 
@@ -3122,6 +3651,18 @@ GRANT ALL ON FUNCTION "public"."pos_open_table_session"("p_table_id" "uuid") TO 
 
 
 
+REVOKE ALL ON FUNCTION "public"."pos_record_payment"("p_session_id" "uuid", "p_amount" numeric, "p_method" "public"."payment_method", "p_mode" "public"."payment_mode", "p_participant_id" "uuid", "p_external_reference" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."pos_record_payment"("p_session_id" "uuid", "p_amount" numeric, "p_method" "public"."payment_method", "p_mode" "public"."payment_mode", "p_participant_id" "uuid", "p_external_reference" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."pos_record_payment"("p_session_id" "uuid", "p_amount" numeric, "p_method" "public"."payment_method", "p_mode" "public"."payment_mode", "p_participant_id" "uuid", "p_external_reference" "text") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."pos_resolve_session_request"("p_session_id" "uuid", "p_kind" "public"."session_request_kind") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."pos_resolve_session_request"("p_session_id" "uuid", "p_kind" "public"."session_request_kind") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."pos_resolve_session_request"("p_session_id" "uuid", "p_kind" "public"."session_request_kind") TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."pos_transition_order"("p_order_id" "uuid", "p_status" "public"."order_status") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."pos_transition_order"("p_order_id" "uuid", "p_status" "public"."order_status") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."pos_transition_order"("p_order_id" "uuid", "p_status" "public"."order_status") TO "service_role";
@@ -3144,9 +3685,14 @@ GRANT ALL ON FUNCTION "public"."reorder_categories"("p_restaurant_id" "uuid", "p
 
 
 
-REVOKE ALL ON FUNCTION "public"."request_table_service"("p_session_id" "uuid", "p_kind" "text", "p_requested" boolean) FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."request_table_service"("p_session_id" "uuid", "p_kind" "text", "p_requested" boolean) TO "authenticated";
-GRANT ALL ON FUNCTION "public"."request_table_service"("p_session_id" "uuid", "p_kind" "text", "p_requested" boolean) TO "service_role";
+REVOKE ALL ON FUNCTION "public"."request_session_service"("p_session_id" "uuid", "p_kind" "public"."session_request_kind") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."request_session_service"("p_session_id" "uuid", "p_kind" "public"."session_request_kind") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."request_session_service"("p_session_id" "uuid", "p_kind" "public"."session_request_kind") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."resolve_mobile_payment"("p_payment_id" "uuid", "p_user_id" "uuid", "p_status" "public"."payment_status") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."resolve_mobile_payment"("p_payment_id" "uuid", "p_user_id" "uuid", "p_status" "public"."payment_status") TO "service_role";
 
 
 
@@ -3164,6 +3710,11 @@ GRANT ALL ON FUNCTION "public"."save_modifier_group"("p_restaurant_id" "uuid", "
 REVOKE ALL ON FUNCTION "public"."save_product"("p_restaurant_id" "uuid", "p_category_id" "uuid", "p_name" "text", "p_base_price" numeric, "p_dietary_tags" "text"[], "p_is_available" boolean, "p_media_urls" "text"[], "p_ingredients" "jsonb", "p_group_ids" "uuid"[], "p_product_id" "uuid", "p_description" "text", "p_food_info" "text") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."save_product"("p_restaurant_id" "uuid", "p_category_id" "uuid", "p_name" "text", "p_base_price" numeric, "p_dietary_tags" "text"[], "p_is_available" boolean, "p_media_urls" "text"[], "p_ingredients" "jsonb", "p_group_ids" "uuid"[], "p_product_id" "uuid", "p_description" "text", "p_food_info" "text") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."save_product"("p_restaurant_id" "uuid", "p_category_id" "uuid", "p_name" "text", "p_base_price" numeric, "p_dietary_tags" "text"[], "p_is_available" boolean, "p_media_urls" "text"[], "p_ingredients" "jsonb", "p_group_ids" "uuid"[], "p_product_id" "uuid", "p_description" "text", "p_food_info" "text") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."session_percentage_share"("p_session_id" "uuid", "p_participant_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."session_percentage_share"("p_session_id" "uuid", "p_participant_id" "uuid") TO "service_role";
 
 
 
@@ -3185,9 +3736,9 @@ GRANT ALL ON FUNCTION "public"."transition_order"("p_order_id" "uuid", "p_status
 
 
 
-REVOKE ALL ON FUNCTION "public"."update_session_split"("p_session_id" "uuid", "p_split_type" "public"."split_type", "p_allocations" "jsonb") FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."update_session_split"("p_session_id" "uuid", "p_split_type" "public"."split_type", "p_allocations" "jsonb") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."update_session_split"("p_session_id" "uuid", "p_split_type" "public"."split_type", "p_allocations" "jsonb") TO "service_role";
+REVOKE ALL ON FUNCTION "public"."update_session_split"("p_session_id" "uuid", "p_split_type" "public"."split_type", "p_allocations" "jsonb", "p_equal_parts" integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."update_session_split"("p_session_id" "uuid", "p_split_type" "public"."split_type", "p_allocations" "jsonb", "p_equal_parts" integer) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."update_session_split"("p_session_id" "uuid", "p_split_type" "public"."split_type", "p_allocations" "jsonb", "p_equal_parts" integer) TO "service_role";
 
 
 
@@ -3266,6 +3817,11 @@ GRANT ALL ON TABLE "public"."order_items" TO "service_role";
 
 GRANT SELECT,REFERENCES,TRIGGER,MAINTAIN ON TABLE "public"."order_status_transitions" TO "authenticated";
 GRANT ALL ON TABLE "public"."order_status_transitions" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."payment_order_items" TO "service_role";
+GRANT SELECT ON TABLE "public"."payment_order_items" TO "authenticated";
 
 
 

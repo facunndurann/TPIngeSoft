@@ -100,6 +100,7 @@ export type Database = {
           id: string
           is_active: boolean
           name: string
+          payment_methods: Database["public"]["Enums"]["payment_method"][]
           restaurant_id: string
         }
         Insert: {
@@ -108,6 +109,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           name: string
+          payment_methods?: Database["public"]["Enums"]["payment_method"][]
           restaurant_id: string
         }
         Update: {
@@ -116,6 +118,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           name?: string
+          payment_methods?: Database["public"]["Enums"]["payment_method"][]
           restaurant_id?: string
         }
         Relationships: [
@@ -596,11 +599,46 @@ export type Database = {
           },
         ]
       }
+      payment_order_items: {
+        Row: {
+          amount: number
+          order_item_id: string
+          payment_id: string
+        }
+        Insert: {
+          amount: number
+          order_item_id: string
+          payment_id: string
+        }
+        Update: {
+          amount?: number
+          order_item_id?: string
+          payment_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_order_items_order_item_id_fkey"
+            columns: ["order_item_id"]
+            isOneToOne: false
+            referencedRelation: "order_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_order_items_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payments: {
         Row: {
           amount: number
           created_at: string
+          external_reference: string | null
           id: string
+          method: Database["public"]["Enums"]["payment_method"]
           mode: Database["public"]["Enums"]["payment_mode"]
           mp_payment_id: string | null
           participant_id: string | null
@@ -612,7 +650,9 @@ export type Database = {
         Insert: {
           amount: number
           created_at?: string
+          external_reference?: string | null
           id?: string
+          method: Database["public"]["Enums"]["payment_method"]
           mode: Database["public"]["Enums"]["payment_mode"]
           mp_payment_id?: string | null
           participant_id?: string | null
@@ -624,7 +664,9 @@ export type Database = {
         Update: {
           amount?: number
           created_at?: string
+          external_reference?: string | null
           id?: string
+          method?: Database["public"]["Enums"]["payment_method"]
           mode?: Database["public"]["Enums"]["payment_mode"]
           mp_payment_id?: string | null
           participant_id?: string | null
@@ -1193,14 +1235,16 @@ export type Database = {
         Row: {
           assigned_employee_id: string | null
           assigned_user_id: string | null
-          attention_requested_at: string | null
+          bill_attended_at: string | null
           bill_requested_at: string | null
           closed_at: string | null
           id: string
+          in_person_payment_attended_at: string | null
           in_person_payment_requested_at: string | null
           opened_at: string
           restaurant_id: string
           split_allocations: Json
+          split_equal_parts: number | null
           split_type: Database["public"]["Enums"]["split_type"]
           split_updated_at: string | null
           split_updated_by: string | null
@@ -1210,14 +1254,16 @@ export type Database = {
         Insert: {
           assigned_employee_id?: string | null
           assigned_user_id?: string | null
-          attention_requested_at?: string | null
+          bill_attended_at?: string | null
           bill_requested_at?: string | null
           closed_at?: string | null
           id?: string
+          in_person_payment_attended_at?: string | null
           in_person_payment_requested_at?: string | null
           opened_at?: string
           restaurant_id: string
           split_allocations?: Json
+          split_equal_parts?: number | null
           split_type?: Database["public"]["Enums"]["split_type"]
           split_updated_at?: string | null
           split_updated_by?: string | null
@@ -1227,14 +1273,16 @@ export type Database = {
         Update: {
           assigned_employee_id?: string | null
           assigned_user_id?: string | null
-          attention_requested_at?: string | null
+          bill_attended_at?: string | null
           bill_requested_at?: string | null
           closed_at?: string | null
           id?: string
+          in_person_payment_attended_at?: string | null
           in_person_payment_requested_at?: string | null
           opened_at?: string
           restaurant_id?: string
           split_allocations?: Json
+          split_equal_parts?: number | null
           split_type?: Database["public"]["Enums"]["split_type"]
           split_updated_at?: string | null
           split_updated_by?: string | null
@@ -1352,9 +1400,13 @@ export type Database = {
     Views: {
       pos_open_sessions: {
         Row: {
+          bill_attended_at: string | null
+          bill_requested_at: string | null
           branch_id: string | null
           branch_name: string | null
           id: string | null
+          in_person_payment_attended_at: string | null
+          in_person_payment_requested_at: string | null
           kitchen_tickets: number | null
           opened_at: string | null
           paid_amount: number | null
@@ -1435,6 +1487,19 @@ export type Database = {
         Returns: boolean
       }
       close_table_session: { Args: { p_session_id: string }; Returns: string }
+      create_mobile_payment: {
+        Args: {
+          p_item_ids?: string[]
+          p_mode?: Database["public"]["Enums"]["payment_mode"]
+          p_request_id: string
+          p_session_id: string
+        }
+        Returns: {
+          amount: number
+          payment_id: string
+          status: Database["public"]["Enums"]["payment_status"]
+        }[]
+      }
       create_restaurant: {
         Args: {
           p_branch_name: string
@@ -1513,6 +1578,24 @@ export type Database = {
         Returns: string
       }
       pos_open_table_session: { Args: { p_table_id: string }; Returns: string }
+      pos_record_payment: {
+        Args: {
+          p_amount: number
+          p_external_reference?: string
+          p_method: Database["public"]["Enums"]["payment_method"]
+          p_mode?: Database["public"]["Enums"]["payment_mode"]
+          p_participant_id?: string
+          p_session_id: string
+        }
+        Returns: string
+      }
+      pos_resolve_session_request: {
+        Args: {
+          p_kind: Database["public"]["Enums"]["session_request_kind"]
+          p_session_id: string
+        }
+        Returns: string
+      }
       pos_transition_order: {
         Args: {
           p_order_id: string
@@ -1535,9 +1618,24 @@ export type Database = {
         Args: { p_category_ids: string[]; p_restaurant_id: string }
         Returns: undefined
       }
-      request_table_service: {
-        Args: { p_kind: string; p_requested?: boolean; p_session_id: string }
-        Returns: undefined
+      request_session_service: {
+        Args: {
+          p_kind: Database["public"]["Enums"]["session_request_kind"]
+          p_session_id: string
+        }
+        Returns: string
+      }
+      resolve_mobile_payment: {
+        Args: {
+          p_payment_id: string
+          p_status: Database["public"]["Enums"]["payment_status"]
+          p_user_id: string
+        }
+        Returns: {
+          amount: number
+          payment_id: string
+          status: Database["public"]["Enums"]["payment_status"]
+        }[]
       }
       save_employee_account: {
         Args: {
@@ -1582,6 +1680,10 @@ export type Database = {
         }
         Returns: string
       }
+      session_percentage_share: {
+        Args: { p_participant_id: string; p_session_id: string }
+        Returns: number
+      }
       submit_order: {
         Args: {
           p_expected_total: number
@@ -1625,6 +1727,7 @@ export type Database = {
       update_session_split: {
         Args: {
           p_allocations?: Json
+          p_equal_parts?: number
           p_session_id: string
           p_split_type: Database["public"]["Enums"]["split_type"]
         }
@@ -1666,9 +1769,16 @@ export type Database = {
         | "delivered"
         | "cancelled"
       order_transition_kind: "advance" | "revert" | "cancel"
-      payment_mode: "full" | "own" | "equal_split" | "custom"
+      payment_method: "mobile" | "in_person" | "external"
+      payment_mode:
+        | "full"
+        | "own"
+        | "equal_split"
+        | "custom"
+        | "percentage_split"
       payment_status: "pending" | "approved" | "rejected" | "cancelled"
       pos_type: "internal" | "fudo"
+      session_request_kind: "bill" | "in_person_payment"
       session_status: "open" | "closed"
       split_type: "none" | "equal" | "percentages"
     }
@@ -1820,9 +1930,17 @@ export const Constants = {
         "cancelled",
       ],
       order_transition_kind: ["advance", "revert", "cancel"],
-      payment_mode: ["full", "own", "equal_split", "custom"],
+      payment_method: ["mobile", "in_person", "external"],
+      payment_mode: [
+        "full",
+        "own",
+        "equal_split",
+        "custom",
+        "percentage_split",
+      ],
       payment_status: ["pending", "approved", "rejected", "cancelled"],
       pos_type: ["internal", "fudo"],
+      session_request_kind: ["bill", "in_person_payment"],
       session_status: ["open", "closed"],
       split_type: ["none", "equal", "percentages"],
     },

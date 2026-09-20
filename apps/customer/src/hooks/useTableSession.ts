@@ -68,6 +68,7 @@ export function useTableSession(token: string) {
       void client.invalidateQueries({ queryKey: ['session', sessionId] })
       void client.invalidateQueries({ queryKey: ['orders', sessionId] })
       void client.invalidateQueries({ queryKey: ['bill', sessionId] })
+      void client.invalidateQueries({ queryKey: ['payments', sessionId] })
     }
 
     return subscribeToTableSession(sessionId, refresh)

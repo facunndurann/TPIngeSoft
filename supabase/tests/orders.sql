@@ -165,9 +165,9 @@ begin
     and event = 'pos.internal.accepted') <> 1 then raise exception 'Duplicate dispatch'; end if;
   update public.orders set status = 'cancelled' where id = legacy_order_id;
 
-  insert into public.payments(restaurant_id, session_id, participant_id, amount, mode, status)
-    values(restaurant, sid, participant, 3.50, 'custom', 'approved'),
-      (restaurant, sid, participant, 20, 'custom', 'pending');
+  insert into public.payments(restaurant_id, session_id, participant_id, amount, mode, method, status)
+    values(restaurant, sid, participant, 3.50, 'custom', 'external', 'approved'),
+      (restaurant, sid, participant, 20, 'custom', 'mobile', 'pending');
   select * into bill from public.session_bills where session_id = sid;
   if bill.paid_amount <> 3.50 or bill.pending_amount <> 20 or bill.is_settled then
     raise exception 'Unapproved payments incorrectly credited'; end if;

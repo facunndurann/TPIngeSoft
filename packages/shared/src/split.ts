@@ -33,6 +33,8 @@ export const splitTypeDescriptions: Record<SplitType, string> = {
 };
 
 export const SPLIT_PERCENTAGE_TOTAL = 100;
+export const MIN_EQUAL_PARTS = 2;
+export const MAX_EQUAL_PARTS = 50;
 
 /** Los porcentajes se comparan en centésimas de punto para no depender del float. */
 const HUNDREDTHS = 100;
@@ -59,8 +61,24 @@ export const sessionSplitSchema = z
   .object({
     type: splitTypeSchema,
     allocations: splitAllocationsSchema.default({}),
+    equalParts: z.number().int().min(MIN_EQUAL_PARTS).max(MAX_EQUAL_PARTS).optional(),
   })
   .superRefine((split, ctx) => {
+    if (split.type === 'equal') {
+      if (split.equalParts === undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['equalParts'],
+          message: 'Elegí cuántas personas van a dividir la cuenta.',
+        });
+      }
+    } else if (split.equalParts !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['equalParts'],
+        message: 'La cantidad de personas solo corresponde a partes iguales.',
+      });
+    }
     if (split.type !== 'percentages') {
       // Guardar asignaciones fuera de `percentages` deja basura que reaparece
       // al volver a ese modo con comensales que ya no están en la mesa.
@@ -120,13 +138,30 @@ export function percentageFits(value: number, limit: number): boolean {
  * Lee la división guardada en `table_sessions` sin castear el `Json` de la
  * columna: lo que no valide vuelve a `none`, que es el estado seguro.
  */
-export function parseSessionSplit(type: unknown, allocations: unknown): SessionSplit {
-  const parsed = sessionSplitSchema.safeParse({ type, allocations: allocations ?? {} });
+export function parseSessionSplit(
+  type: unknown,
+  allocations: unknown,
+  equalParts?: unknown,
+): SessionSplit {
+  const parsed = sessionSplitSchema.safeParse({
+    type,
+    allocations: allocations ?? {},
+    ...(equalParts == null ? {} : { equalParts }),
+  });
   return parsed.success ? parsed.data : defaultSessionSplit;
 }
 
 /** Solo lo que el reparto necesita: así se puede probar sin filas de la base. */
-export type SplitBill = { pending_amount: number | string | null };
+export type SplitBill = {
+  pending_amount: number | string | null;
+  /**
+   * Total en cuenta. Los porcentajes se calculan sobre esto y no sobre el
+   * pendiente: el pendiente encoge cuando otro paga, y el porcentaje de cada
+   * uno está atado a la cuenta entera. Es opcional porque los otros modos
+   * reparten el pendiente y se los puede probar sin el total.
+   */
+  total_amount?: number | string | null;
+};
 export type SplitOrderItem = {
   is_shared: boolean;
   participant_id: string | null;
@@ -223,6 +258,53 @@ function distribute(
     amountCents: cents[index],
     amount: cents[index] / 100,
   }));
+}
+
+/**
+ * Cuánto le toca a cada comensal por su porcentaje (MI-43), sobre el total de
+ * la cuenta. No es lo mismo que `splitBill` con modo `percentages`, que reparte
+ * el pendiente: el pendiente encoge cuando otro paga, y entonces el 40% dejaría
+ * de ser el 40% de lo que esa persona debe.
+ *
+ * Es el espejo exacto de `session_percentage_share` en Postgres, que es quien
+ * decide el importe real del pago: mismo resto mayor y mismo desempate por id
+ * del comensal, para que el celular muestre el centavo que se va a cobrar.
+ */
+export function splitPercentageAmounts(
+  accountTotal: number | string | null | undefined,
+  participants: readonly SplitParticipant[],
+  allocations: SplitAllocations,
+): SplitShare[] {
+  const none = participants.map((participant) => ({
+    participantId: participant.id,
+    amountCents: 0,
+    amount: 0,
+  }));
+  // Orden por id, no por llegada a la mesa: es el `order by remainder desc,
+  // participant_id` de la RPC, y con él los empates caen del mismo lado.
+  const ordered = [...participants].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const weights = ordered.map((participant) =>
+    Math.round((allocations[participant.id] ?? 0) * HUNDREDTHS),
+  );
+  // Sin asignaciones no hay porcentaje que repartir; el reparto parejo de
+  // `distribute` mentiría sobre lo que cada uno debe.
+  if (weights.every((weight) => weight === 0)) return none;
+
+  const shares = distribute(Math.max(0, toCents(accountTotal)), ordered, weights);
+  const byParticipant = new Map(shares.map((share) => [share.participantId, share]));
+  return participants.map(
+    (participant, index) => byParticipant.get(participant.id) ?? none[index],
+  );
+}
+
+/** Importes de cada parte igual, en el orden en que se pagan. */
+export function splitEqualAmounts(bill: SplitBill, parts: number): number[] {
+  const parsedParts = z.number().int().min(MIN_EQUAL_PARTS).max(MAX_EQUAL_PARTS).safeParse(parts);
+  if (!parsedParts.success) return [];
+  const totalCents = Math.max(0, toCents(bill.pending_amount));
+  const base = Math.floor(totalCents / parts);
+  const remainder = totalCents % parts;
+  return Array.from({ length: parts }, (_, index) => (base + (index < remainder ? 1 : 0)) / 100);
 }
 
 /**

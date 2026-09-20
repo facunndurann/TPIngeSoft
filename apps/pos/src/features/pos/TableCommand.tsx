@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { asAmount, formatElapsed, formatPrice, getPosTableState, isKitchenTicket, type OrderStatus, posTableStateLabels } from '@restaurant-platform/shared'
+import { asAmount, enabledPaymentMethods, formatElapsed, formatPrice, getPosTableState, isKitchenTicket, type OrderStatus, paymentMethodLabels, posTableStateLabels, sessionRequestsOf } from '@restaurant-platform/shared'
 import { ArrowLeft, Clock3, PlayCircle, UserRound, Users } from 'lucide-react'
 import { Badge, Button, EmptyState, ErrorText, Modal, Spinner, SummaryItem, useSaveErrors } from '@restaurant-platform/ui'
 import { useCan, useRestaurant } from '@/context/pos-context'
@@ -15,6 +15,8 @@ import {
   transitionPosOrder,
 } from './api'
 import { OrderTicket } from './OrderTicket'
+import { PaymentPanel } from './PaymentPanel'
+import { AttendRequestButtons, ChargedBadge, SessionRequestBadges } from './ServiceRequests'
 import { useNow } from './useNow'
 
 /**
@@ -106,6 +108,7 @@ export function TableCommand() {
 
   const open = session.data
   const state = getPosTableState(open)
+  const branchMethods = enabledPaymentMethods(table.branches)
   const kitchenOrders = (orders.data ?? []).filter((order) => isKitchenTicket(order.status)).length
 
   return (
@@ -118,6 +121,14 @@ export function TableCommand() {
           <p className="text-sm text-neutral-500">
             {table.floor_sections?.name ?? 'Sin sector'}
             {table.branches ? ` · ${table.branches.name}` : ''} · {table.seats} lugares
+          </p>
+          {/* Lo que el admin habilitó para esta sucursal (MI-48): es lo que el
+              comensal ve como opción y lo único que se le puede cobrar acá. */}
+          <p className="text-xs text-neutral-500">
+            Medios de pago:{' '}
+            {branchMethods.length === 0
+              ? 'ninguno habilitado'
+              : branchMethods.map((method) => paymentMethodLabels[method]).join(' · ')}
           </p>
         </div>
         <Badge color={open ? 'indigo' : 'green'}>{posTableStateLabels[state]}</Badge>
@@ -150,6 +161,7 @@ export function TableCommand() {
             <SummaryItem as="dl-pair" icon={Clock3} label="Abierta" value={formatElapsed(open.opened_at, now)} />
             {can('payments.read') && <>
               <SummaryItem as="dl-pair" label="En cuenta" value={formatPrice(bill?.total_amount)} />
+              <SummaryItem as="dl-pair" label="Pagado" value={formatPrice(bill?.paid_amount)} />
               <SummaryItem as="dl-pair" label="Pendiente" value={formatPrice(bill?.pending_amount)} />
             </>}
             <SummaryItem
@@ -166,6 +178,14 @@ export function TableCommand() {
             />
           </dl>
 
+          {/* La mesa llamó: se atiende desde la misma comanda, sin volver al plano. */}
+          {sessionRequestsOf(open).length > 0 && (
+            <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3">
+              <SessionRequestBadges session={open} now={now} />
+              <AttendRequestButtons sessionId={open.id} session={open} />
+            </div>
+          )}
+
           <section className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-sm font-semibold text-neutral-800">
@@ -176,9 +196,13 @@ export function TableCommand() {
                   </span>
                 )}
               </h2>
-              {can('sessions.close') && <Button variant="secondary" onClick={() => setClosing(true)}>
-                Cerrar sesión
-              </Button>}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Cobrada y abierta: el mozo que cobró no cierra, avisa a quien sí. */}
+                <ChargedBadge session={open} now={now} />
+                {can('sessions.close') && <Button variant="secondary" onClick={() => setClosing(true)}>
+                  Cerrar sesión
+                </Button>}
+              </div>
             </div>
 
             {orders.isLoading ? (
@@ -205,6 +229,10 @@ export function TableCommand() {
               </div>
             )}
           </section>
+
+          {can('payments.read') && (
+            <PaymentPanel sessionId={open.id} bill={bill} enabledMethods={branchMethods} />
+          )}
         </>
       )}
 

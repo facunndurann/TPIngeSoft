@@ -1,4 +1,5 @@
 import { createContext, useContext } from 'react'
+import type { PaymentMethod } from '@restaurant-platform/shared'
 import type { Announce } from '@/features/announcements'
 import type { useTableSession } from '@/hooks/useTableSession'
 import type { CartItem } from '@/stores/cart'
@@ -19,6 +20,8 @@ export type TableContextValue = {
   userId?: string
   cartKey: string
   items: CartItem[]
+  /** Medios de pago habilitados en la sucursal de la mesa (MI-48). */
+  paymentMethods: PaymentMethod[]
   sessionOpen: boolean
   named: boolean
   /** El carrito admite cambios: mesa abierta y sin envíos pendientes. */

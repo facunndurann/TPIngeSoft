@@ -6,12 +6,12 @@
 begin;
 
 create function pg_temp.expect_split_error(
-  sid uuid, split public.split_type, allocations jsonb, expected text
+  sid uuid, split public.split_type, allocations jsonb, expected text, equal_parts integer default null
 ) returns void language plpgsql as $$
 declare actual text;
 begin
   begin
-    perform public.update_session_split(sid, split, allocations);
+    perform public.update_session_split(sid, split, allocations, equal_parts);
   exception when others then actual := sqlerrm;
   end;
   if actual is distinct from expected then
@@ -110,9 +110,10 @@ begin
   if saved.split_type <> 'percentages'
      or (saved.split_allocations ->> ana_participant::text)::numeric <> 33.34 then
     raise exception 'Percentages split was not stored'; end if;
-  -- El cambio queda firmado: la app del comensal muestra quién lo hizo y cuándo.
-  if saved.split_updated_by <> ana or saved.split_updated_at is null then
-    raise exception 'A saved split should record its author'; end if;
+  -- La división es de la mesa y gana el último guardado: la pantalla del otro
+  -- necesita saber quién la cambió para avisarlo en vez de pisarlo en silencio.
+  if saved.split_updated_by <> ana_participant or saved.split_updated_at is null then
+    raise exception 'The split does not record who saved it'; end if;
 
   -- Volver a otro modo limpia las asignaciones: no quedan datos viejos.
   perform set_config('request.jwt.claim.sub', beto::text, true);
@@ -124,9 +125,17 @@ begin
   if saved.split_updated_by <> beto then
     raise exception 'The author should be the diner who changed the split last'; end if;
 
-  perform public.update_session_split(sid, 'equal', '{}'::jsonb);
-  if (select split_type from public.table_sessions where id = sid) <> 'equal' then
+  perform public.update_session_split(sid, 'equal', '{}'::jsonb, 4);
+  if not exists(select 1 from public.table_sessions where id = sid
+      and split_type = 'equal' and split_equal_parts = 4) then
     raise exception 'Equal split was not stored'; end if;
+  -- Guardar de nuevo mueve la marca aunque el modo no cambie: es lo que le
+  -- permite al cliente distinguir un cambio nuevo de una relectura.
+  if (select split_updated_by from public.table_sessions where id = sid) <> beto_participant then
+    raise exception 'The author of the last save was not updated'; end if;
+
+  perform pg_temp.expect_split_error(sid, 'equal', '{}'::jsonb, 'INVALID_SPLIT', 1);
+  perform pg_temp.expect_split_error(sid, 'equal', '{}'::jsonb, 'INVALID_SPLIT', 51);
 
   raise notice 'Split SQL assertions passed (enum column, auth, membership, allocation shape, cleanup, authorship)';
 end;

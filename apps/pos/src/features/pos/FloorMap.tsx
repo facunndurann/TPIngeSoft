@@ -12,6 +12,7 @@ import {
   loadSessionBills,
 } from './api'
 import { MoveTableSession } from './MoveTableSession'
+import { AttendRequestButtons, SessionRequestBadges } from './ServiceRequests'
 import { useNow } from './useNow'
 import type { PosBill, PosDiningTable, PosOpenSession } from './types'
 
@@ -242,15 +243,15 @@ const stateStyles: Record<PosTableState, { table: string; badge: string; dot: st
     badge: 'bg-cyan-200 text-cyan-950',
     dot: 'bg-cyan-600',
   },
-  attention_requested: {
-    table: 'border-fuchsia-600 bg-fuchsia-50 text-fuchsia-950',
-    badge: 'bg-fuchsia-200 text-fuchsia-950',
-    dot: 'bg-fuchsia-600',
-  },
   bill_requested: {
     table: 'border-violet-600 bg-violet-50 text-violet-950',
     badge: 'bg-violet-200 text-violet-950',
     dot: 'bg-violet-600',
+  },
+  in_person_payment: {
+    table: 'border-red-600 bg-red-50 text-red-950',
+    badge: 'bg-red-200 text-red-950',
+    dot: 'bg-red-600',
   },
   payment_pending: {
     table: 'border-rose-600 bg-rose-50 text-rose-950',
@@ -265,8 +266,8 @@ const legendStates: PosTableState[] = [
   'order_pending',
   'in_preparation',
   'ready',
-  'attention_requested',
   'bill_requested',
+  'in_person_payment',
   'payment_pending',
 ]
 
@@ -380,11 +381,12 @@ function TableSummary({
 
   return (
     <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm shadow-sm">
-      <div className="mr-auto">
+      <div className="mr-auto space-y-1">
         <p className="font-semibold text-neutral-900">{table.label}</p>
-        <span className={`mt-1 inline-flex rounded px-1.5 py-0.5 text-[10px] font-semibold ${stateStyles[state].badge}`}>
+        <span className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-semibold ${stateStyles[state].badge}`}>
           {posTableStateLabels[state]}
         </span>
+        {session && <SessionRequestBadges session={session} now={now} />}
       </div>
       {session ? (
         <>
@@ -400,6 +402,7 @@ function TableSummary({
       ) : (
         <SummaryItem icon={Users} label="Capacidad" value={`${table.seats} lugares`} />
       )}
+      {session && <AttendRequestButtons sessionId={session.id} session={session} />}
       {session && can('sessions.move') && (
         <Button variant="secondary" onClick={() => onMove(entry)}>
           <Move size={15} /> Mover comanda

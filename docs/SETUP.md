@@ -84,7 +84,7 @@ VITE_SUPABASE_ANON_KEY=<anon key local>
 VITE_EMPLOYEE_EMAIL_DOMAIN=employees.example.com
 ```
 
-`pnpm dev:pos` abre el POS en `http://localhost:5175`. `pnpm dev:functions` sirve ambas funciones usando `supabase/functions/.env.example`. Para otro dominio interno, usar un archivo de entorno propio y el mismo dominio en POS.
+`pnpm dev:pos` abre el POS en `http://localhost:5175`. `pnpm dev:functions` sirve las Edge Functions usando `supabase/functions/.env.example`. Ese archivo habilita el simulador de pagos local con `PAYMENT_SANDBOX_ENABLED=true`. Para otro dominio interno, usar un archivo de entorno propio y el mismo dominio en POS.
 
 ### `apps/customer/.env`
 
@@ -228,9 +228,21 @@ pnpm lint
 pnpm build
 ```
 
+## 7. Probar pago electrónico sandbox (Fase 10)
+
+La sucursal debe tener habilitado **Pago desde el celular**. Levantá `pnpm dev:functions`
+y `pnpm dev:customer`, abrí una mesa con consumo aceptado y entrá a **Pedidos y cuenta**.
+El botón calcula el saldo en PostgreSQL, crea un pago pendiente y muestra dos respuestas del
+simulador: aprobación o rechazo. Sólo la aprobación reduce el saldo. Un rechazo permite iniciar
+otro intento; una sesión cerrada o un importe ya cubierto se rechazan en el servidor.
+
+El sandbox es únicamente de desarrollo/demo. Para deshabilitarlo usá
+`PAYMENT_SANDBOX_ENABLED=false`; iniciar pagos seguirá disponible, pero la confirmación requiere
+reemplazar el simulador por el callback de un proveedor real.
+
 La suite integrada necesita el seed demo y la función activa. Usa 32 verificaciones HTTP/Realtime con fixtures propios que elimina al terminar, sin modificar los menús existentes. Crea tres usuarios Auth anónimos locales; si se proporciona `SUPABASE_SERVICE_ROLE_KEY` solo al proceso de pruebas, también los elimina. No colocar esa clave en un `.env` del frontend. Las pruebas SQL crean fixtures dentro de `BEGIN … ROLLBACK` e incluyen pagos aprobados/rechazados, sin invocar proveedores de pago.
 
-La suite de integración completa requiere Supabase local (Auth, Edge, PostgREST y Realtime). El cobro con Mercado Pago sigue pendiente.
+La suite de integración completa requiere Supabase local (Auth, Edge, PostgREST y Realtime). La integración con un proveedor real como Mercado Pago sigue pendiente; la fase 10 usa el sandbox controlado.
 
 ### Cómo se confirma un pedido
 

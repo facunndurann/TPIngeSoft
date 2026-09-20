@@ -22,7 +22,7 @@ Phones / browsers
                                             ├── Auth (admins + global employee accounts + anonymous diners)
                                             ├── Realtime
                                             ├── Storage (product photos)
-                                            └── Edge Functions: submit-order, employee-accounts
+                                            └── Edge Functions: submit-order, employee-accounts, mobile-payment
 ```
 
 | Piece | Who hosts it | Why |
@@ -34,7 +34,7 @@ Phones / browsers
 
 You will **not** deploy Docker, and you will **not** run `seed.sql` in the cloud. Demo users (`admin@esquina.demo`) exist only in local Docker. In the cloud you register a real account and create the restaurant from the admin onboarding screen.
 
-Mercado Pago and the LLM menu (phases 6–7) are not implemented yet, so there is nothing extra to configure for payments or OpenAI.
+El pago electrónico usa un simulador controlado para la demo. No procesa dinero real ni requiere una cuenta de Mercado Pago.
 
 ---
 
@@ -154,11 +154,13 @@ Orders are **not** written straight from the browser. The customer app calls the
 pnpm supabase functions deploy submit-order
 pnpm supabase secrets set EMPLOYEE_EMAIL_DOMAIN=employees.your-controlled-domain.com
 pnpm supabase functions deploy employee-accounts
+pnpm supabase secrets set PAYMENT_SANDBOX_ENABLED=true
+pnpm supabase functions deploy mobile-payment
 ```
 
-`SUPABASE_URL` and `SUPABASE_ANON_KEY` are injected automatically. You do not set secrets for this function today.
+`SUPABASE_URL`, `SUPABASE_ANON_KEY` y `SUPABASE_SERVICE_ROLE_KEY` son inyectadas por Supabase; no las copies a Vercel ni al frontend. Para la demo sólo se configura la bandera del sandbox indicada arriba.
 
-Confirm: dashboard → **Edge Functions** → `submit-order` is listed. In `supabase/config.toml`, `verify_jwt = true`, so unauthenticated calls are rejected (same as local).
+Confirm: dashboard → **Edge Functions** → `submit-order` and `mobile-payment` are listed. In `supabase/config.toml`, `verify_jwt = true`, so unauthenticated calls are rejected (same as local). `PAYMENT_SANDBOX_ENABLED=true` es sólo para la demo; deshabilitalo antes de integrar un proveedor real.
 
 ---
 
