@@ -1208,6 +1208,7 @@ export type Database = {
           opened_at: string
           restaurant_id: string
           split_allocations: Json
+          split_equal_parts: number | null
           split_type: Database["public"]["Enums"]["split_type"]
           status: Database["public"]["Enums"]["session_status"]
           table_id: string
@@ -1224,6 +1225,7 @@ export type Database = {
           opened_at?: string
           restaurant_id: string
           split_allocations?: Json
+          split_equal_parts?: number | null
           split_type?: Database["public"]["Enums"]["split_type"]
           status?: Database["public"]["Enums"]["session_status"]
           table_id: string
@@ -1240,6 +1242,7 @@ export type Database = {
           opened_at?: string
           restaurant_id?: string
           split_allocations?: Json
+          split_equal_parts?: number | null
           split_type?: Database["public"]["Enums"]["split_type"]
           status?: Database["public"]["Enums"]["session_status"]
           table_id?: string
@@ -1443,7 +1446,11 @@ export type Database = {
       }
       close_table_session: { Args: { p_session_id: string }; Returns: string }
       create_mobile_payment: {
-        Args: { p_request_id: string; p_session_id: string }
+        Args: {
+          p_mode?: Database["public"]["Enums"]["payment_mode"]
+          p_request_id: string
+          p_session_id: string
+        }
         Returns: {
           amount: number
           payment_id: string
@@ -1673,6 +1680,7 @@ export type Database = {
       update_session_split: {
         Args: {
           p_allocations?: Json
+          p_equal_parts?: number
           p_session_id: string
           p_split_type: Database["public"]["Enums"]["split_type"]
         }

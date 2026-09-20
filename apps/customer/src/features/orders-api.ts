@@ -134,6 +134,7 @@ export async function updateSessionSplit(sessionId: string, split: SessionSplit)
     p_session_id: sessionId,
     p_split_type: split.type,
     p_allocations: split.allocations,
+    p_equal_parts: split.equalParts,
   })
   if (error) throw fromPostgres(error)
 }

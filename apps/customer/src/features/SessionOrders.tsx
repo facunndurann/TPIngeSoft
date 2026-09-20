@@ -40,6 +40,9 @@ export function SessionOrders({
   closed,
   paymentMethods,
 }: SessionOrdersProps) {
+  const sessionSplit = session
+    ? parseSessionSplit(session.split_type, session.split_allocations, session.split_equal_parts)
+    : null
   const orders = useQuery({
     queryKey: ['orders', sessionId],
     queryFn: () => loadOrders(sessionId!),
@@ -99,6 +102,7 @@ export function SessionOrders({
           participantId={currentParticipantId}
           payments={payments.data ?? []}
           closed={closed}
+          split={sessionSplit!}
         />
       )}
       <PaymentHistory
@@ -133,7 +137,7 @@ export function SessionOrders({
       {bill.data && session && participants.length > 0 && (
         <BillSplitter
           sessionId={session.id}
-          split={parseSessionSplit(session.split_type, session.split_allocations)}
+          split={sessionSplit!}
           bill={bill.data}
           orders={orders.data ?? []}
           participants={participants}

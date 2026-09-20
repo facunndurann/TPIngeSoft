@@ -140,34 +140,47 @@ $$;
 
 do $$
 declare
-  diner uuid:=gen_random_uuid(); other_diner uuid:=gen_random_uuid();
+  diner uuid:=gen_random_uuid(); other_diner uuid:=gen_random_uuid(); peer uuid:=gen_random_uuid();
   restaurant uuid; branch uuid; table_id uuid; sid uuid; participant uuid;
-  request_id uuid:=gen_random_uuid(); second_request uuid:=gen_random_uuid();
+  request_id uuid:=gen_random_uuid(); second_request uuid:=gen_random_uuid(); peer_request uuid:=gen_random_uuid();
+  fourth_request uuid:=gen_random_uuid(); peer_payment uuid;
   saved record; repeated record; bill record;
 begin
-  insert into auth.users(id,aud,role) values(diner,'authenticated','authenticated'),(other_diner,'authenticated','authenticated');
+  insert into auth.users(id,aud,role) values
+    (diner,'authenticated','authenticated'),(other_diner,'authenticated','authenticated'),
+    (peer,'authenticated','authenticated');
   insert into public.restaurants(name,slug) values('Mobile payment test',gen_random_uuid()::text) returning id into restaurant;
   insert into public.branches(restaurant_id,name) values(restaurant,'Mobile branch') returning id into branch;
   insert into public.tables(restaurant_id,branch_id,label) values(restaurant,branch,'Mobile table') returning id into table_id;
   insert into public.table_sessions(restaurant_id,table_id) values(restaurant,table_id) returning id into sid;
   insert into public.session_participants(session_id,user_id,display_name) values(sid,diner,'Diner') returning id into participant;
+  insert into public.session_participants(session_id,user_id,display_name) values(sid,peer,'Peer');
   insert into public.orders(restaurant_id,session_id,submitted_by,total_amount,status)
-    values(restaurant,sid,participant,12,'accepted');
+    values(restaurant,sid,participant,10,'accepted');
 
   perform set_config('request.jwt.claim.sub',diner::text,true);
   perform pg_temp.expect_mobile_create_error(sid,request_id,'PAYMENT_METHOD_DISABLED');
   update public.branches set payment_methods='{mobile,in_person}' where id=branch;
   select * into saved from public.create_mobile_payment(sid,request_id);
-  if saved.amount<>12 or saved.status<>'pending' then raise exception 'Wrong pending mobile payment'; end if;
+  if saved.amount<>10 or saved.status<>'pending' then raise exception 'Wrong pending mobile payment'; end if;
   select * into repeated from public.create_mobile_payment(sid,request_id);
   if repeated.payment_id<>saved.payment_id then raise exception 'Mobile payment request is not idempotent'; end if;
   perform pg_temp.expect_mobile_create_error(sid,second_request,'PAYMENT_ALREADY_PENDING');
   select * into bill from public.session_bills where session_id=sid;
-  if bill.paid_amount<>0 or bill.pending_amount<>12 then raise exception 'Pending mobile payment reduced balance'; end if;
+  if bill.paid_amount<>0 or bill.pending_amount<>10 then raise exception 'Pending mobile payment reduced balance'; end if;
 
   select * into repeated from public.resolve_mobile_payment(saved.payment_id,diner,'rejected');
   if repeated.status<>'rejected' then raise exception 'Sandbox rejection was not saved'; end if;
-  select * into saved from public.create_mobile_payment(sid,second_request);
+  update public.table_sessions set split_type='equal',split_equal_parts=3 where id=sid;
+  select * into saved from public.create_mobile_payment(sid,second_request,'equal_split');
+  if saved.amount<>3.34 then raise exception 'Wrong first equal part: %',saved.amount; end if;
+  -- Otra persona puede reservar la siguiente parte antes de que se apruebe la
+  -- primera; no debe volver a absorber el mismo centavo de redondeo.
+  perform set_config('request.jwt.claim.sub',peer::text,true);
+  select * into repeated from public.create_mobile_payment(sid,peer_request,'equal_split');
+  if repeated.amount<>3.33 then raise exception 'Wrong concurrent equal part: %',repeated.amount; end if;
+  peer_payment := repeated.payment_id;
+  perform set_config('request.jwt.claim.sub',diner::text,true);
   begin
     perform public.resolve_mobile_payment(saved.payment_id,other_diner,'approved');
     raise exception 'Other diner resolved a payment';
@@ -176,16 +189,23 @@ begin
   end;
   select * into repeated from public.resolve_mobile_payment(saved.payment_id,diner,'approved');
   select * into bill from public.session_bills where session_id=sid;
-  if repeated.status<>'approved' or bill.paid_amount<>12 or bill.pending_amount<>0 or not bill.is_settled
-    then raise exception 'Approved mobile payment did not settle bill'; end if;
+  if repeated.status<>'approved' or bill.paid_amount<>3.34 or bill.pending_amount<>6.66 or bill.is_settled
+    then raise exception 'First equal payment produced a wrong balance'; end if;
+  perform public.resolve_mobile_payment(peer_payment,peer,'approved');
+  select * into saved from public.create_mobile_payment(sid,fourth_request,'equal_split');
+  if saved.amount<>3.33 then raise exception 'Wrong final equal part: %',saved.amount; end if;
+  perform public.resolve_mobile_payment(saved.payment_id,diner,'approved');
+  select * into bill from public.session_bills where session_id=sid;
+  if bill.paid_amount<>10 or bill.pending_amount<>0 or not bill.is_settled
+    then raise exception 'Equal payments did not settle bill'; end if;
   update public.table_sessions set status='closed',closed_at=now() where id=sid;
   perform pg_temp.expect_mobile_create_error(sid,gen_random_uuid(),'SESSION_CLOSED');
 
-  if has_function_privilege('anon','public.create_mobile_payment(uuid,uuid)','EXECUTE')
-    or not has_function_privilege('authenticated','public.create_mobile_payment(uuid,uuid)','EXECUTE')
+  if has_function_privilege('anon','public.create_mobile_payment(uuid,uuid,public.payment_mode)','EXECUTE')
+    or not has_function_privilege('authenticated','public.create_mobile_payment(uuid,uuid,public.payment_mode)','EXECUTE')
     or has_function_privilege('authenticated','public.resolve_mobile_payment(uuid,uuid,public.payment_status)','EXECUTE')
     then raise exception 'Unsafe mobile payment function privileges'; end if;
-  raise notice 'Mobile payment SQL assertions passed (server amount, pending, approval, rejection, idempotency)';
+  raise notice 'Mobile payment SQL assertions passed (server amount, equal parts, pending, approval, rejection, idempotency)';
 end;
 $$;
 

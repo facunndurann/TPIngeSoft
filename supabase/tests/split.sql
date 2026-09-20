@@ -6,12 +6,12 @@
 begin;
 
 create function pg_temp.expect_split_error(
-  sid uuid, split public.split_type, allocations jsonb, expected text
+  sid uuid, split public.split_type, allocations jsonb, expected text, equal_parts integer default null
 ) returns void language plpgsql as $$
 declare actual text;
 begin
   begin
-    perform public.update_session_split(sid, split, allocations);
+    perform public.update_session_split(sid, split, allocations, equal_parts);
   exception when others then actual := sqlerrm;
   end;
   if actual is distinct from expected then
@@ -117,9 +117,13 @@ begin
   if saved.split_type <> 'none' or saved.split_allocations <> '{}'::jsonb then
     raise exception 'Switching away from percentages should clear allocations'; end if;
 
-  perform public.update_session_split(sid, 'equal', '{}'::jsonb);
-  if (select split_type from public.table_sessions where id = sid) <> 'equal' then
+  perform public.update_session_split(sid, 'equal', '{}'::jsonb, 4);
+  if not exists(select 1 from public.table_sessions where id = sid
+      and split_type = 'equal' and split_equal_parts = 4) then
     raise exception 'Equal split was not stored'; end if;
+
+  perform pg_temp.expect_split_error(sid, 'equal', '{}'::jsonb, 'INVALID_SPLIT', 1);
+  perform pg_temp.expect_split_error(sid, 'equal', '{}'::jsonb, 'INVALID_SPLIT', 51);
 
   raise notice 'Split SQL assertions passed (enum column, auth, membership, allocation shape, cleanup)';
 end;

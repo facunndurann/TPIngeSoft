@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { allocationTotal, formatPrice, type SessionSplit, sessionSplitSchema, SPLIT_PERCENTAGE_TOTAL, splitBill, type SplitBill, type SplitOrder, type SplitParticipant, splitTypeDescriptions, splitTypeLabels, splitTypes } from '@restaurant-platform/shared'
+import { allocationTotal, formatPrice, MAX_EQUAL_PARTS, MIN_EQUAL_PARTS, type SessionSplit, sessionSplitSchema, SPLIT_PERCENTAGE_TOTAL, splitBill, splitEqualAmounts, type SplitBill, type SplitOrder, type SplitParticipant, splitTypeDescriptions, splitTypeLabels, splitTypes } from '@restaurant-platform/shared'
 
 import { updateSessionSplit } from '@/features/orders-api'
 
@@ -41,6 +41,9 @@ export function BillSplitter({
 
   const active = draft ?? split
   const shares = splitBill(bill, orders, participants, active)
+  const equalAmounts = active.type === 'equal' && active.equalParts
+    ? splitEqualAmounts(bill, active.equalParts)
+    : []
   const amountOf = (participantId: string) =>
     shares.find((share) => share.participantId === participantId)?.amount ?? 0
 
@@ -60,8 +63,14 @@ export function BillSplitter({
 
   // Cambiar de modo descarta las asignaciones: el schema solo las admite en
   // `percentages`, y guardarlas de más es lo que dejaba porcentajes zombis.
-  const chooseType = (type: SessionSplit['type']) =>
-    setDraft({ type, allocations: type === 'percentages' ? (draft?.allocations ?? {}) : {} })
+  const chooseType = (type: SessionSplit['type']) => setDraft({
+    type,
+    allocations: type === 'percentages' ? (draft?.allocations ?? {}) : {},
+    ...(type === 'equal' ? {
+      equalParts: draft?.equalParts
+        ?? Math.min(MAX_EQUAL_PARTS, Math.max(MIN_EQUAL_PARTS, participants.length)),
+    } : {}),
+  })
 
   return (
     <section className="bill-panel" aria-label="División de la cuenta">
@@ -83,7 +92,38 @@ export function BillSplitter({
         </div>
       )}
 
-      <ul className="split-list">
+      {active.type === 'equal' && (
+        <div className="equal-split-summary">
+          {draft ? (
+            <label>
+              Cantidad de personas
+              <input
+                type="number"
+                min={MIN_EQUAL_PARTS}
+                max={MAX_EQUAL_PARTS}
+                step={1}
+                value={draft.equalParts ?? ''}
+                onChange={(event) => setDraft((current) => current && ({
+                  ...current,
+                  equalParts: event.target.value === '' ? undefined : Number(event.target.value),
+                }))}
+              />
+            </label>
+          ) : (
+            <strong>{active.equalParts} personas</strong>
+          )}
+          {equalAmounts.length > 0 && (
+            <p>
+              {equalAmounts.every((amount) => amount === equalAmounts[0])
+                ? `${active.equalParts} partes de ${formatPrice(equalAmounts[0])}`
+                : `Una parte de ${formatPrice(equalAmounts[0])} y ${equalAmounts.length - 1} de ${formatPrice(equalAmounts[equalAmounts.length - 1])}`}
+            </p>
+          )}
+          <p className="muted">Si sobra algún centavo, se suma a la primera parte para que el total cierre exacto.</p>
+        </div>
+      )}
+
+      {active.type !== 'equal' && <ul className="split-list">
         {participants.map((participant) => {
           const isYou = participant.user_id === userId
           const amount = amountOf(participant.id)
@@ -114,7 +154,7 @@ export function BillSplitter({
             </li>
           )
         })}
-      </ul>
+      </ul>}
 
       {draft?.type === 'percentages' && (
         <p className="muted">

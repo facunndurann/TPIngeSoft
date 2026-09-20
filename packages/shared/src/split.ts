@@ -33,6 +33,8 @@ export const splitTypeDescriptions: Record<SplitType, string> = {
 };
 
 export const SPLIT_PERCENTAGE_TOTAL = 100;
+export const MIN_EQUAL_PARTS = 2;
+export const MAX_EQUAL_PARTS = 50;
 
 /** Los porcentajes se comparan en centésimas de punto para no depender del float. */
 const HUNDREDTHS = 100;
@@ -59,8 +61,24 @@ export const sessionSplitSchema = z
   .object({
     type: splitTypeSchema,
     allocations: splitAllocationsSchema.default({}),
+    equalParts: z.number().int().min(MIN_EQUAL_PARTS).max(MAX_EQUAL_PARTS).optional(),
   })
   .superRefine((split, ctx) => {
+    if (split.type === 'equal') {
+      if (split.equalParts === undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['equalParts'],
+          message: 'Elegí cuántas personas van a dividir la cuenta.',
+        });
+      }
+    } else if (split.equalParts !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['equalParts'],
+        message: 'La cantidad de personas solo corresponde a partes iguales.',
+      });
+    }
     if (split.type !== 'percentages') {
       // Guardar asignaciones fuera de `percentages` deja basura que reaparece
       // al volver a ese modo con comensales que ya no están en la mesa.
@@ -99,8 +117,16 @@ export function allocationTotal(allocations: SplitAllocations): number {
  * Lee la división guardada en `table_sessions` sin castear el `Json` de la
  * columna: lo que no valide vuelve a `none`, que es el estado seguro.
  */
-export function parseSessionSplit(type: unknown, allocations: unknown): SessionSplit {
-  const parsed = sessionSplitSchema.safeParse({ type, allocations: allocations ?? {} });
+export function parseSessionSplit(
+  type: unknown,
+  allocations: unknown,
+  equalParts?: unknown,
+): SessionSplit {
+  const parsed = sessionSplitSchema.safeParse({
+    type,
+    allocations: allocations ?? {},
+    ...(equalParts == null ? {} : { equalParts }),
+  });
   return parsed.success ? parsed.data : defaultSessionSplit;
 }
 
@@ -202,6 +228,16 @@ function distribute(
     amountCents: cents[index],
     amount: cents[index] / 100,
   }));
+}
+
+/** Importes de cada parte igual, en el orden en que se pagan. */
+export function splitEqualAmounts(bill: SplitBill, parts: number): number[] {
+  const parsedParts = z.number().int().min(MIN_EQUAL_PARTS).max(MAX_EQUAL_PARTS).safeParse(parts);
+  if (!parsedParts.success) return [];
+  const totalCents = Math.max(0, toCents(bill.pending_amount));
+  const base = Math.floor(totalCents / parts);
+  const remainder = totalCents % parts;
+  return Array.from({ length: parts }, (_, index) => (base + (index < remainder ? 1 : 0)) / 100);
 }
 
 /**

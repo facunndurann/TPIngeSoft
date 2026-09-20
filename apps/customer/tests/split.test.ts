@@ -8,6 +8,7 @@ import {
   parseSessionSplit,
   sessionSplitSchema,
   splitBill,
+  splitEqualAmounts,
   type SessionSplit,
   type SplitOrder,
 } from '@restaurant-platform/shared'
@@ -29,7 +30,11 @@ const order = (status: SplitOrder['status'], items: SplitOrder['order_items']): 
 })
 
 const amounts = (shares: ReturnType<typeof splitBill>) => shares.map((share) => share.amount)
-const split = (type: SessionSplit['type'], allocations = {}): SessionSplit => ({ type, allocations })
+const split = (type: SessionSplit['type'], allocations = {}): SessionSplit => ({
+  type,
+  allocations,
+  ...(type === 'equal' ? { equalParts: 3 } : {}),
+})
 
 test('los estados facturables son exactamente los de la vista session_bills', () => {
   assert.deepEqual([...billedOrderStatuses], ['accepted', 'in_preparation', 'ready', 'delivered'])
@@ -88,6 +93,11 @@ test('el reparto cierra exacto aunque no sea divisible', () => {
   )
 })
 
+test('las partes iguales usan la cantidad elegida, aunque no coincida con los conectados', () => {
+  assert.deepEqual(splitEqualAmounts({ pending_amount: 100 }, 4), [25, 25, 25, 25])
+  assert.deepEqual(splitEqualAmounts({ pending_amount: 100 }, 6), [16.67, 16.67, 16.67, 16.67, 16.66, 16.66])
+})
+
 test('un comensal que se sumó después no tiene porcentaje y paga 0', () => {
   const shares = splitBill(
     { pending_amount: 500 },
@@ -126,10 +136,12 @@ test('el schema exige que los porcentajes sumen 100', () => {
 test('solo percentages admite asignaciones', () => {
   assert.equal(sessionSplitSchema.safeParse(split('none', { [ana]: 100 })).success, false)
   assert.equal(sessionSplitSchema.safeParse(split('equal')).success, true)
+  assert.equal(sessionSplitSchema.safeParse({ type: 'equal', allocations: {} }).success, false)
+  assert.equal(sessionSplitSchema.safeParse({ ...split('equal'), equalParts: 1 }).success, false)
 })
 
 test('parseSessionSplit no castea: lo inválido vuelve a none', () => {
-  assert.deepEqual(parseSessionSplit('equal', {}), { type: 'equal', allocations: {} })
+  assert.deepEqual(parseSessionSplit('equal', {}, 4), { type: 'equal', allocations: {}, equalParts: 4 })
   assert.deepEqual(parseSessionSplit('percentages', { [ana]: 100 }), {
     type: 'percentages',
     allocations: { [ana]: 100 },

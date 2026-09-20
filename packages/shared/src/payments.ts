@@ -72,7 +72,12 @@ export function acceptsPaymentMethod(
 
 const uuid = z.string().uuid();
 export const mobilePaymentRequestSchema = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('create'), sessionId: uuid, requestId: uuid }).strict(),
+  z.object({
+    action: z.literal('create'),
+    sessionId: uuid,
+    requestId: uuid,
+    mode: z.enum(['full', 'equal_split']).default('full'),
+  }).strict(),
   z.object({
     action: z.literal('confirm'),
     paymentId: uuid,
