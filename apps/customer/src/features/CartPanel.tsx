@@ -3,42 +3,31 @@ import { useMutation } from '@tanstack/react-query'
 import { AppError, formatPrice } from '@restaurant-platform/shared'
 import { useNavigate, useParams } from 'react-router'
 import { QuantityField } from '@/components/QuantityField'
-import type { Announce } from '@/features/announcements'
 import { MAX_CART_LINES, cartPhase, plateCount } from '@/features/cart'
 import type { Review } from '@/features/cart'
 import { cartPrice, price, productOptions, selectionErrors } from '@/features/menu'
 import type { Menu } from '@/features/menu'
 import { abandonSubmission, submitOrder } from '@/features/orders-api'
 import { focusNameField } from '@/features/name-field'
+import { useTable } from '@/features/table-context'
 import { cartItemPath, cartPath, cartReviewPath } from '@/features/table-paths'
 import { useCart } from '@/stores/cart'
 import type { CartItem } from '@/stores/cart'
 
 type CartPanelProps = {
-  cartKey: string
-  sessionId?: string
-  menu?: Menu
-  sessionOpen: boolean
-  /** Si el comensal ya eligió su nombre; sin eso no se envía el pedido. */
-  named: boolean
   reviewing?: boolean
   refreshMenu: () => Promise<unknown>
   onSubmitted: () => void
-  /** Avisos al comensal; los muestra el Toast de la mesa. */
-  onAnnounce: Announce
 }
 
-export function CartPanel({
-  cartKey,
-  sessionId,
-  menu,
-  sessionOpen,
-  named,
-  reviewing = false,
-  refreshMenu,
-  onSubmitted,
-  onAnnounce,
-}: CartPanelProps) {
+/**
+ * El carrito de la mesa. Los datos de la mesa —carrito, carta, si está abierta,
+ * si el comensal ya tiene nombre— salen del contexto; por props llegan solo las
+ * acciones que decide la pantalla que lo monta.
+ */
+export function CartPanel({ reviewing = false, refreshMenu, onSubmitted }: CartPanelProps) {
+  const { cartKey, sessionId, menu: menuQuery, sessionOpen, named, announce } = useTable()
+  const menu = menuQuery.data
   const { token = '' } = useParams()
   const navigate = useNavigate()
   const cart = useCart()
@@ -143,7 +132,7 @@ export function CartPanel({
             cart.remove(cartKey, item.id)
             const name = menu?.productsById.get(item.productId)?.name
             // Deshacer lo devuelve a su posición: quitar de más no cuesta nada.
-            onAnnounce(
+            announce(
               name ? `${name} se quitó de tu carrito` : 'El plato se quitó de tu carrito',
               () => cart.restore(cartKey, item, index),
             )
@@ -159,7 +148,7 @@ export function CartPanel({
               const discarded = items
               cart.clear(cartKey)
               // El reverso está en el aviso: vaciar de más no cuesta nada.
-              onAnnounce(`Vaciamos tu carrito (${plateCount(discarded.length)})`, () =>
+              announce(`Vaciamos tu carrito (${plateCount(discarded.length)})`, () =>
                 cart.restoreAll(cartKey, discarded),
               )
             }}

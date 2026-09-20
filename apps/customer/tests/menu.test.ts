@@ -18,7 +18,8 @@ import {
   resolveMenuDesign,
 } from '@restaurant-platform/shared'
 import { cartKeyFor, cartPhase, plateCount } from '../src/features/cart'
-import { reorderLines } from '../src/features/reorder'
+// `features/reorder` alcanza el store del carrito, que se crea al importarlo:
+// se importa adentro del test, después del localStorage de más abajo. El tipo no.
 import type { OrderedLine } from '../src/features/reorder'
 import { recoverPendingSession } from '../src/features/session-recovery'
 import type { PendingSubmission } from '../src/stores/cart'
@@ -163,7 +164,9 @@ test('the cart phase is the single source for what the diner can do', () => {
   assert.deepEqual(cartPhase({ ...reviewing, menuOutdated: true }), { kind: 'reviewing', review, outdated: false, confirmable: undefined })
   assert.deepEqual(cartPhase({ ...draft, reviewing: true, menu: undefined }), { kind: 'reviewing', review: undefined, outdated: false, confirmable: undefined })
 })
-test('repeating an order rebuilds only what the current menu still serves', () => {
+test('repeating an order rebuilds only what the current menu still serves', async () => {
+  const { reorderAnnouncement, reorderLines } = await import('../src/features/reorder')
+
   const line = (overrides: Partial<OrderedLine> = {}): OrderedLine => ({
     product_id: 'p',
     product_name: 'Milanesa',
@@ -199,6 +202,15 @@ test('repeating an order rebuilds only what the current menu still serves', () =
   const mixed = reorderLines([line(), line({ product_id: 'no-existe', product_name: 'Flan' })], menu)
   assert.equal(mixed.items.length, 1)
   assert.deepEqual(mixed.skipped, ['Flan'])
+
+  // El aviso es una sola línea: cuánto entró al carrito y qué quedó afuera, con
+  // su nombre, para poder buscarlo en la carta.
+  assert.equal(reorderAnnouncement(mixed), 'Agregamos 1 plato a tu carrito. No pudimos repetir: Flan.')
+  assert.equal(reorderAnnouncement({ items, skipped: [] }), 'Agregamos 1 plato a tu carrito.')
+  assert.equal(
+    reorderAnnouncement({ items: [], skipped: ['Milanesa', 'Flan'] }),
+    'Este pedido ya no se puede repetir igual. No pudimos repetir: Milanesa, Flan.',
+  )
 
   // Un ingrediente agotado que se puede quitar se quita solo, como al agregarlo hoy.
   const soldOutIngredient = buildMenu({

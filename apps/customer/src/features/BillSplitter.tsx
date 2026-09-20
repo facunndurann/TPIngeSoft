@@ -3,9 +3,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { allocationTotal, formatPrice, remainingPercentage, type SessionSplit, sessionSplitSchema, SPLIT_PERCENTAGE_TOTAL, splitBill, type SplitBill, type SplitOrder, type SplitParticipant, splitTypeDescriptions, splitTypeLabels, splitTypes } from '@restaurant-platform/shared'
 
 import { PercentField } from '@/components/PercentField'
-import type { Announce } from '@/features/announcements'
 import { AGE_TICK_MS, relativeAge } from '@/features/freshness'
 import { updateSessionSplit } from '@/features/orders-api'
+import { useTable } from '@/features/table-context'
 import { useNow } from '@/hooks/useNow'
 
 type BillSplitterProps = {
@@ -19,8 +19,6 @@ type BillSplitterProps = {
   /** Autor (usuario) y momento del último cambio, como los firma update_session_split. */
   updatedBy?: string | null
   updatedAt?: string | null
-  /** Avisos al comensal; los muestra el Toast de la mesa. */
-  onAnnounce: Announce
 }
 
 /**
@@ -37,8 +35,9 @@ export function BillSplitter({
   userId,
   updatedBy,
   updatedAt,
-  onAnnounce,
 }: BillSplitterProps) {
+  // El aviso es de la mesa: el panel que lo monta no tiene que hacerle de túnel.
+  const { announce } = useTable()
   const queryClient = useQueryClient()
   const now = useNow(AGE_TICK_MS)
   // `null` es la vista de lectura; un borrador abre el editor.
@@ -78,8 +77,8 @@ export function BillSplitter({
     // El primer valor es lo que ya estaba al abrir la pantalla: no es un cambio.
     if (previous === undefined || previous === revision) return
     if (!author || changedByMe) return
-    onAnnounce(`${author.display_name} cambió la división de la cuenta.`)
-  }, [revision, author, changedByMe, onAnnounce])
+    announce(`${author.display_name} cambió la división de la cuenta.`)
+  }, [revision, author, changedByMe, announce])
 
   const validation = draft ? sessionSplitSchema.safeParse(draft) : null
   const assigned = draft ? allocationTotal(draft.allocations) : 0

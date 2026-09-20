@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   Link,
   Navigate,
@@ -12,13 +12,14 @@ import { ErrorMessage } from '@/components/ErrorMessage'
 import { FreshnessNote } from '@/components/FreshnessNote'
 import { Toast } from '@/components/Toast'
 import { type Announce, type Announcement, toastDuration } from '@/features/announcements'
-import { cartKeyFor, plateCount } from '@/features/cart'
+import { cartKeyFor } from '@/features/cart'
 import { CartPanel } from '@/features/CartPanel'
 import { MenuBrowse } from '@/features/MenuBrowse'
 import { cartPrice } from '@/features/menu'
 import { ProductEditor } from '@/features/ProductEditor'
 import { SessionOrders } from '@/features/SessionOrders'
 import { type Failure, SessionPanel } from '@/features/SessionPanel'
+import { TableContext, useTable } from '@/features/table-context'
 import { TableHeader } from '@/features/TableHeader'
 import { TableNav } from '@/features/TableNav'
 import {
@@ -32,35 +33,10 @@ import {
 import { MenuShell } from '@/features/MenuShell'
 import { MenuDesignContext } from '@/features/menu-design'
 import { rememberTable } from '@/features/last-table'
-import { type OrderedLine, reorderLines } from '@/features/reorder'
+import { useReorder } from '@/features/reorder'
 import { TableService } from '@/features/TableService'
 import { useTableSession } from '@/hooks/useTableSession'
 import { useCart } from '@/stores/cart'
-import type { CartItem } from '@/stores/cart'
-
-type TableSession = ReturnType<typeof useTableSession>
-type TableContextValue = {
-  token: string
-  client: TableSession['client']
-  menu: TableSession['menu']
-  session: TableSession['session']
-  sessionId?: string
-  userId?: string
-  cartKey: string
-  items: CartItem[]
-  sessionOpen: boolean
-  named: boolean
-  canEdit: boolean
-  announce: Announce
-}
-
-const TableContext = createContext<TableContextValue | null>(null)
-
-function useTable() {
-  const value = useContext(TableContext)
-  if (!value) throw new Error('La mesa todavía no está lista.')
-  return value
-}
 
 /**
  * Una consulta fallida como la muestra el panel: el error y su reintento, sin la
@@ -155,7 +131,7 @@ function TableApp({ token }: { token: string }) {
 
   return (
     <MenuDesignContext value={design}>
-      <TableContext.Provider
+      <TableContext
         value={{
           token,
           client,
@@ -233,7 +209,7 @@ function TableApp({ token }: { token: string }) {
 
           <footer>{design.copy.footer}</footer>
         </MenuShell>
-      </TableContext.Provider>
+      </TableContext>
     </MenuDesignContext>
   )
 }
@@ -259,8 +235,7 @@ export function TableMenuPage() {
 }
 
 export function TableCartPage({ reviewing = false }: { reviewing?: boolean }) {
-  const { token, client, menu, sessionId, sessionOpen, named, cartKey, items, announce } =
-    useTable()
+  const { token, client, menu, sessionId, cartKey, items, announce } = useTable()
   const pending = useCart((state) => state.submissions[cartKey])
   const navigate = useNavigate()
 
@@ -271,14 +246,8 @@ export function TableCartPage({ reviewing = false }: { reviewing?: boolean }) {
   return (
     <CartPanel
       key={`${cartKey}:${reviewing ? 'review' : 'edit'}`}
-      cartKey={cartKey}
-      sessionId={sessionId}
-      menu={menu.data}
-      sessionOpen={sessionOpen}
-      named={named}
       reviewing={reviewing}
       refreshMenu={() => menu.refetch({ throwOnError: true })}
-      onAnnounce={announce}
       onSubmitted={() => {
         announce(
           'Tu pedido fue enviado. Podés seguir su estado y consultar la cuenta de la mesa.',
@@ -381,40 +350,9 @@ export function TableCartItemPage() {
 }
 
 export function TableOrdersPage() {
-  const { sessionId, session, userId, menu, canEdit, cartKey, announce } = useTable()
-  const cart = useCart()
-  const currentMenu = menu.data
-
-  // Repetir un pedido solo se ofrece cuando el carrito acepta cambios y hay carta
-  // con la que revalidarlo: así el botón nunca aparece en un estado que fallaría.
-  const reorder =
-    canEdit && currentMenu
-      ? (order: { order_items: readonly OrderedLine[] }) => {
-          const { items, skipped } = reorderLines(order.order_items, currentMenu)
-          items.forEach((item) => cart.save(cartKey, item))
-
-          const missing = skipped.length ? ` No pudimos repetir: ${skipped.join(', ')}.` : ''
-          if (items.length === 0) {
-            announce(`Este pedido ya no se puede repetir igual.${missing}`)
-            return
-          }
-          announce(`Agregamos ${plateCount(items.length)} a tu carrito.${missing}`, () => {
-            items.forEach((item) => cart.remove(cartKey, item.id))
-          })
-        }
-      : undefined
-
-  return (
-    <SessionOrders
-      sessionId={sessionId}
-      session={session.data}
-      participants={session.data?.participants ?? []}
-      userId={userId}
-      closed={session.data?.status === 'closed'}
-      onAnnounce={announce}
-      onReorder={reorder}
-    />
-  )
+  const { menu, canEdit, cartKey, announce } = useTable()
+  const reorder = useReorder({ cartKey, menu: menu.data, canEdit, announce })
+  return <SessionOrders onReorder={reorder} />
 }
 
 export function TableCatchAll() {

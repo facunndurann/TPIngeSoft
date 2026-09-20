@@ -1,41 +1,28 @@
 import { useQuery } from '@tanstack/react-query'
-import { formatPrice, orderStatusLabels, parseSessionSplit, type Tables } from '@restaurant-platform/shared'
+import { formatPrice, orderStatusLabels, parseSessionSplit } from '@restaurant-platform/shared'
 import { plateCount } from '@/features/cart'
 import { FreshnessNote } from '@/components/FreshnessNote'
-import type { Announce } from '@/features/announcements'
 import { BillSplitter } from '@/features/BillSplitter'
 import { oldestUpdate } from '@/features/freshness'
 
 import { loadBill, loadOrders } from '@/features/orders-api'
-import type { loadSession } from '@/features/session'
+import { useTable } from '@/features/table-context'
 
-type SessionData = Awaited<ReturnType<typeof loadSession>>
-type Participant = Tables<'session_participants'>
 type Order = Awaited<ReturnType<typeof loadOrders>>[number]
 type OrderItem = Order['order_items'][number]
 type Bill = Awaited<ReturnType<typeof loadBill>>
 
 type SessionOrdersProps = {
-  sessionId?: string
-  session?: SessionData
-  participants: Participant[]
-  userId?: string
-  closed: boolean
-  /** Avisos al comensal; los muestra el Toast de la mesa. */
-  onAnnounce: Announce
   /** Repite un pedido en el carrito. Ausente cuando la mesa no admite pedir. */
   onReorder?: (order: Order) => void
 }
 
-export function SessionOrders({
-  sessionId,
-  session,
-  participants,
-  userId,
-  closed,
-  onAnnounce,
-  onReorder,
-}: SessionOrdersProps) {
+export function SessionOrders({ onReorder }: SessionOrdersProps) {
+  const { sessionId, session: sessionQuery, userId } = useTable()
+  const session = sessionQuery.data
+  const participants = session?.participants ?? []
+  const closed = session?.status === 'closed'
+
   const orders = useQuery({
     queryKey: ['orders', sessionId],
     queryFn: () => loadOrders(sessionId!),
@@ -120,7 +107,6 @@ export function SessionOrders({
           userId={userId}
           updatedBy={session.split_updated_by}
           updatedAt={session.split_updated_at}
-          onAnnounce={onAnnounce}
         />
       )}
     </section>

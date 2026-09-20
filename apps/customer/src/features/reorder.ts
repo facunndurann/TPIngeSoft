@@ -1,5 +1,8 @@
+import type { Announce } from './announcements'
+import { plateCount } from './cart'
 import { selectionErrors } from './menu'
 import type { Menu, Product } from './menu'
+import { useCart } from '../stores/cart'
 import type { CartItem } from '../stores/cart'
 
 /** Lo que un pedido guarda de cada plato: ids para repetirlo, nombre para nombrarlo. */
@@ -78,4 +81,45 @@ function rebuild(line: OrderedLine, product: Product): CartItem | undefined {
 
   // Una sola puerta: las mismas reglas que valida el carrito antes de enviar.
   return selectionErrors(product, item).length === 0 ? item : undefined
+}
+
+/**
+ * El aviso de una ronda repetida, en una sola línea: cuánto entró al carrito y,
+ * si algo quedó afuera, con qué nombre buscarlo en la carta.
+ */
+export function reorderAnnouncement({ items, skipped }: Reorder): string {
+  const missing = skipped.length ? ` No pudimos repetir: ${skipped.join(', ')}.` : ''
+  return items.length === 0
+    ? `Este pedido ya no se puede repetir igual.${missing}`
+    : `Agregamos ${plateCount(items.length)} a tu carrito.${missing}`
+}
+
+type ReorderOptions = {
+  cartKey: string
+  /** La carta de ahora; sin ella no hay contra qué revalidar el pedido. */
+  menu?: Menu
+  /** El carrito admite cambios: mesa abierta y sin envíos pendientes. */
+  canEdit: boolean
+  announce: Announce
+}
+
+/**
+ * Repetir una ronda: rearma el pedido contra la carta de ahora, lo guarda en el
+ * carrito y lo cuenta en un solo aviso, con lo que quedó afuera y con deshacer.
+ * Devuelve `undefined` cuando repetir no es posible, así quien lo ofrece no
+ * necesita saber por qué: el botón no aparece en un estado que fallaría.
+ */
+export function useReorder({ cartKey, menu, canEdit, announce }: ReorderOptions) {
+  const cart = useCart()
+  if (!canEdit || !menu) return undefined
+
+  return (order: { order_items: readonly OrderedLine[] }) => {
+    const { items, skipped } = reorderLines(order.order_items, menu)
+    items.forEach((item) => cart.save(cartKey, item))
+    // Sin nada repetido no hay nada que deshacer.
+    const undo = items.length
+      ? () => items.forEach((item) => cart.remove(cartKey, item.id))
+      : undefined
+    announce(reorderAnnouncement({ items, skipped }), undo)
+  }
 }
