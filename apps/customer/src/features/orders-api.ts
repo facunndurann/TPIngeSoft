@@ -9,6 +9,7 @@ import {
   type SubmitOrderInput,
   type SubmitOrderResult,
 } from '@restaurant-platform/shared'
+import { fromRead } from '@/features/api-errors'
 import { supabase } from '@/lib/supabase'
 
 export async function submitOrder(input: SubmitOrderInput): Promise<SubmitOrderResult> {
@@ -70,7 +71,7 @@ export async function loadOrders(sessionId: string) {
     .select('*, order_items(*, order_item_modifiers(*), order_item_removed_ingredients(*))')
     .eq('session_id', sessionId)
     .order('created_at', { ascending: false })
-  if (error) throw error
+  if (error) throw fromRead(error, 'los pedidos')
   return data
 }
 
@@ -80,7 +81,7 @@ export async function loadBill(sessionId: string) {
     .select('*')
     .eq('session_id', sessionId)
     .single()
-  if (error) throw error
+  if (error) throw fromRead(error, 'la cuenta')
   return data
 }
 

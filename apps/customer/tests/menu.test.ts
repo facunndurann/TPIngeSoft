@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { buildMenu, cartPrice, groupSelectionHint, price, productOptions, selectedInGroup, selectionErrors } from '../src/features/menu'
 import type { Menu, MenuRows, ModifierGroup } from '../src/features/menu'
 import {
+  AppError,
   calculateItemPrice,
   DEFAULT_MENU_DESIGN,
   MAX_ITEM_QUANTITY,
@@ -387,6 +388,49 @@ test('MenuShell paints catalog tokens, layout and copy for each design', async (
   }
 })
 
+test('a failed read keeps the catalog code and never shows the database talking', async () => {
+  const { fromRead } = await import('../src/features/api-errors')
+
+  // Un código del catálogo manda: el mensaje es el suyo, no el de la lectura.
+  const closed = fromRead({ message: 'SESSION_CLOSED' }, 'la carta')
+  assert.equal(closed.code, 'SESSION_CLOSED')
+  assert.equal(closed.message, 'La mesa ya cerró su cuenta.')
+  assert.equal(closed.retryable, false)
+
+  // Una falla sin código explica qué lectura falló, en vez del texto genérico del
+  // catálogo, que habla de reintentar un envío que acá no existe.
+  const raw = 'JSON object requested, multiple (or no) rows returned'
+  const failed = fromRead({ message: raw }, 'la carta')
+  assert.equal(failed.code, 'SERVER_ERROR')
+  assert.equal(failed.message, 'No pudimos cargar la carta. Revisá tu conexión y reintentá.')
+  assert.ok(failed.retryable, 'una lectura fallida se puede repetir')
+  // El texto de la base queda para diagnosticar, nunca a la vista.
+  assert.equal(failed.detail, raw)
+  assert.doesNotMatch(failed.message, /JSON|rows/)
+})
+test('an error only offers to retry when repeating can work', async () => {
+  const { createElement } = await import('react')
+  const { renderToStaticMarkup } = await import('react-dom/server')
+  const { ErrorMessage } = await import('../src/components/ErrorMessage')
+  const noop = () => {}
+  const render = (error: unknown, recover?: { label: string; onAction: () => void }) =>
+    renderToStaticMarkup(createElement(ErrorMessage, { error, retry: noop, recover }))
+
+  // Red caída y errores sin código se asumen reintentables.
+  assert.match(render(new AppError('CONNECTION_ERROR')), /Reintentar<\/button>/)
+  assert.match(render(new Error('Algo raro pasó')), /Algo raro pasó[\s\S]*Reintentar/)
+  assert.match(render('ni un Error'), /No pudimos conectar/)
+
+  // Un rechazo definitivo no invita a chocar de nuevo: ofrece otra salida.
+  const dead = new AppError('TABLE_UNAVAILABLE')
+  assert.doesNotMatch(render(dead), /Reintentar/)
+  assert.match(render(dead), /Recargar la página<\/button>/)
+  assert.match(render(dead, { label: 'Ir al inicio', onAction: noop }), /Ir al inicio<\/button>/)
+  // La salida propia es solo para lo definitivo: lo reintentable se sigue reintentando.
+  assert.match(render(new AppError('CONNECTION_ERROR'), { label: 'Ir al inicio', onAction: noop }), /Reintentar<\/button>/)
+
+  assert.match(render(dead), /role="alert"/)
+})
 test('the table header welcomes on the menu and is only context elsewhere', async () => {
   const { createElement } = await import('react')
   const { renderToStaticMarkup } = await import('react-dom/server')

@@ -80,6 +80,7 @@ function TableApp({ token }: { token: string }) {
   const { client, table, menu, joined, session, sessionId, named, name, setName, rename } =
     useTableSession(token)
   const location = useLocation()
+  const navigate = useNavigate()
   const [announcement, setAnnouncement] = useState<Announcement>()
   const cart = useCart()
   const cartKey = cartKeyFor(sessionId, joined.data?.userId)
@@ -128,7 +129,11 @@ function TableApp({ token }: { token: string }) {
     return (
       <MenuShell>
         <h1>No pudimos abrir esta mesa</h1>
-        <ErrorMessage error={table.error} retry={() => { void table.refetch() }} />
+        <ErrorMessage
+          error={table.error}
+          retry={() => { void table.refetch() }}
+          recover={{ label: 'Ir al inicio', onAction: () => navigate('/') }}
+        />
       </MenuShell>
     )
   }

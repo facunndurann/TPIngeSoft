@@ -1,3 +1,5 @@
+import { AppError } from '@restaurant-platform/shared'
+import { fromRead } from '@/features/api-errors'
 import { buildMenu, type Menu } from '@/features/menu'
 import { supabase } from '@/lib/supabase'
 
@@ -8,8 +10,13 @@ export async function loadTable(token: string) {
     .eq('qr_token', token)
     .eq('is_active', true)
     .maybeSingle()
-  if (error) throw error
-  if (!table) throw new Error('El QR no corresponde a una mesa activa.')
+  if (error) throw fromRead(error, 'la mesa')
+  if (!table) {
+    throw new AppError(
+      'TABLE_UNAVAILABLE',
+      'Este QR no corresponde a una mesa activa. Pedí ayuda al personal del restaurante.',
+    )
+  }
 
   const [branch, restaurant] = await Promise.all([
     supabase
@@ -21,7 +28,11 @@ export async function loadTable(token: string) {
     supabase.from('restaurants').select('*').eq('id', table.restaurant_id).single(),
   ])
   if (branch.error || restaurant.error) {
-    throw new Error('El restaurante o la sucursal no están disponibles.')
+    throw new AppError(
+      'TABLE_UNAVAILABLE',
+      'El restaurante o la sucursal no están atendiendo. Pedí ayuda al personal.',
+      branch.error?.message ?? restaurant.error?.message,
+    )
   }
   return { table, branch: branch.data, restaurant: restaurant.data }
 }
@@ -51,9 +62,10 @@ export async function loadMenu(restaurantId: string): Promise<Menu> {
       .eq('restaurant_id', restaurantId)
       .order('sort_order', { referencedTable: 'modifier_options' }),
   ])
-  if (categories.error) throw categories.error
-  if (products.error) throw products.error
-  if (groups.error) throw groups.error
+  // Uno por consulta: es lo que le prueba a TypeScript que cada `data` ya existe.
+  if (categories.error) throw fromRead(categories.error, 'la carta')
+  if (products.error) throw fromRead(products.error, 'la carta')
+  if (groups.error) throw fromRead(groups.error, 'la carta')
 
   return buildMenu({ categories: categories.data, products: products.data, groups: groups.data })
 }
