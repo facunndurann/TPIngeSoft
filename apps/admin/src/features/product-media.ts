@@ -1,7 +1,8 @@
 import { type ProductMedia, productMedia } from '@restaurant-platform/shared'
-import { supabase } from '@/lib/supabase'
 
-const BUCKET = 'product-images'
+// Sin imports con efectos: product-draft.ts y sus tests no tienen que levantar
+// un cliente de Supabase para modelar el formulario. La subida vive en
+// queries/products.ts, junto a saveProduct, que es quien la usa.
 
 /**
  * Un elemento de la lista de fotos/videos mientras se edita el producto: uno ya
@@ -18,42 +19,4 @@ export function savedMediaDrafts(product: { media_urls: readonly string[] }): Me
 
 export function newMediaDraft(file: File): MediaDraft {
   return { type: 'new', key: crypto.randomUUID(), file }
-}
-
-type Upload = { url: string; path?: string }
-
-/**
- * Sube en paralelo los archivos nuevos y devuelve las URLs finales en el orden de la
- * lista. Si alguna subida falla, borra las que sí terminaron antes de propagar el error.
- * `discardUploads` permite deshacer las subidas si después falla el guardado del producto.
- */
-export async function uploadMediaDrafts(
-  restaurantId: string,
-  drafts: MediaDraft[],
-): Promise<{ urls: string[]; discardUploads: () => Promise<void> }> {
-  const storage = supabase.storage.from(BUCKET)
-
-  const results = await Promise.allSettled(drafts.map(async (draft): Promise<Upload> => {
-    if (draft.type === 'saved') return { url: draft.media.url }
-    const extension = draft.file.name.split('.').pop() ?? 'jpg'
-    const path = `${restaurantId}/${crypto.randomUUID()}.${extension}`
-    const { error } = await storage.upload(path, draft.file)
-    if (error) throw error
-    return { url: storage.getPublicUrl(path).data.publicUrl, path }
-  }))
-
-  const uploads = results.flatMap((result) => (result.status === 'fulfilled' ? [result.value] : []))
-  const paths = uploads.flatMap((upload) => (upload.path ? [upload.path] : []))
-
-  // Limpieza de mejor esfuerzo: si falla, no debe tapar el error original.
-  const discardUploads = async () => {
-    if (paths.length) await storage.remove(paths).catch(() => undefined)
-  }
-
-  const failure = results.find((result) => result.status === 'rejected')
-  if (failure) {
-    await discardUploads()
-    throw failure.reason
-  }
-  return { urls: uploads.map((upload) => upload.url), discardUploads }
 }
