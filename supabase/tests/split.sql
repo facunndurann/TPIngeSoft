@@ -121,8 +121,8 @@ begin
   select * into saved from public.table_sessions where id = sid;
   if saved.split_type <> 'none' or saved.split_allocations <> '{}'::jsonb then
     raise exception 'Switching away from percentages should clear allocations'; end if;
-  -- La firma es del último que cambió, no del primero.
-  if saved.split_updated_by <> beto then
+  -- La firma es del último que cambió, no del primero, y es su participación.
+  if saved.split_updated_by <> beto_participant then
     raise exception 'The author should be the diner who changed the split last'; end if;
 
   perform public.update_session_split(sid, 'equal', '{}'::jsonb, 4);
