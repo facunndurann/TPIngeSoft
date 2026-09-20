@@ -107,7 +107,7 @@ export function ActiveTables() {
                     <p className="text-xs text-neutral-500">
                       {session.participant_names.length} comensal
                       {session.participant_names.length === 1 ? '' : 'es'} ·{' '}
-                      {formatElapsed(session.opened_at, now)}
+                      {formatElapsed(session.opened_at, now, 'exact')}
                     </p>
                   </div>
                   {canPay && (

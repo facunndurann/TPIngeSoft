@@ -40,7 +40,7 @@ export function OrderTicket({
           <p className="text-sm font-semibold text-neutral-900 break-words">{table.label}</p>
           <p className="text-xs text-neutral-500 break-words">
             {branch ? `${branch} · ` : ''}
-            {submitter} · {formatElapsed(order.created_at, now)}
+            {submitter} · {formatElapsed(order.created_at, now, 'exact')}
           </p>
         </div>
         <Badge color={order.status === 'submitted' ? 'amber' : 'indigo'} className="max-w-[85px] shrink-0">

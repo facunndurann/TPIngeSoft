@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { allocationTotal, formatPrice, MAX_EQUAL_PARTS, MIN_EQUAL_PARTS, remainingPercentage, type SessionSplit, sessionSplitSchema, SPLIT_PERCENTAGE_TOTAL, splitBill, splitEqualAmounts, splitPercentageAmounts, type SplitBill, type SplitOrder, type SplitParticipant, splitTypeDescriptions, splitTypeLabels, splitTypes } from '@restaurant-platform/shared'
+import { allocationTotal, formatElapsed, formatPrice, MAX_EQUAL_PARTS, MIN_EQUAL_PARTS, remainingPercentage, type SessionSplit, sessionSplitSchema, SPLIT_PERCENTAGE_TOTAL, splitBill, splitEqualAmounts, splitPercentageAmounts, type SplitBill, type SplitOrder, type SplitParticipant, splitTypeDescriptions, splitTypeLabels, splitTypes } from '@restaurant-platform/shared'
 
 import { PercentField } from '@/components/PercentField'
 import { toastDuration } from '@/features/announcements'
 import { useNow } from '@/features/clock'
-import { relativeAge } from '@/features/freshness'
 import { updateSessionSplit } from '@/features/orders-api'
 
 type BillSplitterProps = {
@@ -98,7 +97,7 @@ export function BillSplitter({
   const changedAt = updatedAt ? Date.parse(updatedAt) : NaN
   const lastChange =
     author && Number.isFinite(changedAt)
-      ? `${changedByMe ? 'La cambiaste vos' : `La cambió ${author.display_name}`} ${relativeAge(changedAt, now)}.`
+      ? `${changedByMe ? 'La cambiaste vos' : `La cambió ${author.display_name}`} ${formatElapsed(changedAt, now)}.`
       : undefined
 
   const validation = draft ? sessionSplitSchema.safeParse(draft) : null

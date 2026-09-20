@@ -1,6 +1,6 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
-import { formatElapsed, groupOrdersByColumn, localDateKey, posColumnFor } from '@restaurant-platform/shared'
+import { groupOrdersByColumn, localDateKey, posColumnFor } from '@restaurant-platform/shared'
 
 test('POS board groups kitchen columns, FIFO in prep/ready, and newest first otherwise', () => {
   const orders = [
@@ -24,9 +24,4 @@ test('the restaurant day changes at Argentina midnight, matching orders.local_da
   // 03:00 UTC es medianoche en Buenos Aires (UTC-3); pos.sql verifica el mismo borde en Postgres.
   assert.equal(localDateKey(new Date('2026-09-06T02:59:59.000Z')), '2026-09-05')
   assert.equal(localDateKey(new Date('2026-09-06T03:00:00.000Z')), '2026-09-06')
-})
-
-test('elapsed time reads in minutes and hours', () => {
-  assert.equal(formatElapsed('2026-09-05T12:00:00.000Z', Date.parse('2026-09-05T12:00:30.000Z')), 'Ahora')
-  assert.equal(formatElapsed('2026-09-05T12:00:00.000Z', Date.parse('2026-09-05T13:05:00.000Z')), 'Hace 1 h 5 min')
 })

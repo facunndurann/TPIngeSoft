@@ -187,8 +187,22 @@ test('POS actions advance and cancel until delivery, and nothing leaves cancelle
 })
 
 test('elapsed time reads naturally and POS errors stay coded', () => {
-  assert.equal(formatElapsed('2026-09-05T12:00:00.000Z', Date.parse('2026-09-05T12:00:30.000Z')), 'Ahora')
-  assert.equal(formatElapsed('2026-09-05T12:00:00.000Z', Date.parse('2026-09-05T13:05:00.000Z')), 'Hace 1 h 5 min')
+  // Un solo vocabulario para las dos apps: fragmento en minúscula, sin sujeto,
+  // que entra igual en «Actualizado …» que en «Pediste la cuenta · …».
+  const opened = '2026-09-05T12:00:00.000Z'
+  const after = (ms: number) => Date.parse(opened) + ms
+  assert.equal(formatElapsed(opened, after(30_000)), 'hace instantes')
+  assert.equal(formatElapsed(opened, after(60_000)), 'hace 1 min')
+  assert.equal(formatElapsed(opened, after(59 * 60_000)), 'hace 59 min')
+  assert.equal(formatElapsed(opened, after(150 * 60_000)), 'hace 2 h')
+  // Al salón le importan los minutos de la hora; al comensal, no.
+  assert.equal(formatElapsed(opened, after(65 * 60_000), 'exact'), 'hace 1 h 5 min')
+  assert.equal(formatElapsed(opened, after(65 * 60_000)), 'hace 1 h')
+  assert.equal(formatElapsed(opened, after(120 * 60_000), 'exact'), 'hace 2 h')
+  // Los milisegundos de react-query y el ISO de la base dan lo mismo.
+  assert.equal(formatElapsed(Date.parse(opened), after(60_000)), 'hace 1 min')
+  // Un reloj atrasado no puede producir un «hace -3 min».
+  assert.equal(formatElapsed(opened, after(-5 * 60_000)), 'hace instantes')
   // Un solo traductor para las tres formas en que llega un error de Postgres.
   assert.equal(fromPostgres('FORBIDDEN').code, 'FORBIDDEN')
   assert.equal(fromPostgres({ message: 'P0001: INVALID_TRANSITION' }).code, 'INVALID_TRANSITION')

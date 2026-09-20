@@ -8,6 +8,7 @@ import {
   sessionRequestState,
 } from '@restaurant-platform/shared'
 
+import { useNow } from '@/features/clock'
 import { requestSessionService } from '@/features/orders-api'
 import { serviceRequestCopy, serviceRequestMethod } from '@/features/service-requests'
 
@@ -34,6 +35,7 @@ export function ServiceRequests({
   paymentMethods,
 }: ServiceRequestsProps) {
   const queryClient = useQueryClient()
+  const now = useNow()
 
   const ask = useMutation({
     mutationFn: (kind: SessionRequestKind) => requestSessionService(sessionId, kind),
@@ -80,11 +82,11 @@ export function ServiceRequests({
         {visible.map(({ kind, copy, state }) => (
           <li key={kind} className="choice">
             <span>
-              {state.status === 'waiting' && `${copy.waiting} · ${formatElapsed(state.since).toLowerCase()}`}
+              {state.status === 'waiting' && `${copy.waiting} · ${formatElapsed(state.since, now)}`}
               {state.status === 'attended' && copy.attended}
               {state.status === 'idle' && copy.action}
               <small className="muted">
-                {state.status === 'attended' ? formatElapsed(state.at) : copy.help}
+                {state.status === 'attended' ? formatElapsed(state.at, now) : copy.help}
               </small>
             </span>
             {state.status === 'waiting' ? (

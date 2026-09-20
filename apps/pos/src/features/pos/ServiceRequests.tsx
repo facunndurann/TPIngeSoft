@@ -44,7 +44,7 @@ export function SessionRequestBadges({
         <li key={request.kind}>
           <Badge color={requestColors[request.kind]}>
             <BellRing size={11} className="mr-1" aria-hidden="true" />
-            {sessionRequestLabels[request.kind]} · {formatElapsed(request.requestedAt, now)}
+            {sessionRequestLabels[request.kind]} · {formatElapsed(request.requestedAt, now, 'exact')}
           </Badge>
         </li>
       ))}
@@ -71,7 +71,7 @@ export function ChargedBadge({
   return (
     <Badge color="green">
       <BadgeCheck size={11} className="mr-1" aria-hidden="true" />
-      Cobrada · {formatElapsed(charged.at, now)}
+      Cobrada · {formatElapsed(charged.at, now, 'exact')}
     </Badge>
   )
 }

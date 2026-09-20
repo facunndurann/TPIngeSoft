@@ -158,7 +158,7 @@ export function TableCommand() {
       ) : (
         <>
           <dl className="flex flex-wrap gap-x-8 gap-y-3 rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm">
-            <SummaryItem as="dl-pair" icon={Clock3} label="Abierta" value={formatElapsed(open.opened_at, now)} />
+            <SummaryItem as="dl-pair" icon={Clock3} label="Abierta" value={formatElapsed(open.opened_at, now, 'exact')} />
             {can('payments.read') && <>
               <SummaryItem as="dl-pair" label="En cuenta" value={formatPrice(bill?.total_amount)} />
               <SummaryItem as="dl-pair" label="Pagado" value={formatPrice(bill?.paid_amount)} />

@@ -1,5 +1,5 @@
+import { formatElapsed } from '@restaurant-platform/shared'
 import { useNow } from '@/features/clock'
-import { relativeAge } from '@/features/freshness'
 
 type FreshnessNoteProps = {
   /** Qué se está actualizando, en palabras del comensal: "la carta". */
@@ -23,7 +23,7 @@ export function FreshnessNote({ label, updatedAt, isFetching, onRefresh }: Fresh
     <div className="freshness">
       {/* `status` anuncia el cambio a un lector de pantalla sin robar el foco. */}
       <p role="status">
-        {isFetching ? `Actualizando ${label}…` : `Actualizado ${relativeAge(updatedAt, now)}`}
+        {isFetching ? `Actualizando ${label}…` : `Actualizado ${formatElapsed(updatedAt, now)}`}
       </p>
       <button type="button" disabled={isFetching} onClick={onRefresh}>
         Actualizar

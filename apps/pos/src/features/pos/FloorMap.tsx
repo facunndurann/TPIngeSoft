@@ -315,7 +315,7 @@ function FloorSurface({
             const selectedTable = selectedId === table.id
             const operator = session?.assigned_employee?.full_name ?? 'Sin asignar'
             const summary = session
-              ? `${formatElapsed(session.opened_at, now)}, ${formatPrice(bill?.total_amount)}, ${operator}`
+              ? `${formatElapsed(session.opened_at, now, 'exact')}, ${formatPrice(bill?.total_amount)}, ${operator}`
               : `${table.seats} lugares`
 
             return (
@@ -338,7 +338,7 @@ function FloorSurface({
                 {session ? (
                   <>
                     <span className="mt-1 max-w-[90%] truncate text-[10px] font-medium leading-none">
-                      {formatElapsed(session.opened_at, now)}
+                      {formatElapsed(session.opened_at, now, 'exact')}
                     </span>
                     <span className="mt-1 max-w-[90%] truncate text-[10px] font-semibold leading-none">
                       {formatPrice(bill?.total_amount)}
@@ -390,7 +390,7 @@ function TableSummary({
       </div>
       {session ? (
         <>
-          <SummaryItem icon={Clock3} label="Abierta" value={formatElapsed(session.opened_at, now)} />
+          <SummaryItem icon={Clock3} label="Abierta" value={formatElapsed(session.opened_at, now, 'exact')} />
           <SummaryItem label="Total acumulado" value={bill ? formatPrice(bill.total_amount) : '—'} />
           <SummaryItem label="Pedidos activos" value={String(activeOrders)} />
           <SummaryItem
