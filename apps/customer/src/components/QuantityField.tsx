@@ -1,5 +1,5 @@
-import { useState } from 'react'
 import { MAX_ITEM_QUANTITY, MIN_ITEM_QUANTITY } from '@restaurant-platform/shared'
+import { useNumericDraft } from '@/hooks/useNumericDraft'
 
 type QuantityFieldProps = {
   value: number
@@ -7,25 +7,30 @@ type QuantityFieldProps = {
   onChange: (quantity: number) => void
 }
 
+/** Un entero dentro del rango se confirma al tipearlo; el resto espera al blur. */
+function parseQuantity(text: string) {
+  const quantity = Number(text)
+  // `Number('')` es 0, así que el campo vacío se descarta antes de mirar el rango.
+  if (text === '' || !Number.isInteger(quantity)) return undefined
+  return quantity >= MIN_ITEM_QUANTITY && quantity <= MAX_ITEM_QUANTITY ? quantity : undefined
+}
+
 /**
  * Único control de cantidad del comensal: los botones siempre dejan un valor
  * válido y el campo acepta tipear, pero nada fuera del rango llega al carrito.
  * Antes el mismo widget se comportaba de dos maneras: en el editor aceptaba
  * cualquier cosa y avisaba después, y en el carrito descartaba la tecla en
- * silencio.
+ * silencio. Hoy el borrador lo maneja `useNumericDraft`, el mismo que el
+ * porcentaje, así que los dos campos no pueden separarse.
  */
 export function QuantityField({ value, disabled = false, onChange }: QuantityFieldProps) {
-  // Lo que se está tipeando. `undefined` = el campo muestra el valor confirmado;
-  // así se puede borrar para escribir otro número sin que el carrito vea un hueco.
-  const [typed, setTyped] = useState<string>()
-
-  const commit = (quantity: number) => {
-    setTyped(undefined)
-    if (quantity !== value) onChange(quantity)
-  }
+  const field = useNumericDraft(value, parseQuantity, (quantity) => {
+    // Ni el parse ni los botones producen `null`: una cantidad nunca queda vacía.
+    if (quantity !== null) onChange(quantity)
+  })
 
   const step = (delta: number) => () =>
-    commit(Math.min(Math.max(value + delta, MIN_ITEM_QUANTITY), MAX_ITEM_QUANTITY))
+    field.commit(Math.min(Math.max(value + delta, MIN_ITEM_QUANTITY), MAX_ITEM_QUANTITY))
 
   return (
     <span className="quantity">
@@ -43,19 +48,10 @@ export function QuantityField({ value, disabled = false, onChange }: QuantityFie
         inputMode="numeric"
         min={MIN_ITEM_QUANTITY}
         max={MAX_ITEM_QUANTITY}
-        value={typed ?? value}
+        value={field.text}
         disabled={disabled}
-        onChange={(event) => {
-          const next = event.target.value
-          setTyped(next)
-          const quantity = Number(next)
-          // Un valor completo y válido se confirma al tipearlo; el resto espera al blur.
-          if (next !== '' && Number.isInteger(quantity)) {
-            if (quantity >= MIN_ITEM_QUANTITY && quantity <= MAX_ITEM_QUANTITY) commit(quantity)
-          }
-        }}
-        // Salir con el campo vacío o fuera de rango no cambia nada: vuelve al último válido.
-        onBlur={() => setTyped(undefined)}
+        onChange={(event) => field.onChange(event.target.value)}
+        onBlur={field.onBlur}
       />
       <button
         type="button"

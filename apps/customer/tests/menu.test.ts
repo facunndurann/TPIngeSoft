@@ -504,15 +504,15 @@ test('the percentage field cannot be pushed past what the others left', async ()
   const { renderToStaticMarkup } = await import('react-dom/server')
   const { PercentField } = await import('../src/components/PercentField')
   const noop = () => {}
-  const render = (value: number | undefined, max: number) =>
+  const render = (value: number | null, max: number) =>
     renderToStaticMarkup(createElement(PercentField, { value, max, label: 'Porcentaje de Ana', onChange: noop }))
 
   // El techo del campo es lo que queda sin asignar, no el total.
   assert.match(render(40, 60), /max="60"/)
   assert.match(render(40, 60), /value="40"/)
   // Sin asignación el campo va vacío: "no participa del reparto" es un estado válido.
-  assert.match(render(undefined, 100), /value=""/)
-  assert.match(render(undefined, 100), /aria-label="Porcentaje de Ana"/)
+  assert.match(render(null, 100), /value=""/)
+  assert.match(render(null, 100), /aria-label="Porcentaje de Ana"/)
 })
 
 test('the remembered table survives only as three usable strings', async () => {

@@ -1,23 +1,34 @@
-import { useState } from 'react'
 import { percentageFits, SPLIT_PERCENTAGE_TOTAL } from '@restaurant-platform/shared'
+import { useNumericDraft } from '@/hooks/useNumericDraft'
 
 type PercentFieldProps = {
-  /** Porcentaje asignado, o `undefined` si este comensal no participa del reparto. */
-  value?: number
+  /** Porcentaje asignado, o `null` si este comensal no participa del reparto. */
+  value: number | null
   /** Techo real: los 100 menos lo que ya tienen los demás. */
   max: number
   label: string
-  onChange: (value?: number) => void
+  onChange: (value: number | null) => void
 }
 
 /**
  * Porcentaje de un comensal. El techo es lo que queda sin asignar, así que no se
  * puede pasar del total: un valor por encima no se confirma y al salir del campo
- * vuelve al último válido, igual que el control de cantidad. Vacío sí se
- * confirma, porque "no participa del reparto" es un estado legítimo.
+ * vuelve al último válido, igual que el control de cantidad, porque es la misma
+ * máquina. Vacío sí se confirma, porque "no participa del reparto" es un estado
+ * legítimo: se confirma como `null`.
  */
 export function PercentField({ value, max, label, onChange }: PercentFieldProps) {
-  const [typed, setTyped] = useState<string>()
+  // El techo depende de lo que tengan los demás, así que el parse se arma acá.
+  const field = useNumericDraft(
+    value,
+    (text) => {
+      if (text === '') return null
+      const percentage = Number(text)
+      const fits = Number.isFinite(percentage) && percentage >= 0 && percentageFits(percentage, max)
+      return fits ? percentage : undefined
+    },
+    onChange,
+  )
 
   return (
     <span className="split-percent">
@@ -29,21 +40,9 @@ export function PercentField({ value, max, label, onChange }: PercentFieldProps)
         max={max}
         step="0.01"
         aria-label={label}
-        value={typed ?? value ?? ''}
-        onChange={(event) => {
-          const next = event.target.value
-          setTyped(next)
-          if (next === '') {
-            onChange(undefined)
-            return
-          }
-          const percentage = Number(next)
-          if (Number.isFinite(percentage) && percentage >= 0 && percentageFits(percentage, max)) {
-            setTyped(undefined)
-            onChange(percentage)
-          }
-        }}
-        onBlur={() => setTyped(undefined)}
+        value={field.text}
+        onChange={(event) => field.onChange(event.target.value)}
+        onBlur={field.onBlur}
       />
       <small>% de {SPLIT_PERCENTAGE_TOTAL}</small>
     </span>

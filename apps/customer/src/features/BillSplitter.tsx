@@ -84,13 +84,13 @@ export function BillSplitter({
   const validation = draft ? sessionSplitSchema.safeParse(draft) : null
   const assigned = draft ? allocationTotal(draft.allocations) : 0
 
-  const setAllocation = (participantId: string, value?: number) =>
+  const setAllocation = (participantId: string, value: number | null) =>
     setDraft((current) => {
       if (!current) return current
       const allocations = { ...current.allocations }
-      // Vacío no es 0 guardado: la clave se saca para no dejar asignaciones
-      // muertas de comensales que no participan del reparto.
-      if (value === undefined) delete allocations[participantId]
+      // El campo vacío llega como `null` y no es 0 guardado: la clave se saca
+      // para no dejar asignaciones muertas de quien no participa del reparto.
+      if (value === null) delete allocations[participantId]
       else allocations[participantId] = value
       return { ...current, allocations }
     })
@@ -133,7 +133,7 @@ export function BillSplitter({
               </span>
               {draft?.type === 'percentages' ? (
                 <PercentField
-                  value={draft.allocations[participant.id]}
+                  value={draft.allocations[participant.id] ?? null}
                   max={remainingPercentage(draft.allocations, participant.id)}
                   label={`Porcentaje de ${participant.display_name}`}
                   onChange={(value) => setAllocation(participant.id, value)}
