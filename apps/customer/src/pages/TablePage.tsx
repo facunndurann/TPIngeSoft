@@ -7,13 +7,13 @@ import {
   useNavigate,
   useParams,
 } from 'react-router'
-import { MENU_DESIGNS } from '@restaurant-platform/shared'
+import { formatPrice, MENU_DESIGNS } from '@restaurant-platform/shared'
 import { ErrorMessage } from '@/components/ErrorMessage'
 import { TOAST_DURATION_MS, Toast } from '@/components/Toast'
 import { cartKeyFor } from '@/features/cart'
 import { CartPanel } from '@/features/CartPanel'
 import { MenuBrowse } from '@/features/MenuBrowse'
-import { cartPrice, money } from '@/features/menu'
+import { cartPrice } from '@/features/menu'
 import { ProductEditor } from '@/features/ProductEditor'
 import { SessionOrders } from '@/features/SessionOrders'
 import { SessionPanel } from '@/features/SessionPanel'
@@ -176,7 +176,7 @@ function TableApp({ token }: { token: string }) {
 
           {atMenu && items.length > 0 && (
             <Link className="primary cart-bar" to={cartPath(token)}>
-              Ver mi carrito <strong>{money(total)}</strong>
+              Ver mi carrito <strong>{formatPrice(total)}</strong>
             </Link>
           )}
 

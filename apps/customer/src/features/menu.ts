@@ -1,5 +1,4 @@
-import type { Tables } from '@restaurant-platform/shared'
-import { calculateItemPrice } from '@restaurant-platform/shared'
+import { calculateItemPrice, type Tables } from '@restaurant-platform/shared'
 
 export type Ingredient = Tables<'product_ingredients'>
 export type ModifierOption = Tables<'modifier_options'>
@@ -69,9 +68,6 @@ export function buildMenu({ categories, products, groups }: MenuRows): Menu {
     productsById,
   }
 }
-
-export const money = (value: number) =>
-  new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(value)
 
 export function matchesSearch(product: Pick<Product, 'name' | 'description'>, search: string) {
   const text = `${product.name} ${product.description ?? ''}`.toLocaleLowerCase()

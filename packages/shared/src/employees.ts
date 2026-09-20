@@ -21,7 +21,40 @@ export function employeeEmail(username: string, domain: string): string {
   return `${normalizeUsername(username)}@${domain.toLowerCase()}`
 }
 
-export function transitionPermission(from: OrderStatus, to: OrderStatus): string {
+/**
+ * Catálogo de permisos. La fuente de verdad son las filas de `role_permissions`
+ * (sembradas en 20260919010000_employee_accounts y 20260919060000_pos_session_operations);
+ * supabase/tests/orders.integration.mjs falla si esta lista no coincide con ellas.
+ *
+ * Existe para que un typo como 'session.open' no compile: antes hacía
+ * desaparecer un botón en silencio, sin romper ningún test.
+ */
+export const posPermissions = [
+  'admin.manage',
+  'audit.read',
+  'employees.manage',
+  'floor.read',
+  'history.read',
+  'orders.accept',
+  'orders.cancel',
+  'orders.deliver',
+  'orders.prepare',
+  'orders.read',
+  'orders.revert',
+  'payments.read',
+  'sessions.close',
+  'sessions.move',
+  'sessions.open',
+] as const
+
+export type PosPermission = (typeof posPermissions)[number]
+
+export function isPosPermission(value: string): value is PosPermission {
+  return (posPermissions as readonly string[]).includes(value)
+}
+
+/** Permiso que habilita una transición concreta del tablero. */
+export function transitionPermission(from: OrderStatus, to: OrderStatus): PosPermission {
   if (to === 'cancelled') return 'orders.cancel'
   const sequence: OrderStatus[] = ['submitted', 'accepted', 'in_preparation', 'ready', 'delivered']
   if (sequence.indexOf(to) < sequence.indexOf(from)) return 'orders.revert'

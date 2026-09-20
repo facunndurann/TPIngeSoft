@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import { TABLE_SPAN, tableShapeLabels, tableShapes } from '@restaurant-platform/shared'
-import { Button, Field, Input, Select, Toggle } from '@/components/ui'
-import type { FloorSection, FloorTable, TableLayoutPatch } from './floor-api'
+import { Button, Field, Input, Select, Toggle } from '@restaurant-platform/ui'
+import type { FloorSection, FloorTable, TableIntent } from './floor-api'
 
 type TableInspectorProps = {
   table: FloorTable
   sections: FloorSection[]
-  onPatch: (patch: TableLayoutPatch) => void
+  onIntent: (intent: TableIntent) => void
   onDelete: () => void
   busy: boolean
 }
@@ -36,22 +36,28 @@ function wholeNumberIn(draft: string, min: number, max: number) {
 }
 
 /** Propiedades de la mesa seleccionada en el plano. */
-export function TableInspector({ table, sections, onPatch, onDelete, busy }: TableInspectorProps) {
+export function TableInspector({ table, sections, onIntent, onDelete, busy }: TableInspectorProps) {
   const label = useCommittedField(table.label, (draft) => {
     const next = draft.trim()
-    if (next && next !== table.label) onPatch({ label: next })
+    if (next && next !== table.label) onIntent({ kind: 'edit', patch: { label: next } })
   })
   const seats = useCommittedField(String(table.seats), (draft) => {
     const next = wholeNumberIn(draft, 1, 40)
-    if (next !== null && next !== table.seats) onPatch({ seats: next })
+    if (next !== null && next !== table.seats) onIntent({ kind: 'edit', patch: { seats: next } })
   })
+  // Un lado nuevo siempre viaja con el otro: el plano necesita la huella entera
+  // para reubicar la mesa si el cambio la saca de la grilla.
   const width = useCommittedField(String(table.width), (draft) => {
     const next = wholeNumberIn(draft, TABLE_SPAN.min, TABLE_SPAN.max)
-    if (next !== null && next !== table.width) onPatch({ width: next })
+    if (next !== null && next !== table.width) {
+      onIntent({ kind: 'resize', width: next, height: table.height })
+    }
   })
   const height = useCommittedField(String(table.height), (draft) => {
     const next = wholeNumberIn(draft, TABLE_SPAN.min, TABLE_SPAN.max)
-    if (next !== null && next !== table.height) onPatch({ height: next })
+    if (next !== null && next !== table.height) {
+      onIntent({ kind: 'resize', width: table.width, height: next })
+    }
   })
 
   return (
@@ -71,7 +77,7 @@ export function TableInspector({ table, sections, onPatch, onDelete, busy }: Tab
       <Field label="Sector">
         <Select
           value={table.section_id ?? ''}
-          onChange={(event) => onPatch({ section_id: event.target.value || null })}
+          onChange={(event) => onIntent({ kind: 'move-to-section', sectionId: event.target.value || null })}
         >
           <option value="">Sin sector</option>
           {sections.map((section) => (
@@ -87,7 +93,7 @@ export function TableInspector({ table, sections, onPatch, onDelete, busy }: Tab
           <Input type="number" min={1} max={40} {...seats} />
         </Field>
         <Field label="Forma">
-          <Select value={table.shape} onChange={(event) => onPatch({ shape: event.target.value })}>
+          <Select value={table.shape} onChange={(event) => onIntent({ kind: 'edit', patch: { shape: event.target.value } })}>
             {tableShapes.map((shape) => (
               <option key={shape} value={shape}>
                 {tableShapeLabels[shape]}
@@ -115,12 +121,12 @@ export function TableInspector({ table, sections, onPatch, onDelete, busy }: Tab
       <div className="space-y-2 border-t border-neutral-200 pt-3">
         <Toggle
           checked={table.is_visible}
-          onChange={(is_visible) => onPatch({ is_visible })}
+          onChange={(is_visible) => onIntent({ kind: 'edit', patch: { is_visible } })}
           label="Visible en el plano operativo"
         />
         <Toggle
           checked={table.is_active}
-          onChange={(is_active) => onPatch({ is_active })}
+          onChange={(is_active) => onIntent({ kind: 'edit', patch: { is_active } })}
           label="En servicio (el QR abre sesión)"
         />
         {(!table.is_visible || !table.is_active) && (

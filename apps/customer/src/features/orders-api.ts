@@ -1,19 +1,15 @@
 import { FunctionsHttpError } from '@supabase/supabase-js'
 import {
+  AppError,
+  fromPostgres,
+  isAppErrorCode,
   submitOrderErrorSchema,
   submitOrderResultSchema,
+  type SessionSplit,
   type SubmitOrderInput,
   type SubmitOrderResult,
 } from '@restaurant-platform/shared'
 import { supabase } from '@/lib/supabase'
-
-export class SubmissionError extends Error {
-  readonly code: string
-  constructor(code: string, message: string) {
-    super(message)
-    this.code = code
-  }
-}
 
 export async function submitOrder(input: SubmitOrderInput): Promise<SubmitOrderResult> {
   const { data, error } = await supabase.functions.invoke<unknown>('submit-order', { body: input })
@@ -22,17 +18,18 @@ export async function submitOrder(input: SubmitOrderInput): Promise<SubmitOrderR
     if (error instanceof FunctionsHttpError) {
       // Un cuerpo ilegible no es un rechazo del servidor: se conserva el envío para reintentar.
       const body = submitOrderErrorSchema.safeParse(await error.context.json().catch(() => null))
-      if (body.success) throw new SubmissionError(body.data.error.code, body.data.error.message)
+      // El mensaje viene del servidor, que ya lo tomó del mismo catálogo.
+      if (body.success) {
+        const { code, message } = body.data.error
+        throw new AppError(isAppErrorCode(code) ? code : 'SERVER_ERROR', message)
+      }
     }
-    throw new SubmissionError(
-      'CONNECTION_ERROR',
-      'No pudimos confirmar el envío. Reintentá: conservamos tu pedido para evitar duplicados.',
-    )
+    throw new AppError('CONNECTION_ERROR')
   }
 
   const result = submitOrderResultSchema.safeParse(data)
   if (!result.success) {
-    throw new SubmissionError(
+    throw new AppError(
       'CONNECTION_ERROR',
       'No pudimos confirmar la respuesta. Reintentá el mismo envío para consultar su resultado.',
     )
@@ -57,7 +54,7 @@ export async function abandonSubmission(
     p_request_id: input.requestId,
   })
   if (error) {
-    throw new SubmissionError(
+    throw new AppError(
       'CONNECTION_ERROR',
       'No pudimos cancelar el envío porque todavía no sabemos si llegó. Revisá tu conexión y reintentá.',
     )
@@ -87,15 +84,11 @@ export async function loadBill(sessionId: string) {
   return data
 }
 
-export async function updateSessionSplit(
-  sessionId: string,
-  splitType: 'none' | 'equal' | 'percentages',
-  allocations: Record<string, number> = {}
-) {
+export async function updateSessionSplit(sessionId: string, split: SessionSplit) {
   const { error } = await supabase.rpc('update_session_split', {
     p_session_id: sessionId,
-    p_split_type: splitType,
-    p_allocations: allocations,
+    p_split_type: split.type,
+    p_allocations: split.allocations,
   })
-  if (error) throw new SubmissionError('SPLIT_ERROR', 'No pudimos actualizar la división de la cuenta.')
+  if (error) throw fromPostgres(error)
 }

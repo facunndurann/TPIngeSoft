@@ -1,17 +1,31 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
-import { PRODUCT_MEDIA_LIMIT } from '@restaurant-platform/shared'
-import { rpcError } from '@/lib/rpc-error'
-import { supabase } from '@/lib/supabase'
+import { PRODUCT_MEDIA_LIMIT, type Tables } from '@restaurant-platform/shared'
+import {
+  Button,
+  ErrorText,
+  Field,
+  Input,
+  Select,
+  Spinner,
+  Textarea,
+  Toggle,
+  useSaveErrors,
+} from '@restaurant-platform/ui'
 import { categoriesQuery } from '@/queries/categories'
-import { modifierGroupsQuery } from '@/queries/modifier-groups'
-import { productQuery, productsByCategoryQuery } from '@/queries/products'
+import { modifierGroupsQuery, type ModifierGroupWithOptions } from '@/queries/modifier-groups'
+import { productQuery, productsByCategoryQuery, saveProduct } from '@/queries/products'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { MediaUploader } from '@/features/MediaUploader'
-import { savedMediaDrafts, uploadMediaDrafts, type MediaDraft } from '@/features/product-media'
-import { Button, ErrorText, Field, Input, Select, Spinner, Textarea, Toggle } from '@/components/ui'
+import {
+  draftErrors,
+  draftFrom,
+  emptyDraft,
+  type IngredientDraft,
+  type ProductDraft,
+} from '@/features/product-draft'
 
 const DIETARY_TAGS = [
   { value: 'vegetariano', label: 'Vegetariano' },
@@ -20,158 +34,125 @@ const DIETARY_TAGS = [
   { value: 'picante', label: 'Picante' },
 ]
 
-/** Ingrediente tal como se envía a save_product; sin `id` es un ingrediente nuevo. */
-type IngredientDraft = {
-  id?: string
-  name: string
-  is_removable: boolean
-  is_available: boolean
-}
-
+/**
+ * Resuelve los datos y recién ahí monta el formulario, ya cargado. El `key` es
+ * el patrón que el resto del proyecto usa para esto (TableApp, CartPanel,
+ * ProductEditor): reemplaza al efecto de hidratación, a su flag `loadedProduct`
+ * y al estado a medio llenar que había entre medio.
+ */
 export function ProductEditPage() {
   const { productId } = useParams()
-  const isNew = !productId
+  const restaurant = useRestaurant()
+
+  const categories = useQuery(categoriesQuery(restaurant.id))
+  const groups = useQuery(modifierGroupsQuery(restaurant.id))
+  const product = useQuery({ ...productQuery(productId ?? ''), enabled: !!productId })
+
+  if (productId && product.isLoading) return <Spinner />
+  if (productId && !product.data) {
+    return (
+      <div className="mx-auto max-w-2xl space-y-4">
+        <BackLink />
+        <ErrorText message="No pudimos cargar este producto. Volvé a la lista e intentá de nuevo." />
+      </div>
+    )
+  }
+
+  return (
+    <ProductForm
+      key={productId ?? 'new'}
+      productId={productId}
+      title={product.data ? `Editar "${product.data.name}"` : 'Nuevo producto'}
+      initial={product.data ? draftFrom(product.data) : emptyDraft()}
+      categories={categories.data ?? []}
+      groups={groups.data ?? []}
+    />
+  )
+}
+
+function BackLink() {
+  return (
+    <Link to="/productos" className="text-neutral-400 hover:text-neutral-700" aria-label="Volver">
+      <ArrowLeft size={20} />
+    </Link>
+  )
+}
+
+type ProductFormProps = {
+  /** Ausente al crear: `saveProduct` pide el id nuevo a la RPC. */
+  productId?: string
+  title: string
+  initial: ProductDraft
+  categories: Tables<'menu_categories'>[]
+  groups: ModifierGroupWithOptions[]
+}
+
+function ProductForm({ productId, title, initial, categories, groups }: ProductFormProps) {
   const restaurant = useRestaurant()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const errors = useSaveErrors()
 
-  // Datos base del formulario
-  const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
-  const [categoryId, setCategoryId] = useState('')
-  const [basePrice, setBasePrice] = useState('')
-  const [foodInfo, setFoodInfo] = useState('')
-  const [dietaryTags, setDietaryTags] = useState<string[]>([])
-  const [isAvailable, setIsAvailable] = useState(true)
-  const [media, setMedia] = useState<MediaDraft[]>([])
-  const [ingredients, setIngredients] = useState<IngredientDraft[]>([])
-  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([])
-  const [loadedProduct, setLoadedProduct] = useState(isNew)
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
+  // Un solo estado, inicializado con lo que ya llegó: no hay paso intermedio.
+  const [draft, setDraft] = useState(initial)
+  const patch = (changes: Partial<ProductDraft>) =>
+    setDraft((current) => ({ ...current, ...changes }))
 
-  const { data: categories } = useQuery(categoriesQuery(restaurant.id))
-  const { data: allGroups } = useQuery(modifierGroupsQuery(restaurant.id))
-  const { data: existing, isLoading } = useQuery({ ...productQuery(productId ?? ''), enabled: !isNew })
-
-  useEffect(() => {
-    if (!existing || loadedProduct) return
-    setName(existing.name)
-    setDescription(existing.description ?? '')
-    setCategoryId(existing.category_id)
-    setBasePrice(String(existing.base_price))
-    setFoodInfo(existing.food_info ?? '')
-    setDietaryTags(existing.dietary_tags)
-    setIsAvailable(existing.is_available)
-    setMedia(savedMediaDrafts(existing))
-    setIngredients(
-      [...existing.product_ingredients]
-        .sort((a, b) => a.sort_order - b.sort_order)
-        .map((i) => ({
-          id: i.id,
-          name: i.name,
-          is_removable: i.is_removable,
-          is_available: i.is_available,
-        })),
-    )
-    setSelectedGroupIds(existing.product_modifier_groups.map((g) => g.group_id))
-    setLoadedProduct(true)
-  }, [existing, loadedProduct])
-
-  function toggleTag(tag: string) {
-    setDietaryTags((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]))
-  }
-
-  function toggleGroup(groupId: string) {
-    setSelectedGroupIds((prev) =>
-      prev.includes(groupId) ? prev.filter((id) => id !== groupId) : [...prev, groupId],
-    )
-  }
-
-  function updateIngredient(index: number, patch: Partial<IngredientDraft>) {
-    setIngredients((prev) => prev.map((ing, i) => (i === index ? { ...ing, ...patch } : ing)))
-  }
-
-  function removeIngredient(index: number) {
-    setIngredients((prev) => prev.filter((_, i) => i !== index))
-  }
-
-  async function handleSave() {
-    setError(null)
-    const price = Number(basePrice)
-    if (!name.trim()) return setError('El producto necesita un nombre')
-    if (!categoryId) return setError('Elegí una categoría')
-    if (Number.isNaN(price) || price < 0) return setError('El precio no es válido')
-    if (ingredients.some((i) => !i.name.trim())) return setError('Todos los ingredientes necesitan nombre')
-
-    setSaving(true)
-    try {
-      // Storage no participa de la transacción: los archivos nuevos se suben antes, en paralelo.
-      const { urls: mediaUrls, discardUploads } = await uploadMediaDrafts(restaurant.id, media)
-
-      // Producto, ingredientes y grupos (listas completas, en orden) se guardan juntos:
-      // si algo falla no queda nada guardado y reintentar no duplica el producto.
-      const { data: savedId, error: rpcErr } = await supabase.rpc('save_product', {
-        p_restaurant_id: restaurant.id,
-        p_product_id: productId,
-        p_category_id: categoryId,
-        p_name: name,
-        p_description: description,
-        p_base_price: price,
-        p_food_info: foodInfo,
-        p_dietary_tags: dietaryTags,
-        p_is_available: isAvailable,
-        p_media_urls: mediaUrls,
-        p_ingredients: ingredients,
-        p_group_ids: selectedGroupIds,
-      })
-      if (rpcErr) {
-        // No se guardó nada, así que ningún producto referencia los archivos recién subidos.
-        await discardUploads()
-        throw rpcError(rpcErr)
-      }
-
-      await queryClient.invalidateQueries({ queryKey: productsByCategoryQuery(restaurant.id).queryKey })
-      await queryClient.invalidateQueries({ queryKey: productQuery(savedId).queryKey })
+  const save = useMutation(errors.saving('No pudimos guardar el producto.', {
+    mutationFn: async () => {
+      const invalid = draftErrors(draft)
+      if (invalid) throw new Error(invalid)
+      return saveProduct({ restaurantId: restaurant.id, productId, draft })
+    },
+    onSuccess: async (savedId) => {
+      // Las dos cachés son independientes: no hay razón para encadenarlas.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: productsByCategoryQuery(restaurant.id).queryKey }),
+        queryClient.invalidateQueries({ queryKey: productQuery(savedId).queryKey }),
+      ])
       navigate('/productos')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error guardando el producto')
-    } finally {
-      setSaving(false)
-    }
-  }
+    },
+  }))
 
-  if (!isNew && isLoading) return <Spinner />
+  const toggle = <T,>(list: T[], value: T) =>
+    list.includes(value) ? list.filter((entry) => entry !== value) : [...list, value]
+
+  const updateIngredient = (index: number, changes: Partial<IngredientDraft>) =>
+    patch({
+      ingredients: draft.ingredients.map((ingredient, i) =>
+        i === index ? { ...ingredient, ...changes } : ingredient,
+      ),
+    })
 
   return (
     <div className="mx-auto max-w-2xl space-y-5">
       <div className="flex items-center gap-3">
-        <Link to="/productos" className="text-neutral-400 hover:text-neutral-700" aria-label="Volver">
-          <ArrowLeft size={20} />
-        </Link>
-        <h1 className="text-xl font-bold text-neutral-900">
-          {isNew ? 'Nuevo producto' : `Editar "${existing?.name ?? ''}"`}
-        </h1>
+        <BackLink />
+        <h1 className="text-xl font-bold text-neutral-900">{title}</h1>
       </div>
 
       <section className="space-y-4 rounded-xl border border-neutral-200 bg-white p-5">
         <h2 className="font-semibold text-neutral-900">Información básica</h2>
         <Field label="Nombre">
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej: Hamburguesa clásica" />
+          <Input
+            value={draft.name}
+            onChange={(e) => patch({ name: e.target.value })}
+            placeholder="Ej: Hamburguesa clásica"
+          />
         </Field>
         <Field label="Descripción">
           <Textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
+            value={draft.description}
+            onChange={(e) => patch({ description: e.target.value })}
             rows={2}
             placeholder="Lo que ve el cliente debajo del nombre"
           />
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Categoría">
-            <Select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+            <Select value={draft.categoryId} onChange={(e) => patch({ categoryId: e.target.value })}>
               <option value="">Elegir…</option>
-              {categories?.map((category) => (
+              {categories.map((category) => (
                 <option key={category.id} value={category.id}>
                   {category.name}
                 </option>
@@ -183,16 +164,16 @@ export function ProductEditPage() {
               type="number"
               min={0}
               step="0.01"
-              value={basePrice}
-              onChange={(e) => setBasePrice(e.target.value)}
+              value={draft.basePrice}
+              onChange={(e) => patch({ basePrice: e.target.value })}
               placeholder="8900"
             />
           </Field>
         </div>
         <Field label="Información alimentaria (opcional)">
           <Input
-            value={foodInfo}
-            onChange={(e) => setFoodInfo(e.target.value)}
+            value={draft.foodInfo}
+            onChange={(e) => patch({ foodInfo: e.target.value })}
             placeholder="Ej: contiene gluten y lactosa"
           />
         </Field>
@@ -203,9 +184,9 @@ export function ProductEditPage() {
               <button
                 key={tag.value}
                 type="button"
-                onClick={() => toggleTag(tag.value)}
+                onClick={() => patch({ dietaryTags: toggle(draft.dietaryTags, tag.value) })}
                 className={`cursor-pointer rounded-full px-3 py-1 text-sm font-medium transition-colors ${
-                  dietaryTags.includes(tag.value)
+                  draft.dietaryTags.includes(tag.value)
                     ? 'bg-indigo-600 text-white'
                     : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
                 }`}
@@ -215,14 +196,24 @@ export function ProductEditPage() {
             ))}
           </div>
         </div>
-        <Toggle checked={isAvailable} onChange={setIsAvailable} label="Disponible para pedir" />
+        <Toggle
+          checked={draft.isAvailable}
+          onChange={(isAvailable) => patch({ isAvailable })}
+          label="Disponible para pedir"
+        />
       </section>
 
       <section className="space-y-3 rounded-xl border border-neutral-200 bg-white p-5">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-neutral-900">Fotografía o video (máx {PRODUCT_MEDIA_LIMIT})</h2>
+          <h2 className="font-semibold text-neutral-900">
+            Fotografía o video (máx {PRODUCT_MEDIA_LIMIT})
+          </h2>
         </div>
-        <MediaUploader value={media} onChange={setMedia} onError={setError} />
+        <MediaUploader
+          value={draft.media}
+          onChange={(media) => patch({ media })}
+          onError={(message) => (message ? errors.report(message) : errors.clear())}
+        />
       </section>
 
       <section className="space-y-3 rounded-xl border border-neutral-200 bg-white p-5">
@@ -234,7 +225,7 @@ export function ProductEditPage() {
           </p>
         </div>
         <div className="space-y-2">
-          {ingredients.map((ingredient, index) => (
+          {draft.ingredients.map((ingredient, index) => (
             <div key={ingredient.id ?? `new-${index}`} className="flex items-center gap-2">
               <Input
                 value={ingredient.name}
@@ -244,12 +235,12 @@ export function ProductEditPage() {
               />
               <Toggle
                 checked={ingredient.is_removable}
-                onChange={(value) => updateIngredient(index, { is_removable: value })}
+                onChange={(is_removable) => updateIngredient(index, { is_removable })}
                 label="Removible"
               />
               <button
                 className="cursor-pointer p-1 text-neutral-400 hover:text-red-600"
-                onClick={() => removeIngredient(index)}
+                onClick={() => patch({ ingredients: draft.ingredients.filter((_, i) => i !== index) })}
                 aria-label="Quitar ingrediente"
               >
                 <Trash2 size={15} />
@@ -260,7 +251,9 @@ export function ProductEditPage() {
         <Button
           variant="secondary"
           onClick={() =>
-            setIngredients((prev) => [...prev, { name: '', is_removable: true, is_available: true }])
+            patch({
+              ingredients: [...draft.ingredients, { name: '', is_removable: true, is_available: true }],
+            })
           }
         >
           <Plus size={15} /> Agregar ingrediente
@@ -274,7 +267,7 @@ export function ProductEditPage() {
             Grupos de modificadores que aplican a este producto (se crean en la sección Modificadores).
           </p>
         </div>
-        {!allGroups?.length ? (
+        {groups.length === 0 ? (
           <p className="text-sm text-neutral-500">
             Todavía no hay grupos.{' '}
             <Link to="/modificadores" className="text-indigo-600 hover:underline">
@@ -283,12 +276,12 @@ export function ProductEditPage() {
           </p>
         ) : (
           <div className="space-y-1.5">
-            {allGroups.map((group) => (
+            {groups.map((group) => (
               <label key={group.id} className="flex cursor-pointer items-center gap-2.5 text-sm">
                 <input
                   type="checkbox"
-                  checked={selectedGroupIds.includes(group.id)}
-                  onChange={() => toggleGroup(group.id)}
+                  checked={draft.groupIds.includes(group.id)}
+                  onChange={() => patch({ groupIds: toggle(draft.groupIds, group.id) })}
                   className="h-4 w-4 accent-indigo-600"
                 />
                 <span className="font-medium text-neutral-800">{group.name}</span>
@@ -301,14 +294,14 @@ export function ProductEditPage() {
         )}
       </section>
 
-      <ErrorText message={error} />
+      <ErrorText message={errors.message} />
 
       <div className="flex justify-end gap-2 pb-8">
         <Link to="/productos">
           <Button variant="secondary">Cancelar</Button>
         </Link>
-        <Button onClick={handleSave} disabled={saving}>
-          {saving ? 'Guardando…' : isNew ? 'Crear producto' : 'Guardar cambios'}
+        <Button onClick={() => save.mutate()} disabled={save.isPending}>
+          {save.isPending ? 'Guardando…' : productId ? 'Guardar cambios' : 'Crear producto'}
         </Button>
       </div>
     </div>

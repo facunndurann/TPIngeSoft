@@ -1,4 +1,4 @@
-import { test } from 'node:test'
+import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import { normalizeUsername, employeeEmail, transitionPermission } from '../../packages/shared/src/employees.ts'
 import { createEmployeeHandler, parseEmployeeRequest, type EmployeeGateway } from '../functions/employee-accounts/handler.ts'

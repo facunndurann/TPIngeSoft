@@ -140,6 +140,8 @@ Resumen corto para usar un proyecto real de Supabase en lugar del local:
 | El panel muestra "Faltan las variables VITE_SUPABASE_URL..." | Falta el `.env` de esa app o el dev server no se reinició después de crearlo. |
 | Login demo no funciona | El seed no está aplicado: `pnpm supabase db reset`. |
 | Cambié el schema y el frontend no tipa | Regenerar tipos: `pnpm db:types`. |
+| El CI falla en "Schema snapshot is current" | Agregaste una migración sin regenerar el snapshot: `pnpm db:schema` y commiteá el resultado. |
+| Quiero saber qué hace hoy una función que varias migraciones redefinen | Leer `supabase/schema.generated.sql`, no reproducir las migraciones. |
 | Puertos 54321-54324 ocupados | Otro proyecto Supabase local corriendo: `pnpm supabase stop --project-id <otro>` o cambiar puertos en `supabase/config.toml`. |
 
 

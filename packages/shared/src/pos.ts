@@ -53,25 +53,6 @@ export const posActions: Record<OrderStatus, PosOrderActions> = {
   cancelled: {},
 }
 
-const POS_ERROR_CODES = [
-  'AUTH_REQUIRED',
-  'INVALID_REQUEST',
-  'SESSION_NOT_FOUND',
-  'FORBIDDEN',
-  'ORDER_NOT_FOUND',
-  'TABLE_NOT_FOUND',
-  'TABLE_UNAVAILABLE',
-  'TABLE_OCCUPIED',
-  'TABLE_BRANCH_MISMATCH',
-  'SESSION_MOVE_CONFLICT',
-  'EMPLOYEE_NOT_FOUND',
-  'INVALID_TRANSITION',
-  'POS_UNAVAILABLE',
-  'POS_UNSUPPORTED',
-] as const
-
-export type PosErrorCode = (typeof POS_ERROR_CODES)[number]
-
 /** Un pedido sigue siendo comanda de cocina mientras todavía puede avanzar. */
 export function isKitchenTicket(status: OrderStatus): boolean {
   return posActions[status].advance !== undefined
@@ -96,24 +77,29 @@ export const posTableStateLabels: Record<PosTableState, string> = {
   payment_pending: 'Cobro pendiente',
 }
 
-export type PosTableStateInput = {
-  hasOpenSession: boolean
-  orderStatuses?: readonly OrderStatus[]
-  billRequestedAt?: string | null
-  inPersonPaymentRequestedAt?: string | null
-  hasPendingPayment?: boolean
+/** Sesión abierta tal como la leen el plano y la comanda. */
+export type PosTableStateSession = {
+  bill_requested_at?: string | null
+  in_person_payment_requested_at?: string | null
+  orders?: readonly { status: OrderStatus }[]
+  payments?: readonly { status: string }[]
 }
 
 /**
- * Estado principal de una mesa, ordenado por prioridad operativa. Los rótulos
- * se muestran junto al color para que el mapa no dependa solo de la vista.
+ * Estado principal de una mesa, ordenado por prioridad operativa. Recibe la
+ * sesión entera (o `null` si está libre) en lugar de campos sueltos: así el
+ * plano y la comanda no tienen que armar el mismo objeto cada uno.
+ * Los rótulos se muestran junto al color para que el mapa no dependa solo de la vista.
  */
-export function getPosTableState(input: PosTableStateInput): PosTableState {
-  if (!input.hasOpenSession) return 'free'
-  if (input.inPersonPaymentRequestedAt || input.hasPendingPayment) return 'payment_pending'
-  if (input.billRequestedAt) return 'bill_requested'
+export function getPosTableState(session: PosTableStateSession | null | undefined): PosTableState {
+  if (!session) return 'free'
+  if (
+    session.in_person_payment_requested_at ||
+    session.payments?.some((payment) => payment.status === 'pending')
+  ) return 'payment_pending'
+  if (session.bill_requested_at) return 'bill_requested'
 
-  const statuses = input.orderStatuses ?? []
+  const statuses = (session.orders ?? []).map((order) => order.status)
   if (statuses.includes('ready')) return 'ready'
   if (statuses.includes('submitted') || statuses.includes('accepted')) return 'order_pending'
   if (statuses.includes('in_preparation')) return 'in_preparation'
@@ -127,7 +113,8 @@ export function posColumnFor(status: OrderStatus): PosBoardColumnId | null {
   return null
 }
 
-export function sortColumnOrders<T extends { created_at: string }>(
+/** Cocina y barra atienden por orden de llegada; el resto muestra lo último primero. */
+function sortColumnOrders<T extends { created_at: string }>(
   columnId: PosBoardColumnId,
   orders: T[],
 ): T[] {
@@ -159,6 +146,21 @@ export function asAmount(value: number | string | null | undefined): number {
   return Number.isFinite(amount) ? amount : 0
 }
 
+/**
+ * Precios en pesos, con centavos solo cuando existen. Una sola instancia de
+ * Intl: se llama por ítem, por modificador y por línea de pedido.
+ */
+const priceFormatter = new Intl.NumberFormat('es-AR', {
+  style: 'currency',
+  currency: 'ARS',
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
+})
+
+export function formatPrice(value: number | string | null | undefined): string {
+  return priceFormatter.format(asAmount(value))
+}
+
 export function localDateKey(now: Date = new Date(), timeZone = POS_TIME_ZONE): string {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone,
@@ -166,41 +168,6 @@ export function localDateKey(now: Date = new Date(), timeZone = POS_TIME_ZONE): 
     month: '2-digit',
     day: '2-digit',
   }).format(now)
-}
-
-function wallTimeUtcMs(date: Date, timeZone: string): number {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hourCycle: 'h23',
-  }).formatToParts(date)
-  const num = (type: Intl.DateTimeFormatPartTypes) =>
-    Number(parts.find((part) => part.type === type)?.value)
-  return Date.UTC(num('year'), num('month') - 1, num('day'), num('hour'), num('minute'), num('second'))
-}
-
-/** UTC bounds of a YYYY-MM-DD calendar day in the restaurant timezone. */
-export function dayRangeUtc(dateKey: string, timeZone = POS_TIME_ZONE): { start: string; end: string } {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
-    throw new Error('Invalid date key')
-  }
-  const startOf = (key: string) => {
-    const utcMidnight = Date.parse(`${key}T00:00:00.000Z`)
-    let instant = utcMidnight
-    for (let i = 0; i < 3; i += 1) {
-      instant = utcMidnight - (wallTimeUtcMs(new Date(instant), timeZone) - instant)
-    }
-    return instant
-  }
-  const [year, month, day] = dateKey.split('-').map(Number)
-  const next = new Date(Date.UTC(year, month - 1, day + 1))
-  const nextKey = `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, '0')}-${String(next.getUTCDate()).padStart(2, '0')}`
-  return { start: new Date(startOf(dateKey)).toISOString(), end: new Date(startOf(nextKey)).toISOString() }
 }
 
 export function formatElapsed(fromIso: string, nowMs = Date.now()): string {
@@ -213,32 +180,4 @@ export function formatElapsed(fromIso: string, nowMs = Date.now()): string {
   const rest = minutes % 60
   if (rest === 0) return hours === 1 ? 'Hace 1 h' : `Hace ${hours} h`
   return hours === 1 ? `Hace 1 h ${rest} min` : `Hace ${hours} h ${rest} min`
-}
-
-export function posErrorCode(message: string): PosErrorCode | 'UNKNOWN' {
-  const match = POS_ERROR_CODES.find((code) => message === code || message.includes(code))
-  return match ?? 'UNKNOWN'
-}
-
-export const posErrorMessages: Record<PosErrorCode, string> = {
-  AUTH_REQUIRED: 'Tu sesión expiró. Volvé a ingresar.',
-  INVALID_REQUEST: 'La solicitud no es válida.',
-  SESSION_NOT_FOUND: 'No encontramos esa sesión de mesa.',
-  FORBIDDEN: 'No tenés permiso para esta acción.',
-  ORDER_NOT_FOUND: 'No encontramos ese pedido.',
-  TABLE_NOT_FOUND: 'Esa mesa ya no existe. Actualizá el plano.',
-  TABLE_UNAVAILABLE:
-    'Esa mesa no está disponible para operar: puede estar fuera de servicio o en un sector dado de baja.',
-  TABLE_OCCUPIED: 'La mesa destino ya tiene una comanda abierta. Elegí otra mesa.',
-  TABLE_BRANCH_MISMATCH: 'La mesa destino debe estar en la misma sucursal.',
-  SESSION_MOVE_CONFLICT: 'La comanda fue movida o cerrada por otro operador. Actualizá el plano.',
-  EMPLOYEE_NOT_FOUND: 'Tu cuenta ya no está habilitada en esta sucursal. Volvé a ingresar.',
-  INVALID_TRANSITION: 'Ese cambio de estado no está permitido. Actualizá el tablero e intentá de nuevo.',
-  POS_UNAVAILABLE: 'El POS no está activo para este restaurante.',
-  POS_UNSUPPORTED: 'Este restaurante usa un POS externo que todavía no está conectado.',
-}
-
-export function posErrorMessage(message: string): string {
-  const code = posErrorCode(message)
-  return code === 'UNKNOWN' ? 'No pudimos completar la acción. Reintentá.' : posErrorMessages[code]
 }

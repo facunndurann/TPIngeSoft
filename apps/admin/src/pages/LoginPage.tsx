@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { UtensilsCrossed, Store } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { Button, ErrorText, Field, Input } from '@/components/ui'
+import { Button, ErrorText, Field, Input } from '@restaurant-platform/ui'
 
 export function LoginPage() {
   const [email, setEmail] = useState('')

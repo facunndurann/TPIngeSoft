@@ -7,7 +7,7 @@ import {
   type MenuDesign,
   type MenuDesignId,
 } from '@restaurant-platform/shared'
-import { Modal } from '@/components/ui'
+import { Modal } from '@restaurant-platform/ui'
 import { customerAppUrl } from '@/lib/customer-app'
 
 type DesignPickerProps = {

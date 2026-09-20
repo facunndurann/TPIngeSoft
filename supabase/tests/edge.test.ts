@@ -1,14 +1,12 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
-import { submitOrderErrorSchema, submitOrderResultSchema, submitOrderSchema } from '../../packages/shared/src/orders.ts'
-import { appErrorMessage, appErrors, isRetryableError } from '../../packages/shared/src/errors.ts'
+import { type OrderStatus, submitOrderErrorSchema, submitOrderResultSchema, submitOrderSchema } from '../../packages/shared/src/orders.ts'
+import { AppError, appErrorMessage, appErrors, fromPostgres, isRetryableError } from '../../packages/shared/src/errors.ts'
 import {
-  dayRangeUtc,
   formatElapsed,
   getPosTableState,
   isKitchenTicket,
   posActions,
-  posErrorCode,
 } from '../../packages/shared/src/pos.ts'
 import {
   FLOOR_GRID,
@@ -28,7 +26,6 @@ import { DEFAULT_MENU_DESIGN } from '../../packages/shared/src/designs.ts'
 // Si otra migración cambia el default de restaurants.menu_design, apuntá este import a esa.
 import menuDesignEnumSql from '../migrations/20260915150000_menu_design_enum.sql?raw'
 import { createSubmitOrderHandler } from '../functions/submit-order/handler.ts'
-import { databaseError, OrderError } from '../functions/_shared/errors.ts'
 import type { OrderGateway } from '../functions/_shared/order-gateway.ts'
 
 const input = {
@@ -69,7 +66,7 @@ test('preflight and wrong method never authenticate or create orders', async () 
 test('requires a verified identity and valid bounded JSON', async () => {
   const { gateway, creates } = fixture()
   const handler = createSubmitOrderHandler(async jwt => {
-    if (jwt !== 'valid-user') throw new OrderError('AUTH_REQUIRED')
+    if (jwt !== 'valid-user') throw new AppError('AUTH_REQUIRED')
     return gateway
   })
   assert.equal((await handler(request(input, { 'Content-Type': 'application/json' }))).status, 401)
@@ -93,7 +90,7 @@ test('database errors answer with the status, code and message of the shared cat
   const { gateway } = fixture()
   const handler = createSubmitOrderHandler(async () => gateway)
   for (const code of ['PRICE_CHANGED', 'REQUEST_ABANDONED', 'POS_UNAVAILABLE'] as const) {
-    gateway.submit = async () => { throw databaseError({ message: code }) }
+    gateway.submit = async () => { throw fromPostgres({ message: code }) }
     const response = await handler(request())
     assert.equal(response.status, appErrors[code].status)
     const body = submitOrderErrorSchema.parse(await response.json())
@@ -130,15 +127,23 @@ test('POS actions advance and cancel until delivery, and nothing leaves cancelle
   assert.equal(isKitchenTicket('cancelled'), false)
 })
 
-test('restaurant day bounds use Argentina time and POS errors stay coded', () => {
-  assert.deepEqual(dayRangeUtc('2026-09-05'), {
-    start: '2026-09-05T03:00:00.000Z',
-    end: '2026-09-06T03:00:00.000Z',
-  })
+test('elapsed time reads naturally and POS errors stay coded', () => {
   assert.equal(formatElapsed('2026-09-05T12:00:00.000Z', Date.parse('2026-09-05T12:00:30.000Z')), 'Ahora')
   assert.equal(formatElapsed('2026-09-05T12:00:00.000Z', Date.parse('2026-09-05T13:05:00.000Z')), 'Hace 1 h 5 min')
-  assert.equal(posErrorCode('FORBIDDEN'), 'FORBIDDEN')
-  assert.equal(posErrorCode('P0001: INVALID_TRANSITION'), 'INVALID_TRANSITION')
+  // Un solo traductor para las tres formas en que llega un error de Postgres.
+  assert.equal(fromPostgres('FORBIDDEN').code, 'FORBIDDEN')
+  assert.equal(fromPostgres({ message: 'P0001: INVALID_TRANSITION' }).code, 'INVALID_TRANSITION')
+  assert.equal(fromPostgres('TABLE_OCCUPIED').code, 'TABLE_OCCUPIED')
+  const constraint = fromPostgres('duplicate key violates "tables_label_unique_per_branch"')
+  assert.equal(constraint.code, 'TABLE_LABEL_TAKEN')
+  assert.equal(constraint.message, appErrors.TABLE_LABEL_TAKEN.message)
+  // Lo desconocido no filtra el detalle interno: mensaje del catálogo y nada más.
+  const unknown = fromPostgres('relation "x" does not exist')
+  assert.equal(unknown.code, 'SERVER_ERROR')
+  assert.equal(unknown.message, appErrors.SERVER_ERROR.message)
+  assert.equal(unknown.detail, 'relation "x" does not exist')
+  assert.equal(unknown.status, 503)
+  assert.equal(unknown.retryable, true)
 })
 
 test('reverting steps back exactly one stage, never to submitted nor from cancelled', () => {
@@ -164,21 +169,21 @@ test('the error catalog decides which failures keep a submission for retry', () 
 })
 
 test('table map states follow operational priority without inventing occupancy', () => {
-  assert.equal(getPosTableState({ hasOpenSession: false, billRequestedAt: '2026-09-18' }), 'free')
-  assert.equal(getPosTableState({ hasOpenSession: true }), 'occupied')
-  assert.equal(getPosTableState({ hasOpenSession: true, orderStatuses: ['delivered'] }), 'occupied')
-  assert.equal(getPosTableState({ hasOpenSession: true, orderStatuses: ['accepted'] }), 'order_pending')
-  assert.equal(getPosTableState({ hasOpenSession: true, orderStatuses: ['in_preparation'] }), 'in_preparation')
-  assert.equal(getPosTableState({ hasOpenSession: true, orderStatuses: ['submitted', 'ready'] }), 'ready')
+  const orders = (...statuses: OrderStatus[]) => statuses.map((status) => ({ status }))
+  assert.equal(getPosTableState(null), 'free')
+  assert.equal(getPosTableState({ bill_requested_at: '2026-09-18' }), 'bill_requested')
+  assert.equal(getPosTableState({}), 'occupied')
+  assert.equal(getPosTableState({ orders: orders('delivered') }), 'occupied')
+  assert.equal(getPosTableState({ orders: orders('accepted') }), 'order_pending')
+  assert.equal(getPosTableState({ orders: orders('in_preparation') }), 'in_preparation')
+  assert.equal(getPosTableState({ orders: orders('submitted', 'ready') }), 'ready')
   assert.equal(getPosTableState({
-    hasOpenSession: true,
-    orderStatuses: ['ready'],
-    billRequestedAt: '2026-09-18T12:00:00Z',
+    orders: orders('ready'),
+    bill_requested_at: '2026-09-18T12:00:00Z',
   }), 'bill_requested')
   assert.equal(getPosTableState({
-    hasOpenSession: true,
-    billRequestedAt: '2026-09-18T12:00:00Z',
-    hasPendingPayment: true,
+    bill_requested_at: '2026-09-18T12:00:00Z',
+    payments: [{ status: 'pending' }],
   }), 'payment_pending')
 })
 

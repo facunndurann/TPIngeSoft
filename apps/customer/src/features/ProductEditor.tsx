@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { productMedia } from '@restaurant-platform/shared'
+import { formatPrice, productMedia } from '@restaurant-platform/shared'
 import { MediaCarousel } from '@/features/MediaCarousel'
-import { money, price, selectionErrors } from '@/features/menu'
+import { price, selectionErrors } from '@/features/menu'
 import type { ModifierGroup, ModifierOption, Product } from '@/features/menu'
 import { useMenuDesign } from '@/features/menu-design'
 import type { CartItem } from '@/stores/cart'
@@ -27,7 +27,7 @@ export function ProductEditor({ product, initial, onSave, onClose }: ProductEdit
       <p className="eyebrow">{copy.product}</p>
       <h1 id="product-title">{product.name}</h1>
       <p>{product.description}</p>
-      <strong>{money(product.base_price)}</strong>
+      <strong>{formatPrice(product.base_price)}</strong>
       {product.food_info && <p className="notice">{product.food_info}</p>}
       {product.dietary_tags.length > 0 && <p>{product.dietary_tags.join(' · ')}</p>}
 
@@ -68,7 +68,7 @@ export function ProductEditor({ product, initial, onSave, onClose }: ProductEdit
                   {option.is_available
                     ? option.price_delta === 0
                       ? 'Sin cargo'
-                      : money(option.price_delta)
+                      : formatPrice(option.price_delta)
                     : 'Agotado'}
                 </small>
               </span>
@@ -118,7 +118,7 @@ export function ProductEditor({ product, initial, onSave, onClose }: ProductEdit
         disabled={errors.length > 0}
         onClick={() => onSave(item)}
       >
-        {initial ? 'Guardar cambios' : 'Agregar al carrito'} · {money(price(product, item))}
+        {initial ? 'Guardar cambios' : 'Agregar al carrito'} · {formatPrice(price(product, item))}
       </button>
     </section>
   )

@@ -1,7 +1,8 @@
 import { defineConfig } from 'vitest/config'
 
-// Un solo runner para las pruebas de lógica del monorepo (`pnpm test`).
-// Cada app corre con su propio vite.config.ts (alias `@`, imports `?raw`).
+// Runner único para las pruebas de lógica del monorepo (`pnpm test`).
+// Cada proyecto hereda el vite.config.ts de su app: alias `@`, imports `?raw`
+// y las variables VITE_* que el código lee de import.meta.env.
 export default defineConfig({
   test: {
     projects: [
@@ -16,14 +17,26 @@ export default defineConfig({
       },
       'apps/admin',
       {
-        // Contrato HTTP de submit-order, catálogo de errores y máquina de estados.
-        // orders.integration.mjs queda afuera: necesita el stack local (`pnpm test:orders:integration`).
+        extends: 'apps/pos/vite.config.ts',
+        test: {
+          name: 'pos',
+          root: 'apps/pos',
+          // El POS renderiza con react-dom/server y lee estas al construir el cliente.
+          env: {
+            VITE_SUPABASE_URL: 'http://127.0.0.1:54321',
+            VITE_SUPABASE_ANON_KEY: 'test-public-key',
+            VITE_EMPLOYEE_EMAIL_DOMAIN: 'employees.example.com',
+          },
+        },
+      },
+      {
+        // Contrato HTTP de submit-order, catálogo de errores, máquina de estados
+        // y cuentas de empleados. orders.integration.mjs queda afuera: necesita
+        // el stack local (`pnpm test:orders:integration`).
         test: {
           name: 'orders',
           root: 'supabase',
           include: ['tests/**/*.test.ts'],
-          // employees.test.ts usa node:test y se corre con `pnpm test:employees`.
-          exclude: ['tests/employees.test.ts'],
         },
       },
     ],

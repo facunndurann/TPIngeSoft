@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase'
 import { branchesQuery } from '@/queries/branches'
 import { branchTablesQuery } from '@/queries/tables'
 import { useRestaurant } from '@/restaurant/restaurant-context'
-import { Badge, Button, EmptyState, ErrorText, Input, Modal, Select, Spinner, Toggle } from '@/components/ui'
+import { Badge, Button, EmptyState, ErrorText, Input, Modal, Select, Spinner, Toggle, useSaveErrors } from '@restaurant-platform/ui'
 
 type DiningTable = Tables<'tables'> & {
   floor_sections: Pick<Tables<'floor_sections'>, 'id' | 'name'> | null
@@ -25,7 +25,7 @@ export function TablesPage() {
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null)
   const [newLabel, setNewLabel] = useState('')
   const [qrTable, setQrTable] = useState<DiningTable | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const errors = useSaveErrors()
 
   const { data: branches } = useQuery(branchesQuery(restaurant.id))
 
@@ -36,7 +36,7 @@ export function TablesPage() {
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: tablesQuery.queryKey })
 
-  const createMutation = useMutation({
+  const createMutation = useMutation(errors.saving('No pudimos crear la mesa.', {
     mutationFn: async (label: string) => {
       const { error: mErr } = await supabase.from('tables').insert({
         restaurant_id: restaurant.id,
@@ -49,26 +49,23 @@ export function TablesPage() {
       setNewLabel('')
       invalidate()
     },
-    onError: (e) => setError(e.message),
-  })
+  }))
 
-  const updateMutation = useMutation({
+  const updateMutation = useMutation(errors.saving('No pudimos guardar la mesa.', {
     mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
       const { error: mErr } = await supabase.from('tables').update({ is_active }).eq('id', id)
       if (mErr) throw mErr
     },
     onSuccess: invalidate,
-    onError: (e) => setError(e.message),
-  })
+  }))
 
-  const deleteMutation = useMutation({
+  const deleteMutation = useMutation(errors.saving('No pudimos eliminar la mesa.', {
     mutationFn: async (id: string) => {
       const { error: mErr } = await supabase.from('tables').delete().eq('id', id)
       if (mErr) throw mErr
     },
     onSuccess: invalidate,
-    onError: (e) => setError(e.message),
-  })
+  }))
 
   function handleCreate(e: FormEvent) {
     e.preventDefault()
@@ -110,7 +107,7 @@ export function TablesPage() {
         </Button>
       </form>
 
-      <ErrorText message={error} />
+      <ErrorText message={errors.message} />
 
       {isLoading ? (
         <Spinner />

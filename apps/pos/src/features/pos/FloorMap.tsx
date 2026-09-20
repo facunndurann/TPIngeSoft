@@ -1,20 +1,10 @@
 import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
-import {
-  FLOOR_GRID,
-  asAmount,
-  clampToGrid,
-  formatElapsed,
-  getPosTableState,
-  posTableStateLabels,
-  tableFootprint,
-  type PosTableState,
-} from '@restaurant-platform/shared'
+import { formatElapsed, formatPrice, getPosTableState, type PosTableState, posTableStateLabels } from '@restaurant-platform/shared'
 import { ClipboardList, Clock3, Move, UserRound, Users } from 'lucide-react'
-import { Button, EmptyState, ErrorText, Select, Spinner } from '@/components/ui'
-import { formatPrice } from '@/lib/format'
-import { useRestaurant, usePosContext } from '@/context/pos-context'
+import { Button, EmptyState, ErrorText, FloorGrid, Select, Spinner, SummaryItem } from '@restaurant-platform/ui'
+import { useCan, useRestaurant } from '@/context/pos-context'
 import {
   loadOpenSessions,
   loadPosFloorSections,
@@ -36,7 +26,7 @@ import type { PosBill, PosDiningTable, PosOpenSession } from './types'
  */
 export function FloorMap() {
   const restaurant = useRestaurant()
-  const canPay = usePosContext().permissions.includes('payments.read')
+  const canPay = useCan()('payments.read')
   const now = useNow()
   const [moving, setMoving] = useState<FloorMapEntry | null>(null)
   const navigate = useNavigate()
@@ -105,13 +95,7 @@ export function FloorMap() {
       table,
       session,
       bill,
-      state: getPosTableState({
-        hasOpenSession: !!session,
-        orderStatuses: session?.orders.map((order) => order.status),
-        billRequestedAt: session?.bill_requested_at,
-        inPersonPaymentRequestedAt: session?.in_person_payment_requested_at,
-        hasPendingPayment: session?.payments.some((payment) => payment.status === 'pending'),
-      }),
+      state: getPosTableState(session),
     }
   })
 
@@ -315,25 +299,16 @@ function FloorSurface({
         tabIndex={0}
         aria-label="Plano desplazable del sector"
       >
-        <div
-          className="relative"
-          style={{
-            width: FLOOR_GRID.cols * FLOOR_GRID.cell,
-            height: FLOOR_GRID.rows * FLOOR_GRID.cell,
-            backgroundSize: `${FLOOR_GRID.cell}px ${FLOOR_GRID.cell}px`,
-            backgroundImage:
-              'linear-gradient(to right, #f1f1f1 1px, transparent 1px), linear-gradient(to bottom, #f1f1f1 1px, transparent 1px)',
-          }}
-          aria-label="Mesas del sector"
-        >
-          {entries.map((entry) => {
-            const { table, session, bill, state } = entry
-            const footprint = tableFootprint(table)
-            const position = clampToGrid(table.position_x, table.position_y, footprint)
+        <FloorGrid
+          tables={entries.map((entry) => entry.table)}
+          ariaLabel="Mesas del sector"
+          emptyMessage="Este sector todavía no tiene mesas operativas."
+          renderTable={(table, tile) => {
+            const { session, bill, state } = entries.find((entry) => entry.table.id === table.id)!
             const selectedTable = selectedId === table.id
             const operator = session?.assigned_employee?.full_name ?? 'Sin asignar'
             const summary = session
-              ? `${formatElapsed(session.opened_at, now)}, ${formatPrice(asAmount(bill?.total_amount))}, ${operator}`
+              ? `${formatElapsed(session.opened_at, now)}, ${formatPrice(bill?.total_amount)}, ${operator}`
               : `${table.seats} lugares`
 
             return (
@@ -347,12 +322,7 @@ function FloorSurface({
                 className={`absolute flex cursor-pointer flex-col items-center justify-center overflow-hidden border-2 text-center shadow-sm transition hover:brightness-95 focus-visible:ring-2 focus-visible:ring-indigo-600 focus-visible:ring-offset-2 focus-visible:outline-none ${stateStyles[state].table} ${
                   selectedTable ? 'ring-2 ring-indigo-600 ring-offset-2' : ''
                 } ${table.shape === 'round' ? 'rounded-full' : 'rounded-xl'}`}
-                style={{
-                  left: position.x * FLOOR_GRID.cell + 3,
-                  top: position.y * FLOOR_GRID.cell + 3,
-                  width: footprint.w * FLOOR_GRID.cell - 6,
-                  height: footprint.h * FLOOR_GRID.cell - 6,
-                }}
+                style={tile.box}
               >
                 <span className="max-w-full truncate px-1 text-xs font-bold leading-tight">{table.label}</span>
                 <span className={`mt-0.5 max-w-[90%] truncate rounded px-1 py-0.5 text-[9px] font-semibold leading-none ${stateStyles[state].badge}`}>
@@ -364,7 +334,7 @@ function FloorSurface({
                       {formatElapsed(session.opened_at, now)}
                     </span>
                     <span className="mt-1 max-w-[90%] truncate text-[10px] font-semibold leading-none">
-                      {formatPrice(asAmount(bill?.total_amount))}
+                      {formatPrice(bill?.total_amount)}
                     </span>
                     <span className="mt-1 max-w-[90%] truncate text-[9px] leading-none opacity-75">
                       {operator}
@@ -378,14 +348,8 @@ function FloorSurface({
                 )}
               </button>
             )
-          })}
-
-          {entries.length === 0 && (
-            <p className="absolute inset-0 flex items-center justify-center text-sm text-neutral-400">
-              Este sector todavía no tiene mesas operativas.
-            </p>
-          )}
-        </div>
+          }}
+        />
       </div>
     </div>
   )
@@ -402,7 +366,7 @@ function TableSummary({
   onOpen: (tableId: string) => void
   onMove: (entry: FloorMapEntry) => void
 }) {
-  const { permissions } = usePosContext()
+  const can = useCan()
   const { table, session, bill, state } = entry
   const activeOrders = session?.orders.filter((order) =>
     ['submitted', 'accepted', 'in_preparation', 'ready'].includes(order.status),
@@ -419,7 +383,7 @@ function TableSummary({
       {session ? (
         <>
           <SummaryItem icon={Clock3} label="Abierta" value={formatElapsed(session.opened_at, now)} />
-          <SummaryItem label="Total acumulado" value={bill ? formatPrice(asAmount(bill.total_amount)) : '—'} />
+          <SummaryItem label="Total acumulado" value={bill ? formatPrice(bill.total_amount) : '—'} />
           <SummaryItem label="Pedidos activos" value={String(activeOrders)} />
           <SummaryItem
             icon={UserRound}
@@ -430,7 +394,7 @@ function TableSummary({
       ) : (
         <SummaryItem icon={Users} label="Capacidad" value={`${table.seats} lugares`} />
       )}
-      {session && permissions.includes('sessions.move') && (
+      {session && can('sessions.move') && (
         <Button variant="secondary" onClick={() => onMove(entry)}>
           <Move size={15} /> Mover comanda
         </Button>
@@ -439,26 +403,6 @@ function TableSummary({
         <ClipboardList size={15} />
         {session ? 'Continuar comanda' : 'Abrir comanda'}
       </Button>
-    </div>
-  )
-}
-
-function SummaryItem({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon?: typeof Clock3
-  label: string
-  value: string
-}) {
-  return (
-    <div className="min-w-28">
-      <p className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-neutral-400">
-        {Icon && <Icon size={12} aria-hidden="true" />}
-        {label}
-      </p>
-      <p className="mt-0.5 font-medium text-neutral-800">{value}</p>
     </div>
   )
 }

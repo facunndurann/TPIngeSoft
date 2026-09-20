@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Eye, LayoutGrid, Pencil, Plus, SquarePen, Trash2, X } from 'lucide-react'
 import { clampToGrid, findFreeCell, isOperable, tableFootprint } from '@restaurant-platform/shared'
 import { useRestaurant } from '@/restaurant/restaurant-context'
-import { Badge, Button, EmptyState, ErrorText, Input, Select, Spinner, Toggle } from '@/components/ui'
+import { Badge, Button, EmptyState, ErrorText, Input, Select, Spinner, Toggle, useSaveErrors } from '@restaurant-platform/ui'
 import { FloorCanvas } from '@/features/floor/FloorCanvas'
 import { TableInspector } from '@/features/floor/TableInspector'
 import {
@@ -18,10 +18,13 @@ import {
   updateTableLayout,
   type FloorSection,
   type FloorTable,
+  type TableIntent,
   type TableLayoutPatch,
 } from '@/features/floor/floor-api'
 
 type Mode = 'view' | 'edit'
+
+const SAVE_FAILED = 'No pudimos guardar el cambio.'
 
 /** Tamaño de una mesa nueva, en celdas. */
 const NEW_TABLE_SPAN = { width: 3, height: 3 }
@@ -36,7 +39,7 @@ export function FloorPlanPage() {
   const [newSectionName, setNewSectionName] = useState('')
   const [newTableLabel, setNewTableLabel] = useState('')
   const [renaming, setRenaming] = useState<FloorSection | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const errors = useSaveErrors()
 
   const branches = useQuery({
     queryKey: ['branches', restaurant.id],
@@ -76,15 +79,9 @@ export function FloorPlanPage() {
     void queryClient.invalidateQueries({ queryKey: ['tables'] })
   }
 
-  function run<TArgs>(fn: (args: TArgs) => Promise<unknown>) {
-    return {
-      mutationFn: fn,
-      onMutate: () => setError(null),
-      onSuccess: refresh,
-      onError: (err: unknown) =>
-        setError(err instanceof Error ? err.message : 'No pudimos guardar el cambio.'),
-    }
-  }
+  /** Toda mutación del plano falla igual: limpia, guarda y reporta. */
+  const run = <TArgs,>(mutationFn: (args: TArgs) => Promise<unknown>) =>
+    errors.saving(SAVE_FAILED, { mutationFn, onSuccess: refresh })
 
   function occupiedCells(targetSectionId: string | null, exceptTableId?: string) {
     return (tables.data ?? [])
@@ -128,13 +125,12 @@ export function FloorPlanPage() {
   )
   const removeTable = useMutation(run((id: string) => deleteTable(id)))
 
-  const patchTable = useMutation({
+  const patchTable = useMutation(errors.saving(SAVE_FAILED, {
     mutationFn: ({ id, patch }: { id: string; patch: TableLayoutPatch }) =>
       updateTableLayout(id, patch),
     // Optimista: al soltar una mesa tiene que quedar donde la soltaste, no
     // saltar a la posición vieja hasta que vuelva el refetch.
     onMutate: async ({ id, patch }) => {
-      setError(null)
       await queryClient.cancelQueries({ queryKey: tablesKey })
       const previous = queryClient.getQueryData<FloorTable[]>(tablesKey)
       queryClient.setQueryData<FloorTable[]>(tablesKey, (current) =>
@@ -142,12 +138,11 @@ export function FloorPlanPage() {
       )
       return { previous }
     },
-    onError: (err, _variables, context) => {
+    onError: (_err, _variables, context) => {
       if (context?.previous) queryClient.setQueryData(tablesKey, context.previous)
-      setError(err instanceof Error ? err.message : 'No pudimos guardar el cambio.')
     },
     onSettled: refresh,
-  })
+  }))
 
   /**
    * Cambiar el tamaño puede sacar la mesa de la grilla, así que la posición se
@@ -177,6 +172,18 @@ export function FloorPlanPage() {
       patch: { section_id: targetSectionId, position_x: x, position_y: y },
     })
     setSelectedTableId(table.id)
+  }
+
+  /** Traduce una intención del inspector a la operación que le corresponde. */
+  function applyIntent(table: FloorTable, intent: TableIntent) {
+    switch (intent.kind) {
+      case 'resize':
+        return resizeTable(table, intent)
+      case 'move-to-section':
+        return placeInSection(table, intent.sectionId)
+      case 'edit':
+        return patchTable.mutate({ id: table.id, patch: intent.patch })
+    }
   }
 
   function handleAddSection(event: FormEvent) {
@@ -236,14 +243,14 @@ export function FloorPlanPage() {
             mode={mode}
             onChange={(next) => {
               setMode(next)
-              setError(null)
+              errors.clear()
               if (next === 'view') setSelectedTableId(null)
             }}
           />
         </div>
       </div>
 
-      <ErrorText message={error} />
+      <ErrorText message={errors.message} />
 
       <SectionTabs
         sections={sections.data ?? []}
@@ -349,7 +356,7 @@ export function FloorPlanPage() {
                 const table = sectionTables.find((entry) => entry.id === id)
                 if (table) resizeTable(table, { width, height })
               }}
-              onReject={setError}
+              onReject={errors.report}
             />
 
             {unassigned.length > 0 && (
@@ -377,18 +384,7 @@ export function FloorPlanPage() {
               table={selectedTable}
               sections={sections.data ?? []}
               busy={removeTable.isPending}
-              onPatch={(patch) => {
-                if (patch.width !== undefined || patch.height !== undefined) {
-                  resizeTable(selectedTable, {
-                    width: patch.width ?? selectedTable.width,
-                    height: patch.height ?? selectedTable.height,
-                  })
-                } else if ('section_id' in patch) {
-                  placeInSection(selectedTable, patch.section_id ?? null)
-                } else {
-                  patchTable.mutate({ id: selectedTable.id, patch })
-                }
-              }}
+              onIntent={(intent) => applyIntent(selectedTable, intent)}
               onDelete={() =>
                 removeTable.mutate(selectedTable.id, { onSuccess: () => setSelectedTableId(null) })
               }

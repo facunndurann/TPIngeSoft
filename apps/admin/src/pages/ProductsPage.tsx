@@ -2,42 +2,39 @@ import { useState } from 'react'
 import { Link } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
-import { productMedia, type Tables } from '@restaurant-platform/shared'
+import { formatPrice, productMedia, type Tables } from '@restaurant-platform/shared'
 import { MediaThumb } from '@/features/MediaThumb'
 import { supabase } from '@/lib/supabase'
 import { productsByCategoryQuery } from '@/queries/products'
-import { formatPrice } from '@/lib/format'
 import { useRestaurant } from '@/restaurant/restaurant-context'
-import { Badge, Button, EmptyState, ErrorText, Spinner, Toggle } from '@/components/ui'
+import { Badge, Button, EmptyState, ErrorText, Spinner, Toggle, useSaveErrors } from '@restaurant-platform/ui'
 
 export function ProductsPage() {
   const restaurant = useRestaurant()
   const queryClient = useQueryClient()
   const [categoryFilter, setCategoryFilter] = useState<string | 'all'>('all')
-  const [error, setError] = useState<string | null>(null)
+  const errors = useSaveErrors()
 
   const { data: categories, isLoading } = useQuery(productsByCategoryQuery(restaurant.id))
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: productsByCategoryQuery(restaurant.id).queryKey })
 
-  const availabilityMutation = useMutation({
+  const availabilityMutation = useMutation(errors.saving('No pudimos cambiar la disponibilidad.', {
     mutationFn: async ({ id, is_available }: { id: string; is_available: boolean }) => {
       const { error: mErr } = await supabase.from('products').update({ is_available }).eq('id', id)
       if (mErr) throw mErr
     },
     onSuccess: invalidate,
-    onError: (e) => setError(e.message),
-  })
+  }))
 
-  const deleteMutation = useMutation({
+  const deleteMutation = useMutation(errors.saving('No pudimos eliminar el producto.', {
     mutationFn: async (id: string) => {
       const { error: mErr } = await supabase.from('products').delete().eq('id', id)
       if (mErr) throw mErr
     },
     onSuccess: invalidate,
-    onError: (e) => setError(e.message),
-  })
+  }))
 
   const groups = (categories ?? []).filter(
     (category) =>
@@ -75,7 +72,7 @@ export function ProductsPage() {
         ))}
       </div>
 
-      <ErrorText message={error} />
+      <ErrorText message={errors.message} />
 
       {isLoading ? (
         <Spinner />

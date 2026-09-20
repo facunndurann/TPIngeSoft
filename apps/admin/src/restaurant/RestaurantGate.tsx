@@ -1,14 +1,12 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Store } from 'lucide-react'
-import { DEFAULT_MENU_DESIGN } from '@restaurant-platform/shared'
-import { rpcError } from '@/lib/rpc-error'
+import { DEFAULT_MENU_DESIGN, fromPostgres } from '@restaurant-platform/shared'
 import { myRestaurantQuery } from '@/queries/restaurant'
 import { supabase } from '@/lib/supabase'
-import { Button, ErrorText, Field, Input, Spinner, Textarea } from '@/components/ui'
+import { Button, ErrorText, Field, Input, Spinner, Textarea, useAuth } from '@restaurant-platform/ui'
 import { DesignPicker } from '@/features/DesignPicker'
 import { RestaurantContext } from './restaurant-context'
-import { useAuth } from '@/auth/useAuth'
 
 /**
  * Carga el restaurante del usuario autenticado y su rol. Solo owner/manager
@@ -69,7 +67,7 @@ function CreateRestaurantScreen() {
         p_menu_design: menuDesign,
         p_branch_name: branchName,
       })
-      if (rpcErr) throw rpcError(rpcErr)
+      if (rpcErr) throw fromPostgres(rpcErr)
 
       await queryClient.invalidateQueries({ queryKey: ['my-restaurant'] })
     } catch (err) {

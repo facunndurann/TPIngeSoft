@@ -1,10 +1,9 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { OrderStatus } from '@restaurant-platform/shared'
+import { groupOrdersByColumn, type OrderStatus, posBoardColumns } from '@restaurant-platform/shared'
 import { useRestaurant } from '@/context/pos-context'
-import { ErrorText, Spinner } from '@/components/ui'
+import { ErrorText, Spinner } from '@restaurant-platform/ui'
 import { posBoardQuery, posQueryKey, transitionPosOrder, type PosOrder } from './api'
-import { groupOrdersByColumn, posBoardColumns } from './board'
 import { OrderTicket } from './OrderTicket'
 import { useNow } from './useNow'
 

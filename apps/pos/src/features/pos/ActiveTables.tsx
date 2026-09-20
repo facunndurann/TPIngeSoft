@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { formatPrice } from '@/lib/format'
-import { useRestaurant, usePosContext } from '@/context/pos-context'
-import { Badge, Button, EmptyState, ErrorText, Modal, Spinner } from '@/components/ui'
+import { formatElapsed, formatPrice } from '@restaurant-platform/shared'
+import { useCan, useRestaurant } from '@/context/pos-context'
+import { Badge, Button, EmptyState, ErrorText, Modal, Spinner, useSaveErrors } from '@restaurant-platform/ui'
 import {
   closePosSession,
   loadRestaurantTables,
@@ -11,17 +11,16 @@ import {
   posQueryKey,
   type PosOpenSessionCard,
 } from './api'
-import { formatElapsed } from './time'
 import { useNow } from './useNow'
 
 export function ActiveTables() {
   const restaurant = useRestaurant()
-  const { permissions } = usePosContext()
-  const canPay = permissions.includes('payments.read')
+  const can = useCan()
+  const canPay = can('payments.read')
   const queryClient = useQueryClient()
   const now = useNow()
   const [closing, setClosing] = useState<PosOpenSessionCard | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const errors = useSaveErrors()
 
   const sessions = useQuery(posOpenSessionsQuery(restaurant.id, restaurant.branchId))
   const tables = useQuery({
@@ -32,15 +31,13 @@ export function ActiveTables() {
   const occupiedIds = new Set((sessions.data ?? []).map((session) => session.table_id))
   const freeTables = (tables.data ?? []).filter((table) => !occupiedIds.has(table.id))
 
-  const closeMutation = useMutation({
+  const closeMutation = useMutation(errors.saving('No pudimos cerrar la sesión.', {
     mutationFn: (sessionId: string) => closePosSession(sessionId),
     onSuccess: () => {
       setClosing(null)
-      setError(null)
       void queryClient.invalidateQueries({ queryKey: posQueryKey(restaurant.id, restaurant.branchId) })
     },
-    onError: (err) => setError(err instanceof Error ? err.message : 'No pudimos cerrar la sesión.'),
-  })
+  }))
 
   return (
     <div className="space-y-6">
@@ -124,11 +121,11 @@ export function ActiveTables() {
                   <Link to={`/salon/${session.table_id}`} className="flex-1">
                     <Button className="w-full">Continuar comanda</Button>
                   </Link>
-                  {permissions.includes('sessions.close') && (
+                  {can('sessions.close') && (
                     <Button
                       variant="secondary"
                       className="flex-1"
-                      onClick={() => { setError(null); setClosing(session) }}
+                      onClick={() => { errors.clear(); setClosing(session) }}
                     >
                       Cerrar sesión
                     </Button>
@@ -182,7 +179,7 @@ export function ActiveTables() {
                 Hay pedidos enviados sin aceptar. Podés cancelarlos desde Comandas.
               </p>
             )}
-            <ErrorText message={error} />
+            <ErrorText message={errors.message} />
             <div className="flex gap-2">
               <Button variant="secondary" className="flex-1" onClick={() => setClosing(null)}>
                 Seguir abierta

@@ -10,12 +10,16 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "lint": "echo 'no lint configured for shared yet'"
+    "lint": "eslint ."
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.112.4",
     "zod": "^3.24.0"
   },
   "devDependencies": {
-    "typescript": "~5.8.3"
+    "@eslint/js": "^9.25.0",
+    "eslint": "^9.25.0",
+    "typescript": "~5.8.3",
+    "typescript-eslint": "^8.30.1"
   }
 }

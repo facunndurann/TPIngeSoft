@@ -117,17 +117,18 @@ pnpm typecheck        # typecheck de todos los paquetes
 pnpm lint             # lint de todos los paquetes
 pnpm test             # Vitest: carrito, tablero POS y contrato de submit-order
 pnpm --filter pos test # login y vistas del POS según permisos
-pnpm test:employees   # cuentas de empleados (provisión, permisos, auditoría)
 pnpm test:sql         # aserciones SQL contra el stack local (cada archivo en BEGIN … ROLLBACK)
 pnpm test:employees:integration # Auth + Edge + RLS; requiere credenciales locales
 pnpm test:orders:integration # pruebas contra el stack local + Edge Functions (pedidos y cierre de sesión)
 pnpm build            # build de producción de todas las apps
 pnpm db:types         # regenerar packages/shared/src/database.types.ts desde la DB local
+pnpm db:schema        # regenerar supabase/schema.generated.sql (el schema de hoy, de una sola lectura)
 pnpm supabase stop    # apagar el stack local
 pnpm supabase status  # ver URLs y credenciales del stack local
 ```
 
 - **Supabase Studio** (explorar la DB visualmente): http://127.0.0.1:54323
-- El CI (GitHub Actions) corre dos jobs en cada push/PR: pruebas de lógica, typecheck (incluida la lógica Edge), lint y build; y otro que levanta Supabase local para las aserciones SQL y la suite integrada.
+- **`supabase/schema.generated.sql`** es el schema tal como quedó: las migraciones son append-only y redefinen varias veces la misma función (`transition_order` seis veces), así que este archivo es el único lugar donde se lee de corrido qué hace hoy. Se genera con `pnpm db:schema` y el CI falla si quedó desactualizado; no se edita a mano.
+- El CI (GitHub Actions) corre dos jobs en cada push/PR: pruebas de lógica (un solo runner: `vitest`), typecheck (incluida la lógica Edge), lint y build; y otro que levanta Supabase local para verificar el snapshot del schema, las aserciones SQL y la suite integrada.
 
 Modelo, matriz de permisos y transición de empleados legacy: [docs/pos-accounts.md](docs/pos-accounts.md).
