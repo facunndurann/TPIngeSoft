@@ -3,7 +3,7 @@ import { Link } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { formatElapsed, formatPrice, sessionRequestsOf } from '@restaurant-platform/shared'
 import { useCan, useRestaurant } from '@/context/pos-context'
-import { Badge, Button, EmptyState, ErrorText, Modal, Spinner, useSaveErrors } from '@restaurant-platform/ui'
+import { Badge, Button, EmptyState, ErrorText, Modal, Spinner, useNow, useSaveErrors } from '@restaurant-platform/ui'
 import {
   closePosSession,
   loadRestaurantTables,
@@ -12,7 +12,6 @@ import {
   type PosOpenSessionCard,
 } from './api'
 import { AttendRequestButtons, ChargedBadge, SessionRequestBadges } from './ServiceRequests'
-import { useNow } from './useNow'
 
 export function ActiveTables() {
   const restaurant = useRestaurant()

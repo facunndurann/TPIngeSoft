@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { Link, NavLink, Outlet } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import type { PosPermission } from '@restaurant-platform/shared'
-import { Button } from '@restaurant-platform/ui'
+import { Button, ClockProvider } from '@restaurant-platform/ui'
 import { useCan, usePosContext } from '@/context/pos-context'
 import { supabase } from '@/lib/supabase'
 import { subscribeToRestaurantPos } from './realtime'
@@ -67,7 +67,11 @@ export function PosPage({ multipleContexts }: { multipleContexts: boolean }) {
           ))}
       </nav>
 
-      <Outlet />
+      {/* El salón mira el tablero por horas: un tic cada 30 s alcanza para que
+          los «hace X» no queden viejos y no redibuja de más una pantalla llena. */}
+      <ClockProvider tickMs={30_000}>
+        <Outlet />
+      </ClockProvider>
     </main>
   )
 }

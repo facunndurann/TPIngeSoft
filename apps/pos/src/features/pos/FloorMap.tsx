@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { formatElapsed, formatPrice, getPosTableState, type PosTableState, posTableStateLabels } from '@restaurant-platform/shared'
 import { ClipboardList, Clock3, Move, UserRound, Users } from 'lucide-react'
-import { Button, EmptyState, ErrorText, FloorGrid, Select, Spinner, SummaryItem } from '@restaurant-platform/ui'
+import { Button, EmptyState, ErrorText, FloorGrid, Select, Spinner, SummaryItem, useNow } from '@restaurant-platform/ui'
 import { useCan, useRestaurant } from '@/context/pos-context'
 import {
   loadOpenSessions,
@@ -13,7 +13,6 @@ import {
 } from './api'
 import { MoveTableSession } from './MoveTableSession'
 import { AttendRequestButtons, SessionRequestBadges } from './ServiceRequests'
-import { useNow } from './useNow'
 import type { PosBill, PosDiningTable, PosOpenSession } from './types'
 
 /**

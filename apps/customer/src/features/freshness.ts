@@ -4,9 +4,6 @@
  * palabras es de `formatElapsed`, que es el mismo para las dos apps.
  */
 
-/** Cada cuánto reescribir un "hace X" en pantalla para que no quede viejo. */
-export const AGE_TICK_MS = 15_000
-
 /**
  * Antigüedad de un panel que muestra varias consultas juntas: manda la lectura
  * más vieja. `0` es "todavía no hubo lectura" en react-query, así que no cuenta;

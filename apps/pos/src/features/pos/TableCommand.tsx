@@ -3,7 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { asAmount, enabledPaymentMethods, formatElapsed, formatPrice, getPosTableState, isKitchenTicket, type OrderStatus, paymentMethodLabels, posTableStateLabels, sessionRequestsOf } from '@restaurant-platform/shared'
 import { ArrowLeft, Clock3, PlayCircle, UserRound, Users } from 'lucide-react'
-import { Badge, Button, EmptyState, ErrorText, Modal, Spinner, SummaryItem, useSaveErrors } from '@restaurant-platform/ui'
+import { Badge, Button, EmptyState, ErrorText, Modal, Spinner, SummaryItem, useNow, useSaveErrors } from '@restaurant-platform/ui'
 import { useCan, useRestaurant } from '@/context/pos-context'
 import {
   closePosSession,
@@ -17,7 +17,6 @@ import {
 import { OrderTicket } from './OrderTicket'
 import { PaymentPanel } from './PaymentPanel'
 import { AttendRequestButtons, ChargedBadge, SessionRequestBadges } from './ServiceRequests'
-import { useNow } from './useNow'
 
 /**
  * Comanda de una mesa abierta desde el plano (MI-64). La misma pantalla sirve

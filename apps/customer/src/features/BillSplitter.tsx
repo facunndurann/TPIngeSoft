@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { allocationTotal, formatElapsed, formatPrice, MAX_EQUAL_PARTS, MIN_EQUAL_PARTS, remainingPercentage, type SessionSplit, sessionSplitSchema, SPLIT_PERCENTAGE_TOTAL, splitBill, splitEqualAmounts, splitPercentageAmounts, type SplitBill, type SplitOrder, type SplitParticipant, splitTypeDescriptions, splitTypeLabels, splitTypes } from '@restaurant-platform/shared'
+import { useNow } from '@restaurant-platform/ui'
 
 import { PercentField } from '@/components/PercentField'
 import { toastDuration } from '@/features/announcements'
-import { useNow } from '@/features/clock'
 import { updateSessionSplit } from '@/features/orders-api'
 
 type BillSplitterProps = {

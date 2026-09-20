@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   Link,
   Navigate,
@@ -8,12 +8,12 @@ import {
   useParams,
 } from 'react-router'
 import { enabledPaymentMethods, formatPrice, MENU_DESIGNS } from '@restaurant-platform/shared'
+import { ClockProvider } from '@restaurant-platform/ui'
 import { ErrorMessage } from '@/components/ErrorMessage'
 import { FreshnessNote } from '@/components/FreshnessNote'
 import { Toast } from '@/components/Toast'
 import { type Announce, type Announcement, toastDuration } from '@/features/announcements'
 import { cartKeyFor } from '@/features/cart'
-import { ClockContext } from '@/features/clock'
 import { CartPanel } from '@/features/CartPanel'
 import { MenuBrowse } from '@/features/MenuBrowse'
 import { cartPrice } from '@/features/menu'
@@ -33,7 +33,6 @@ import {
   tableSection,
 } from '@/features/table-paths'
 import { MenuShell } from '@/features/MenuShell'
-import { AGE_TICK_MS } from '@/features/freshness'
 import { MenuDesignContext } from '@/features/menu-design'
 import { rememberTable } from '@/features/last-table'
 import { useReorder } from '@/features/reorder'
@@ -50,22 +49,6 @@ function failureOf(query: {
   refetch: () => unknown
 }): Failure | undefined {
   return query.isError ? { error: query.error, retry: () => { void query.refetch() } } : undefined
-}
-
-/**
- * Un solo intervalo para toda la mesa. El estado vive acá y no en `TableApp`:
- * `children` entra como prop y no cambia con el tic, así que React solo vuelve a
- * dibujar a quien lee la hora, no a la pantalla entera.
- */
-function ClockProvider({ children }: { children: ReactNode }) {
-  const [now, setNow] = useState(() => Date.now())
-
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), AGE_TICK_MS)
-    return () => clearInterval(timer)
-  }, [])
-
-  return <ClockContext value={now}>{children}</ClockContext>
 }
 
 function useTableBack(fallback: string) {

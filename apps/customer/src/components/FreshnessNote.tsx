@@ -1,5 +1,5 @@
 import { formatElapsed } from '@restaurant-platform/shared'
-import { useNow } from '@/features/clock'
+import { useNow } from '@restaurant-platform/ui'
 
 type FreshnessNoteProps = {
   /** Qué se está actualizando, en palabras del comensal: "la carta". */

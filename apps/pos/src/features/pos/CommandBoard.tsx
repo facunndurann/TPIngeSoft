@@ -2,10 +2,9 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { groupOrdersByColumn, type OrderStatus, posBoardColumns } from '@restaurant-platform/shared'
 import { useRestaurant } from '@/context/pos-context'
-import { ErrorText, Spinner } from '@restaurant-platform/ui'
+import { ErrorText, Spinner, useNow } from '@restaurant-platform/ui'
 import { posBoardQuery, posQueryKey, transitionPosOrder, type PosOrder } from './api'
 import { OrderTicket } from './OrderTicket'
-import { useNow } from './useNow'
 
 const columnStyles: Record<string, string> = {
   new: 'border-amber-200 bg-amber-50',

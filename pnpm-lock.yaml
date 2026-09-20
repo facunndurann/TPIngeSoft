@@ -93,6 +93,9 @@ importers:
       '@restaurant-platform/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@restaurant-platform/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       '@supabase/supabase-js':
         specifier: ^2.112.4
         version: 2.112.4

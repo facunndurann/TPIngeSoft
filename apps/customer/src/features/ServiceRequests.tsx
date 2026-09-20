@@ -7,8 +7,8 @@ import {
   type SessionRequestSource,
   sessionRequestState,
 } from '@restaurant-platform/shared'
+import { useNow } from '@restaurant-platform/ui'
 
-import { useNow } from '@/features/clock'
 import { requestSessionService } from '@/features/orders-api'
 import { serviceRequestCopy, serviceRequestMethod } from '@/features/service-requests'
 

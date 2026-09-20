@@ -1,3 +1,4 @@
+export * from './clock'
 export * from './components'
 export * from './SummaryItem'
 export * from './FloorGrid'
