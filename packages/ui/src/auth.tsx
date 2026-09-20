@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import type { QueryClient } from '@tanstack/react-query'
-import type { Session, SupabaseClient } from '@supabase/supabase-js'
+import type { AppSupabaseClient } from '@restaurant-platform/shared'
+import type { Session } from '@supabase/supabase-js'
 
 export type AuthState = { session: Session | null; loading: boolean }
 
@@ -11,8 +12,7 @@ export function useAuth(): AuthState {
 }
 
 type AuthProviderProps = {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- el cliente llega tipado con el Database de cada app
-  client: SupabaseClient<any, any, any>
+  client: AppSupabaseClient
   queryClient: QueryClient
   children: ReactNode
 }

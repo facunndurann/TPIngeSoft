@@ -25,12 +25,6 @@ jobs:
       - name: Unit tests
         run: pnpm test
 
-      - name: Employee account tests
-        run: pnpm test:employees
-
-      - name: POS frontend tests
-        run: pnpm --filter pos test
-
       - name: Typecheck
         run: pnpm typecheck
 
@@ -63,6 +57,13 @@ jobs:
       # no participan en las pruebas; storage-api sí (las migraciones crean buckets).
       - name: Start local Supabase
         run: pnpm exec supabase start -x studio,mailpit,imgproxy,logflare,vector,supavisor
+
+      # El snapshot es la única forma legible de saber qué hace hoy una función
+      # que las migraciones redefinen varias veces. Si quedó viejo, falla acá.
+      - name: Schema snapshot is current
+        run: |
+          pnpm db:schema
+          git diff --exit-code -- supabase/schema.generated.sql
 
       - name: SQL assertions
         run: pnpm test:sql

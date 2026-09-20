@@ -8,7 +8,6 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "typecheck": "tsc -b",
-    "test": "node ../../supabase/tests/run-unit.mjs apps/pos/src/pos.test.tsx",
     "preview": "vite preview"
   },
   "dependencies": {

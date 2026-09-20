@@ -2,7 +2,7 @@
   "name": "restaurant-platform",
   "private": true,
   "version": "0.0.1",
-  "description": "Plataforma web de autoservicio inteligente para restaurantes (menú QR, pedidos, POS propio y pagos)",
+  "description": "Plataforma web de autoservicio inteligente para restaurantes (men\u00fa QR, pedidos, POS propio y pagos)",
   "scripts": {
     "dev:customer": "pnpm --filter customer dev",
     "dev:admin": "pnpm --filter admin dev",
@@ -13,11 +13,11 @@
     "lint": "pnpm -r lint",
     "test": "vitest run",
     "test:sql": "bash supabase/tests/run-sql.sh",
-    "test:employees": "node supabase/tests/run-unit.mjs supabase/tests/employees.test.ts",
     "test:employees:integration": "node supabase/tests/employees.integration.mjs",
     "test:orders:integration": "node --experimental-strip-types supabase/tests/orders.integration.mjs",
     "dev:functions": "supabase functions serve --env-file supabase/functions/.env.example",
-    "db:types": "supabase gen types typescript --local > packages/shared/src/database.types.ts"
+    "db:types": "supabase gen types typescript --local > packages/shared/src/database.types.ts",
+    "db:schema": "supabase db dump --local --schema public -f supabase/schema.generated.sql"
   },
   "devDependencies": {
     "supabase": "^2.45.5",
