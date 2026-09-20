@@ -358,22 +358,30 @@ declare
   target public.tables;
   sid uuid;
 begin
-  if auth.uid() is null then raise exception 'Authentication required'; end if;
-  if participant_name is not null and (length(trim(participant_name)) < 1 or length(trim(participant_name)) > 40) then
-    raise exception 'Name must contain 1 to 40 characters';
+  if auth.uid() is null then raise exception 'AUTH_REQUIRED'; end if;
+
+  if participant_name is not null
+     and (length(trim(participant_name)) < 1 or length(trim(participant_name)) > 40) then
+    raise exception 'INVALID_NAME';
   end if;
+
   select t.* into target from public.tables t
     join public.branches b on b.id = t.branch_id
     where t.qr_token = qr and t.is_active and b.is_active for update of t;
-  if not found then raise exception 'Table unavailable'; end if;
-  select id into sid from public.table_sessions where table_id = target.id and status = 'open' for update;
+  if not found then raise exception 'TABLE_UNAVAILABLE'; end if;
+
+  select id into sid from public.table_sessions
+    where table_id = target.id and status = 'open' for update;
   if sid is null then
-    insert into public.table_sessions(restaurant_id, table_id) values(target.restaurant_id, target.id) returning id into sid;
+    insert into public.table_sessions(restaurant_id, table_id)
+      values(target.restaurant_id, target.id) returning id into sid;
   end if;
+
   insert into public.session_participants(session_id, user_id, display_name)
     values(sid, auth.uid(), coalesce(trim(participant_name), 'Comensal'))
     on conflict (session_id, user_id) do update
       set display_name = coalesce(trim(participant_name), session_participants.display_name);
+
   return sid;
 end;
 $$;

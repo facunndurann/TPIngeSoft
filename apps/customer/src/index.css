@@ -110,6 +110,7 @@ footer { text-align: center; color: var(--menu-muted); font-size: 12px; margin-t
 .bill-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; margin: 0 0 22px; }
 .bill-grid dt { color: var(--menu-bill-muted); font-size: 13px; }
 .bill-grid dd { margin: 8px 0 0; font-size: clamp(18px, 4vw, 25px); font-weight: 750; }
+.bill-grid dd small { display: block; margin-top: 6px; font-weight: 400; letter-spacing: 0; color: var(--menu-bill-muted); }
 .settled { color: var(--menu-success-text); font-weight: 700; }
 .split-modes { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
 .split-list { list-style: none; padding: 0; margin: 0 0 6px; }

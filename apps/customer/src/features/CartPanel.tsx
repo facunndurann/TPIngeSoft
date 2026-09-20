@@ -116,7 +116,8 @@ export function CartPanel({
       <p className="eyebrow">ANTES DE PEDIR</p>
       <h2>Tu carrito</h2>
       <p className="muted">
-        Este carrito es tuyo. Los demás comensales arman el suyo en la misma sesión de mesa.
+        Este carrito es tuyo. Cada comensal arma el suyo y todos los pedidos van a la cuenta de
+        la mesa.
       </p>
 
       {phase.kind === 'empty' && (
@@ -182,7 +183,7 @@ export function CartPanel({
           )}
           {!sessionOpen && (
             <p className="notice">
-              Para enviar necesitás una sesión de mesa abierta y conexión con la mesa.
+              Para enviar tu pedido, la mesa tiene que estar abierta y con conexión.
             </p>
           )}
           {needsMenuRefresh && (

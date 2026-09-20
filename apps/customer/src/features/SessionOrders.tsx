@@ -54,7 +54,7 @@ export function SessionOrders({
     return (
       <section>
         <h2>Pedidos y cuenta</h2>
-        <p className="notice">Conectate con tu mesa para consultar sus pedidos y cuenta.</p>
+        <p className="notice">Escaneá el QR de tu mesa para consultar sus pedidos y su cuenta.</p>
       </section>
     )
   }
@@ -65,7 +65,7 @@ export function SessionOrders({
       <h2>Pedidos y cuenta</h2>
       <p className="muted">
         Los pedidos de todos los comensales se actualizan automáticamente.{' '}
-        {closed && 'Esta sesión está cerrada; podés seguir consultando el detalle.'}
+        {closed && 'La mesa ya cerró su cuenta; podés seguir consultando el detalle.'}
       </p>
 
       <FreshnessNote
@@ -97,8 +97,13 @@ export function SessionOrders({
       {orders.data?.length === 0 && (
         <p className="empty">Todavía no hay pedidos enviados en esta mesa.</p>
       )}
-      {orders.data?.map((order) => (
-        <OrderCard key={order.id} order={order} participantName={participantName} />
+      {orders.data?.map((order, index) => (
+        <OrderCard
+          key={order.id}
+          order={order}
+          position={orders.data.length - index}
+          participantName={participantName}
+        />
       ))}
       {bill.data && session && participants.length > 0 && (
         <BillSplitter
@@ -118,30 +123,45 @@ export function SessionOrders({
 }
 
 function BillSummary({ bill }: { bill: Bill }) {
+  // Cada cifra dice qué pasó con el pedido, no su estado contable, y lleva su
+  // propia aclaración: el párrafo al pie obligaba a leerlo entero para entender
+  // una sola de las cuatro.
+  const figures = [
+    {
+      term: 'Esperando al restaurante',
+      amount: bill.submitted_amount,
+      hint: 'Ya lo enviaste; se suma a la cuenta cuando el restaurante lo recibe.',
+    },
+    {
+      term: 'Ya en la cuenta',
+      amount: bill.total_amount,
+      hint: 'Lo que el restaurante aceptó. Lo cancelado no se cobra.',
+    },
+    {
+      term: 'Pagado',
+      amount: bill.paid_amount,
+      hint: 'Solo los pagos ya aprobados.',
+    },
+    {
+      term: 'Falta pagar',
+      amount: bill.pending_amount,
+      hint: 'Lo que está en la cuenta y todavía no se pagó.',
+    },
+  ]
+
   return (
     <div className="bill-panel" aria-label="Resumen de cuenta">
       <dl className="bill-grid">
-        <div>
-          <dt>Enviado, por confirmar</dt>
-          <dd>{formatPrice(bill.submitted_amount ?? 0)}</dd>
-        </div>
-        <div>
-          <dt>En cuenta</dt>
-          <dd>{formatPrice(bill.total_amount ?? 0)}</dd>
-        </div>
-        <div>
-          <dt>Pagado</dt>
-          <dd>{formatPrice(bill.paid_amount ?? 0)}</dd>
-        </div>
-        <div>
-          <dt>Pendiente de pago</dt>
-          <dd>{formatPrice(bill.pending_amount ?? 0)}</dd>
-        </div>
+        {figures.map(({ term, amount, hint }) => (
+          <div key={term}>
+            <dt>{term}</dt>
+            <dd>
+              {formatPrice(amount ?? 0)}
+              <small>{hint}</small>
+            </dd>
+          </div>
+        ))}
       </dl>
-      <p className="muted">
-        Los pedidos aceptados por el restaurante forman parte de la cuenta. Los enviados esperan
-        confirmación y los cancelados no se cobran. Pagado incluye únicamente pagos aprobados.
-      </p>
       {bill.is_settled && (bill.total_amount ?? 0) > 0 && <p className="settled">Cuenta pagada</p>}
     </div>
   )
@@ -149,9 +169,12 @@ function BillSummary({ bill }: { bill: Bill }) {
 
 function OrderCard({
   order,
+  position,
   participantName,
 }: {
   order: Order
+  /** Número del pedido dentro de la mesa, contando desde el primero. */
+  position: number
   participantName: (id: string | null) => string
 }) {
   const createdAt = new Intl.DateTimeFormat('es-AR', {
@@ -166,7 +189,7 @@ function OrderCard({
         <span className={`badge status-${order.status}`}>{orderStatusLabels[order.status]}</span>
       </div>
       <p className="muted">
-        {createdAt} · #{order.id.slice(0, 8)}
+        Pedido {position} de la mesa · {createdAt}
       </p>
       {order.status === 'submitted' && (
         <p className="muted">Esperando confirmación del restaurante. Aún no está en cuenta.</p>

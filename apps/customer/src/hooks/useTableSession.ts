@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { participantNameSchema } from '@restaurant-platform/shared'
+import { AppError, participantNameSchema } from '@restaurant-platform/shared'
 import { loadMenu, loadTable } from '@/features/menu-api'
 import { connectSession, joinSession, loadSession } from '@/features/session'
 import { subscribeToTableSession } from '@/features/session-realtime'
@@ -54,8 +54,10 @@ export function useTableSession(token: string) {
 
   const rename = useMutation({
     mutationFn: async () => {
-      const validName = participantNameSchema.parse(name)
-      const result = await joinSession(token, validName)
+      // El mismo límite que revalida customer_join_table_session, con su mensaje.
+      const validName = participantNameSchema.safeParse(name)
+      if (!validName.success) throw new AppError('INVALID_NAME')
+      const result = await joinSession(token, validName.data)
       client.setQueryData(['join', token], result)
       await client.invalidateQueries({ queryKey: ['session', result.id] })
     },

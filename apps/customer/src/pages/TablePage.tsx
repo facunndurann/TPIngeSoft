@@ -266,7 +266,8 @@ export function TableProductPage() {
           ← Volver
         </button>
         <p className="notice">
-          Para personalizar y agregar al carrito necesitás una sesión de mesa abierta.
+          Para personalizar y agregar al carrito, la mesa tiene que estar abierta y sin envíos
+          pendientes.
         </p>
       </section>
     )
@@ -305,7 +306,7 @@ export function TableCartItemPage() {
         </button>
         <p className="notice">
           {product
-            ? 'Para editar este plato necesitás una sesión de mesa abierta.'
+            ? 'Para editar este plato, la mesa tiene que estar abierta y sin envíos pendientes.'
             : 'Este plato ya no está en la carta.'}
         </p>
       </section>

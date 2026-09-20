@@ -19,10 +19,11 @@ export const appErrors = {
 
   // Envío de pedidos (submit_order, abandon_order_request)
   INVALID_ITEMS: { status: 400, retryable: false, message: 'Revisá los productos y cantidades del carrito.' },
-  SESSION_NOT_FOUND: { status: 404, retryable: false, message: 'No encontramos esa sesión de mesa.' },
-  SESSION_CLOSED: { status: 409, retryable: false, message: 'Esta sesión de mesa ya está cerrada.' },
+  SESSION_NOT_FOUND: { status: 404, retryable: false, message: 'No encontramos la cuenta de esa mesa.' },
+  SESSION_CLOSED: { status: 409, retryable: false, message: 'La mesa ya cerró su cuenta.' },
   NOT_PARTICIPANT: { status: 403, retryable: false, message: 'Ingresá desde el QR de esta mesa para realizar pedidos.' },
-  TABLE_UNAVAILABLE: { status: 409, retryable: false, message: 'La mesa o sucursal no está disponible para recibir pedidos.' },
+  INVALID_NAME: { status: 400, retryable: false, message: 'Usá un nombre de 1 a 40 caracteres.' },
+  TABLE_UNAVAILABLE: { status: 409, retryable: false, message: 'Esta mesa no está recibiendo pedidos. Consultá con el personal del restaurante.' },
   PRODUCT_UNAVAILABLE: { status: 409, retryable: false, message: 'Un producto ya no está disponible. Actualizamos la carta para que revises tu carrito.' },
   INVALID_MODIFIERS: { status: 409, retryable: false, message: 'Cambiaron las opciones disponibles de un plato. Revisá su personalización.' },
   INVALID_INGREDIENTS: { status: 409, retryable: false, message: 'Revisá los ingredientes: hay cambios en su disponibilidad o en cuáles se pueden quitar.' },

@@ -13,7 +13,7 @@ type SessionPanelProps = {
   hasPendingSubmission: boolean
   name: string
   onNameChange: (value: string) => void
-  rename: { mutate: () => void; isPending: boolean; isError: boolean }
+  rename: { mutate: () => void; isPending: boolean; isError: boolean; error: unknown }
   onOpenNewSession: () => void
 }
 
@@ -76,7 +76,9 @@ export function SessionPanel({
               </button>
               {rename.isError && (
                 <p role="alert">
-                  No pudimos guardar el nombre. Usá entre 1 y 40 caracteres e intentá nuevamente.
+                  {rename.error instanceof Error
+                    ? rename.error.message
+                    : 'No pudimos guardar tu nombre. Intentá nuevamente.'}
                 </p>
               )}
             </form>
@@ -95,14 +97,14 @@ function ClosedSessionNotice({
   onOpenNewSession: () => void
 }) {
   const message = hasPendingSubmission
-    ? 'Revisá el envío pendiente antes de abrir otra sesión.'
+    ? 'Revisá el envío pendiente antes de empezar de nuevo.'
     : 'Los productos del carrito no se enviarán.'
 
   return (
     <div className="notice">
-      <p>Esta sesión se cerró. Podés consultar sus pedidos y cuenta. {message}</p>
+      <p>La mesa cerró su cuenta. Podés seguir consultando sus pedidos. {message}</p>
       <button disabled={hasPendingSubmission} onClick={onOpenNewSession}>
-        Abrir una nueva sesión
+        Empezar de nuevo en esta mesa
       </button>
     </div>
   )
