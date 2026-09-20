@@ -19,6 +19,8 @@ type CartPanelProps = {
   reviewing?: boolean
   refreshMenu: () => Promise<unknown>
   onSubmitted: () => void
+  /** Avisos al comensal; los muestra el Toast de la mesa. */
+  onAnnounce: (message: string) => void
 }
 
 export function CartPanel({
@@ -29,6 +31,7 @@ export function CartPanel({
   reviewing = false,
   refreshMenu,
   onSubmitted,
+  onAnnounce,
 }: CartPanelProps) {
   const { token = '' } = useParams()
   const navigate = useNavigate()
@@ -128,7 +131,11 @@ export function CartPanel({
           locked={phase.kind !== 'editing' || !phase.editable}
           onQuantityChange={(quantity) => cart.save(cartKey, { ...item, quantity })}
           onEdit={() => navigate(cartItemPath(token, item.id))}
-          onRemove={() => cart.remove(cartKey, item.id)}
+          onRemove={() => {
+            cart.remove(cartKey, item.id)
+            const name = menu?.productsById.get(item.productId)?.name
+            onAnnounce(name ? `${name} se quitó de tu carrito` : 'El plato se quitó de tu carrito')
+          }}
         />
       ))}
 

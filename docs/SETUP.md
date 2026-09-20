@@ -208,6 +208,7 @@ Recorrido de aceptación:
 6. Cambiar el nombre, precio u opciones de un producto después de pedirlo. El pedido ya enviado conserva sus snapshots.
 7. Avanzar el pedido desde el **POS independiente** (`http://localhost:5175`): **Preparar**, **Marcar listo** y **Entregar**. Deben actualizarse ambos comensales. Solo miembros del restaurante pueden hacerlo. La secuencia es `submitted → accepted → in_preparation → ready → delivered`; `cancelled` se permite antes de entregar y elimina ese importe de la cuenta. Repetir un estado no duplica sus registros.
 8. Consultar **Pedidos y cuenta**: **Enviado, por confirmar** corresponde a pedidos todavía sin recepción del POS; **En cuenta** incluye los aceptados y posteriores; **Pagado** suma solo pagos aprobados; **Pendiente de pago** es la diferencia, con mínimo cero. La cuenta saldada requiere consumo positivo, saldo cero y ningún pedido esperando recepción. El cierre de sesión se hace desde el POS (Fase 5, abajo).
+9. Verificar que el comensal vea el refresco automático: **Pedidos y cuenta** y la carta muestran **Actualizado hace …** y **Actualizando …** mientras hay una lectura en curso, con un botón para pedirla a mano. Quitar un plato del carrito avisa igual que agregarlo. Al cambiar la división desde un navegador, el otro debe ver el aviso con el nombre de quien la cambió y, en el panel, quién la cambió y cuándo.
 
 Pruebas reproducibles:
 

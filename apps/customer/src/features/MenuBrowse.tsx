@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
 import { formatPrice, productMedia } from '@restaurant-platform/shared'
 import { MediaCarousel } from '@/features/MediaCarousel'
@@ -10,9 +11,11 @@ type MenuBrowseProps = {
   token: string
   menu: Menu
   canEdit: boolean
+  /** Estado del refresco de la carta; lo arma quien tiene la consulta. */
+  freshness?: ReactNode
 }
 
-export function MenuBrowse({ token, menu, canEdit }: MenuBrowseProps) {
+export function MenuBrowse({ token, menu, canEdit, freshness }: MenuBrowseProps) {
   const { copy } = useMenuDesign()
   const { search: locationSearch } = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -47,6 +50,7 @@ export function MenuBrowse({ token, menu, canEdit }: MenuBrowseProps) {
             setSearchParams(next, { replace: true })
           }}
         />
+        {freshness}
       </div>
 
       <div className="categories" aria-label="Categorías">

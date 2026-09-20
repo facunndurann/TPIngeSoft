@@ -98,7 +98,8 @@ begin
   perform pg_temp.expect_split_error(sid, 'percentages', '[]'::jsonb, 'INVALID_SPLIT');
 
   select * into saved from public.table_sessions where id = sid;
-  if saved.split_type <> 'none' or saved.split_allocations <> '{}'::jsonb then
+  if saved.split_type <> 'none' or saved.split_allocations <> '{}'::jsonb
+     or saved.split_updated_by is not null or saved.split_updated_at is not null then
     raise exception 'Rejected splits should leave the session untouched'; end if;
 
   -- ---------- Guardados válidos ----------
@@ -109,6 +110,9 @@ begin
   if saved.split_type <> 'percentages'
      or (saved.split_allocations ->> ana_participant::text)::numeric <> 33.34 then
     raise exception 'Percentages split was not stored'; end if;
+  -- El cambio queda firmado: la app del comensal muestra quién lo hizo y cuándo.
+  if saved.split_updated_by <> ana or saved.split_updated_at is null then
+    raise exception 'A saved split should record its author'; end if;
 
   -- Volver a otro modo limpia las asignaciones: no quedan datos viejos.
   perform set_config('request.jwt.claim.sub', beto::text, true);
@@ -116,12 +120,15 @@ begin
   select * into saved from public.table_sessions where id = sid;
   if saved.split_type <> 'none' or saved.split_allocations <> '{}'::jsonb then
     raise exception 'Switching away from percentages should clear allocations'; end if;
+  -- La firma es del último que cambió, no del primero.
+  if saved.split_updated_by <> beto then
+    raise exception 'The author should be the diner who changed the split last'; end if;
 
   perform public.update_session_split(sid, 'equal', '{}'::jsonb);
   if (select split_type from public.table_sessions where id = sid) <> 'equal' then
     raise exception 'Equal split was not stored'; end if;
 
-  raise notice 'Split SQL assertions passed (enum column, auth, membership, allocation shape, cleanup)';
+  raise notice 'Split SQL assertions passed (enum column, auth, membership, allocation shape, cleanup, authorship)';
 end;
 $$;
 

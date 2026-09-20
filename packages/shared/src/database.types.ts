@@ -1198,6 +1198,8 @@ export type Database = {
           restaurant_id: string
           split_allocations: Json
           split_type: Database["public"]["Enums"]["split_type"]
+          split_updated_at: string | null
+          split_updated_by: string | null
           status: Database["public"]["Enums"]["session_status"]
           table_id: string
         }
@@ -1212,6 +1214,8 @@ export type Database = {
           restaurant_id: string
           split_allocations?: Json
           split_type?: Database["public"]["Enums"]["split_type"]
+          split_updated_at?: string | null
+          split_updated_by?: string | null
           status?: Database["public"]["Enums"]["session_status"]
           table_id: string
         }
@@ -1226,6 +1230,8 @@ export type Database = {
           restaurant_id?: string
           split_allocations?: Json
           split_type?: Database["public"]["Enums"]["split_type"]
+          split_updated_at?: string | null
+          split_updated_by?: string | null
           status?: Database["public"]["Enums"]["session_status"]
           table_id?: string
         }

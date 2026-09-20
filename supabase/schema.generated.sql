@@ -1342,7 +1342,10 @@ begin
   if p_split_type <> 'percentages' then
     if allocations <> '{}'::jsonb then raise exception 'INVALID_SPLIT'; end if;
     update public.table_sessions
-      set split_type = p_split_type, split_allocations = '{}'::jsonb
+      set split_type = p_split_type,
+          split_allocations = '{}'::jsonb,
+          split_updated_by = auth.uid(),
+          split_updated_at = now()
       where id = p_session_id;
     return;
   end if;
@@ -1372,7 +1375,10 @@ begin
   if total <> 100 then raise exception 'INVALID_SPLIT'; end if;
 
   update public.table_sessions
-    set split_type = p_split_type, split_allocations = allocations
+    set split_type = p_split_type,
+        split_allocations = allocations,
+        split_updated_by = auth.uid(),
+        split_updated_at = now()
     where id = p_session_id;
 end;
 $$;
@@ -1723,7 +1729,9 @@ CREATE TABLE IF NOT EXISTS "public"."table_sessions" (
     "assigned_employee_id" "uuid",
     "bill_requested_at" timestamp with time zone,
     "in_person_payment_requested_at" timestamp with time zone,
-    "assigned_user_id" "uuid"
+    "assigned_user_id" "uuid",
+    "split_updated_by" "uuid",
+    "split_updated_at" timestamp with time zone
 );
 
 
@@ -1739,6 +1747,14 @@ COMMENT ON COLUMN "public"."table_sessions"."bill_requested_at" IS 'Momento en q
 
 
 COMMENT ON COLUMN "public"."table_sessions"."in_person_payment_requested_at" IS 'Momento en que la mesa pidió cobro presencial. La acción del cliente se incorpora en MI-46.';
+
+
+
+COMMENT ON COLUMN "public"."table_sessions"."split_updated_by" IS 'Comensal que cambió la división por última vez; la app lo muestra como autor del cambio.';
+
+
+
+COMMENT ON COLUMN "public"."table_sessions"."split_updated_at" IS 'Momento del último cambio de división. Null mientras la mesa nunca la cambió.';
 
 
 
@@ -2581,6 +2597,11 @@ ALTER TABLE ONLY "public"."table_sessions"
 
 ALTER TABLE ONLY "public"."table_sessions"
     ADD CONSTRAINT "table_sessions_restaurant_id_fkey" FOREIGN KEY ("restaurant_id") REFERENCES "public"."restaurants"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."table_sessions"
+    ADD CONSTRAINT "table_sessions_split_updated_by_fkey" FOREIGN KEY ("split_updated_by") REFERENCES "auth"."users"("id") ON DELETE SET NULL;
 
 
 

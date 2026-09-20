@@ -9,6 +9,7 @@ import {
 } from 'react-router'
 import { formatPrice, MENU_DESIGNS } from '@restaurant-platform/shared'
 import { ErrorMessage } from '@/components/ErrorMessage'
+import { FreshnessNote } from '@/components/FreshnessNote'
 import { TOAST_DURATION_MS, Toast } from '@/components/Toast'
 import { cartKeyFor } from '@/features/cart'
 import { CartPanel } from '@/features/CartPanel'
@@ -190,7 +191,21 @@ function TableApp({ token }: { token: string }) {
 export function TableMenuPage() {
   const { token, menu, canEdit } = useTable()
   if (!menu.data) return null
-  return <MenuBrowse token={token} menu={menu.data} canEdit={canEdit} />
+  return (
+    <MenuBrowse
+      token={token}
+      menu={menu.data}
+      canEdit={canEdit}
+      freshness={
+        <FreshnessNote
+          label="la carta"
+          updatedAt={menu.dataUpdatedAt || undefined}
+          isFetching={menu.isFetching}
+          onRefresh={() => { void menu.refetch() }}
+        />
+      }
+    />
+  )
 }
 
 export function TableCartPage({ reviewing = false }: { reviewing?: boolean }) {
@@ -211,6 +226,7 @@ export function TableCartPage({ reviewing = false }: { reviewing?: boolean }) {
       sessionOpen={sessionOpen}
       reviewing={reviewing}
       refreshMenu={() => menu.refetch({ throwOnError: true })}
+      onAnnounce={setAnnouncement}
       onSubmitted={() => {
         setAnnouncement(
           'Tu pedido fue enviado. Podés seguir su estado y consultar la cuenta de la mesa.',
@@ -312,7 +328,7 @@ export function TableCartItemPage() {
 }
 
 export function TableOrdersPage() {
-  const { sessionId, session, userId } = useTable()
+  const { sessionId, session, userId, setAnnouncement } = useTable()
   return (
     <SessionOrders
       sessionId={sessionId}
@@ -320,6 +336,7 @@ export function TableOrdersPage() {
       participants={session.data?.participants ?? []}
       userId={userId}
       closed={session.data?.status === 'closed'}
+      onAnnounce={setAnnouncement}
     />
   )
 }

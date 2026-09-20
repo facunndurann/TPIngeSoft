@@ -56,6 +56,9 @@ button[aria-pressed=true], .tabs a[aria-current=page], .categories a[aria-curren
 }
 .menu-heading { margin-bottom: 20px; }
 .menu-heading input { width: 100%; margin-top: 8px; }
+.freshness { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 12px 0 0; }
+.freshness p { margin: 0; color: var(--menu-muted); font-size: 13px; }
+.freshness button { font-size: 13px; }
 .categories { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0 20px; margin-bottom: 12px; }
 .categories button, .categories a { white-space: nowrap; border-radius: var(--menu-radius-pill); display: inline-flex; align-items: center; }
 section { margin-bottom: 28px; }

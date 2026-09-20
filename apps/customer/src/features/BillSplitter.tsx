@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { allocationTotal, formatPrice, type SessionSplit, sessionSplitSchema, SPLIT_PERCENTAGE_TOTAL, splitBill, type SplitBill, type SplitOrder, type SplitParticipant, splitTypeDescriptions, splitTypeLabels, splitTypes } from '@restaurant-platform/shared'
 
+import { AGE_TICK_MS, relativeAge } from '@/features/freshness'
 import { updateSessionSplit } from '@/features/orders-api'
+import { useNow } from '@/hooks/useNow'
 
 type BillSplitterProps = {
   sessionId: string
@@ -12,6 +14,11 @@ type BillSplitterProps = {
   orders: readonly SplitOrder[]
   participants: readonly (SplitParticipant & { display_name: string; user_id: string })[]
   userId?: string
+  /** Autor (usuario) y momento del último cambio, como los firma update_session_split. */
+  updatedBy?: string | null
+  updatedAt?: string | null
+  /** Avisos al comensal; los muestra el Toast de la mesa. */
+  onAnnounce: (message: string) => void
 }
 
 /**
@@ -26,8 +33,12 @@ export function BillSplitter({
   orders,
   participants,
   userId,
+  updatedBy,
+  updatedAt,
+  onAnnounce,
 }: BillSplitterProps) {
   const queryClient = useQueryClient()
+  const now = useNow(AGE_TICK_MS)
   // `null` es la vista de lectura; un borrador abre el editor.
   const [draft, setDraft] = useState<SessionSplit | null>(null)
 
@@ -43,6 +54,30 @@ export function BillSplitter({
   const shares = splitBill(bill, orders, participants, active)
   const amountOf = (participantId: string) =>
     shares.find((share) => share.participantId === participantId)?.amount ?? 0
+
+  // El autor se guarda como usuario: el nombre sale de su participación actual,
+  // así un cambio de nombre no deja la autoría con el nombre viejo.
+  const author = participants.find((participant) => participant.user_id === updatedBy)
+  const changedByMe = !!updatedBy && updatedBy === userId
+  const changedAt = updatedAt ? Date.parse(updatedAt) : NaN
+  const lastChange =
+    author && Number.isFinite(changedAt)
+      ? `${changedByMe ? 'La cambiaste vos' : `La cambió ${author.display_name}`} ${relativeAge(changedAt, now)}.`
+      : undefined
+
+  // La división es de la mesa: el cambio de otro comensal llega por Realtime sin
+  // que este haya tocado nada. Se compara la versión guardada, no el borrador.
+  const seen = useRef<string | undefined>(undefined)
+  const revision = `${updatedAt ?? ''}|${split.type}|${JSON.stringify(split.allocations)}`
+
+  useEffect(() => {
+    const previous = seen.current
+    seen.current = revision
+    // El primer valor es lo que ya estaba al abrir la pantalla: no es un cambio.
+    if (previous === undefined || previous === revision) return
+    if (!author || changedByMe) return
+    onAnnounce(`${author.display_name} cambió la división de la cuenta.`)
+  }, [revision, author, changedByMe, onAnnounce])
 
   const validation = draft ? sessionSplitSchema.safeParse(draft) : null
   const assigned = draft ? allocationTotal(draft.allocations) : 0
@@ -67,6 +102,7 @@ export function BillSplitter({
     <section className="bill-panel" aria-label="División de la cuenta">
       <h3>{draft ? '¿Cómo quieren dividir la cuenta?' : 'División de la cuenta'}</h3>
       <p className="muted">{splitTypeDescriptions[active.type]}</p>
+      {!draft && lastChange && <p className="muted">{lastChange}</p>}
 
       {draft && (
         <div className="split-modes" role="group" aria-label="Forma de dividir">

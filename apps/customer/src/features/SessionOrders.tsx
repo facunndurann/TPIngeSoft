@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { formatPrice, orderStatusLabels, parseSessionSplit, type Tables } from '@restaurant-platform/shared'
+import { FreshnessNote } from '@/components/FreshnessNote'
 import { BillSplitter } from '@/features/BillSplitter'
+import { oldestUpdate } from '@/features/freshness'
 
 import { loadBill, loadOrders } from '@/features/orders-api'
 import type { loadSession } from '@/features/session'
@@ -17,9 +19,18 @@ type SessionOrdersProps = {
   participants: Participant[]
   userId?: string
   closed: boolean
+  /** Avisos al comensal; los muestra el Toast de la mesa. */
+  onAnnounce: (message: string) => void
 }
 
-export function SessionOrders({ sessionId, session, participants, userId, closed }: SessionOrdersProps) {
+export function SessionOrders({
+  sessionId,
+  session,
+  participants,
+  userId,
+  closed,
+  onAnnounce,
+}: SessionOrdersProps) {
   const orders = useQuery({
     queryKey: ['orders', sessionId],
     queryFn: () => loadOrders(sessionId!),
@@ -57,6 +68,16 @@ export function SessionOrders({ sessionId, session, participants, userId, closed
         {closed && 'Esta sesión está cerrada; podés seguir consultando el detalle.'}
       </p>
 
+      <FreshnessNote
+        label="los pedidos y la cuenta"
+        updatedAt={oldestUpdate(orders.dataUpdatedAt, bill.dataUpdatedAt)}
+        isFetching={orders.isFetching || bill.isFetching}
+        onRefresh={() => {
+          void orders.refetch()
+          void bill.refetch()
+        }}
+      />
+
       {bill.isPending && <p role="status">Actualizando la cuenta…</p>}
       {bill.isError && (
         <div className="notice" role="alert">
@@ -87,6 +108,9 @@ export function SessionOrders({ sessionId, session, participants, userId, closed
           orders={orders.data ?? []}
           participants={participants}
           userId={userId}
+          updatedBy={session.split_updated_by}
+          updatedAt={session.split_updated_at}
+          onAnnounce={onAnnounce}
         />
       )}
     </section>
