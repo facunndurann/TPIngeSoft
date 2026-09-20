@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { formatPrice, orderStatusLabels, parseSessionSplit, type Tables } from '@restaurant-platform/shared'
+import { plateCount } from '@/features/cart'
 import { FreshnessNote } from '@/components/FreshnessNote'
 import type { Announce } from '@/features/announcements'
 import { BillSplitter } from '@/features/BillSplitter'
@@ -67,10 +68,9 @@ export function SessionOrders({
     <section aria-label="Pedidos y cuenta de la mesa">
       <p className="eyebrow">TODOS EN LA MISMA MESA</p>
       <h2>Pedidos y cuenta</h2>
-      <p className="muted">
-        Los pedidos de todos los comensales se actualizan automáticamente.{' '}
-        {closed && 'La mesa ya cerró su cuenta; podés seguir consultando el detalle.'}
-      </p>
+      {closed && (
+        <p className="muted">La mesa ya cerró su cuenta; podés seguir consultando el detalle.</p>
+      )}
 
       <FreshnessNote
         label="los pedidos y la cuenta"
@@ -189,29 +189,40 @@ function OrderCard({
     timeStyle: 'short',
   }).format(new Date(order.created_at))
 
+  const plates = order.order_items.reduce((sum, item) => sum + item.quantity, 0)
+
   return (
     <article className="order-card">
-      <div className="order-heading">
-        <h3>Pedido de {participantName(order.submitted_by)}</h3>
-        <span className={`badge status-${order.status}`}>{orderStatusLabels[order.status]}</span>
-      </div>
-      <p className="muted">
-        Pedido {position} de la mesa · {createdAt}
-      </p>
-      {order.status === 'submitted' && (
-        <p className="muted">Esperando confirmación del restaurante. Aún no está en cuenta.</p>
-      )}
-      {order.status === 'cancelled' && (
-        <p className="muted">Este pedido fue cancelado y no se cobra.</p>
-      )}
-      {order.order_items.map((item) => (
-        <OrderLine key={item.id} item={item} participantName={participantName} />
-      ))}
-      {order.notes && <p>{order.notes}</p>}
-      <div className="total">
-        <span>Total del pedido</span>
-        <strong>{formatPrice(order.total_amount)}</strong>
-      </div>
+      {/* Cerrada por defecto: el resumen ya contesta de quién es, cuánto y cómo va;
+          el detalle plato por plato se abre cuando alguien lo busca. */}
+      <details className="order-details">
+        <summary className="disclosure">
+          <div className="order-summary">
+            <h3>Pedido {position} de la mesa</h3>
+            <p className="muted">
+              {participantName(order.submitted_by)} · {plateCount(plates)} ·{' '}
+              {formatPrice(order.total_amount)} · {createdAt}
+            </p>
+          </div>
+          <span className={`badge status-${order.status}`}>{orderStatusLabels[order.status]}</span>
+          <span className="chevron" aria-hidden="true">›</span>
+        </summary>
+
+        {order.status === 'submitted' && (
+          <p className="muted">Esperando confirmación del restaurante. Aún no está en cuenta.</p>
+        )}
+        {order.status === 'cancelled' && (
+          <p className="muted">Este pedido fue cancelado y no se cobra.</p>
+        )}
+        {order.order_items.map((item) => (
+          <OrderLine key={item.id} item={item} participantName={participantName} />
+        ))}
+        {order.notes && <p>{order.notes}</p>}
+        <div className="total">
+          <span>Total del pedido</span>
+          <strong>{formatPrice(order.total_amount)}</strong>
+        </div>
+      </details>
       {/* La ronda es el caso típico: repetir lo mismo sin rearmarlo plato por plato. */}
       {onReorder && (
         <button onClick={() => onReorder(order)}>Pedir de nuevo</button>

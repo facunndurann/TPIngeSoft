@@ -65,10 +65,24 @@ export function SessionPanel({
 
       {session.data && (
         <>
-          <p>
-            <strong>{displayName}</strong> · {session.data.participants.length} en la mesa
-          </p>
-          <p className="muted">{names}</p>
+          {/* En reposo el panel es una línea: quién sos y cuántos son. Los nombres
+              de la mesa quedan a un toque, sin ocupar el pliegue de la carta. */}
+          <div className="table-people">
+            <details>
+              <summary className="disclosure">
+                <span>
+                  <strong>{displayName}</strong> · {session.data.participants.length} en la mesa
+                </span>
+                <span className="chevron" aria-hidden="true">›</span>
+              </summary>
+              <p className="muted">{names}</p>
+            </details>
+            {named && !editing && session.data.status !== 'closed' && (
+              <button className="text-button" onClick={() => setEditing(true)}>
+                Cambiar mi nombre
+              </button>
+            )}
+          </div>
 
           {session.data.status === 'closed' ? (
             <ClosedSessionNotice
@@ -76,11 +90,7 @@ export function SessionPanel({
               cartCount={cartCount}
               onOpenNewSession={onOpenNewSession}
             />
-          ) : named && !editing ? (
-            <button className="text-button" onClick={() => setEditing(true)}>
-              Cambiar mi nombre
-            </button>
-          ) : (
+          ) : named && !editing ? null : (
             <>
               {/* Se pide antes del primer pedido, con el motivo: un comensal sin
                   nombre no se puede distinguir en la cuenta de la mesa. */}

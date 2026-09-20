@@ -1,6 +1,6 @@
 # App del comensal
 
-React + TypeScript, mobile-first. Entrá por `/m/:qrToken` usando los QR generados por admin.
+React + TypeScript, mobile-first: la carta empieza lo más arriba posible, así que fuera de ella el encabezado va compacto, el panel de la mesa se reduce a una línea y cada pedido llega cerrado con su resumen. Entrá por `/m/:qrToken` usando los QR generados por admin.
 
 Ver [setup y recorrido de aceptación](../../docs/SETUP.md#6-probar-pedidos-y-cuenta-fase-4).
 

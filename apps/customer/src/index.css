@@ -50,10 +50,22 @@ h3, h4 { font-size: 17px; font-weight: 700; }
 p { line-height: 1.6; }
 .shell { max-width: 1000px; margin: auto; padding: 32px 20px 110px; background: var(--menu-bg); color: var(--menu-text); min-height: 100dvh; }
 header { border-bottom: 1px solid var(--menu-border); padding-bottom: 16px; }
+header.compact { padding-bottom: 12px; }
+header.compact h1 { font-size: 17px; font-weight: 700; letter-spacing: 0; margin-bottom: 0; }
+header.compact .muted { font-size: inherit; font-weight: 400; }
 .eyebrow { color: var(--menu-eyebrow); font-size: 11px; font-weight: 750; letter-spacing: .17em; margin-bottom: 12px; font-family: var(--menu-font-display); }
 .badge { display: inline-block; background: var(--menu-badge-bg); color: var(--menu-badge-text); padding: 4px 10px; border-radius: var(--menu-radius-pill); font-size: 12px; margin-left: 8px; }
 .session-panel { margin: 20px 0; background: var(--menu-surface-muted); border-radius: calc(var(--menu-radius) + 4px); padding: 18px; }
 .session-panel .text-button { margin-bottom: 0; }
+.table-people { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.table-people details { flex: 1; min-width: 0; }
+.table-people p { margin: 8px 0 0; }
+/* Un solo aspecto para los bloques que se abren. La flecha la pone el markup y no
+   el marcador nativo, que con contenido en bloque queda descolgado en su propia línea. */
+.disclosure { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; cursor: pointer; list-style: none; }
+.disclosure::-webkit-details-marker { display: none; }
+.chevron { display: inline-block; color: var(--menu-muted); transform: rotate(90deg); transition: transform .2s; }
+[open] > .disclosure .chevron { transform: rotate(-90deg); }
 .muted, small { color: var(--menu-muted); font-size: 13px; }
 .name-form { display: flex; gap: 8px; flex-wrap: wrap; }
 .name-form input { flex: 1; }
@@ -148,6 +160,11 @@ footer { text-align: center; color: var(--menu-muted); font-size: 12px; margin-t
 .order-line p { font-size: 13px; margin-bottom: 6px; }
 /* La última línea del pedido ya cierra con su total: el botón no necesita más aire arriba. */
 .order-card > button { margin-top: 4px; }
+.order-summary { flex: 1; min-width: 0; }
+.order-summary h3 { margin-bottom: 4px; }
+.order-summary p { margin-bottom: 0; }
+/* Abierta, el detalle necesita separarse del resumen que lo destapó. */
+.order-details[open] > summary { margin-bottom: 12px; }
 .status-submitted { background: var(--menu-notice-bg); color: var(--menu-notice-text); }
 .status-in_preparation { background: var(--menu-warning-bg); color: var(--menu-warning-text); }
 .status-ready, .status-delivered { background: var(--menu-success-bg); color: var(--menu-success-text); }

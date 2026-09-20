@@ -155,10 +155,13 @@ function TableApp({ token }: { token: string }) {
         }}
       >
         <MenuShell>
+          {/* La bienvenida es para la carta, que es donde cae el QR: en el resto de
+              las pantallas el encabezado se reduce a decir dónde estás. */}
           <TableHeader
             restaurantName={restaurant.name}
             branchName={branch.name}
             tableLabel={currentTable.label}
+            compact={!atMenu}
           />
 
           <SessionPanel

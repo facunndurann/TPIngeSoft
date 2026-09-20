@@ -387,6 +387,25 @@ test('MenuShell paints catalog tokens, layout and copy for each design', async (
   }
 })
 
+test('the table header welcomes on the menu and is only context elsewhere', async () => {
+  const { createElement } = await import('react')
+  const { renderToStaticMarkup } = await import('react-dom/server')
+  const { TableHeader } = await import('../src/features/TableHeader')
+  const props = { restaurantName: 'La Parrilla', branchName: 'Centro', tableLabel: 'Mesa 4' }
+
+  const welcome = renderToStaticMarkup(createElement(TableHeader, props))
+  assert.match(welcome, /class="eyebrow"/)
+  assert.match(welcome, /<h1>La Parrilla<\/h1>/)
+
+  // Compacto: una línea con el mismo dato, sin eyebrow ni párrafo aparte, y un solo h1.
+  const compact = renderToStaticMarkup(createElement(TableHeader, { ...props, compact: true }))
+  assert.doesNotMatch(compact, /class="eyebrow"/)
+  assert.match(compact, /<header class="compact"><h1>La Parrilla/)
+  assert.match(compact, /Centro/)
+  assert.match(compact, /Mesa 4/)
+  assert.equal((compact.match(/<h1/g) ?? []).length, 1)
+  assert.ok(compact.length < welcome.length)
+})
 test('productMedia classifies each url and mediaElementSrc only tweaks videos', () => {
   const media = productMedia({
     media_urls: ['https://cdn/a.jpg', 'https://cdn/b.MP4', 'https://cdn/c.webm?v=2'],
