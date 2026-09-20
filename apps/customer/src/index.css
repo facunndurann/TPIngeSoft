@@ -57,7 +57,7 @@ header { border-bottom: 1px solid var(--menu-border); padding-bottom: 16px; }
 .muted, small { color: var(--menu-muted); font-size: 13px; }
 .name-form { display: flex; gap: 8px; flex-wrap: wrap; }
 .name-form input { flex: 1; }
-.tabs { display: flex; gap: 10px; margin-bottom: 32px; }
+.tabs { display: flex; gap: 10px; margin-bottom: 20px; position: sticky; top: 0; z-index: 3; background: var(--menu-bg); padding: 12px 0; }
 .tabs a { flex: 1; display: flex; align-items: center; justify-content: center; text-align: center; }
 button[aria-pressed=true], a[aria-current=page], button.primary, a.primary {
   background: var(--menu-accent);
@@ -96,6 +96,10 @@ legend { padding: 0 8px; font-weight: 700; font-family: var(--menu-font-display)
 .cart-item { background: var(--menu-surface); border: 1px solid var(--menu-border); border-radius: calc(var(--menu-radius) + 2px); padding: 20px; margin: 18px 0; }
 .cart-item p { font-size: 14px; }
 .cart-actions, .total { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; }
+.cart-summary { list-style: none; padding: 0; margin: 12px 0 0; }
+.cart-summary li { padding: 10px 0; border-bottom: 1px solid var(--menu-border); }
+.cart-summary li:last-child { border-bottom: none; }
+.cart-summary-line { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .total { font-size: 22px; padding: 18px 0; }
 .cart-bar {
   position: fixed;

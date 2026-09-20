@@ -131,7 +131,7 @@ export function CartPanel({
         <p className="empty">Tu carrito está vacío. Explorá la carta para agregar algo rico.</p>
       )}
 
-      {items.map((item, index) => (
+      {phase.kind === 'editing' && items.map((item, index) => (
         <CartLine
           key={item.id}
           item={item}
@@ -166,7 +166,8 @@ export function CartPanel({
 
       {phase.kind === 'pending' && (
         <PendingSubmission
-          itemCount={phase.submission.snapshot.reduce((sum, item) => sum + item.quantity, 0)}
+          items={phase.submission.snapshot}
+          menu={menu}
           total={phase.submission.input.expectedTotal}
           status={phase.activity}
           onRetry={() => {
@@ -179,14 +180,18 @@ export function CartPanel({
 
       {(phase.kind === 'editing' || phase.kind === 'reviewing') && (
         <>
-          <div className="total">
-            <span>Total estimado</span>
-            <strong>{menu ? formatPrice(total) : '—'}</strong>
-          </div>
-          <p className="muted">
-            Productos sin enviar. Al confirmar, el restaurante recibirá el pedido y validará
-            precios y disponibilidad.
-          </p>
+          {phase.kind === 'editing' && (
+            <>
+              <div className="total">
+                <span>Total estimado</span>
+                <strong>{menu ? formatPrice(total) : '—'}</strong>
+              </div>
+              <p className="muted">
+                Productos sin enviar. Al confirmar, el restaurante recibirá el pedido y validará
+                precios y disponibilidad.
+              </p>
+            </>
+          )}
           {items.length > MAX_CART_LINES && (
             <p className="notice">
               Podés enviar hasta {MAX_CART_LINES} platos distintos por pedido.
@@ -215,10 +220,13 @@ export function CartPanel({
           {phase.kind === 'reviewing' ? (
             <div className="confirmation" aria-label="Confirmación del pedido">
               <h3>Confirmá tu pedido</h3>
-              <p>Revisá los platos, las cantidades y los productos para compartir de arriba.</p>
-              <p>
-                Total revisado: <strong>{formatPrice(phase.review?.total ?? total)}</strong>
-              </p>
+              <p>Esto es lo que va a recibir el restaurante:</p>
+              {/* La revisión se fijó al entrar: es la que respalda el total que se confirma. */}
+              <CartSummary items={phase.review?.items ?? items} menu={menu} />
+              <div className="total">
+                <span>Total revisado</span>
+                <strong>{formatPrice(phase.review?.total ?? total)}</strong>
+              </div>
               {phase.outdated && (
                 <p role="alert" className="notice">
                   La carta o el carrito cambiaron. Volvé a revisar el pedido antes de enviarlo.
@@ -312,14 +320,63 @@ function CartLine({
   )
 }
 
+/**
+ * Lo que se envía, en firme: el mismo contenido de las líneas del carrito pero sin
+ * controles, para que confirmar no obligue a subir a mirar otra cosa.
+ */
+function CartSummary({
+  items,
+  menu,
+  prices = true,
+}: {
+  items: CartItem[]
+  menu?: Menu
+  /** Un envío pendiente se firmó con su propio total: sus líneas no se revalúan con la carta de ahora. */
+  prices?: boolean
+}) {
+  return (
+    <ul className="cart-summary">
+      {items.map((item) => {
+        const product = menu?.productsById.get(item.productId)
+        const options = product ? productOptions(product) : []
+        // Personalizaciones en una línea: en la confirmación se leen, no se editan.
+        const details = [
+          ...item.optionIds.map(
+            (id) => options.find((option) => option.id === id)?.name ?? 'opción por actualizar',
+          ),
+          ...item.removedIds.map(
+            (id) =>
+              `sin ${product?.ingredients.find((ingredient) => ingredient.id === id)?.name ?? 'ingrediente por actualizar'}`,
+          ),
+        ]
+
+        return (
+          <li key={item.id}>
+            <div className="cart-summary-line">
+              <span>
+                {item.quantity} × {product?.name ?? 'Plato del carrito'}
+                {item.isShared && <span className="badge">Para compartir</span>}
+              </span>
+              {prices && <strong>{product ? formatPrice(price(product, item)) : '—'}</strong>}
+            </div>
+            {details.length > 0 && <small>{details.join(' · ')}</small>}
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
 function PendingSubmission({
-  itemCount,
+  items,
+  menu,
   total,
   status,
   onRetry,
   onCancel,
 }: {
-  itemCount: number
+  items: CartItem[]
+  menu?: Menu
   total: number
   status: 'idle' | 'sending' | 'cancelling'
   onRetry: () => void
@@ -329,9 +386,11 @@ function PendingSubmission({
   return (
     <div className="confirmation" aria-live="polite">
       <h3>{status === 'sending' ? 'Enviando tu pedido…' : 'Hay un envío por confirmar'}</h3>
-      <p>
-        {itemCount} productos · {formatPrice(total)}
-      </p>
+      <CartSummary items={items} menu={menu} prices={false} />
+      <div className="total">
+        <span>Total enviado</span>
+        <strong>{formatPrice(total)}</strong>
+      </div>
       <p>
         Conservamos este envío y bloqueamos su edición hasta conocer el resultado. Podés
         reintentarlo sin duplicar el pedido, o cancelarlo si todavía no llegó al restaurante.

@@ -1,7 +1,7 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
-import { buildMenu, cartPrice, price, productOptions, selectionErrors } from '../src/features/menu'
-import type { Menu, MenuRows } from '../src/features/menu'
+import { buildMenu, cartPrice, groupSelectionHint, price, productOptions, selectedInGroup, selectionErrors } from '../src/features/menu'
+import type { Menu, MenuRows, ModifierGroup } from '../src/features/menu'
 import {
   calculateItemPrice,
   DEFAULT_MENU_DESIGN,
@@ -116,6 +116,23 @@ test('a successful response matches submitted lines by value, not by key or opti
   useCart.setState((state) => ({ carts: { ...state.carts, [key]: [reordered] } }))
   useCart.getState().finishSubmission(key, submission.input.requestId)
   assert.deepEqual(useCart.getState().carts[key], [])
+})
+test('a modifier group says where you are, not just what it allows', () => {
+  const group = (min: number, max: number, available = true) => ({
+    id: 'g', name: 'Salsa', min_select: min, max_select: max, is_available: available,
+    options: [{ id: 'a' }, { id: 'b' }, { id: 'c' }],
+  } as unknown as ModifierGroup)
+
+  assert.equal(groupSelectionHint(group(1, 1), []), 'Obligatorio · elegiste 0 de 1 · mínimo 1')
+  assert.equal(groupSelectionHint(group(1, 1), ['a']), 'Obligatorio · elegiste 1 de 1')
+  assert.equal(groupSelectionHint(group(0, 3), ['a', 'b']), 'Opcional · elegiste 2 de 3')
+  assert.equal(groupSelectionHint(group(2, 3), ['a']), 'Obligatorio · elegiste 1 de 3 · mínimo 2')
+  // Al llegar al techo se explica por qué el resto quedó deshabilitado.
+  assert.equal(groupSelectionHint(group(0, 2), ['a', 'b']), 'Opcional · elegiste 2 de 2 · llegaste al máximo')
+  assert.equal(groupSelectionHint(group(1, 2, false), ['a']), 'Obligatorio · elegiste 1 de 2 · Agotado')
+  // Solo cuenta lo elegido en este grupo, no en otro del mismo plato.
+  assert.equal(groupSelectionHint(group(0, 3), ['z']), 'Opcional · elegiste 0 de 3')
+  assert.equal(selectedInGroup(group(0, 3), ['a', 'z']), 1)
 })
 test('the cart phase is the single source for what the diner can do', () => {
   const item = { ...selection, id: 'line', productId: 'p' }

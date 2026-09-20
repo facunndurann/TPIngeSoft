@@ -84,6 +84,31 @@ export function productOptions(product: Product): ModifierOption[] {
   return product.groups.flatMap((group) => group.options)
 }
 
+/** Cuántas opciones de este grupo están elegidas. */
+export function selectedInGroup(group: ModifierGroup, optionIds: string[]): number {
+  return group.options.filter((option) => optionIds.includes(option.id)).length
+}
+
+/**
+ * Cómo va un grupo de opciones, sin hacer contar al comensal: lo elegido sobre
+ * el techo, qué falta para el mínimo y por qué el resto quedó deshabilitado al
+ * llegar al máximo. Reemplaza al "Elegí 1 a 2", que no decía en qué punto estaba.
+ */
+export function groupSelectionHint(group: ModifierGroup, optionIds: string[]): string {
+  const chosen = selectedInGroup(group, optionIds)
+  const parts = [
+    group.min_select > 0 ? 'Obligatorio' : 'Opcional',
+    `elegiste ${chosen} de ${group.max_select}`,
+  ]
+
+  if (chosen < group.min_select) parts.push(`mínimo ${group.min_select}`)
+  // En un grupo de una sola opción, elegir otra reemplaza: no hay techo que avisar.
+  else if (chosen >= group.max_select && group.max_select > 1) parts.push('llegaste al máximo')
+  if (!group.is_available) parts.push('Agotado')
+
+  return parts.join(' · ')
+}
+
 export function selectionErrors(product: Product, selection: Selection): string[] {
   const errors: string[] = []
 

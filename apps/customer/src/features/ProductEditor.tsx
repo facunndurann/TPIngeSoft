@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { formatPrice, productMedia } from '@restaurant-platform/shared'
 import { QuantityField } from '@/components/QuantityField'
 import { MediaCarousel } from '@/features/MediaCarousel'
-import { price, selectionErrors } from '@/features/menu'
+import { groupSelectionHint, price, selectedInGroup, selectionErrors } from '@/features/menu'
 import type { ModifierGroup, ModifierOption, Product } from '@/features/menu'
 import { useMenuDesign } from '@/features/menu-design'
 import type { CartItem } from '@/stores/cart'
@@ -56,12 +56,11 @@ export function ProductEditor({ product, initial, onSave, onClose }: ProductEdit
       )}
 
       {product.groups.map((group) => (
-        <fieldset key={group.id}>
+        // La regla del grupo describe al grupo: se la lee al entrar en él.
+        <fieldset key={group.id} aria-describedby={`group-${group.id}-hint`}>
           <legend>{group.name}</legend>
-          <p className="muted">
-            {group.min_select > 0 ? 'Obligatorio' : 'Opcional'} · Elegí {group.min_select} a{' '}
-            {group.max_select}
-            {!group.is_available && ' · Agotado'}
+          <p className="muted" id={`group-${group.id}-hint`}>
+            {groupSelectionHint(group, item.optionIds)}
           </p>
           {group.options.map((option) => (
             <label className="choice" key={option.id}>
@@ -172,8 +171,7 @@ function IngredientChoice({
 function isOptionDisabled(group: ModifierGroup, option: ModifierOption, optionIds: string[]) {
   const selected = optionIds.includes(option.id)
   const unavailable = !option.is_available || !group.is_available
-  const selectedInGroup = group.options.filter((entry) => optionIds.includes(entry.id)).length
-  const atMax = group.max_select > 1 && selectedInGroup >= group.max_select
+  const atMax = group.max_select > 1 && selectedInGroup(group, optionIds) >= group.max_select
 
   return (unavailable && !selected) || (!selected && atMax)
 }

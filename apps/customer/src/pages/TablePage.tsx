@@ -196,7 +196,7 @@ function TableApp({ token }: { token: string }) {
 
           <Outlet />
 
-          {atMenu && items.length > 0 && (
+          {(atMenu || section === 'orders') && items.length > 0 && (
             <Link className="primary cart-bar" to={cartPath(token)}>
               Ver mi carrito <strong>{formatPrice(total)}</strong>
             </Link>
