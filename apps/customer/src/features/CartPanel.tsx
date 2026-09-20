@@ -4,7 +4,7 @@ import { AppError, formatPrice } from '@restaurant-platform/shared'
 import { useNavigate, useParams } from 'react-router'
 import { QuantityField } from '@/components/QuantityField'
 import type { Announce } from '@/features/announcements'
-import { MAX_CART_LINES, cartPhase } from '@/features/cart'
+import { MAX_CART_LINES, cartPhase, plateCount } from '@/features/cart'
 import type { Review } from '@/features/cart'
 import { cartPrice, price, productOptions, selectionErrors } from '@/features/menu'
 import type { Menu } from '@/features/menu'
@@ -150,6 +150,24 @@ export function CartPanel({
           }}
         />
       ))}
+
+      {phase.kind === 'editing' && phase.editable && items.length > 1 && (
+        <div className="cart-actions">
+          <button
+            className="text-button"
+            onClick={() => {
+              const discarded = items
+              cart.clear(cartKey)
+              // El reverso está en el aviso: vaciar de más no cuesta nada.
+              onAnnounce(`Vaciamos tu carrito (${plateCount(discarded.length)})`, () =>
+                cart.restoreAll(cartKey, discarded),
+              )
+            }}
+          >
+            Vaciar carrito
+          </button>
+        </div>
+      )}
 
       {send.isError && (
         <p className="notice" role="alert">

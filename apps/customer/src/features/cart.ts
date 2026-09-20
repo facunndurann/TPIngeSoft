@@ -6,6 +6,11 @@ import type { CartItem, PendingSubmission } from '../stores/cart'
 /** Líneas distintas por pedido; es el mismo máximo que valida submitOrderSchema. */
 export const MAX_CART_LINES = 50
 
+/** "3 platos" / "1 plato": el plural aparece en los avisos del carrito. */
+export function plateCount(count: number) {
+  return `${count} ${count === 1 ? 'plato' : 'platos'}`
+}
+
 /**
  * Clave persistida del carrito: uno por comensal dentro de cada sesión de mesa.
  * Es el único lugar que conoce el formato; cambiarlo deja huérfanos los envíos guardados.

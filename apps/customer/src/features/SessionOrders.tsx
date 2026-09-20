@@ -22,6 +22,8 @@ type SessionOrdersProps = {
   closed: boolean
   /** Avisos al comensal; los muestra el Toast de la mesa. */
   onAnnounce: Announce
+  /** Repite un pedido en el carrito. Ausente cuando la mesa no admite pedir. */
+  onReorder?: (order: Order) => void
 }
 
 export function SessionOrders({
@@ -31,6 +33,7 @@ export function SessionOrders({
   userId,
   closed,
   onAnnounce,
+  onReorder,
 }: SessionOrdersProps) {
   const orders = useQuery({
     queryKey: ['orders', sessionId],
@@ -104,6 +107,7 @@ export function SessionOrders({
           order={order}
           position={orders.data.length - index}
           participantName={participantName}
+          onReorder={onReorder}
         />
       ))}
       {bill.data && session && participants.length > 0 && (
@@ -172,11 +176,13 @@ function OrderCard({
   order,
   position,
   participantName,
+  onReorder,
 }: {
   order: Order
   /** Número del pedido dentro de la mesa, contando desde el primero. */
   position: number
   participantName: (id: string | null) => string
+  onReorder?: (order: Order) => void
 }) {
   const createdAt = new Intl.DateTimeFormat('es-AR', {
     dateStyle: 'short',
@@ -206,6 +212,10 @@ function OrderCard({
         <span>Total del pedido</span>
         <strong>{formatPrice(order.total_amount)}</strong>
       </div>
+      {/* La ronda es el caso típico: repetir lo mismo sin rearmarlo plato por plato. */}
+      {onReorder && (
+        <button onClick={() => onReorder(order)}>Pedir de nuevo</button>
+      )}
     </article>
   )
 }

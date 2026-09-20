@@ -12,7 +12,7 @@ import { ErrorMessage } from '@/components/ErrorMessage'
 import { FreshnessNote } from '@/components/FreshnessNote'
 import { Toast } from '@/components/Toast'
 import { type Announce, type Announcement, toastDuration } from '@/features/announcements'
-import { cartKeyFor } from '@/features/cart'
+import { cartKeyFor, plateCount } from '@/features/cart'
 import { CartPanel } from '@/features/CartPanel'
 import { MenuBrowse } from '@/features/MenuBrowse'
 import { cartPrice } from '@/features/menu'
@@ -32,6 +32,7 @@ import {
 import { MenuShell } from '@/features/MenuShell'
 import { MenuDesignContext } from '@/features/menu-design'
 import { rememberTable } from '@/features/last-table'
+import { type OrderedLine, reorderLines } from '@/features/reorder'
 import { TableService } from '@/features/TableService'
 import { useTableSession } from '@/hooks/useTableSession'
 import { useCart } from '@/stores/cart'
@@ -359,7 +360,29 @@ export function TableCartItemPage() {
 }
 
 export function TableOrdersPage() {
-  const { sessionId, session, userId, announce } = useTable()
+  const { sessionId, session, userId, menu, canEdit, cartKey, announce } = useTable()
+  const cart = useCart()
+  const currentMenu = menu.data
+
+  // Repetir un pedido solo se ofrece cuando el carrito acepta cambios y hay carta
+  // con la que revalidarlo: así el botón nunca aparece en un estado que fallaría.
+  const reorder =
+    canEdit && currentMenu
+      ? (order: { order_items: readonly OrderedLine[] }) => {
+          const { items, skipped } = reorderLines(order.order_items, currentMenu)
+          items.forEach((item) => cart.save(cartKey, item))
+
+          const missing = skipped.length ? ` No pudimos repetir: ${skipped.join(', ')}.` : ''
+          if (items.length === 0) {
+            announce(`Este pedido ya no se puede repetir igual.${missing}`)
+            return
+          }
+          announce(`Agregamos ${plateCount(items.length)} a tu carrito.${missing}`, () => {
+            items.forEach((item) => cart.remove(cartKey, item.id))
+          })
+        }
+      : undefined
+
   return (
     <SessionOrders
       sessionId={sessionId}
@@ -368,6 +391,7 @@ export function TableOrdersPage() {
       userId={userId}
       closed={session.data?.status === 'closed'}
       onAnnounce={announce}
+      onReorder={reorder}
     />
   )
 }

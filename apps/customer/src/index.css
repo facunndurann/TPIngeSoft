@@ -88,6 +88,7 @@ ul.notice { padding-left: 32px; list-style: disc; }
 .empty { text-align: center; padding: 45px 15px; color: var(--menu-muted); }
 .editor { max-width: 620px; margin: auto; }
 .text-button { margin-bottom: 20px; }
+.cart-actions .text-button { margin-bottom: 0; margin-left: auto; }
 fieldset { border: 1px solid var(--menu-border); padding: 16px; margin: 24px 0; border-radius: var(--menu-radius); }
 legend { padding: 0 8px; font-weight: 700; font-family: var(--menu-font-display); }
 .choice { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px 0; }
@@ -145,6 +146,8 @@ footer { text-align: center; color: var(--menu-muted); font-size: 12px; margin-t
 .order-heading .badge { margin-left: 0; }
 .order-line { border-bottom: 1px solid var(--menu-border); padding: 18px 0; }
 .order-line p { font-size: 13px; margin-bottom: 6px; }
+/* La última línea del pedido ya cierra con su total: el botón no necesita más aire arriba. */
+.order-card > button { margin-top: 4px; }
 .status-submitted { background: var(--menu-notice-bg); color: var(--menu-notice-text); }
 .status-in_preparation { background: var(--menu-warning-bg); color: var(--menu-warning-text); }
 .status-ready, .status-delivered { background: var(--menu-success-bg); color: var(--menu-success-text); }

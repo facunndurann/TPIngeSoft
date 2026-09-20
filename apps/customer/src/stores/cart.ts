@@ -13,6 +13,7 @@ type CartState = {
   save: (key: string, item: CartItem) => void
   remove: (key: string, id: string) => void
   restore: (key: string, item: CartItem, index: number) => void
+  restoreAll: (key: string, items: CartItem[]) => void
   clear: (key: string) => void
   beginSubmission: (key: string, sessionId: string, expectedTotal: number) => PendingSubmission | undefined
   finishSubmission: (key: string, requestId: string) => void
@@ -56,6 +57,16 @@ export const useCart = create<CartState>()(
           // Vuelve a su posición original; si el carrito se acortó, al final.
           next.splice(Math.min(index, next.length), 0, item)
           return { carts: { ...state.carts, [key]: next } }
+        }),
+
+      restoreAll: (key, items) =>
+        set((state) => {
+          if (state.submissions[key]) return state
+          const current = state.carts[key] ?? []
+          // Lo agregado después de vaciar se conserva y los recuperados vuelven
+          // adelante, que es donde estaban. Deshacer dos veces no duplica nada.
+          const kept = current.filter((item) => !items.some((entry) => entry.id === item.id))
+          return { carts: { ...state.carts, [key]: [...items, ...kept] } }
         }),
 
       clear: (key) =>
