@@ -101,6 +101,15 @@ CREATE TYPE "public"."pos_type" AS ENUM (
 ALTER TYPE "public"."pos_type" OWNER TO "postgres";
 
 
+CREATE TYPE "public"."session_request_kind" AS ENUM (
+    'bill',
+    'in_person_payment'
+);
+
+
+ALTER TYPE "public"."session_request_kind" OWNER TO "postgres";
+
+
 CREATE TYPE "public"."session_status" AS ENUM (
     'open',
     'closed'
@@ -722,6 +731,66 @@ $$;
 ALTER FUNCTION "public"."pos_open_table_session"("p_table_id" "uuid") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."pos_resolve_session_request"("p_session_id" "uuid", "p_kind" "public"."session_request_kind") RETURNS timestamp with time zone
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  target public.table_sessions;
+  bid uuid;
+  requested timestamptz;
+begin
+  if auth.uid() is null then raise exception 'AUTH_REQUIRED'; end if;
+  if p_session_id is null or p_kind is null then raise exception 'INVALID_REQUEST'; end if;
+  -- Igual que el cierre: la autorización se resuelve antes de informar si la
+  -- sesión existe, y antes de bloquear la fila.
+  if not exists (select 1 from profiles where id = auth.uid())
+    or not public.can_read_session(p_session_id, 'sessions.attend')
+    then raise exception 'FORBIDDEN'; end if;
+
+  select * into target from public.table_sessions where id = p_session_id for update;
+  if not found then raise exception 'SESSION_NOT_FOUND'; end if;
+  select branch_id into bid from public.tables
+    where id = target.table_id and restaurant_id = target.restaurant_id;
+  if bid is null or not public.has_permission(target.restaurant_id, 'sessions.attend', bid)
+    then raise exception 'FORBIDDEN'; end if;
+
+  requested := case p_kind
+    when 'bill' then target.bill_requested_at
+    else target.in_person_payment_requested_at end;
+  -- Nada que atender: sin fila de auditoría, para que dos mozos tocando el
+  -- mismo botón no registren dos atenciones de una sola solicitud. Tampoco se
+  -- pisa la confirmación que ya está viendo la mesa.
+  if requested is null then return null; end if;
+
+  update public.table_sessions set
+    bill_requested_at = case
+      when p_kind = 'bill' then null else bill_requested_at end,
+    bill_attended_at = case
+      when p_kind = 'bill' then now() else bill_attended_at end,
+    in_person_payment_requested_at = case
+      when p_kind = 'in_person_payment' then null else in_person_payment_requested_at end,
+    in_person_payment_attended_at = case
+      when p_kind = 'in_person_payment' then now() else in_person_payment_attended_at end,
+    -- Atender la mesa es operarla: queda como responsable quien fue.
+    assigned_user_id = auth.uid()
+  where id = target.id;
+
+  perform public.record_pos_action(
+    target.restaurant_id, bid, 'session.request_attended', null, target.id,
+    jsonb_build_object('kind', p_kind, 'requestedAt', requested));
+  return requested;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."pos_resolve_session_request"("p_session_id" "uuid", "p_kind" "public"."session_request_kind") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."pos_resolve_session_request"("p_session_id" "uuid", "p_kind" "public"."session_request_kind") IS 'MI-47: marca atendida la solicitud de una mesa y la audita. Devuelve la hora que tenía la solicitud, o null si no había ninguna. Errores: AUTH_REQUIRED, INVALID_REQUEST, FORBIDDEN, SESSION_NOT_FOUND.';
+
+
+
 CREATE OR REPLACE FUNCTION "public"."pos_transition_order"("p_order_id" "uuid", "p_status" "public"."order_status") RETURNS "uuid"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -848,6 +917,62 @@ ALTER FUNCTION "public"."reorder_categories"("p_restaurant_id" "uuid", "p_catego
 
 
 COMMENT ON FUNCTION "public"."reorder_categories"("p_restaurant_id" "uuid", "p_category_ids" "uuid"[]) IS 'Members only; the list must contain exactly the current categories. Errors: AUTH_REQUIRED, FORBIDDEN, STALE_DATA.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."request_session_service"("p_session_id" "uuid", "p_kind" "public"."session_request_kind") RETURNS timestamp with time zone
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  target public.table_sessions;
+  requested timestamptz;
+begin
+  if auth.uid() is null then raise exception 'AUTH_REQUIRED'; end if;
+  if p_session_id is null or p_kind is null then raise exception 'INVALID_REQUEST'; end if;
+  -- Pedir la cuenta es del comensal. Un empleado atiende la mesa desde el POS,
+  -- igual que no puede sumarse a una sesión por QR (join_table_session).
+  if exists (select 1 from profiles where id = auth.uid()) then raise exception 'FORBIDDEN'; end if;
+
+  -- Se bloquea la fila: dos comensales tocando el botón a la vez dejan una sola
+  -- solicitud, con la hora del primero.
+  select * into target from public.table_sessions where id = p_session_id for update;
+  if not found then raise exception 'SESSION_NOT_FOUND'; end if;
+  if target.status <> 'open' then raise exception 'SESSION_CLOSED'; end if;
+  if not exists (
+    select 1 from public.session_participants
+    where session_id = p_session_id and user_id = auth.uid()
+  ) then raise exception 'NOT_PARTICIPANT'; end if;
+
+  requested := case p_kind
+    when 'bill' then target.bill_requested_at
+    else target.in_person_payment_requested_at end;
+  -- Ya hay una solicitud viva de este tipo: se devuelve la misma hora sin
+  -- escribir, así el plano tampoco se despierta por un toque repetido.
+  if requested is not null then return requested; end if;
+
+  requested := now();
+  -- Pedir de nuevo borra la confirmación anterior: lo último que pasó es que la
+  -- mesa volvió a llamar.
+  update public.table_sessions set
+    bill_requested_at = case
+      when p_kind = 'bill' then requested else bill_requested_at end,
+    bill_attended_at = case
+      when p_kind = 'bill' then null else bill_attended_at end,
+    in_person_payment_requested_at = case
+      when p_kind = 'in_person_payment' then requested else in_person_payment_requested_at end,
+    in_person_payment_attended_at = case
+      when p_kind = 'in_person_payment' then null else in_person_payment_attended_at end
+  where id = target.id;
+  return requested;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."request_session_service"("p_session_id" "uuid", "p_kind" "public"."session_request_kind") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."request_session_service"("p_session_id" "uuid", "p_kind" "public"."session_request_kind") IS 'MI-38/MI-46: un comensal de la mesa pide la cuenta o cobro presencial. Idempotente: devuelve la hora de la solicitud viva. Errores: AUTH_REQUIRED, INVALID_REQUEST, FORBIDDEN, SESSION_NOT_FOUND, SESSION_CLOSED, NOT_PARTICIPANT.';
 
 
 
@@ -1723,7 +1848,9 @@ CREATE TABLE IF NOT EXISTS "public"."table_sessions" (
     "assigned_employee_id" "uuid",
     "bill_requested_at" timestamp with time zone,
     "in_person_payment_requested_at" timestamp with time zone,
-    "assigned_user_id" "uuid"
+    "assigned_user_id" "uuid",
+    "bill_attended_at" timestamp with time zone,
+    "in_person_payment_attended_at" timestamp with time zone
 );
 
 
@@ -1739,6 +1866,14 @@ COMMENT ON COLUMN "public"."table_sessions"."bill_requested_at" IS 'Momento en q
 
 
 COMMENT ON COLUMN "public"."table_sessions"."in_person_payment_requested_at" IS 'Momento en que la mesa pidió cobro presencial. La acción del cliente se incorpora en MI-46.';
+
+
+
+COMMENT ON COLUMN "public"."table_sessions"."bill_attended_at" IS 'Momento en que el salón dio por entregada la cuenta que la mesa pidió.';
+
+
+
+COMMENT ON COLUMN "public"."table_sessions"."in_person_payment_attended_at" IS 'Momento en que el salón dio por cobrada la mesa en persona. El pago todavía no se registra como tal: eso llega con MI-49.';
 
 
 
@@ -1828,15 +1963,19 @@ CREATE OR REPLACE VIEW "public"."pos_open_sessions" WITH ("security_invoker"='tr
     "t"."branch_id",
     "b"."name" AS "branch_name",
     COALESCE("p"."names", '{}'::"text"[]) AS "participant_names",
-    "bill"."submitted_amount",
-    "bill"."total_amount",
-    "bill"."paid_amount",
-    "bill"."pending_amount",
+    COALESCE("bill"."submitted_amount", (0)::numeric) AS "submitted_amount",
+    COALESCE("bill"."total_amount", (0)::numeric) AS "total_amount",
+    COALESCE("bill"."paid_amount", (0)::numeric) AS "paid_amount",
+    COALESCE("bill"."pending_amount", (0)::numeric) AS "pending_amount",
+    "s"."bill_requested_at",
+    "s"."bill_attended_at",
+    "s"."in_person_payment_requested_at",
+    "s"."in_person_payment_attended_at",
     "k"."tickets" AS "kitchen_tickets"
    FROM ((((("public"."table_sessions" "s"
      JOIN "public"."tables" "t" ON (("t"."id" = "s"."table_id")))
      JOIN "public"."branches" "b" ON (("b"."id" = "t"."branch_id")))
-     JOIN "public"."session_bills" "bill" ON (("bill"."session_id" = "s"."id")))
+     LEFT JOIN "public"."session_bills" "bill" ON (("bill"."session_id" = "s"."id")))
      LEFT JOIN LATERAL ( SELECT "array_agg"("sp"."display_name" ORDER BY "sp"."joined_at") AS "names"
            FROM "public"."session_participants" "sp"
           WHERE ("sp"."session_id" = "s"."id")) "p" ON (true))
@@ -3043,6 +3182,12 @@ GRANT ALL ON FUNCTION "public"."pos_open_table_session"("p_table_id" "uuid") TO 
 
 
 
+REVOKE ALL ON FUNCTION "public"."pos_resolve_session_request"("p_session_id" "uuid", "p_kind" "public"."session_request_kind") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."pos_resolve_session_request"("p_session_id" "uuid", "p_kind" "public"."session_request_kind") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."pos_resolve_session_request"("p_session_id" "uuid", "p_kind" "public"."session_request_kind") TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."pos_transition_order"("p_order_id" "uuid", "p_status" "public"."order_status") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."pos_transition_order"("p_order_id" "uuid", "p_status" "public"."order_status") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."pos_transition_order"("p_order_id" "uuid", "p_status" "public"."order_status") TO "service_role";
@@ -3062,6 +3207,12 @@ GRANT ALL ON FUNCTION "public"."reject_abandoned_order_request"() TO "service_ro
 REVOKE ALL ON FUNCTION "public"."reorder_categories"("p_restaurant_id" "uuid", "p_category_ids" "uuid"[]) FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."reorder_categories"("p_restaurant_id" "uuid", "p_category_ids" "uuid"[]) TO "authenticated";
 GRANT ALL ON FUNCTION "public"."reorder_categories"("p_restaurant_id" "uuid", "p_category_ids" "uuid"[]) TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."request_session_service"("p_session_id" "uuid", "p_kind" "public"."session_request_kind") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."request_session_service"("p_session_id" "uuid", "p_kind" "public"."session_request_kind") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."request_session_service"("p_session_id" "uuid", "p_kind" "public"."session_request_kind") TO "service_role";
 
 
 

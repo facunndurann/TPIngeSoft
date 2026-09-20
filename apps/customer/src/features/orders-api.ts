@@ -5,6 +5,7 @@ import {
   isAppErrorCode,
   submitOrderErrorSchema,
   submitOrderResultSchema,
+  type SessionRequestKind,
   type SessionSplit,
   type SubmitOrderInput,
   type SubmitOrderResult,
@@ -82,6 +83,18 @@ export async function loadBill(sessionId: string) {
     .single()
   if (error) throw error
   return data
+}
+
+/**
+ * Pide la cuenta o que un mozo venga a cobrar (MI-38/MI-46). Es idempotente:
+ * si ya había una solicitud viva devuelve su hora original sin crear otra.
+ */
+export async function requestSessionService(sessionId: string, kind: SessionRequestKind) {
+  const { error } = await supabase.rpc('request_session_service', {
+    p_session_id: sessionId,
+    p_kind: kind,
+  })
+  if (error) throw fromPostgres(error)
 }
 
 export async function updateSessionSplit(sessionId: string, split: SessionSplit) {

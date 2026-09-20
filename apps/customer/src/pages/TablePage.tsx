@@ -17,6 +17,7 @@ import { cartPrice } from '@/features/menu'
 import { ProductEditor } from '@/features/ProductEditor'
 import { SessionOrders } from '@/features/SessionOrders'
 import { SessionPanel } from '@/features/SessionPanel'
+import { useAttentionAnnouncements } from '@/features/service-requests'
 import { TableHeader } from '@/features/TableHeader'
 import { TableNav } from '@/features/TableNav'
 import {
@@ -84,6 +85,9 @@ function TableApp({ token }: { token: string }) {
   const section = tableSection(location.pathname)
   const atMenu = isMenuIndex(location.pathname)
   const total = menu.data ? cartPrice(menu.data, items) : 0
+
+  // «Ya te cobramos» tiene que llegar aunque el comensal esté mirando la carta.
+  useAttentionAnnouncements(session.data, setAnnouncement)
 
   useEffect(() => {
     window.scrollTo(0, 0)

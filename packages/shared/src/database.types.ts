@@ -1190,9 +1190,11 @@ export type Database = {
         Row: {
           assigned_employee_id: string | null
           assigned_user_id: string | null
+          bill_attended_at: string | null
           bill_requested_at: string | null
           closed_at: string | null
           id: string
+          in_person_payment_attended_at: string | null
           in_person_payment_requested_at: string | null
           opened_at: string
           restaurant_id: string
@@ -1204,9 +1206,11 @@ export type Database = {
         Insert: {
           assigned_employee_id?: string | null
           assigned_user_id?: string | null
+          bill_attended_at?: string | null
           bill_requested_at?: string | null
           closed_at?: string | null
           id?: string
+          in_person_payment_attended_at?: string | null
           in_person_payment_requested_at?: string | null
           opened_at?: string
           restaurant_id: string
@@ -1218,9 +1222,11 @@ export type Database = {
         Update: {
           assigned_employee_id?: string | null
           assigned_user_id?: string | null
+          bill_attended_at?: string | null
           bill_requested_at?: string | null
           closed_at?: string | null
           id?: string
+          in_person_payment_attended_at?: string | null
           in_person_payment_requested_at?: string | null
           opened_at?: string
           restaurant_id?: string
@@ -1340,9 +1346,13 @@ export type Database = {
     Views: {
       pos_open_sessions: {
         Row: {
+          bill_attended_at: string | null
+          bill_requested_at: string | null
           branch_id: string | null
           branch_name: string | null
           id: string | null
+          in_person_payment_attended_at: string | null
+          in_person_payment_requested_at: string | null
           kitchen_tickets: number | null
           opened_at: string | null
           paid_amount: number | null
@@ -1501,6 +1511,13 @@ export type Database = {
         Returns: string
       }
       pos_open_table_session: { Args: { p_table_id: string }; Returns: string }
+      pos_resolve_session_request: {
+        Args: {
+          p_kind: Database["public"]["Enums"]["session_request_kind"]
+          p_session_id: string
+        }
+        Returns: string
+      }
       pos_transition_order: {
         Args: {
           p_order_id: string
@@ -1522,6 +1539,13 @@ export type Database = {
       reorder_categories: {
         Args: { p_category_ids: string[]; p_restaurant_id: string }
         Returns: undefined
+      }
+      request_session_service: {
+        Args: {
+          p_kind: Database["public"]["Enums"]["session_request_kind"]
+          p_session_id: string
+        }
+        Returns: string
       }
       save_employee_account: {
         Args: {
@@ -1653,6 +1677,7 @@ export type Database = {
       payment_mode: "full" | "own" | "equal_split" | "custom"
       payment_status: "pending" | "approved" | "rejected" | "cancelled"
       pos_type: "internal" | "fudo"
+      session_request_kind: "bill" | "in_person_payment"
       session_status: "open" | "closed"
       split_type: "none" | "equal" | "percentages"
     }
@@ -1807,6 +1832,7 @@ export const Constants = {
       payment_mode: ["full", "own", "equal_split", "custom"],
       payment_status: ["pending", "approved", "rejected", "cancelled"],
       pos_type: ["internal", "fudo"],
+      session_request_kind: ["bill", "in_person_payment"],
       session_status: ["open", "closed"],
       split_type: ["none", "equal", "percentages"],
     },

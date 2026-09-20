@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { asAmount, formatElapsed, formatPrice, getPosTableState, isKitchenTicket, type OrderStatus, posTableStateLabels } from '@restaurant-platform/shared'
+import { asAmount, formatElapsed, formatPrice, getPosTableState, isKitchenTicket, type OrderStatus, posTableStateLabels, sessionRequestsOf } from '@restaurant-platform/shared'
 import { ArrowLeft, Clock3, PlayCircle, UserRound, Users } from 'lucide-react'
 import { Badge, Button, EmptyState, ErrorText, Modal, Spinner, SummaryItem, useSaveErrors } from '@restaurant-platform/ui'
 import { useCan, useRestaurant } from '@/context/pos-context'
@@ -15,6 +15,7 @@ import {
   transitionPosOrder,
 } from './api'
 import { OrderTicket } from './OrderTicket'
+import { AttendRequestButtons, ChargedBadge, SessionRequestBadges } from './ServiceRequests'
 import { useNow } from './useNow'
 
 /**
@@ -166,6 +167,14 @@ export function TableCommand() {
             />
           </dl>
 
+          {/* La mesa llamó: se atiende desde la misma comanda, sin volver al plano. */}
+          {sessionRequestsOf(open).length > 0 && (
+            <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3">
+              <SessionRequestBadges session={open} now={now} />
+              <AttendRequestButtons sessionId={open.id} session={open} />
+            </div>
+          )}
+
           <section className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-sm font-semibold text-neutral-800">
@@ -176,9 +185,13 @@ export function TableCommand() {
                   </span>
                 )}
               </h2>
-              {can('sessions.close') && <Button variant="secondary" onClick={() => setClosing(true)}>
-                Cerrar sesión
-              </Button>}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Cobrada y abierta: el mozo que cobró no cierra, avisa a quien sí. */}
+                <ChargedBadge session={open} now={now} />
+                {can('sessions.close') && <Button variant="secondary" onClick={() => setClosing(true)}>
+                  Cerrar sesión
+                </Button>}
+              </div>
             </div>
 
             {orders.isLoading ? (

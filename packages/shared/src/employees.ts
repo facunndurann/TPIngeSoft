@@ -23,7 +23,8 @@ export function employeeEmail(username: string, domain: string): string {
 
 /**
  * Catálogo de permisos. La fuente de verdad son las filas de `role_permissions`
- * (sembradas en 20260919010000_employee_accounts y 20260919060000_pos_session_operations);
+ * (sembradas en 20260919010000_employee_accounts, 20260919060000_pos_session_operations
+ * y 20260920000000_session_service_requests);
  * supabase/tests/orders.integration.mjs falla si esta lista no coincide con ellas.
  *
  * Existe para que un typo como 'session.open' no compile: antes hacía
@@ -42,6 +43,7 @@ export const posPermissions = [
   'orders.read',
   'orders.revert',
   'payments.read',
+  'sessions.attend',
   'sessions.close',
   'sessions.move',
   'sessions.open',

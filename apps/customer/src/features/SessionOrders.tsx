@@ -4,6 +4,7 @@ import { BillSplitter } from '@/features/BillSplitter'
 
 import { loadBill, loadOrders } from '@/features/orders-api'
 import type { loadSession } from '@/features/session'
+import { ServiceRequests } from '@/features/ServiceRequests'
 
 type SessionData = Awaited<ReturnType<typeof loadSession>>
 type Participant = Tables<'session_participants'>
@@ -65,6 +66,7 @@ export function SessionOrders({ sessionId, session, participants, userId, closed
         </div>
       )}
       {bill.data && <BillSummary bill={bill.data} />}
+      {session && <ServiceRequests sessionId={session.id} session={session} closed={closed} />}
 
       {orders.isPending && <p role="status">Cargando los pedidos…</p>}
       {orders.isError && (
