@@ -67,18 +67,19 @@ export function BillSplitter({
       : undefined
 
   // La división es de la mesa: el cambio de otro comensal llega por Realtime sin
-  // que este haya tocado nada. Se compara la versión guardada, no el borrador.
-  const seen = useRef<string | undefined>(undefined)
-  const revision = `${updatedAt ?? ''}|${split.type}|${JSON.stringify(split.allocations)}`
+  // que este haya tocado nada. Cuándo cambió lo dice `split_updated_at`, que
+  // `update_session_split` —único escritor de la división— reescribe en sus dos
+  // ramas: la división no puede moverse sin que ese momento cambie. El ref arranca
+  // con lo que ya estaba al abrir la pantalla, que no es un cambio.
+  const seen = useRef(updatedAt)
 
   useEffect(() => {
     const previous = seen.current
-    seen.current = revision
-    // El primer valor es lo que ya estaba al abrir la pantalla: no es un cambio.
-    if (previous === undefined || previous === revision) return
+    seen.current = updatedAt
+    if (previous === updatedAt) return
     if (!author || changedByMe) return
     announce(`${author.display_name} cambió la división de la cuenta.`)
-  }, [revision, author, changedByMe, announce])
+  }, [updatedAt, author, changedByMe, announce])
 
   const validation = draft ? sessionSplitSchema.safeParse(draft) : null
   const assigned = draft ? allocationTotal(draft.allocations) : 0
