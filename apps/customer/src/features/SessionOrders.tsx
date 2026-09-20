@@ -6,7 +6,6 @@ import {
   paymentMethodLabels,
   paymentModeLabels,
   paymentStatusLabels,
-  type PaymentMethod,
 } from '@restaurant-platform/shared'
 import { FreshnessNote } from '@/components/FreshnessNote'
 import { BillSplitter } from '@/features/BillSplitter'
@@ -23,20 +22,22 @@ type Bill = Awaited<ReturnType<typeof loadBill>>
 type Payment = Awaited<ReturnType<typeof loadPayments>>[number]
 
 type SessionOrdersProps = {
-  /** Medios de pago que habilitó la sucursal. */
-  paymentMethods: PaymentMethod[]
   /** Repite un pedido en el carrito. Ausente cuando la mesa no admite pedir. */
   onReorder?: (order: Order) => void
 }
 
-export function SessionOrders({ paymentMethods, onReorder }: SessionOrdersProps) {
-  const { sessionId, session: sessionQuery, userId } = useTable()
+export function SessionOrders({ onReorder }: SessionOrdersProps) {
+  const { sessionId, session: sessionQuery, userId, paymentMethods } = useTable()
   const session = sessionQuery.data
   const participants = session?.participants ?? []
   const closed = session?.status === 'closed'
-  const sessionSplit = session
-    ? parseSessionSplit(session.split_type, session.split_allocations, session.split_equal_parts)
-    : null
+  // `parseSessionSplit` acepta lo que venga y cae en `none`: sin mesa leída no
+  // hay división, y así el valor nunca es nulo para quien lo muestra.
+  const sessionSplit = parseSessionSplit(
+    session?.split_type,
+    session?.split_allocations,
+    session?.split_equal_parts,
+  )
 
   const orders = useQuery({
     queryKey: ['orders', sessionId],
@@ -108,7 +109,7 @@ export function SessionOrders({ paymentMethods, onReorder }: SessionOrdersProps)
           participants={participants}
           payments={payments.data ?? []}
           closed={closed}
-          split={sessionSplit!}
+          split={sessionSplit}
           orders={orders.data ?? []}
           participantName={participantName}
         />
@@ -120,14 +121,7 @@ export function SessionOrders({ paymentMethods, onReorder }: SessionOrdersProps)
         participantName={participantName}
         retry={() => { void payments.refetch() }}
       />
-      {session && (
-        <ServiceRequests
-          sessionId={session.id}
-          session={session}
-          closed={closed}
-          paymentMethods={paymentMethods}
-        />
-      )}
+      <ServiceRequests />
 
       {orders.isPending && <p role="status">Cargando los pedidos…</p>}
       {orders.isError && (
@@ -148,17 +142,8 @@ export function SessionOrders({ paymentMethods, onReorder }: SessionOrdersProps)
           onReorder={onReorder}
         />
       ))}
-      {bill.data && session && participants.length > 0 && (
-        <BillSplitter
-          sessionId={session.id}
-          split={sessionSplit!}
-          bill={bill.data}
-          orders={orders.data ?? []}
-          participants={participants}
-          userId={userId}
-          updatedBy={session.split_updated_by}
-          updatedAt={session.split_updated_at}
-        />
+      {bill.data && (
+        <BillSplitter split={sessionSplit} bill={bill.data} orders={orders.data ?? []} />
       )}
     </section>
   )

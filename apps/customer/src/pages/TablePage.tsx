@@ -350,9 +350,9 @@ export function TableCartItemPage() {
 }
 
 export function TableOrdersPage() {
-  const { menu, canEdit, cartKey, announce, paymentMethods } = useTable()
+  const { menu, canEdit, cartKey, announce } = useTable()
   const reorder = useReorder({ cartKey, menu: menu.data, canEdit, announce })
-  return <SessionOrders paymentMethods={paymentMethods} onReorder={reorder} />
+  return <SessionOrders onReorder={reorder} />
 }
 
 export function TableCatchAll() {

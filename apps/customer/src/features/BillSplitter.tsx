@@ -1,23 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { allocationTotal, formatElapsed, formatPrice, MAX_EQUAL_PARTS, MIN_EQUAL_PARTS, remainingPercentage, type SessionSplit, sessionSplitSchema, SPLIT_PERCENTAGE_TOTAL, splitBill, splitEqualAmounts, splitPercentageAmounts, type SplitBill, type SplitOrder, type SplitParticipant, splitTypeDescriptions, splitTypeLabels, splitTypes } from '@restaurant-platform/shared'
+import { allocationTotal, formatElapsed, formatPrice, MAX_EQUAL_PARTS, MIN_EQUAL_PARTS, remainingPercentage, type SessionSplit, sessionSplitSchema, SPLIT_PERCENTAGE_TOTAL, splitBill, splitEqualAmounts, splitPercentageAmounts, type SplitBill, type SplitOrder, splitTypeDescriptions, splitTypeLabels, splitTypes } from '@restaurant-platform/shared'
 import { useNow } from '@restaurant-platform/ui'
 
 import { PercentField } from '@/components/PercentField'
 import { toastDuration } from '@/features/announcements'
 import { updateSessionSplit } from '@/features/orders-api'
+import { useTable } from '@/features/table-context'
 
 type BillSplitterProps = {
-  sessionId: string
   /** Lo guardado en la sesión, ya validado por parseSessionSplit. */
   split: SessionSplit
   bill: SplitBill
   orders: readonly SplitOrder[]
-  participants: readonly (SplitParticipant & { display_name: string; user_id: string })[]
-  userId?: string
-  /** Quién guardó la división vigente y cuándo; con eso se avisa el cambio ajeno. */
-  updatedBy: string | null
-  updatedAt: string | null
 }
 
 /**
@@ -25,16 +20,15 @@ type BillSplitterProps = {
  * salen de `splitBill` y la validez del borrador la decide `sessionSplitSchema`,
  * el mismo schema que revalida la RPC. Acá no se repite ninguna regla.
  */
-export function BillSplitter({
-  sessionId,
-  split,
-  bill,
-  orders,
-  participants,
-  userId,
-  updatedBy,
-  updatedAt,
-}: BillSplitterProps) {
+export function BillSplitter({ split, bill, orders }: BillSplitterProps) {
+  // Quiénes están en la mesa, quién soy y quién guardó la división son hechos
+  // de la mesa; los importes y el borrador los calcula la pantalla.
+  const { session: sessionQuery, userId } = useTable()
+  const session = sessionQuery.data
+  const participants = session?.participants ?? []
+  const updatedBy = session?.split_updated_by ?? null
+  const updatedAt = session?.split_updated_at ?? null
+
   const queryClient = useQueryClient()
   const now = useNow()
   // `null` es la vista de lectura; un borrador abre el editor.
@@ -53,10 +47,10 @@ export function BillSplitter({
     lastSaved.current = updatedAt
     // Sin saber quién soy no se puede distinguir mi guardado del ajeno.
     if (!updatedAt || !currentParticipantId || updatedBy === currentParticipantId) return
-    const author = participants.find((entry) => entry.id === updatedBy)
+    const author = session?.participants.find((entry) => entry.id === updatedBy)
     setDraft(null)
     setChangedBy(author?.display_name ?? 'Otro comensal')
-  }, [updatedAt, updatedBy, participants, currentParticipantId])
+  }, [updatedAt, updatedBy, session, currentParticipantId])
 
   // El aviso dura lo mismo que un toast; cada cambio nuevo reinicia el plazo.
   useEffect(() => {
@@ -65,14 +59,21 @@ export function BillSplitter({
     return () => clearTimeout(timer)
   }, [changedBy])
 
+  // La sesión viaja con la mutación: guardar solo se puede con la mesa leída,
+  // pero el closure de `mutationFn` no lo sabe.
   const save = useMutation({
-    mutationFn: (next: SessionSplit) => updateSessionSplit(sessionId, next),
-    onSuccess: async () => {
+    mutationFn: ({ sessionId, next }: { sessionId: string; next: SessionSplit }) =>
+      updateSessionSplit(sessionId, next),
+    onSuccess: async (_result, { sessionId }) => {
       setDraft(null)
       setChangedBy(null)
       await queryClient.invalidateQueries({ queryKey: ['session', sessionId] })
     },
   })
+
+  // Sin mesa leída o sin comensales no hay nada que repartir: la condición es
+  // del panel, no de quien lo monta.
+  if (!session || participants.length === 0) return null
 
   const active = draft ?? split
   const shares = splitBill(bill, orders, participants, active)
@@ -249,7 +250,7 @@ export function BillSplitter({
             <button
               className="primary"
               disabled={!validation?.success || save.isPending}
-              onClick={() => validation?.success && save.mutate(validation.data)}
+              onClick={() => validation?.success && save.mutate({ sessionId: session.id, next: validation.data })}
             >
               {save.isPending ? 'Guardando…' : 'Guardar división'}
             </button>

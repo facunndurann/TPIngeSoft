@@ -1,25 +1,15 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   formatElapsed,
-  type PaymentMethod,
   type SessionRequestKind,
   sessionRequestKinds,
-  type SessionRequestSource,
   sessionRequestState,
 } from '@restaurant-platform/shared'
 import { useNow } from '@restaurant-platform/ui'
 
 import { requestSessionService } from '@/features/orders-api'
 import { serviceRequestCopy, serviceRequestMethod } from '@/features/service-requests'
-
-type ServiceRequestsProps = {
-  sessionId: string
-  /** La sesión guardada: sus fechas dicen qué pidió la mesa y qué ya le atendieron. */
-  session: SessionRequestSource
-  closed: boolean
-  /** Medios habilitados en la sucursal (MI-48), en el orden del catálogo. */
-  paymentMethods: PaymentMethod[]
-}
+import { useTable } from '@/features/table-context'
 
 /**
  * Avisos de la mesa al salón (MI-38/MI-46) y su respuesta. Pedir es un gesto de
@@ -28,19 +18,26 @@ type ServiceRequestsProps = {
  * su lugar. Esa confirmación la guarda la sesión, no la pantalla: sigue ahí si
  * el comensal recargó, entró desde otro teléfono o estaba mirando la carta.
  */
-export function ServiceRequests({
-  sessionId,
-  session,
-  closed,
-  paymentMethods,
-}: ServiceRequestsProps) {
+export function ServiceRequests() {
+  // Todo lo que necesita es de la mesa: qué pidió, si cerró y qué medios ofrece
+  // la sucursal. Nada de eso se lo puede contar mejor quien lo monta.
+  const { session: sessionQuery, paymentMethods } = useTable()
   const queryClient = useQueryClient()
   const now = useNow()
+  const session = sessionQuery.data
 
+  // La sesión viaja con la mutación en vez de `session!.id`: el botón existe
+  // solo cuando la mesa está leída, pero el closure no lo sabe.
   const ask = useMutation({
-    mutationFn: (kind: SessionRequestKind) => requestSessionService(sessionId, kind),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['session', sessionId] }),
+    mutationFn: ({ sessionId, kind }: { sessionId: string; kind: SessionRequestKind }) =>
+      requestSessionService(sessionId, kind),
+    onSuccess: (_result, { sessionId }) =>
+      queryClient.invalidateQueries({ queryKey: ['session', sessionId] }),
   })
+
+  // Sin la mesa leída no hay nada que pedir ni que confirmar.
+  if (!session) return null
+  const closed = session.status === 'closed'
 
   // El local puede no ofrecer un medio; el aviso que ya está en curso se sigue
   // viendo igual, porque el salón también lo sigue viendo.
@@ -94,8 +91,8 @@ export function ServiceRequests({
             ) : (
               !done &&
               offered(kind) && (
-                <button disabled={ask.isPending} onClick={() => ask.mutate(kind)}>
-                  {ask.isPending && ask.variables === kind
+                <button disabled={ask.isPending} onClick={() => ask.mutate({ sessionId: session.id, kind })}>
+                  {ask.isPending && ask.variables?.kind === kind
                     ? 'Avisando…'
                     : // Volver a llamar es la excepción —no llegó—, no la acción principal.
                       state.status === 'attended'
