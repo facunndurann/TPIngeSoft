@@ -103,6 +103,8 @@ export function SessionOrders({
           payments={payments.data ?? []}
           closed={closed}
           split={sessionSplit!}
+          orders={orders.data ?? []}
+          participantName={participantName}
         />
       )}
       <PaymentHistory

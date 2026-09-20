@@ -116,6 +116,11 @@ footer { text-align: center; color: var(--menu-muted); font-size: 12px; margin-t
 .equal-split-summary { margin: 12px 0 18px; }
 .equal-split-summary label { display: grid; gap: 6px; font-weight: 700; }
 .equal-split-summary input { max-width: 140px; }
+.payment-items { border: 0; padding: 0; margin: 16px 0; min-width: 0; }
+.payment-items legend { font-weight: 800; margin-bottom: 8px; }
+.payment-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--menu-border); }
+.payment-item span { display: grid; gap: 2px; }
+.payment-item small { color: var(--menu-muted); }
 .order-card { border: 1px solid var(--menu-border); background: var(--menu-surface); border-radius: calc(var(--menu-radius) + 4px); padding: 22px; margin: 24px 0; }
 .order-heading { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
 .order-heading h3 { margin-bottom: 8px; }

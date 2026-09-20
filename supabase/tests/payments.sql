@@ -142,8 +142,10 @@ do $$
 declare
   diner uuid:=gen_random_uuid(); other_diner uuid:=gen_random_uuid(); peer uuid:=gen_random_uuid();
   restaurant uuid; branch uuid; table_id uuid; sid uuid; participant uuid;
+  item_order uuid; first_item uuid; second_item uuid;
   request_id uuid:=gen_random_uuid(); second_request uuid:=gen_random_uuid(); peer_request uuid:=gen_random_uuid();
   fourth_request uuid:=gen_random_uuid(); peer_payment uuid;
+  item_request uuid:=gen_random_uuid(); item_retry uuid:=gen_random_uuid(); final_item_request uuid:=gen_random_uuid();
   saved record; repeated record; bill record;
 begin
   insert into auth.users(id,aud,role) values
@@ -198,14 +200,62 @@ begin
   select * into bill from public.session_bills where session_id=sid;
   if bill.paid_amount<>10 or bill.pending_amount<>0 or not bill.is_settled
     then raise exception 'Equal payments did not settle bill'; end if;
+
+  -- MI-42: un pago por ítems reserva exactamente las líneas elegidas. Un
+  -- rechazo las libera y una aprobación impide cobrarlas nuevamente.
+  insert into public.orders(restaurant_id,session_id,submitted_by,total_amount,status)
+    values(restaurant,sid,participant,9,'accepted') returning id into item_order;
+  insert into public.order_items(
+    order_id,product_id,participant_id,is_shared,quantity,product_name,base_price,total_price
+  ) values(item_order,null,participant,false,1,'Item A',4,4) returning id into first_item;
+  insert into public.order_items(
+    order_id,product_id,participant_id,is_shared,quantity,product_name,base_price,total_price
+  ) values(item_order,null,participant,true,1,'Item B',5,5) returning id into second_item;
+
+  select * into saved from public.create_mobile_payment(sid,item_request,'custom',array[first_item]);
+  if saved.amount<>4 or not exists(
+    select 1 from public.payment_order_items
+    where payment_id=saved.payment_id and order_item_id=first_item and amount=4
+  ) then raise exception 'Item payment did not preserve its selected line'; end if;
+  select * into repeated from public.create_mobile_payment(sid,item_request,'custom',array[first_item]);
+  if repeated.payment_id<>saved.payment_id then raise exception 'Item payment is not idempotent'; end if;
+  begin
+    perform public.create_mobile_payment(sid,item_request,'custom',array[second_item]);
+    raise exception 'Reused item request accepted different items';
+  exception when others then
+    if sqlerrm<>'IDEMPOTENCY_CONFLICT' then raise; end if;
+  end;
+  perform public.resolve_mobile_payment(saved.payment_id,diner,'rejected');
+
+  select * into saved from public.create_mobile_payment(sid,item_retry,'custom',array[first_item]);
+  perform public.resolve_mobile_payment(saved.payment_id,diner,'approved');
+  begin
+    perform public.create_mobile_payment(sid,gen_random_uuid(),'custom',array[first_item]);
+    raise exception 'An approved item was charged twice';
+  exception when others then
+    if sqlerrm<>'PAYMENT_ITEMS_UNAVAILABLE' then raise; end if;
+  end;
+  select * into saved from public.create_mobile_payment(
+    sid,final_item_request,'custom',array[second_item]
+  );
+  if saved.amount<>5 then raise exception 'Wrong second item subtotal: %',saved.amount; end if;
+  perform public.resolve_mobile_payment(saved.payment_id,diner,'approved');
+  select * into bill from public.session_bills where session_id=sid;
+  if bill.paid_amount<>19 or bill.pending_amount<>0 or not bill.is_settled
+    then raise exception 'Item payments did not settle the added order'; end if;
+
   update public.table_sessions set status='closed',closed_at=now() where id=sid;
   perform pg_temp.expect_mobile_create_error(sid,gen_random_uuid(),'SESSION_CLOSED');
 
-  if has_function_privilege('anon','public.create_mobile_payment(uuid,uuid,public.payment_mode)','EXECUTE')
-    or not has_function_privilege('authenticated','public.create_mobile_payment(uuid,uuid,public.payment_mode)','EXECUTE')
+  if has_function_privilege('anon','public.create_mobile_payment(uuid,uuid,public.payment_mode,uuid[])','EXECUTE')
+    or not has_function_privilege('authenticated','public.create_mobile_payment(uuid,uuid,public.payment_mode,uuid[])','EXECUTE')
+    or has_table_privilege('authenticated','public.payment_order_items','INSERT')
+    or has_table_privilege('authenticated','public.payment_order_items','UPDATE')
+    or has_table_privilege('authenticated','public.payment_order_items','DELETE')
+    or not has_table_privilege('authenticated','public.payment_order_items','SELECT')
     or has_function_privilege('authenticated','public.resolve_mobile_payment(uuid,uuid,public.payment_status)','EXECUTE')
     then raise exception 'Unsafe mobile payment function privileges'; end if;
-  raise notice 'Mobile payment SQL assertions passed (server amount, equal parts, pending, approval, rejection, idempotency)';
+  raise notice 'Mobile payment SQL assertions passed (server amount, equal parts, item trace, pending, approval, rejection, idempotency)';
 end;
 $$;
 

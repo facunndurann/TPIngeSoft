@@ -148,9 +148,15 @@ test('mobile payment endpoint creates and confirms only validated requests', asy
   const approved=await handler(mobileRequest({action:'confirm',paymentId,outcome:'approved'}))
   assert.equal(approved.status,200)
   assert.deepEqual(await approved.json(),{paymentId,amount:1250,status:'approved'})
-  assert.deepEqual(calls,['create','confirm'])
+  const byItems=await handler(mobileRequest({
+    action:'create',sessionId:input.sessionId,requestId:paymentId,mode:'custom',itemIds:[input.sessionId],
+  }))
+  assert.equal(byItems.status,201)
+  assert.deepEqual(calls,['create','confirm','create'])
   assert.equal((await handler(mobileRequest({action:'create',sessionId:'bad',requestId:paymentId}))).status,400)
   assert.equal((await handler(mobileRequest({action:'confirm',paymentId,outcome:'invented'}))).status,400)
+  assert.equal((await handler(mobileRequest({action:'create',sessionId:input.sessionId,requestId:paymentId,mode:'custom'}))).status,400)
+  assert.equal((await handler(mobileRequest({action:'create',sessionId:input.sessionId,requestId:paymentId,mode:'full',itemIds:[paymentId]}))).status,400)
   assert.equal((await handler(mobileRequest({action:'create',sessionId:input.sessionId,requestId:paymentId},'forged'))).status,401)
 })
 

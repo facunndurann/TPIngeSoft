@@ -93,7 +93,7 @@ export async function loadBill(sessionId: string) {
 export async function loadPayments(sessionId: string) {
   const { data, error } = await supabase
     .from('payments')
-    .select('id, participant_id, amount, mode, method, status, external_reference, created_at')
+    .select('id, participant_id, amount, mode, method, status, external_reference, created_at, payment_order_items(order_item_id)')
     .eq('session_id', sessionId)
     .order('created_at', { ascending: false })
   if (error) throw error

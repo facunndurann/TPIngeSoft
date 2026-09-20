@@ -24,6 +24,7 @@ export async function authenticateMobilePayment(
       if (input.action==='create') {
         const {data:rows,error}=await caller.rpc('create_mobile_payment',{
           p_session_id:input.sessionId,p_request_id:input.requestId,p_mode:input.mode,
+          p_item_ids:input.itemIds,
         });
         if (error) throw fromPostgres(error);
         return result(rows[0] as PaymentRow);

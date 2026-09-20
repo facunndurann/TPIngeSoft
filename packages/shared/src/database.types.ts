@@ -599,6 +599,39 @@ export type Database = {
           },
         ]
       }
+      payment_order_items: {
+        Row: {
+          amount: number
+          order_item_id: string
+          payment_id: string
+        }
+        Insert: {
+          amount: number
+          order_item_id: string
+          payment_id: string
+        }
+        Update: {
+          amount?: number
+          order_item_id?: string
+          payment_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_order_items_order_item_id_fkey"
+            columns: ["order_item_id"]
+            isOneToOne: false
+            referencedRelation: "order_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_order_items_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payments: {
         Row: {
           amount: number
@@ -1447,6 +1480,7 @@ export type Database = {
       close_table_session: { Args: { p_session_id: string }; Returns: string }
       create_mobile_payment: {
         Args: {
+          p_item_ids?: string[]
           p_mode?: Database["public"]["Enums"]["payment_mode"]
           p_request_id: string
           p_session_id: string

@@ -45,7 +45,7 @@ export const paymentModeLabels: Record<PaymentMode, string> = {
   full: 'Cuenta completa',
   own: 'Consumo propio',
   equal_split: 'Partes iguales',
-  custom: 'Importe parcial',
+  custom: 'Ítems o importe parcial',
 };
 
 /** Lo que hace falta saber de una sucursal para cobrarle a una mesa. */
@@ -76,14 +76,23 @@ export const mobilePaymentRequestSchema = z.discriminatedUnion('action', [
     action: z.literal('create'),
     sessionId: uuid,
     requestId: uuid,
-    mode: z.enum(['full', 'equal_split']).default('full'),
+    mode: z.enum(['full', 'equal_split', 'custom']).default('full'),
+    itemIds: z.array(uuid).min(1).max(100).optional(),
   }).strict(),
   z.object({
     action: z.literal('confirm'),
     paymentId: uuid,
     outcome: z.enum(['approved', 'rejected']),
   }).strict(),
-]);
+]).superRefine((request, ctx) => {
+  if (request.action !== 'create') return;
+  if (request.mode === 'custom' && !request.itemIds?.length) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['itemIds'], message: 'Elegí al menos un ítem.' });
+  }
+  if (request.mode !== 'custom' && request.itemIds !== undefined) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['itemIds'], message: 'Este pago no admite ítems.' });
+  }
+});
 export type MobilePaymentRequest = z.infer<typeof mobilePaymentRequestSchema>;
 
 export const mobilePaymentResultSchema = z.object({
