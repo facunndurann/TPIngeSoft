@@ -85,6 +85,7 @@ jobs:
           stack=$(pnpm exec supabase status -o json)
           export SUPABASE_URL=$(jq -r .API_URL <<< "$stack")
           export SUPABASE_ANON_KEY=$(jq -r .ANON_KEY <<< "$stack")
+          export SUPABASE_SERVICE_ROLE_KEY=$(jq -r .SERVICE_ROLE_KEY <<< "$stack")
           pnpm test:orders:integration
 
       - name: Edge Functions log

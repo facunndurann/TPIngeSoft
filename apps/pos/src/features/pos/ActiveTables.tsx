@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { formatElapsed, formatPrice } from '@restaurant-platform/shared'
-import { useRestaurant, usePosContext } from '@/context/pos-context'
+import { useCan, useRestaurant } from '@/context/pos-context'
 import { Badge, Button, EmptyState, ErrorText, Modal, Spinner, useSaveErrors } from '@restaurant-platform/ui'
 import {
   closePosSession,
@@ -15,8 +15,8 @@ import { useNow } from './useNow'
 
 export function ActiveTables() {
   const restaurant = useRestaurant()
-  const { permissions } = usePosContext()
-  const canPay = permissions.includes('payments.read')
+  const can = useCan()
+  const canPay = can('payments.read')
   const queryClient = useQueryClient()
   const now = useNow()
   const [closing, setClosing] = useState<PosOpenSessionCard | null>(null)
@@ -121,7 +121,7 @@ export function ActiveTables() {
                   <Link to={`/salon/${session.table_id}`} className="flex-1">
                     <Button className="w-full">Continuar comanda</Button>
                   </Link>
-                  {permissions.includes('sessions.close') && (
+                  {can('sessions.close') && (
                     <Button
                       variant="secondary"
                       className="flex-1"

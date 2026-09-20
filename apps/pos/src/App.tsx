@@ -1,9 +1,10 @@
 import { useState, type ReactNode } from 'react'
 import { Navigate, Route, Routes, useNavigate } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
+import type { PosPermission } from '@restaurant-platform/shared'
 import { Button, ErrorText, Spinner, useAuth } from '@restaurant-platform/ui'
 import { supabase } from '@/lib/supabase'
-import { AccessContext, usePosContext } from '@/context/pos-context'
+import { AccessContext, useCan } from '@/context/pos-context'
 import { LoginPage } from '@/pages/LoginPage'
 import { PosPage } from '@/features/pos/PosPage'
 import { CommandBoard } from '@/features/pos/CommandBoard'
@@ -71,6 +72,6 @@ function AuthenticatedPos({ userId }: { userId: string }) {
     </Routes>
   </AccessContext>
 }
-function Permission({ name, children }: { name: string; children: ReactNode }) {
-  return usePosContext().permissions.includes(name) ? children : <Navigate to="/" replace />
+function Permission({ name, children }: { name: PosPermission; children: ReactNode }) {
+  return useCan()(name) ? children : <Navigate to="/" replace />
 }

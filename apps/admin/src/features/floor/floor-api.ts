@@ -108,6 +108,17 @@ export type TableLayoutPatch = Partial<
   >
 >
 
+/**
+ * Lo que el inspector le pide al plano. Son tres operaciones con semántica
+ * propia — redimensionar recalcula la posición, mudar de sector busca un hueco
+ * libre, editar es un update plano — así que viajan discriminadas en vez de
+ * como un `Partial<>` suelto cuyas claves haya que olfatear del otro lado.
+ */
+export type TableIntent =
+  | { kind: 'edit'; patch: Omit<TableLayoutPatch, 'section_id' | 'width' | 'height'> }
+  | { kind: 'resize'; width: number; height: number }
+  | { kind: 'move-to-section'; sectionId: string | null }
+
 export async function updateTableLayout(tableId: string, patch: TableLayoutPatch) {
   unwrap(await supabase.from('tables').update(patch).eq('id', tableId).select())
 }

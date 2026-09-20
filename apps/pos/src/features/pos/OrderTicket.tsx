@@ -2,7 +2,7 @@ import { Undo2 } from 'lucide-react'
 import { formatElapsed, formatPrice, type OrderStatus, orderStatusLabels, posActions, transitionPermission } from '@restaurant-platform/shared'
 import { Badge, Button } from '@restaurant-platform/ui'
 import type { PosOrder, PosOrderItem } from './api'
-import { usePosContext } from '@/context/pos-context'
+import { useCan } from '@/context/pos-context'
 
 function participantName(order: PosOrder, participantId: string | null) {
   return order.table_sessions.session_participants.find((entry) => entry.id === participantId)
@@ -22,9 +22,9 @@ export function OrderTicket({
   error: string | null
   onTransition: (to: OrderStatus) => void
 }) {
-  const { permissions } = usePosContext()
+  const can = useCan()
   const allowed = (step: { to: OrderStatus; label: string } | undefined) =>
-    step && permissions.includes(transitionPermission(order.status, step.to)) ? step : undefined
+    step && can(transitionPermission(order.status, step.to)) ? step : undefined
   const actions = posActions[order.status]
   const advance = allowed(actions.advance)
   const revert = allowed(actions.revert)

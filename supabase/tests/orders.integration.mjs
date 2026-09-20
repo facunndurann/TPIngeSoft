@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { posActions } from '../../packages/shared/src/pos.ts'
+import { posPermissions } from '../../packages/shared/src/employees.ts'
 
 const require = createRequire(new URL('../../apps/customer/package.json', import.meta.url))
 const { createClient } = require('@supabase/supabase-js')
@@ -18,7 +19,11 @@ const fileEnv = Object.fromEntries(envFile.split(/\r?\n/).flatMap((line) => {
 }))
 const apiUrl = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? fileEnv.VITE_SUPABASE_URL
 const anonKey = process.env.SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY ?? fileEnv.VITE_SUPABASE_ANON_KEY
+const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 assert.ok(apiUrl && anonKey, 'Configure apps/customer/.env or SUPABASE_URL and SUPABASE_ANON_KEY.')
+// role_permissions está revocada para `authenticated`; leer el catálogo (y limpiar
+// los usuarios anónimos) necesita la clave de servicio del stack local.
+assert.ok(serviceKey, 'Set SUPABASE_SERVICE_ROLE_KEY (supabase status -o json) to run this suite.')
 assert.ok(['127.0.0.1', 'localhost', '[::1]'].includes(new URL(apiUrl).hostname),
   'This integration suite only runs against local Supabase; it uses the demo seed accounts.')
 
@@ -451,6 +456,15 @@ try {
       .sort()
     assert.deepEqual(allowed, offered)
   })
+  await check('role_permissions holds exactly the permissions the apps can name', async () => {
+    // Mismo contrato que posActions: la base manda y el catálogo de TS la espeja.
+    // Un permiso que solo existe de un lado es un botón muerto o una ruta abierta.
+    const granted = unwrap(
+      await client(serviceKey).from('role_permissions').select('permission'),
+      'Read role permissions',
+    )
+    assert.deepEqual([...new Set(granted.map((row) => row.permission))].sort(), [...posPermissions].sort())
+  })
   await check('only members of the order restaurant can advance its status', async () => {
     for (const actor of [customer, outsider, otherAdmin, admin]) {
       const result = await actor.rpc('transition_order', { p_order_id: orderId, p_status: 'in_preparation' })
@@ -605,17 +619,13 @@ try {
     }
   }
   if (anonymousIds.length > 0) {
-    if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      const service = client(process.env.SUPABASE_SERVICE_ROLE_KEY)
-      for (const id of anonymousIds) {
-        const result = await service.auth.admin.deleteUser(id)
-        if (result.error) {
-          console.error(`Anonymous user cleanup failed: ${result.error.message}`)
-          failure ??= new Error('Anonymous user cleanup was incomplete')
-        }
+    const service = client(serviceKey)
+    for (const id of anonymousIds) {
+      const result = await service.auth.admin.deleteUser(id)
+      if (result.error) {
+        console.error(`Anonymous user cleanup failed: ${result.error.message}`)
+        failure ??= new Error('Anonymous user cleanup was incomplete')
       }
-    } else {
-      console.log(`Note: ${anonymousIds.length} anonymous Auth test users remain locally. Set SUPABASE_SERVICE_ROLE_KEY to remove them automatically.`)
     }
   }
   for (const actor of clients) {

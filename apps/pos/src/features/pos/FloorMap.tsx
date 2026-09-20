@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { formatElapsed, formatPrice, getPosTableState, type PosTableState, posTableStateLabels } from '@restaurant-platform/shared'
 import { ClipboardList, Clock3, Move, UserRound, Users } from 'lucide-react'
 import { Button, EmptyState, ErrorText, FloorGrid, Select, Spinner, SummaryItem } from '@restaurant-platform/ui'
-import { useRestaurant, usePosContext } from '@/context/pos-context'
+import { useCan, useRestaurant } from '@/context/pos-context'
 import {
   loadOpenSessions,
   loadPosFloorSections,
@@ -26,7 +26,7 @@ import type { PosBill, PosDiningTable, PosOpenSession } from './types'
  */
 export function FloorMap() {
   const restaurant = useRestaurant()
-  const canPay = usePosContext().permissions.includes('payments.read')
+  const canPay = useCan()('payments.read')
   const now = useNow()
   const [moving, setMoving] = useState<FloorMapEntry | null>(null)
   const navigate = useNavigate()
@@ -366,7 +366,7 @@ function TableSummary({
   onOpen: (tableId: string) => void
   onMove: (entry: FloorMapEntry) => void
 }) {
-  const { permissions } = usePosContext()
+  const can = useCan()
   const { table, session, bill, state } = entry
   const activeOrders = session?.orders.filter((order) =>
     ['submitted', 'accepted', 'in_preparation', 'ready'].includes(order.status),
@@ -394,7 +394,7 @@ function TableSummary({
       ) : (
         <SummaryItem icon={Users} label="Capacidad" value={`${table.seats} lugares`} />
       )}
-      {session && permissions.includes('sessions.move') && (
+      {session && can('sessions.move') && (
         <Button variant="secondary" onClick={() => onMove(entry)}>
           <Move size={15} /> Mover comanda
         </Button>

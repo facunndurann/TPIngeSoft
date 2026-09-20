@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { asAmount, formatElapsed, formatPrice, getPosTableState, isKitchenTicket, type OrderStatus, posTableStateLabels } from '@restaurant-platform/shared'
 import { ArrowLeft, Clock3, PlayCircle, UserRound, Users } from 'lucide-react'
 import { Badge, Button, EmptyState, ErrorText, Modal, Spinner, SummaryItem, useSaveErrors } from '@restaurant-platform/ui'
-import { useRestaurant, usePosContext } from '@/context/pos-context'
+import { useCan, useRestaurant } from '@/context/pos-context'
 import {
   closePosSession,
   loadRestaurantTables,
@@ -26,7 +26,7 @@ export function TableCommand() {
   const { tableId = '' } = useParams()
   const [searchParams] = useSearchParams()
   const restaurant = useRestaurant()
-  const { permissions } = usePosContext()
+  const can = useCan()
   const queryClient = useQueryClient()
   const now = useNow()
   const [closing, setClosing] = useState(false)
@@ -131,7 +131,7 @@ export function TableCommand() {
             La mesa está libre. Al abrir la comanda queda ocupada en el plano y los comensales pueden
             sumarse escaneando el QR.
           </p>
-          {permissions.includes('sessions.open') ? (
+          {can('sessions.open') ? (
             <Button
               className="mx-auto"
               disabled={openSession.isPending}
@@ -148,7 +148,7 @@ export function TableCommand() {
         <>
           <dl className="flex flex-wrap gap-x-8 gap-y-3 rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm">
             <SummaryItem as="dl-pair" icon={Clock3} label="Abierta" value={formatElapsed(open.opened_at, now)} />
-            {permissions.includes('payments.read') && <>
+            {can('payments.read') && <>
               <SummaryItem as="dl-pair" label="En cuenta" value={formatPrice(bill?.total_amount)} />
               <SummaryItem as="dl-pair" label="Pendiente" value={formatPrice(bill?.pending_amount)} />
             </>}
@@ -176,7 +176,7 @@ export function TableCommand() {
                   </span>
                 )}
               </h2>
-              {permissions.includes('sessions.close') && <Button variant="secondary" onClick={() => setClosing(true)}>
+              {can('sessions.close') && <Button variant="secondary" onClick={() => setClosing(true)}>
                 Cerrar sesión
               </Button>}
             </div>
@@ -215,7 +215,7 @@ export function TableCommand() {
               Los comensales no podrán enviar más pedidos en esta cuenta. Si vuelven a escanear el QR
               se abre una sesión nueva.
             </p>
-            {permissions.includes('payments.read') && asAmount(bill?.pending_amount) > 0 && (
+            {can('payments.read') && asAmount(bill?.pending_amount) > 0 && (
               <p className="rounded-lg bg-amber-50 px-3 py-2 text-amber-950">
                 Queda {formatPrice(bill?.pending_amount)} pendiente.
               </p>

@@ -18,6 +18,7 @@ import {
   updateTableLayout,
   type FloorSection,
   type FloorTable,
+  type TableIntent,
   type TableLayoutPatch,
 } from '@/features/floor/floor-api'
 
@@ -171,6 +172,18 @@ export function FloorPlanPage() {
       patch: { section_id: targetSectionId, position_x: x, position_y: y },
     })
     setSelectedTableId(table.id)
+  }
+
+  /** Traduce una intención del inspector a la operación que le corresponde. */
+  function applyIntent(table: FloorTable, intent: TableIntent) {
+    switch (intent.kind) {
+      case 'resize':
+        return resizeTable(table, intent)
+      case 'move-to-section':
+        return placeInSection(table, intent.sectionId)
+      case 'edit':
+        return patchTable.mutate({ id: table.id, patch: intent.patch })
+    }
   }
 
   function handleAddSection(event: FormEvent) {
@@ -371,18 +384,7 @@ export function FloorPlanPage() {
               table={selectedTable}
               sections={sections.data ?? []}
               busy={removeTable.isPending}
-              onPatch={(patch) => {
-                if (patch.width !== undefined || patch.height !== undefined) {
-                  resizeTable(selectedTable, {
-                    width: patch.width ?? selectedTable.width,
-                    height: patch.height ?? selectedTable.height,
-                  })
-                } else if ('section_id' in patch) {
-                  placeInSection(selectedTable, patch.section_id ?? null)
-                } else {
-                  patchTable.mutate({ id: selectedTable.id, patch })
-                }
-              }}
+              onIntent={(intent) => applyIntent(selectedTable, intent)}
               onDelete={() =>
                 removeTable.mutate(selectedTable.id, { onSuccess: () => setSelectedTableId(null) })
               }
