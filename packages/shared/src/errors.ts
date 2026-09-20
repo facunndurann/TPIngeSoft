@@ -57,8 +57,10 @@ export const appErrors = {
   CATEGORY_IN_USE: { status: 409, retryable: false, message: 'No se puede eliminar: la categoría tiene productos. Movelos o eliminalos primero.' },
   BRANCH_IN_USE: { status: 409, retryable: false, message: 'No se puede eliminar: la sucursal tiene mesas asociadas.' },
 
-  // Falla inesperada: el detalle interno nunca se expone
-  SERVER_ERROR: { status: 503, retryable: true, message: 'No pudimos confirmar el resultado. Reintentá el mismo envío para evitar duplicados.' },
+  // Falla inesperada: el detalle interno nunca se expone. El mensaje sirve a
+  // cualquier operación de las tres apps, lecturas incluidas; quien necesite
+  // decir algo más preciso lo pasa al constructor de AppError.
+  SERVER_ERROR: { status: 503, retryable: true, message: 'No pudimos completar la operación. Revisá tu conexión y reintentá.' },
 } satisfies Record<string, AppErrorDefinition>
 
 export type AppErrorCode = keyof typeof appErrors

@@ -113,7 +113,10 @@ test('unexpected failures never leak backend details', async () => {
   assert.equal(failed.status, 503)
   const body = await failed.text()
   assert.doesNotMatch(body, /private backend detail/)
-  assert.equal(JSON.parse(body).error.code, 'SERVER_ERROR')
+  const { code, message } = JSON.parse(body).error
+  assert.equal(code, 'SERVER_ERROR')
+  // El envío pide reintentar el mismo requestId: el catálogo ya no lo dice por él.
+  assert.equal(message, 'No pudimos confirmar el resultado. Reintentá el mismo envío para evitar duplicados.')
 })
 
 test('POS actions advance and cancel until delivery, and nothing leaves cancelled', () => {

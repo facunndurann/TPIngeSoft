@@ -388,26 +388,6 @@ test('MenuShell paints catalog tokens, layout and copy for each design', async (
   }
 })
 
-test('a failed read keeps the catalog code and never shows the database talking', async () => {
-  const { fromRead } = await import('../src/features/api-errors')
-
-  // Un código del catálogo manda: el mensaje es el suyo, no el de la lectura.
-  const closed = fromRead({ message: 'SESSION_CLOSED' }, 'la carta')
-  assert.equal(closed.code, 'SESSION_CLOSED')
-  assert.equal(closed.message, 'La mesa ya cerró su cuenta.')
-  assert.equal(closed.retryable, false)
-
-  // Una falla sin código explica qué lectura falló, en vez del texto genérico del
-  // catálogo, que habla de reintentar un envío que acá no existe.
-  const raw = 'JSON object requested, multiple (or no) rows returned'
-  const failed = fromRead({ message: raw }, 'la carta')
-  assert.equal(failed.code, 'SERVER_ERROR')
-  assert.equal(failed.message, 'No pudimos cargar la carta. Revisá tu conexión y reintentá.')
-  assert.ok(failed.retryable, 'una lectura fallida se puede repetir')
-  // El texto de la base queda para diagnosticar, nunca a la vista.
-  assert.equal(failed.detail, raw)
-  assert.doesNotMatch(failed.message, /JSON|rows/)
-})
 test('an error only offers to retry when repeating can work', async () => {
   const { createElement } = await import('react')
   const { renderToStaticMarkup } = await import('react-dom/server')

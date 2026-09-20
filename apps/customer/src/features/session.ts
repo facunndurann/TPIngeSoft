@@ -1,5 +1,4 @@
 import { AppError, fromPostgres } from '@restaurant-platform/shared'
-import { fromRead } from '@/features/api-errors'
 import { supabase } from '@/lib/supabase'
 import { useCart } from '@/stores/cart'
 import { recoverPendingSession } from '@/features/session-recovery'
@@ -35,7 +34,7 @@ export async function connectSession(token: string, tableId: string) {
       .eq('table_id', tableId)
       .eq('session_participants.user_id', userId)
       .order('opened_at', { ascending: false })
-    if (error) throw fromRead(error, 'tu mesa')
+    if (error) throw fromPostgres(error)
     return data
   })
 
@@ -58,7 +57,7 @@ export async function loadSession(id: string) {
     supabase.from('table_sessions').select('*').eq('id', id).single(),
     supabase.from('session_participants').select('*').eq('session_id', id).order('joined_at'),
   ])
-  if (session.error) throw fromRead(session.error, 'tu mesa')
-  if (participants.error) throw fromRead(participants.error, 'los comensales de la mesa')
+  if (session.error) throw fromPostgres(session.error)
+  if (participants.error) throw fromPostgres(participants.error)
   return { ...session.data, participants: participants.data }
 }

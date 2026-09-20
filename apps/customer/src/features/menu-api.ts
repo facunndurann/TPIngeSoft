@@ -1,5 +1,4 @@
-import { AppError } from '@restaurant-platform/shared'
-import { fromRead } from '@/features/api-errors'
+import { AppError, fromPostgres } from '@restaurant-platform/shared'
 import { buildMenu, type Menu } from '@/features/menu'
 import { supabase } from '@/lib/supabase'
 
@@ -10,7 +9,7 @@ export async function loadTable(token: string) {
     .eq('qr_token', token)
     .eq('is_active', true)
     .maybeSingle()
-  if (error) throw fromRead(error, 'la mesa')
+  if (error) throw fromPostgres(error)
   if (!table) {
     throw new AppError(
       'TABLE_UNAVAILABLE',
@@ -63,9 +62,9 @@ export async function loadMenu(restaurantId: string): Promise<Menu> {
       .order('sort_order', { referencedTable: 'modifier_options' }),
   ])
   // Uno por consulta: es lo que le prueba a TypeScript que cada `data` ya existe.
-  if (categories.error) throw fromRead(categories.error, 'la carta')
-  if (products.error) throw fromRead(products.error, 'la carta')
-  if (groups.error) throw fromRead(groups.error, 'la carta')
+  if (categories.error) throw fromPostgres(categories.error)
+  if (products.error) throw fromPostgres(products.error)
+  if (groups.error) throw fromPostgres(groups.error)
 
   return buildMenu({ categories: categories.data, products: products.data, groups: groups.data })
 }

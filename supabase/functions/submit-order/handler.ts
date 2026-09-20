@@ -52,7 +52,14 @@ export function createSubmitOrderHandler(authenticate: (jwt: string) => Promise<
       const gateway = await authenticate(token);
       return json(await gateway.submit(parsed.data));
     } catch (error) {
-      return errorResponse(error instanceof AppError ? error : new AppError('SERVER_ERROR'));
+      if (error instanceof AppError) return errorResponse(error);
+      // Una falla inesperada durante un envío deja el resultado en duda, y el
+      // mensaje genérico del catálogo no alcanza: acá hay que pedir el reintento
+      // del mismo envío, que es lo único que evita el pedido duplicado.
+      return errorResponse(new AppError(
+        'SERVER_ERROR',
+        'No pudimos confirmar el resultado. Reintentá el mismo envío para evitar duplicados.',
+      ));
     }
   };
 }
