@@ -1,69 +1,59 @@
-import type { UseQueryResult } from '@tanstack/react-query'
-import { type FormEvent, useEffect, useState } from 'react'
+import { type FormEvent, useState } from 'react'
 import { ErrorMessage } from '@/components/ErrorMessage'
 import { NAME_FIELD_ID } from '@/features/name-field'
 import type { loadSession } from '@/features/session'
+import type { RenameField } from '@/hooks/useTableSession'
 
 type Session = Awaited<ReturnType<typeof loadSession>>
-type JoinResult = { id: string; userId: string }
+
+/** Una falla a mostrar, con su reintento ya resuelto por quien hizo la consulta. */
+export type Failure = { error: unknown; retry: () => void }
 
 type SessionPanelProps = {
-  joined: UseQueryResult<JoinResult>
-  session: UseQueryResult<Session>
-  userId?: string
+  /** Todavía conectando con la mesa. */
+  connecting: boolean
+  /** No se pudo entrar a la mesa. */
+  connection?: Failure
+  /** No se pudo leer la mesa. */
+  read?: Failure
+  /** La mesa leída; hasta que llegue, el panel solo informa el estado. */
+  session?: Session
+  /** Cómo se llama este comensal y si el nombre lo eligió él: los decide el hook
+      dueño de la sesión, así que acá no se vuelven a derivar. */
+  displayName: string
+  named: boolean
   hasPendingSubmission: boolean
   cartCount: number
-  name: string
-  onNameChange: (value: string) => void
-  rename: {
-    mutate: () => void
-    isPending: boolean
-    isSuccess: boolean
-    isError: boolean
-    error: unknown
-  }
+  rename: RenameField
   onOpenNewSession: () => void
 }
 
 export function SessionPanel({
-  joined,
+  connecting,
+  connection,
+  read,
   session,
-  userId,
+  displayName,
+  named,
   hasPendingSubmission,
   cartCount,
-  name,
-  onNameChange,
   rename,
   onOpenNewSession,
 }: SessionPanelProps) {
-  const currentParticipant = session.data?.participants.find((p) => p.user_id === userId)
-  const displayName = currentParticipant?.display_name ?? 'Comensal'
-  const named = !!currentParticipant?.named_at
-  const names = session.data?.participants.map((p) => p.display_name).join(' · ') ?? ''
-  const [editing, setEditing] = useState(false)
-
-  // Guardado el nombre, el formulario se cierra: ya cumplió y deja de ocupar la
-  // pantalla en cada pedido. Al reabrirlo, `isSuccess` no cambió, así que queda abierto.
-  useEffect(() => {
-    if (rename.isSuccess) setEditing(false)
-  }, [rename.isSuccess])
+  const names = session?.participants.map((p) => p.display_name).join(' · ') ?? ''
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
-    rename.mutate()
+    rename.submit()
   }
 
   return (
     <section className="session-panel" aria-label="Tu mesa">
-      {joined.isPending && <p role="status">Conectando con tu mesa…</p>}
-      {joined.isError && (
-        <ErrorMessage error={joined.error} retry={() => { void joined.refetch() }} />
-      )}
-      {session.isError && (
-        <ErrorMessage error={session.error} retry={() => { void session.refetch() }} />
-      )}
+      {connecting && <p role="status">Conectando con tu mesa…</p>}
+      {connection && <ErrorMessage {...connection} />}
+      {read && <ErrorMessage {...read} />}
 
-      {session.data && (
+      {session && (
         <>
           {/* En reposo el panel es una línea: quién sos y cuántos son. Los nombres
               de la mesa quedan a un toque, sin ocupar el pliegue de la carta. */}
@@ -71,26 +61,26 @@ export function SessionPanel({
             <details>
               <summary className="disclosure">
                 <span>
-                  <strong>{displayName}</strong> · {session.data.participants.length} en la mesa
+                  <strong>{displayName}</strong> · {session.participants.length} en la mesa
                 </span>
                 <span className="chevron" aria-hidden="true">›</span>
               </summary>
               <p className="muted">{names}</p>
             </details>
-            {named && !editing && session.data.status !== 'closed' && (
-              <button className="text-button" onClick={() => setEditing(true)}>
+            {named && !rename.editing && session.status !== 'closed' && (
+              <button className="text-button" onClick={() => rename.setEditing(true)}>
                 Cambiar mi nombre
               </button>
             )}
           </div>
 
-          {session.data.status === 'closed' ? (
+          {session.status === 'closed' ? (
             <ClosedSessionNotice
               hasPendingSubmission={hasPendingSubmission}
               cartCount={cartCount}
               onOpenNewSession={onOpenNewSession}
             />
-          ) : named && !editing ? null : (
+          ) : named && !rename.editing ? null : (
             <>
               {/* Se pide antes del primer pedido, con el motivo: un comensal sin
                   nombre no se puede distinguir en la cuenta de la mesa. */}
@@ -104,27 +94,25 @@ export function SessionPanel({
                 <input
                   id={NAME_FIELD_ID}
                   placeholder="Tu nombre para la mesa"
-                  value={name}
+                  value={rename.name}
                   maxLength={40}
                   required
                   autoComplete="given-name"
-                  onChange={(event) => onNameChange(event.target.value)}
+                  onChange={(event) => rename.setName(event.target.value)}
                 />
-                <button disabled={rename.isPending || !name.trim() || hasPendingSubmission}>
+                <button disabled={rename.isPending || !rename.name.trim() || hasPendingSubmission}>
                   {rename.isPending ? 'Guardando…' : 'Guardar nombre'}
                 </button>
                 {named && (
-                  <button type="button" disabled={rename.isPending} onClick={() => setEditing(false)}>
+                  <button
+                    type="button"
+                    disabled={rename.isPending}
+                    onClick={() => rename.setEditing(false)}
+                  >
                     Cancelar
                   </button>
                 )}
-                {rename.isError && (
-                  <p role="alert">
-                    {rename.error instanceof Error
-                      ? rename.error.message
-                      : 'No pudimos guardar tu nombre. Intentá nuevamente.'}
-                  </p>
-                )}
+                {rename.message && <p role="alert">{rename.message}</p>}
               </form>
             </>
           )}

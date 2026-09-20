@@ -18,7 +18,7 @@ import { MenuBrowse } from '@/features/MenuBrowse'
 import { cartPrice } from '@/features/menu'
 import { ProductEditor } from '@/features/ProductEditor'
 import { SessionOrders } from '@/features/SessionOrders'
-import { SessionPanel } from '@/features/SessionPanel'
+import { type Failure, SessionPanel } from '@/features/SessionPanel'
 import { TableHeader } from '@/features/TableHeader'
 import { TableNav } from '@/features/TableNav'
 import {
@@ -62,6 +62,18 @@ function useTable() {
   return value
 }
 
+/**
+ * Una consulta fallida como la muestra el panel: el error y su reintento, sin la
+ * forma de react-query del otro lado.
+ */
+function failureOf(query: {
+  isError: boolean
+  error: unknown
+  refetch: () => unknown
+}): Failure | undefined {
+  return query.isError ? { error: query.error, retry: () => { void query.refetch() } } : undefined
+}
+
 function useTableBack(fallback: string) {
   const navigate = useNavigate()
   const location = useLocation()
@@ -77,7 +89,7 @@ export function TableRoute() {
 }
 
 function TableApp({ token }: { token: string }) {
-  const { client, table, menu, joined, session, sessionId, named, name, setName, rename } =
+  const { client, table, menu, joined, session, sessionId, displayName, named, rename } =
     useTableSession(token)
   const location = useLocation()
   const navigate = useNavigate()
@@ -170,13 +182,14 @@ function TableApp({ token }: { token: string }) {
           />
 
           <SessionPanel
-            joined={joined}
-            session={session}
-            userId={joined.data?.userId}
+            connecting={joined.isPending}
+            connection={failureOf(joined)}
+            read={failureOf(session)}
+            session={session.data}
+            displayName={displayName}
+            named={named}
             hasPendingSubmission={!!cart.submissions[cartKey]}
             cartCount={cartCount}
-            name={name}
-            onNameChange={setName}
             rename={rename}
             onOpenNewSession={() => {
               setAnnouncement(undefined)
