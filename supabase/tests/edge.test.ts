@@ -2,15 +2,17 @@ import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import { type OrderStatus, submitOrderErrorSchema, submitOrderResultSchema, submitOrderSchema } from '../../packages/shared/src/orders.ts'
 import { AppError, appErrorMessage, appErrors, fromPostgres, isRetryableError } from '../../packages/shared/src/errors.ts'
+import { formatElapsed } from '../../packages/shared/src/time.ts'
 import {
-  formatElapsed,
-  getPosTableState,
-  isKitchenTicket,
-  posActions,
   sessionRequestKinds,
   sessionRequestLabels,
   sessionRequestsOf,
   sessionRequestState,
+} from '../../packages/shared/src/session-requests.ts'
+import {
+  getPosTableState,
+  isKitchenTicket,
+  posActions,
 } from '../../packages/shared/src/pos.ts'
 import { splitPercentageAmounts } from '../../packages/shared/src/split.ts'
 import {

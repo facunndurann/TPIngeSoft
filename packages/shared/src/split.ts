@@ -15,7 +15,7 @@
 
 import { z } from 'zod';
 import { isBilledStatus, type OrderStatus } from './orders.ts';
-import { asAmount } from './pos.ts';
+import { asAmount } from './money.ts';
 
 export const splitTypes = ['none', 'equal', 'percentages'] as const;
 export type SplitType = (typeof splitTypes)[number];
