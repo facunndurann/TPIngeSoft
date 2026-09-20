@@ -85,6 +85,17 @@ export async function loadBill(sessionId: string) {
   return data
 }
 
+/** Movimientos de la cuenta. El saldo se calcula aparte en session_bills. */
+export async function loadPayments(sessionId: string) {
+  const { data, error } = await supabase
+    .from('payments')
+    .select('id, participant_id, amount, mode, method, status, external_reference, created_at')
+    .eq('session_id', sessionId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+
 /**
  * Pide la cuenta o que un mozo venga a cobrar (MI-38/MI-46). Es idempotente:
  * si ya había una solicitud viva devuelve su hora original sin crear otra.

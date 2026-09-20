@@ -603,7 +603,9 @@ export type Database = {
         Row: {
           amount: number
           created_at: string
+          external_reference: string | null
           id: string
+          method: Database["public"]["Enums"]["payment_method"]
           mode: Database["public"]["Enums"]["payment_mode"]
           mp_payment_id: string | null
           participant_id: string | null
@@ -615,7 +617,9 @@ export type Database = {
         Insert: {
           amount: number
           created_at?: string
+          external_reference?: string | null
           id?: string
+          method: Database["public"]["Enums"]["payment_method"]
           mode: Database["public"]["Enums"]["payment_mode"]
           mp_payment_id?: string | null
           participant_id?: string | null
@@ -627,7 +631,9 @@ export type Database = {
         Update: {
           amount?: number
           created_at?: string
+          external_reference?: string | null
           id?: string
+          method?: Database["public"]["Enums"]["payment_method"]
           mode?: Database["public"]["Enums"]["payment_mode"]
           mp_payment_id?: string | null
           participant_id?: string | null
@@ -1514,6 +1520,17 @@ export type Database = {
         Returns: string
       }
       pos_open_table_session: { Args: { p_table_id: string }; Returns: string }
+      pos_record_payment: {
+        Args: {
+          p_amount: number
+          p_external_reference?: string
+          p_method: Database["public"]["Enums"]["payment_method"]
+          p_mode?: Database["public"]["Enums"]["payment_mode"]
+          p_participant_id?: string
+          p_session_id: string
+        }
+        Returns: string
+      }
       pos_resolve_session_request: {
         Args: {
           p_kind: Database["public"]["Enums"]["session_request_kind"]
@@ -1843,4 +1860,3 @@ export const Constants = {
     },
   },
 } as const
-

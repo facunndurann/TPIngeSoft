@@ -13,6 +13,8 @@ import type { Database } from './database.types.ts';
 
 /** Los define el enum `payment_method` de la base, que es lo que acepta la columna. */
 export type PaymentMethod = Database['public']['Enums']['payment_method'];
+export type PaymentStatus = Database['public']['Enums']['payment_status'];
+export type PaymentMode = Database['public']['Enums']['payment_mode'];
 
 /** Orden en que se ofrecen y se muestran, del más automático al más manual. */
 export const paymentMethods = ['mobile', 'in_person', 'external'] as const satisfies
@@ -29,6 +31,20 @@ export const paymentMethodDescriptions: Record<PaymentMethod, string> = {
   mobile: 'El comensal paga en la app con un medio electrónico.',
   in_person: 'El comensal puede pedir que un mozo le cobre en la mesa.',
   external: 'Se arregla fuera de la app: caja, efectivo o transferencia.',
+};
+
+export const paymentStatusLabels: Record<PaymentStatus, string> = {
+  pending: 'Pendiente',
+  approved: 'Aprobado',
+  rejected: 'Rechazado',
+  cancelled: 'Cancelado',
+};
+
+export const paymentModeLabels: Record<PaymentMode, string> = {
+  full: 'Cuenta completa',
+  own: 'Consumo propio',
+  equal_split: 'Partes iguales',
+  custom: 'Importe parcial',
 };
 
 /** Lo que hace falta saber de una sucursal para cobrarle a una mesa. */

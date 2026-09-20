@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query'
-import { AppError, fromPostgres, isOperable, localDateKey, type OrderStatus, type SessionRequestKind, type Tables } from '@restaurant-platform/shared'
+import { AppError, fromPostgres, isOperable, localDateKey, type OrderStatus, type PaymentMethod, type PaymentMode, type SessionRequestKind, type Tables } from '@restaurant-platform/shared'
 import { supabase } from '@/lib/supabase'
 import type { PosBill, PosDiningTable, PosFloorSection, PosOpenSession, PosOrder } from './types'
 import { posOrderSelect, posSessionSelect } from './types'
@@ -111,6 +111,34 @@ export async function loadSessionBills(sessionIds: string[]) {
     .in('session_id', sessionIds)
   throwIfError(error)
   return (data ?? []) as PosBill[]
+}
+
+export async function loadSessionPayments(sessionId: string) {
+  const { data, error } = await supabase
+    .from('payments')
+    .select('id, participant_id, amount, mode, method, status, external_reference, created_at')
+    .eq('session_id', sessionId)
+    .order('created_at', { ascending: false })
+  throwIfError(error)
+  return data ?? []
+}
+
+export async function recordPosPayment(input: {
+  sessionId: string
+  amount: number
+  method: PaymentMethod
+  mode: PaymentMode
+  externalReference?: string
+}) {
+  const { data, error } = await supabase.rpc('pos_record_payment', {
+    p_session_id: input.sessionId,
+    p_amount: input.amount,
+    p_method: input.method,
+    p_mode: input.mode,
+    p_external_reference: input.externalReference || undefined,
+  })
+  throwIfError(error)
+  return data
 }
 
 /**

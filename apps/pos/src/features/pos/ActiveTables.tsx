@@ -55,7 +55,7 @@ export function ActiveTables() {
         <h1 className="text-xl font-bold text-neutral-900">Mesas activas</h1>
         <p className="text-sm text-neutral-500">
           Mesas que llamaron, consumo acumulado, estado de pago y cierre manual de sesión. El cobro
-          digital corresponde a la siguiente fase.
+          digital corresponde a la siguiente fase; los cobros presenciales se registran desde la comanda.
         </p>
       </div>
 
@@ -202,8 +202,8 @@ export function ActiveTables() {
             </p>
             {canPay && closing.pending_amount > 0 && (
               <p className="rounded-lg bg-amber-50 px-3 py-2 text-amber-950">
-                Queda {formatPrice(closing.pending_amount)} pendiente. El pago en efectivo no
-                se registra todavía en el sistema.
+                Queda {formatPrice(closing.pending_amount)} pendiente. Registrá el cobro desde la
+                comanda antes de cerrar si la mesa ya pagó.
               </p>
             )}
             {closing.kitchen_tickets > 0 && (

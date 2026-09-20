@@ -745,6 +745,96 @@ $$;
 ALTER FUNCTION "public"."pos_open_table_session"("p_table_id" "uuid") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."pos_record_payment"("p_session_id" "uuid", "p_amount" numeric, "p_method" "public"."payment_method", "p_mode" "public"."payment_mode" DEFAULT 'full'::"public"."payment_mode", "p_participant_id" "uuid" DEFAULT NULL::"uuid", "p_external_reference" "text" DEFAULT NULL::"text") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  target public.table_sessions;
+  target_branch uuid;
+  enabled_methods public.payment_method[];
+  account_total numeric := 0;
+  approved_total numeric := 0;
+  pending_total numeric := 0;
+  payment_id uuid;
+  normalized_reference text := nullif(btrim(p_external_reference), '');
+begin
+  if auth.uid() is null then raise exception 'AUTH_REQUIRED'; end if;
+  if p_session_id is null or p_amount is null or p_method is null or p_mode is null
+    then raise exception 'INVALID_REQUEST'; end if;
+  if p_amount in ('NaN'::numeric, 'Infinity'::numeric, '-Infinity'::numeric)
+    or p_amount <= 0 or p_amount <> round(p_amount, 2)
+    then raise exception 'INVALID_PAYMENT_AMOUNT'; end if;
+  if normalized_reference is not null and length(normalized_reference) > 200
+    then raise exception 'INVALID_REQUEST'; end if;
+
+  -- Todas las registraciones de la sesión toman el mismo lock. Dos cajas no
+  -- pueden acreditar simultáneamente más que el saldo disponible.
+  select * into target from public.table_sessions
+  where id = p_session_id for update;
+  if not found then raise exception 'SESSION_NOT_FOUND'; end if;
+  if target.status <> 'open' then raise exception 'SESSION_CLOSED'; end if;
+
+  select t.branch_id, b.payment_methods into target_branch, enabled_methods
+  from public.tables t
+  join public.branches b on b.id = t.branch_id and b.restaurant_id = t.restaurant_id
+  where t.id = target.table_id and t.restaurant_id = target.restaurant_id;
+  if target_branch is null then raise exception 'TABLE_NOT_FOUND'; end if;
+  if not exists(select 1 from public.profiles where id = auth.uid())
+    or not public.has_permission(target.restaurant_id, 'payments.write', target_branch)
+    then raise exception 'FORBIDDEN'; end if;
+  if not (p_method = any(enabled_methods)) then raise exception 'PAYMENT_METHOD_DISABLED'; end if;
+  -- El pago mobile sólo se confirma desde la integración de la fase 10. El POS
+  -- no puede fabricar una aprobación que el proveedor nunca confirmó.
+  if p_method = 'mobile' then raise exception 'PAYMENT_METHOD_UNAVAILABLE'; end if;
+
+  if p_participant_id is not null and not exists(
+    select 1 from public.session_participants
+    where id = p_participant_id and session_id = target.id
+  ) then raise exception 'INVALID_PARTICIPANT'; end if;
+
+  select coalesce(sum(total_amount), 0) into account_total
+  from public.orders
+  where session_id = target.id and restaurant_id = target.restaurant_id
+    and status in ('accepted','in_preparation','ready','delivered');
+  select coalesce(sum(amount), 0) into approved_total
+  from public.payments
+  where session_id = target.id and restaurant_id = target.restaurant_id
+    and status = 'approved';
+  pending_total := greatest(account_total - approved_total, 0);
+  if pending_total = 0 then raise exception 'NOTHING_TO_PAY'; end if;
+  if p_amount > pending_total then raise exception 'PAYMENT_EXCEEDS_BALANCE'; end if;
+
+  begin
+    insert into public.payments(
+      restaurant_id, session_id, participant_id, amount, mode, method,
+      status, external_reference
+    ) values (
+      target.restaurant_id, target.id, p_participant_id, p_amount, p_mode,
+      p_method, 'approved', normalized_reference
+    ) returning id into payment_id;
+  exception when unique_violation then
+    raise exception 'PAYMENT_REFERENCE_CONFLICT';
+  end;
+
+  perform public.record_pos_action(
+    target.restaurant_id, target_branch, 'payment.recorded', null, target.id,
+    jsonb_build_object(
+      'paymentId', payment_id,
+      'amount', p_amount,
+      'method', p_method,
+      'mode', p_mode,
+      'participantId', p_participant_id
+    )
+  );
+  return payment_id;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."pos_record_payment"("p_session_id" "uuid", "p_amount" numeric, "p_method" "public"."payment_method", "p_mode" "public"."payment_mode", "p_participant_id" "uuid", "p_external_reference" "text") OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."pos_resolve_session_request"("p_session_id" "uuid", "p_kind" "public"."session_request_kind") RETURNS timestamp with time zone
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -1810,11 +1900,26 @@ CREATE TABLE IF NOT EXISTS "public"."payments" (
     "mp_payment_id" "text",
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    CONSTRAINT "payments_amount_check" CHECK (("amount" > (0)::numeric))
+    "method" "public"."payment_method" NOT NULL,
+    "external_reference" "text",
+    CONSTRAINT "payments_amount_check" CHECK (("amount" > (0)::numeric)),
+    CONSTRAINT "payments_external_reference_length" CHECK ((("external_reference" IS NULL) OR ("length"("external_reference") <= 200)))
 );
 
 
 ALTER TABLE "public"."payments" OWNER TO "postgres";
+
+
+COMMENT ON COLUMN "public"."payments"."mp_payment_id" IS 'Compatibilidad histórica. Las integraciones nuevas deben usar external_reference.';
+
+
+
+COMMENT ON COLUMN "public"."payments"."method" IS 'Medio concreto usado para pagar. Es independiente de mode, que describe cómo se dividió la cuenta.';
+
+
+
+COMMENT ON COLUMN "public"."payments"."external_reference" IS 'Identificador opcional del proveedor, transferencia, recibo o terminal. No contiene credenciales.';
+
 
 
 CREATE TABLE IF NOT EXISTS "public"."pos_audit_log" (
@@ -2422,6 +2527,14 @@ CREATE INDEX "orders_restaurant_local_date_idx" ON "public"."orders" USING "btre
 
 
 CREATE INDEX "orders_session_id_idx" ON "public"."orders" USING "btree" ("session_id");
+
+
+
+CREATE UNIQUE INDEX "payments_external_reference_unique" ON "public"."payments" USING "btree" ("restaurant_id", "method", "external_reference") WHERE ("external_reference" IS NOT NULL);
+
+
+
+CREATE INDEX "payments_session_created_idx" ON "public"."payments" USING "btree" ("session_id", "created_at" DESC);
 
 
 
@@ -3209,6 +3322,12 @@ GRANT ALL ON FUNCTION "public"."pos_open_table_session"("p_table_id" "uuid") TO 
 
 
 
+REVOKE ALL ON FUNCTION "public"."pos_record_payment"("p_session_id" "uuid", "p_amount" numeric, "p_method" "public"."payment_method", "p_mode" "public"."payment_mode", "p_participant_id" "uuid", "p_external_reference" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."pos_record_payment"("p_session_id" "uuid", "p_amount" numeric, "p_method" "public"."payment_method", "p_mode" "public"."payment_mode", "p_participant_id" "uuid", "p_external_reference" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."pos_record_payment"("p_session_id" "uuid", "p_amount" numeric, "p_method" "public"."payment_method", "p_mode" "public"."payment_mode", "p_participant_id" "uuid", "p_external_reference" "text") TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."pos_resolve_session_request"("p_session_id" "uuid", "p_kind" "public"."session_request_kind") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."pos_resolve_session_request"("p_session_id" "uuid", "p_kind" "public"."session_request_kind") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."pos_resolve_session_request"("p_session_id" "uuid", "p_kind" "public"."session_request_kind") TO "service_role";
@@ -3508,8 +3627,6 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TAB
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "anon";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "authenticated";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "service_role";
-
-
 
 
 

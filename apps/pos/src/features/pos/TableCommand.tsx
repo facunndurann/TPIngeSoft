@@ -15,6 +15,7 @@ import {
   transitionPosOrder,
 } from './api'
 import { OrderTicket } from './OrderTicket'
+import { PaymentPanel } from './PaymentPanel'
 import { AttendRequestButtons, ChargedBadge, SessionRequestBadges } from './ServiceRequests'
 import { useNow } from './useNow'
 
@@ -160,6 +161,7 @@ export function TableCommand() {
             <SummaryItem as="dl-pair" icon={Clock3} label="Abierta" value={formatElapsed(open.opened_at, now)} />
             {can('payments.read') && <>
               <SummaryItem as="dl-pair" label="En cuenta" value={formatPrice(bill?.total_amount)} />
+              <SummaryItem as="dl-pair" label="Pagado" value={formatPrice(bill?.paid_amount)} />
               <SummaryItem as="dl-pair" label="Pendiente" value={formatPrice(bill?.pending_amount)} />
             </>}
             <SummaryItem
@@ -227,6 +229,10 @@ export function TableCommand() {
               </div>
             )}
           </section>
+
+          {can('payments.read') && (
+            <PaymentPanel sessionId={open.id} bill={bill} enabledMethods={branchMethods} />
+          )}
         </>
       )}
 

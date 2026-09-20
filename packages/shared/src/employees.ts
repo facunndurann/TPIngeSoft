@@ -43,6 +43,7 @@ export const posPermissions = [
   'orders.read',
   'orders.revert',
   'payments.read',
+  'payments.write',
   'sessions.attend',
   'sessions.close',
   'sessions.move',

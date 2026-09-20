@@ -1,8 +1,17 @@
 import { useQuery } from '@tanstack/react-query'
-import { formatPrice, orderStatusLabels, parseSessionSplit, type PaymentMethod, type Tables } from '@restaurant-platform/shared'
+import {
+  formatPrice,
+  orderStatusLabels,
+  parseSessionSplit,
+  paymentMethodLabels,
+  paymentModeLabels,
+  paymentStatusLabels,
+  type PaymentMethod,
+  type Tables,
+} from '@restaurant-platform/shared'
 import { BillSplitter } from '@/features/BillSplitter'
 
-import { loadBill, loadOrders } from '@/features/orders-api'
+import { loadBill, loadOrders, loadPayments } from '@/features/orders-api'
 import type { loadSession } from '@/features/session'
 import { ServiceRequests } from '@/features/ServiceRequests'
 
@@ -11,6 +20,7 @@ type Participant = Tables<'session_participants'>
 type Order = Awaited<ReturnType<typeof loadOrders>>[number]
 type OrderItem = Order['order_items'][number]
 type Bill = Awaited<ReturnType<typeof loadBill>>
+type Payment = Awaited<ReturnType<typeof loadPayments>>[number]
 
 type SessionOrdersProps = {
   sessionId?: string
@@ -38,6 +48,12 @@ export function SessionOrders({
   const bill = useQuery({
     queryKey: ['bill', sessionId],
     queryFn: () => loadBill(sessionId!),
+    enabled: !!sessionId,
+    refetchInterval: 15000,
+  })
+  const payments = useQuery({
+    queryKey: ['payments', sessionId],
+    queryFn: () => loadPayments(sessionId!),
     enabled: !!sessionId,
     refetchInterval: 15000,
   })
@@ -74,6 +90,13 @@ export function SessionOrders({
         </div>
       )}
       {bill.data && <BillSummary bill={bill.data} />}
+      <PaymentHistory
+        payments={payments.data}
+        loading={payments.isPending}
+        error={payments.isError}
+        participantName={participantName}
+        retry={() => { void payments.refetch() }}
+      />
       {session && (
         <ServiceRequests
           sessionId={session.id}
@@ -107,6 +130,55 @@ export function SessionOrders({
         />
       )}
     </section>
+  )
+}
+
+function PaymentHistory({
+  payments,
+  loading,
+  error,
+  participantName,
+  retry,
+}: {
+  payments?: Payment[]
+  loading: boolean
+  error: boolean
+  participantName: (id: string | null) => string
+  retry: () => void
+}) {
+  if (loading) return <p role="status">Actualizando los pagos…</p>
+  if (error) {
+    return (
+      <div className="notice" role="alert">
+        <p>No pudimos actualizar el historial de pagos.</p>
+        <button onClick={retry}>Reintentar pagos</button>
+      </div>
+    )
+  }
+  if (!payments?.length) return null
+
+  return (
+    <div className="bill-panel" aria-label="Historial de pagos">
+      <h3>Pagos registrados</h3>
+      {payments.map((payment) => (
+        <div className="line" key={payment.id}>
+          <div>
+            <strong>{formatPrice(payment.amount)}</strong>{' '}
+            <span>{paymentStatusLabels[payment.status]}</span>
+            <p className="muted">
+              {paymentMethodLabels[payment.method]} · {paymentModeLabels[payment.mode]}
+              {payment.participant_id ? ` · ${participantName(payment.participant_id)}` : ''}
+            </p>
+          </div>
+          <time dateTime={payment.created_at}>
+            {new Intl.DateTimeFormat('es-AR', {
+              day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+            }).format(new Date(payment.created_at))}
+          </time>
+        </div>
+      ))}
+      <p className="muted">Los pagos pendientes o rechazados se muestran, pero no reducen el saldo.</p>
+    </div>
   )
 }
 
