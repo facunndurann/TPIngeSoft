@@ -119,8 +119,13 @@ test('a successful response matches submitted lines by value, not by key or opti
 })
 test('the cart phase is the single source for what the diner can do', () => {
   const item = { ...selection, id: 'line', productId: 'p' }
-  const draft = { items: [item], menu, total: 30.9, sessionId: 'session', sessionOpen: true, reviewing: false, menuOutdated: false, sending: false, cancelling: false }
+  const review = { items: [{ ...item }], total: 30.9 }
+  const draft = { items: [item], menu, total: 30.9, sessionId: 'session', sessionOpen: true, named: true, reviewing: false, menuOutdated: false, sending: false, cancelling: false }
   assert.deepEqual(cartPhase(draft), { kind: 'editing', editable: true, canReview: true })
+  // Sin nombre elegido se puede armar el carrito, pero no enviarlo: la cuenta no
+  // sabría de quién es cada plato.
+  assert.deepEqual(cartPhase({ ...draft, named: false }), { kind: 'editing', editable: true, canReview: false })
+  assert.deepEqual(cartPhase({ ...draft, named: false, reviewing: true, review }), { kind: 'reviewing', review, outdated: false, confirmable: undefined })
   assert.deepEqual(cartPhase({ ...draft, items: [] }), { kind: 'empty' })
   assert.deepEqual(cartPhase({ ...draft, menuOutdated: true }), { kind: 'editing', editable: true, canReview: false })
   assert.deepEqual(cartPhase({ ...draft, items: [{ ...item, optionIds: [] }] }), { kind: 'editing', editable: true, canReview: false })
@@ -131,7 +136,6 @@ test('the cart phase is the single source for what the diner can do', () => {
   assert.deepEqual(cartPhase({ ...draft, submission, sending: true, cancelling: true }), { kind: 'pending', submission, activity: 'sending' })
   assert.deepEqual(cartPhase({ ...draft, submission, cancelling: true }), { kind: 'pending', submission, activity: 'cancelling' })
 
-  const review = { items: [{ ...item }], total: 30.9 }
   const reviewing = { ...draft, reviewing: true, review }
   assert.deepEqual(cartPhase(reviewing), { kind: 'reviewing', review, outdated: false, confirmable: { sessionId: 'session', expectedTotal: 30.9 } })
   assert.deepEqual(cartPhase({ ...reviewing, total: 31 }), { kind: 'reviewing', review, outdated: true, confirmable: undefined })
@@ -372,6 +376,22 @@ test('the cart puts an undone plate back in its place and starting over drops th
   useCart.getState().restore(key, plate('z'), 0)
   assert.deepEqual(useCart.getState().carts[key].map((item) => item.id), ['a'])
   useCart.setState({ carts: {}, submissions: {} })
+})
+
+test('the percentage field cannot be pushed past what the others left', async () => {
+  const { createElement } = await import('react')
+  const { renderToStaticMarkup } = await import('react-dom/server')
+  const { PercentField } = await import('../src/components/PercentField')
+  const noop = () => {}
+  const render = (value: number | undefined, max: number) =>
+    renderToStaticMarkup(createElement(PercentField, { value, max, label: 'Porcentaje de Ana', onChange: noop }))
+
+  // El techo del campo es lo que queda sin asignar, no el total.
+  assert.match(render(40, 60), /max="60"/)
+  assert.match(render(40, 60), /value="40"/)
+  // Sin asignación el campo va vacío: "no participa del reparto" es un estado válido.
+  assert.match(render(undefined, 100), /value=""/)
+  assert.match(render(undefined, 100), /aria-label="Porcentaje de Ana"/)
 })
 
 test('the remembered table survives only as three usable strings', async () => {

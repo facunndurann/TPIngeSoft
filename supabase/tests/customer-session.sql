@@ -33,6 +33,7 @@ declare
   open_qr text;
   sid uuid;
   rejoined uuid;
+  named timestamptz;
 begin
   insert into auth.users(id, aud, role) values
     (diner,'authenticated','authenticated'), (newcomer,'authenticated','authenticated'),
@@ -85,6 +86,10 @@ begin
   if (select display_name from public.session_participants
       where session_id = sid and user_id = diner) <> 'Ana' then
     raise exception 'The participant name should be stored trimmed'; end if;
+  -- El nombre elegido queda firmado: es lo que distingue a este comensal del default.
+  select named_at into named from public.session_participants
+    where session_id = sid and user_id = diner;
+  if named is null then raise exception 'Choosing a name should be recorded'; end if;
 
   -- Volver a entrar sin nombre conserva el que ya tenía y la misma mesa.
   rejoined := public.join_table_session(open_qr, null);
@@ -92,16 +97,28 @@ begin
   if (select display_name from public.session_participants
       where session_id = sid and user_id = diner) <> 'Ana' then
     raise exception 'Rejoining without a name should keep the stored one'; end if;
+  if (select named_at from public.session_participants
+      where session_id = sid and user_id = diner) <> named then
+    raise exception 'Rejoining without a name should keep the original signature'; end if;
 
-  -- Un comensal nuevo sin nombre entra como Comensal a la misma mesa.
+  -- Un comensal nuevo sin nombre entra como Comensal y sin firma: la app se la pide.
   perform set_config('request.jwt.claim.sub', newcomer::text, true);
   if public.join_table_session(open_qr, null) <> sid then
     raise exception 'A second diner should join the same open session'; end if;
   if (select display_name from public.session_participants
       where session_id = sid and user_id = newcomer) <> 'Comensal' then
     raise exception 'A nameless diner should default to Comensal'; end if;
+  if (select named_at from public.session_participants
+      where session_id = sid and user_id = newcomer) is not null then
+    raise exception 'The default name must not count as chosen'; end if;
 
-  raise notice 'Customer session SQL assertions passed (auth, staff guard, name, table availability, rejoin)';
+  -- Y al elegirlo, queda firmado sin volver a entrar desde cero.
+  perform public.join_table_session(open_qr, 'Beto');
+  if (select display_name || coalesce(named_at::text, '') from public.session_participants
+      where session_id = sid and user_id = newcomer) = 'Comensal' then
+    raise exception 'Choosing a name later should update and sign it'; end if;
+
+  raise notice 'Customer session SQL assertions passed (auth, staff guard, name, signature, table availability, rejoin)';
 end;
 $$;
 

@@ -53,6 +53,7 @@ header { border-bottom: 1px solid var(--menu-border); padding-bottom: 16px; }
 .eyebrow { color: var(--menu-eyebrow); font-size: 11px; font-weight: 750; letter-spacing: .17em; margin-bottom: 12px; font-family: var(--menu-font-display); }
 .badge { display: inline-block; background: var(--menu-badge-bg); color: var(--menu-badge-text); padding: 4px 10px; border-radius: var(--menu-radius-pill); font-size: 12px; margin-left: 8px; }
 .session-panel { margin: 20px 0; background: var(--menu-surface-muted); border-radius: calc(var(--menu-radius) + 4px); padding: 18px; }
+.session-panel .text-button { margin-bottom: 0; }
 .muted, small { color: var(--menu-muted); font-size: 13px; }
 .name-form { display: flex; gap: 8px; flex-wrap: wrap; }
 .name-form input { flex: 1; }

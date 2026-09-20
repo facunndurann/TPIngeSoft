@@ -1,6 +1,7 @@
 import type { UseQueryResult } from '@tanstack/react-query'
-import { type FormEvent, useState } from 'react'
+import { type FormEvent, useEffect, useState } from 'react'
 import { ErrorMessage } from '@/components/ErrorMessage'
+import { NAME_FIELD_ID } from '@/features/name-field'
 import type { loadSession } from '@/features/session'
 
 type Session = Awaited<ReturnType<typeof loadSession>>
@@ -14,7 +15,13 @@ type SessionPanelProps = {
   cartCount: number
   name: string
   onNameChange: (value: string) => void
-  rename: { mutate: () => void; isPending: boolean; isError: boolean; error: unknown }
+  rename: {
+    mutate: () => void
+    isPending: boolean
+    isSuccess: boolean
+    isError: boolean
+    error: unknown
+  }
   onOpenNewSession: () => void
 }
 
@@ -31,7 +38,15 @@ export function SessionPanel({
 }: SessionPanelProps) {
   const currentParticipant = session.data?.participants.find((p) => p.user_id === userId)
   const displayName = currentParticipant?.display_name ?? 'Comensal'
+  const named = !!currentParticipant?.named_at
   const names = session.data?.participants.map((p) => p.display_name).join(' · ') ?? ''
+  const [editing, setEditing] = useState(false)
+
+  // Guardado el nombre, el formulario se cierra: ya cumplió y deja de ocupar la
+  // pantalla en cada pedido. Al reabrirlo, `isSuccess` no cambió, así que queda abierto.
+  useEffect(() => {
+    if (rename.isSuccess) setEditing(false)
+  }, [rename.isSuccess])
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
@@ -61,30 +76,47 @@ export function SessionPanel({
               cartCount={cartCount}
               onOpenNewSession={onOpenNewSession}
             />
+          ) : named && !editing ? (
+            <button className="text-button" onClick={() => setEditing(true)}>
+              Cambiar mi nombre
+            </button>
           ) : (
-            <form className="name-form" onSubmit={handleSubmit}>
-              <label className="sr-only" htmlFor="name">
-                Tu nombre
-              </label>
-              <input
-                id="name"
-                placeholder="Tu nombre para la mesa"
-                value={name}
-                maxLength={40}
-                required
-                onChange={(event) => onNameChange(event.target.value)}
-              />
-              <button disabled={rename.isPending || !name.trim() || hasPendingSubmission}>
-                Guardar nombre
-              </button>
-              {rename.isError && (
-                <p role="alert">
-                  {rename.error instanceof Error
-                    ? rename.error.message
-                    : 'No pudimos guardar tu nombre. Intentá nuevamente.'}
-                </p>
+            <>
+              {/* Se pide antes del primer pedido, con el motivo: un comensal sin
+                  nombre no se puede distinguir en la cuenta de la mesa. */}
+              {!named && (
+                <p>Poné tu nombre así la mesa sabe qué pidió cada uno al dividir la cuenta.</p>
               )}
-            </form>
+              <form className="name-form" onSubmit={handleSubmit}>
+                <label className="sr-only" htmlFor={NAME_FIELD_ID}>
+                  Tu nombre
+                </label>
+                <input
+                  id={NAME_FIELD_ID}
+                  placeholder="Tu nombre para la mesa"
+                  value={name}
+                  maxLength={40}
+                  required
+                  autoComplete="given-name"
+                  onChange={(event) => onNameChange(event.target.value)}
+                />
+                <button disabled={rename.isPending || !name.trim() || hasPendingSubmission}>
+                  {rename.isPending ? 'Guardando…' : 'Guardar nombre'}
+                </button>
+                {named && (
+                  <button type="button" disabled={rename.isPending} onClick={() => setEditing(false)}>
+                    Cancelar
+                  </button>
+                )}
+                {rename.isError && (
+                  <p role="alert">
+                    {rename.error instanceof Error
+                      ? rename.error.message
+                      : 'No pudimos guardar tu nombre. Intentá nuevamente.'}
+                  </p>
+                )}
+              </form>
+            </>
           )}
         </>
       )}

@@ -50,18 +50,41 @@ export function useTableSession(token: string) {
     return subscribeToTableSession(sessionId, refresh)
   }, [sessionId, client])
 
-  const [name, setName] = useState('')
+  const participant = session.data?.participants.find(
+    (entry) => entry.user_id === joined.data?.userId,
+  )
+  // Solo se precarga un nombre elegido: precargar el que puso el sistema
+  // invitaría a guardarlo como propio.
+  const savedName = participant?.named_at ? participant.display_name : ''
+
+  // `undefined` = el campo muestra lo guardado. Mientras se edita manda el
+  // borrador, así el refetch cada 15 segundos no pisa lo que se está tipeando.
+  const [draftName, setDraftName] = useState<string>()
 
   const rename = useMutation({
     mutationFn: async () => {
       // El mismo límite que revalida customer_join_table_session, con su mensaje.
-      const validName = participantNameSchema.safeParse(name)
+      const validName = participantNameSchema.safeParse(draftName ?? savedName)
       if (!validName.success) throw new AppError('INVALID_NAME')
       const result = await joinSession(token, validName.data)
       client.setQueryData(['join', token], result)
       await client.invalidateQueries({ queryKey: ['session', result.id] })
     },
+    // Guardado, el campo vuelve a mostrar lo que hay en la mesa.
+    onSuccess: () => setDraftName(undefined),
   })
 
-  return { client, table, menu, joined, session, sessionId, name, setName, rename }
+  return {
+    client,
+    table,
+    menu,
+    joined,
+    session,
+    sessionId,
+    participant,
+    named: !!participant?.named_at,
+    name: draftName ?? savedName,
+    setName: setDraftName,
+    rename,
+  }
 }

@@ -9,6 +9,7 @@ import type { Review } from '@/features/cart'
 import { cartPrice, price, productOptions, selectionErrors } from '@/features/menu'
 import type { Menu } from '@/features/menu'
 import { abandonSubmission, submitOrder } from '@/features/orders-api'
+import { focusNameField } from '@/features/name-field'
 import { cartItemPath, cartPath, cartReviewPath } from '@/features/table-paths'
 import { useCart } from '@/stores/cart'
 import type { CartItem } from '@/stores/cart'
@@ -18,6 +19,8 @@ type CartPanelProps = {
   sessionId?: string
   menu?: Menu
   sessionOpen: boolean
+  /** Si el comensal ya eligió su nombre; sin eso no se envía el pedido. */
+  named: boolean
   reviewing?: boolean
   refreshMenu: () => Promise<unknown>
   onSubmitted: () => void
@@ -30,6 +33,7 @@ export function CartPanel({
   sessionId,
   menu,
   sessionOpen,
+  named,
   reviewing = false,
   refreshMenu,
   onSubmitted,
@@ -98,6 +102,7 @@ export function CartPanel({
     total,
     sessionId,
     sessionOpen,
+    named,
     reviewing,
     review,
     submission: cart.submissions[cartKey],
@@ -191,6 +196,15 @@ export function CartPanel({
             <p className="notice">
               Para enviar tu pedido, la mesa tiene que estar abierta y con conexión.
             </p>
+          )}
+          {sessionOpen && !named && (
+            <div className="notice">
+              <p>
+                Poné tu nombre antes de enviar: es lo que permite saber qué pidió cada uno y
+                repartir la cuenta.
+              </p>
+              <button onClick={focusNameField}>Poner mi nombre</button>
+            </div>
           )}
           {needsMenuRefresh && (
             <div className="notice">

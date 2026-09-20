@@ -96,6 +96,27 @@ export function allocationTotal(allocations: SplitAllocations): number {
 }
 
 /**
+ * Cuánto puede asignarse todavía a un comensal: los 100 menos lo que ya tienen
+ * los demás. Es el techo real de su campo, así nadie puede pasar del total.
+ * Se suma en centésimas y se divide al final para no arrastrar ruido del float.
+ */
+export function remainingPercentage(
+  allocations: SplitAllocations,
+  participantId: string,
+): number {
+  const others = Object.entries(allocations).reduce(
+    (total, [id, value]) => (id === participantId ? total : total + Math.round(value * HUNDREDTHS)),
+    0,
+  );
+  return Math.max(SPLIT_PERCENTAGE_TOTAL * HUNDREDTHS - others, 0) / HUNDREDTHS;
+}
+
+/** Compara porcentajes con la precisión del schema: dos decimales, sin sorpresas del float. */
+export function percentageFits(value: number, limit: number): boolean {
+  return Math.round(value * HUNDREDTHS) <= Math.round(limit * HUNDREDTHS);
+}
+
+/**
  * Lee la división guardada en `table_sessions` sin castear el `Json` de la
  * columna: lo que no valide vuelve a `none`, que es el estado seguro.
  */

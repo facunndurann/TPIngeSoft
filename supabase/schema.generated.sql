@@ -357,6 +357,8 @@ CREATE OR REPLACE FUNCTION "public"."customer_join_table_session"("qr" "text", "
 declare
   target public.tables;
   sid uuid;
+  -- Null cuando el comensal entra sin nombre: no se puede dar por elegido el default.
+  named timestamptz := case when participant_name is not null then now() end;
 begin
   if auth.uid() is null then raise exception 'AUTH_REQUIRED'; end if;
 
@@ -377,10 +379,12 @@ begin
       values(target.restaurant_id, target.id) returning id into sid;
   end if;
 
-  insert into public.session_participants(session_id, user_id, display_name)
-    values(sid, auth.uid(), coalesce(trim(participant_name), 'Comensal'))
+  insert into public.session_participants(session_id, user_id, display_name, named_at)
+    values(sid, auth.uid(), coalesce(trim(participant_name), 'Comensal'), named)
     on conflict (session_id, user_id) do update
-      set display_name = coalesce(trim(participant_name), session_participants.display_name);
+      set display_name = coalesce(trim(participant_name), session_participants.display_name),
+          -- Volver a entrar sin nombre no borra el que ya se eligió.
+          named_at = coalesce(named, session_participants.named_at);
 
   return sid;
 end;
@@ -1835,11 +1839,16 @@ CREATE TABLE IF NOT EXISTS "public"."session_participants" (
     "session_id" "uuid" NOT NULL,
     "user_id" "uuid" NOT NULL,
     "display_name" "text" NOT NULL,
-    "joined_at" timestamp with time zone DEFAULT "now"() NOT NULL
+    "joined_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "named_at" timestamp with time zone
 );
 
 
 ALTER TABLE "public"."session_participants" OWNER TO "postgres";
+
+
+COMMENT ON COLUMN "public"."session_participants"."named_at" IS 'Momento en que el comensal eligió su nombre. Null mientras usa el que puso el sistema.';
+
 
 
 CREATE TABLE IF NOT EXISTS "public"."tables" (

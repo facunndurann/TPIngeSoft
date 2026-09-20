@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { allocationTotal, formatPrice, type SessionSplit, sessionSplitSchema, SPLIT_PERCENTAGE_TOTAL, splitBill, type SplitBill, type SplitOrder, type SplitParticipant, splitTypeDescriptions, splitTypeLabels, splitTypes } from '@restaurant-platform/shared'
+import { allocationTotal, formatPrice, remainingPercentage, type SessionSplit, sessionSplitSchema, SPLIT_PERCENTAGE_TOTAL, splitBill, type SplitBill, type SplitOrder, type SplitParticipant, splitTypeDescriptions, splitTypeLabels, splitTypes } from '@restaurant-platform/shared'
 
+import { PercentField } from '@/components/PercentField'
 import type { Announce } from '@/features/announcements'
 import { AGE_TICK_MS, relativeAge } from '@/features/freshness'
 import { updateSessionSplit } from '@/features/orders-api'
@@ -83,14 +84,14 @@ export function BillSplitter({
   const validation = draft ? sessionSplitSchema.safeParse(draft) : null
   const assigned = draft ? allocationTotal(draft.allocations) : 0
 
-  const setAllocation = (participantId: string, value: string) =>
+  const setAllocation = (participantId: string, value?: number) =>
     setDraft((current) => {
       if (!current) return current
       const allocations = { ...current.allocations }
       // Vacío no es 0 guardado: la clave se saca para no dejar asignaciones
       // muertas de comensales que no participan del reparto.
-      if (value === '') delete allocations[participantId]
-      else allocations[participantId] = Number(value)
+      if (value === undefined) delete allocations[participantId]
+      else allocations[participantId] = value
       return { ...current, allocations }
     })
 
@@ -131,18 +132,12 @@ export function BillSplitter({
                 {isYou && <span className="badge">vos</span>}
               </span>
               {draft?.type === 'percentages' ? (
-                <span className="split-percent">
-                  <input
-                    type="number"
-                    min={0}
-                    max={SPLIT_PERCENTAGE_TOTAL}
-                    step="0.01"
-                    aria-label={`Porcentaje de ${participant.display_name}`}
-                    value={draft.allocations[participant.id] ?? ''}
-                    onChange={(event) => setAllocation(participant.id, event.target.value)}
-                  />
-                  <small>%</small>
-                </span>
+                <PercentField
+                  value={draft.allocations[participant.id]}
+                  max={remainingPercentage(draft.allocations, participant.id)}
+                  label={`Porcentaje de ${participant.display_name}`}
+                  onChange={(value) => setAllocation(participant.id, value)}
+                />
               ) : amount === 0 ? (
                 <small>No debe nada</small>
               ) : (
@@ -154,8 +149,10 @@ export function BillSplitter({
       </ul>
 
       {draft?.type === 'percentages' && (
-        <p className="muted">
-          Asignado: {assigned}% de {SPLIT_PERCENTAGE_TOTAL}%.
+        <p className="muted" role="status">
+          {assigned === SPLIT_PERCENTAGE_TOTAL
+            ? `Repartido el ${SPLIT_PERCENTAGE_TOTAL}%.`
+            : `Asignado ${assigned}% de ${SPLIT_PERCENTAGE_TOTAL}%: falta repartir ${SPLIT_PERCENTAGE_TOTAL - assigned}%.`}
         </p>
       )}
 

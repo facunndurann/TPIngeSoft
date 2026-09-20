@@ -2,6 +2,8 @@ import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import {
   allocationTotal,
+  percentageFits,
+  remainingPercentage,
   billedOrderStatuses,
   defaultSessionSplit,
   isBilledStatus,
@@ -142,4 +144,19 @@ test('parseSessionSplit no castea: lo inválido vuelve a none', () => {
 test('allocationTotal informa cuánto falta asignar', () => {
   assert.equal(allocationTotal({ [ana]: 40, [beto]: 35 }), 75)
   assert.equal(allocationTotal({}), 0)
+})
+
+test('the percentage budget leaves each diner only what the others do not have', () => {
+  // Con dos tercios repartidos, al tercero le queda exactamente el resto, sin ruido del float.
+  const thirds = { [ana]: 33.34, [beto]: 33.33, [caro]: 33.33 }
+  assert.equal(remainingPercentage(thirds, caro), 33.33)
+  assert.equal(remainingPercentage(thirds, ana), 33.34)
+  assert.equal(remainingPercentage({ [ana]: 60 }, beto), 40)
+  // Sin nada asignado el techo es el total; con el total tomado, cero.
+  assert.equal(remainingPercentage({}, ana), 100)
+  assert.equal(remainingPercentage({ [beto]: 100 }, ana), 0)
+
+  assert.ok(percentageFits(33.33, remainingPercentage(thirds, caro)))
+  assert.ok(!percentageFits(33.34, remainingPercentage(thirds, caro)))
+  assert.ok(percentageFits(0, 0))
 })

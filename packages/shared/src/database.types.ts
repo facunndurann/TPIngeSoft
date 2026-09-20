@@ -1145,6 +1145,7 @@ export type Database = {
           display_name: string
           id: string
           joined_at: string
+          named_at: string | null
           session_id: string
           user_id: string
         }
@@ -1152,6 +1153,7 @@ export type Database = {
           display_name: string
           id?: string
           joined_at?: string
+          named_at?: string | null
           session_id: string
           user_id: string
         }
@@ -1159,6 +1161,7 @@ export type Database = {
           display_name?: string
           id?: string
           joined_at?: string
+          named_at?: string | null
           session_id?: string
           user_id?: string
         }

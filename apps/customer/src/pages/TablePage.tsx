@@ -48,6 +48,7 @@ type TableContextValue = {
   cartKey: string
   items: CartItem[]
   sessionOpen: boolean
+  named: boolean
   canEdit: boolean
   announce: Announce
 }
@@ -75,7 +76,7 @@ export function TableRoute() {
 }
 
 function TableApp({ token }: { token: string }) {
-  const { client, table, menu, joined, session, sessionId, name, setName, rename } =
+  const { client, table, menu, joined, session, sessionId, named, name, setName, rename } =
     useTableSession(token)
   const location = useLocation()
   const [announcement, setAnnouncement] = useState<Announcement>()
@@ -147,6 +148,7 @@ function TableApp({ token }: { token: string }) {
           cartKey,
           items,
           sessionOpen,
+          named,
           canEdit,
           announce,
         }}
@@ -235,7 +237,8 @@ export function TableMenuPage() {
 }
 
 export function TableCartPage({ reviewing = false }: { reviewing?: boolean }) {
-  const { token, client, menu, sessionId, sessionOpen, cartKey, items, announce } = useTable()
+  const { token, client, menu, sessionId, sessionOpen, named, cartKey, items, announce } =
+    useTable()
   const pending = useCart((state) => state.submissions[cartKey])
   const navigate = useNavigate()
 
@@ -250,6 +253,7 @@ export function TableCartPage({ reviewing = false }: { reviewing?: boolean }) {
       sessionId={sessionId}
       menu={menu.data}
       sessionOpen={sessionOpen}
+      named={named}
       reviewing={reviewing}
       refreshMenu={() => menu.refetch({ throwOnError: true })}
       onAnnounce={announce}
