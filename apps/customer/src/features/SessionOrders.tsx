@@ -10,6 +10,7 @@ import {
   type Tables,
 } from '@restaurant-platform/shared'
 import { BillSplitter } from '@/features/BillSplitter'
+import { MobilePayment } from '@/features/MobilePayment'
 
 import { loadBill, loadOrders, loadPayments } from '@/features/orders-api'
 import type { loadSession } from '@/features/session'
@@ -63,6 +64,7 @@ export function SessionOrders({
     const suffix = participant?.user_id === userId ? ' (vos)' : ''
     return `${participant?.display_name ?? 'Comensal'}${suffix}`
   }
+  const currentParticipantId = participants.find(participant => participant.user_id === userId)?.id
 
   if (!sessionId) {
     return (
@@ -90,6 +92,15 @@ export function SessionOrders({
         </div>
       )}
       {bill.data && <BillSummary bill={bill.data} />}
+      {bill.data && session && currentParticipantId && paymentMethods.includes('mobile') && (
+        <MobilePayment
+          sessionId={session.id}
+          pending={Number(bill.data.pending_amount ?? 0)}
+          participantId={currentParticipantId}
+          payments={payments.data ?? []}
+          closed={closed}
+        />
+      )}
       <PaymentHistory
         payments={payments.data}
         loading={payments.isPending}

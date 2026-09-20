@@ -9,6 +9,10 @@ import {
   type SessionSplit,
   type SubmitOrderInput,
   type SubmitOrderResult,
+  mobilePaymentErrorSchema,
+  mobilePaymentResultSchema,
+  type MobilePaymentRequest,
+  type MobilePaymentResult,
 } from '@restaurant-platform/shared'
 import { supabase } from '@/lib/supabase'
 
@@ -94,6 +98,23 @@ export async function loadPayments(sessionId: string) {
     .order('created_at', { ascending: false })
   if (error) throw error
   return data
+}
+
+export async function runMobilePayment(input: MobilePaymentRequest): Promise<MobilePaymentResult> {
+  const { data, error } = await supabase.functions.invoke<unknown>('mobile-payment', { body: input })
+  if (error) {
+    if (error instanceof FunctionsHttpError) {
+      const body = mobilePaymentErrorSchema.safeParse(await error.context.json().catch(() => null))
+      if (body.success) {
+        const code = body.data.error.code
+        throw new AppError(isAppErrorCode(code) ? code : 'SERVER_ERROR')
+      }
+    }
+    throw new AppError('CONNECTION_ERROR')
+  }
+  const parsed = mobilePaymentResultSchema.safeParse(data)
+  if (!parsed.success) throw new AppError('SERVER_ERROR')
+  return parsed.data
 }
 
 /**

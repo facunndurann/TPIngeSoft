@@ -38,6 +38,7 @@ import { DEFAULT_MENU_DESIGN } from '../../packages/shared/src/designs.ts'
 import menuDesignEnumSql from '../migrations/20260915150000_menu_design_enum.sql?raw'
 import { createSubmitOrderHandler } from '../functions/submit-order/handler.ts'
 import type { OrderGateway } from '../functions/_shared/order-gateway.ts'
+import { createMobilePaymentHandler, type MobilePaymentGateway } from '../functions/mobile-payment/handler.ts'
 
 const input = {
   sessionId: '00000000-0000-4000-8000-000000000001',
@@ -125,6 +126,41 @@ test('unexpected failures never leak backend details', async () => {
   const body = await failed.text()
   assert.doesNotMatch(body, /private backend detail/)
   assert.equal(JSON.parse(body).error.code, 'SERVER_ERROR')
+})
+
+test('mobile payment endpoint creates and confirms only validated requests', async () => {
+  const calls: string[]=[]
+  const gateway: MobilePaymentGateway={execute:async input => {
+    calls.push(input.action)
+    return {paymentId:input.action==='create'?input.requestId:input.paymentId,amount:1250,status:input.action==='create'?'pending':input.outcome}
+  }}
+  const handler=createMobilePaymentHandler(async token => {
+    if (token!=='valid-user') throw new AppError('AUTH_REQUIRED')
+    return gateway
+  })
+  const paymentId='00000000-0000-4000-8000-000000000010'
+  const mobileRequest=(body:unknown,token='valid-user') => new Request('http://local/mobile-payment',{
+    method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify(body),
+  })
+  const created=await handler(mobileRequest({action:'create',sessionId:input.sessionId,requestId:paymentId}))
+  assert.equal(created.status,201)
+  assert.deepEqual(await created.json(),{paymentId,amount:1250,status:'pending'})
+  const approved=await handler(mobileRequest({action:'confirm',paymentId,outcome:'approved'}))
+  assert.equal(approved.status,200)
+  assert.deepEqual(await approved.json(),{paymentId,amount:1250,status:'approved'})
+  assert.deepEqual(calls,['create','confirm'])
+  assert.equal((await handler(mobileRequest({action:'create',sessionId:'bad',requestId:paymentId}))).status,400)
+  assert.equal((await handler(mobileRequest({action:'confirm',paymentId,outcome:'invented'}))).status,400)
+  assert.equal((await handler(mobileRequest({action:'create',sessionId:input.sessionId,requestId:paymentId},'forged'))).status,401)
+})
+
+test('mobile payment endpoint handles preflight and never leaks provider failures', async () => {
+  const handler=createMobilePaymentHandler(async () => ({execute:async () => {throw new Error('provider secret')}}))
+  assert.equal((await handler(new Request('http://local',{method:'OPTIONS'}))).status,204)
+  assert.equal((await handler(new Request('http://local'))).status,405)
+  const response=await handler(new Request('http://local',{method:'POST',headers:{Authorization:'Bearer x','Content-Type':'application/json'},body:'{' }))
+  assert.equal(response.status,400)
+  assert.doesNotMatch(await response.text(),/provider secret/)
 })
 
 test('POS actions advance and cancel until delivery, and nothing leaves cancelled', () => {

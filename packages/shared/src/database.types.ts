@@ -1442,6 +1442,14 @@ export type Database = {
         Returns: boolean
       }
       close_table_session: { Args: { p_session_id: string }; Returns: string }
+      create_mobile_payment: {
+        Args: { p_request_id: string; p_session_id: string }
+        Returns: {
+          amount: number
+          payment_id: string
+          status: Database["public"]["Enums"]["payment_status"]
+        }[]
+      }
       create_restaurant: {
         Args: {
           p_branch_name: string
@@ -1566,6 +1574,18 @@ export type Database = {
           p_session_id: string
         }
         Returns: string
+      }
+      resolve_mobile_payment: {
+        Args: {
+          p_payment_id: string
+          p_status: Database["public"]["Enums"]["payment_status"]
+          p_user_id: string
+        }
+        Returns: {
+          amount: number
+          payment_id: string
+          status: Database["public"]["Enums"]["payment_status"]
+        }[]
       }
       save_employee_account: {
         Args: {

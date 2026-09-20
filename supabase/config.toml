@@ -384,6 +384,9 @@ deno_version = 2
 [functions.submit-order]
 verify_jwt = true
 
+[functions.mobile-payment]
+verify_jwt = true
+
 [functions.employee-accounts]
 # The handler verifies the bearer token using Auth.getUser (supports signing keys).
 verify_jwt = false
