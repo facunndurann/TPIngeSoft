@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { formatPrice, isBilledStatus, splitEqualAmounts, type OrderStatus, type SessionSplit, type Tables } from '@restaurant-platform/shared'
+import { formatPrice, isBilledStatus, type OrderStatus, type SessionSplit, splitEqualAmounts, splitPercentageAmounts, type SplitParticipant, type Tables } from '@restaurant-platform/shared'
 import { runMobilePayment } from './orders-api'
 
 type Payment = Pick<Tables<'payments'>, 'id'|'participant_id'|'amount'|'method'|'mode'|'status'> & {
@@ -19,11 +19,15 @@ type PayableOrder = {
 }
 
 export function MobilePayment({
-  sessionId, pending, participantId, payments, closed, split, orders, participantName,
+  sessionId, pending, accountTotal, participantId, participants, payments, closed, split, orders,
+  participantName,
 }: {
   sessionId: string
   pending: number
+  /** Total en cuenta: es la base del porcentaje, no el pendiente (MI-43). */
+  accountTotal: number
   participantId: string
+  participants: readonly SplitParticipant[]
   payments: Payment[]
   closed: boolean
   split: SessionSplit
@@ -50,12 +54,28 @@ export function MobilePayment({
   const remainingParts=split.type==='equal' && split.equalParts
     ? Math.max(1,split.equalParts-allocatedEqualPayments.length)
     : 1
-  const paymentMode=selectedItems.length>0 ? 'custom' : split.type==='equal' ? 'equal_split' : 'full'
+  const paymentMode=selectedItems.length>0 ? 'custom'
+    : split.type==='equal' ? 'equal_split'
+    : split.type==='percentages' ? 'percentage_split'
+    : 'full'
   const availableEqualBalance=Math.max(0,pending-reservedEqualAmount)
+  // MI-43: el porcentaje se aplica al total de la cuenta, y de ahí se descuenta
+  // lo que este comensal ya pagó. Misma regla que session_percentage_share, que
+  // es la que manda: acá solo se muestra el importe antes de iniciarlo.
+  const ownPercentage=split.type==='percentages' ? split.allocations[participantId] ?? 0 : 0
+  const ownShare=split.type==='percentages'
+    ? splitPercentageAmounts(accountTotal,participants,split.allocations)
+      .find(share => share.participantId===participantId)?.amount ?? 0
+    : 0
+  const settledByOwner=payments
+    .filter(payment => payment.participant_id===participantId && payment.status==='approved')
+    .reduce((total,payment) => total+Number(payment.amount),0)
   const nextAmount=paymentMode==='custom'
     ? selectedItems.reduce((total,item) => total+Number(item.total_price),0)
     : paymentMode==='equal_split'
     ? splitEqualAmounts({pending_amount:availableEqualBalance},remainingParts)[0] ?? availableEqualBalance
+    : paymentMode==='percentage_split'
+    ? Math.min(Math.max(ownShare-settledByOwner,0),pending)
     : pending
   const toggleItem=(id:string) => {
     requestId.current=crypto.randomUUID()
@@ -130,6 +150,8 @@ export function MobilePayment({
           ? 'El servidor vuelve a validar los ítems y su subtotal antes de crear el pago.'
           : paymentMode==='equal_split'
           ? `Quedan ${remainingParts} ${remainingParts===1?'parte':'partes'} por pagar. El importe se calcula y valida en el servidor.`
+          : paymentMode==='percentage_split'
+          ? `Tu parte es el ${ownPercentage}% de ${formatPrice(accountTotal)}: ${formatPrice(ownShare)}. El importe se calcula y valida en el servidor.`
           : 'El importe se calcula y valida en el servidor.'}
       </p>
       {ownPending ? (
@@ -151,12 +173,14 @@ export function MobilePayment({
         <button className="primary wide" disabled={start.isPending} onClick={() => start.mutate()}>
           {start.isPending?'Iniciando pago…':paymentMode==='custom'
             ? `Pagar ítems · ${formatPrice(nextAmount)}`
-            : paymentMode==='equal_split'
+            : paymentMode==='equal_split' || paymentMode==='percentage_split'
             ? `Pagar mi parte · ${formatPrice(nextAmount)}`
             : `Pagar ${formatPrice(pending)}`}
         </button>
       ) : paymentMode==='equal_split' && pending>0 && !closed ? (
         <p className="muted">Todas las partes disponibles ya tienen un pago esperando confirmación.</p>
+      ) : paymentMode==='percentage_split' && pending>0 && !closed ? (
+        <p className="settled">Ya pagaste tu {ownPercentage}% de la cuenta. El resto lo pagan los demás.</p>
       ) : (
         <p className="settled">No hay saldo disponible para pagar.</p>
       )}

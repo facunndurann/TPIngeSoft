@@ -1243,6 +1243,8 @@ export type Database = {
           split_allocations: Json
           split_equal_parts: number | null
           split_type: Database["public"]["Enums"]["split_type"]
+          split_updated_at: string | null
+          split_updated_by: string | null
           status: Database["public"]["Enums"]["session_status"]
           table_id: string
         }
@@ -1260,6 +1262,8 @@ export type Database = {
           split_allocations?: Json
           split_equal_parts?: number | null
           split_type?: Database["public"]["Enums"]["split_type"]
+          split_updated_at?: string | null
+          split_updated_by?: string | null
           status?: Database["public"]["Enums"]["session_status"]
           table_id: string
         }
@@ -1277,6 +1281,8 @@ export type Database = {
           split_allocations?: Json
           split_equal_parts?: number | null
           split_type?: Database["public"]["Enums"]["split_type"]
+          split_updated_at?: string | null
+          split_updated_by?: string | null
           status?: Database["public"]["Enums"]["session_status"]
           table_id?: string
         }
@@ -1671,6 +1677,10 @@ export type Database = {
         }
         Returns: string
       }
+      session_percentage_share: {
+        Args: { p_participant_id: string; p_session_id: string }
+        Returns: number
+      }
       submit_order: {
         Args: {
           p_expected_total: number
@@ -1757,7 +1767,12 @@ export type Database = {
         | "cancelled"
       order_transition_kind: "advance" | "revert" | "cancel"
       payment_method: "mobile" | "in_person" | "external"
-      payment_mode: "full" | "own" | "equal_split" | "custom"
+      payment_mode:
+        | "full"
+        | "own"
+        | "equal_split"
+        | "custom"
+        | "percentage_split"
       payment_status: "pending" | "approved" | "rejected" | "cancelled"
       pos_type: "internal" | "fudo"
       session_request_kind: "bill" | "in_person_payment"
@@ -1913,7 +1928,13 @@ export const Constants = {
       ],
       order_transition_kind: ["advance", "revert", "cancel"],
       payment_method: ["mobile", "in_person", "external"],
-      payment_mode: ["full", "own", "equal_split", "custom"],
+      payment_mode: [
+        "full",
+        "own",
+        "equal_split",
+        "custom",
+        "percentage_split",
+      ],
       payment_status: ["pending", "approved", "rejected", "cancelled"],
       pos_type: ["internal", "fudo"],
       session_request_kind: ["bill", "in_person_payment"],
@@ -1922,3 +1943,4 @@ export const Constants = {
     },
   },
 } as const
+

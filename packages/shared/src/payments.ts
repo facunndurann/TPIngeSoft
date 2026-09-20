@@ -45,6 +45,7 @@ export const paymentModeLabels: Record<PaymentMode, string> = {
   full: 'Cuenta completa',
   own: 'Consumo propio',
   equal_split: 'Partes iguales',
+  percentage_split: 'Porcentaje asignado',
   custom: 'Ítems o importe parcial',
 };
 
@@ -76,7 +77,7 @@ export const mobilePaymentRequestSchema = z.discriminatedUnion('action', [
     action: z.literal('create'),
     sessionId: uuid,
     requestId: uuid,
-    mode: z.enum(['full', 'equal_split', 'custom']).default('full'),
+    mode: z.enum(['full', 'equal_split', 'percentage_split', 'custom']).default('full'),
     itemIds: z.array(uuid).min(1).max(100).optional(),
   }).strict(),
   z.object({

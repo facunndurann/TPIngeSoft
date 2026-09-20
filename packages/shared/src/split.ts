@@ -131,7 +131,16 @@ export function parseSessionSplit(
 }
 
 /** Solo lo que el reparto necesita: así se puede probar sin filas de la base. */
-export type SplitBill = { pending_amount: number | string | null };
+export type SplitBill = {
+  pending_amount: number | string | null;
+  /**
+   * Total en cuenta. Los porcentajes se calculan sobre esto y no sobre el
+   * pendiente: el pendiente encoge cuando otro paga, y el porcentaje de cada
+   * uno está atado a la cuenta entera. Es opcional porque los otros modos
+   * reparten el pendiente y se los puede probar sin el total.
+   */
+  total_amount?: number | string | null;
+};
 export type SplitOrderItem = {
   is_shared: boolean;
   participant_id: string | null;
@@ -228,6 +237,43 @@ function distribute(
     amountCents: cents[index],
     amount: cents[index] / 100,
   }));
+}
+
+/**
+ * Cuánto le toca a cada comensal por su porcentaje (MI-43), sobre el total de
+ * la cuenta. No es lo mismo que `splitBill` con modo `percentages`, que reparte
+ * el pendiente: el pendiente encoge cuando otro paga, y entonces el 40% dejaría
+ * de ser el 40% de lo que esa persona debe.
+ *
+ * Es el espejo exacto de `session_percentage_share` en Postgres, que es quien
+ * decide el importe real del pago: mismo resto mayor y mismo desempate por id
+ * del comensal, para que el celular muestre el centavo que se va a cobrar.
+ */
+export function splitPercentageAmounts(
+  accountTotal: number | string | null | undefined,
+  participants: readonly SplitParticipant[],
+  allocations: SplitAllocations,
+): SplitShare[] {
+  const none = participants.map((participant) => ({
+    participantId: participant.id,
+    amountCents: 0,
+    amount: 0,
+  }));
+  // Orden por id, no por llegada a la mesa: es el `order by remainder desc,
+  // participant_id` de la RPC, y con él los empates caen del mismo lado.
+  const ordered = [...participants].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const weights = ordered.map((participant) =>
+    Math.round((allocations[participant.id] ?? 0) * HUNDREDTHS),
+  );
+  // Sin asignaciones no hay porcentaje que repartir; el reparto parejo de
+  // `distribute` mentiría sobre lo que cada uno debe.
+  if (weights.every((weight) => weight === 0)) return none;
+
+  const shares = distribute(Math.max(0, toCents(accountTotal)), ordered, weights);
+  const byParticipant = new Map(shares.map((share) => [share.participantId, share]));
+  return participants.map(
+    (participant, index) => byParticipant.get(participant.id) ?? none[index],
+  );
 }
 
 /** Importes de cada parte igual, en el orden en que se pagan. */

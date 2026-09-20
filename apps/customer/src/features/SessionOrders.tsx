@@ -99,7 +99,9 @@ export function SessionOrders({
         <MobilePayment
           sessionId={session.id}
           pending={Number(bill.data.pending_amount ?? 0)}
+          accountTotal={Number(bill.data.total_amount ?? 0)}
           participantId={currentParticipantId}
+          participants={participants}
           payments={payments.data ?? []}
           closed={closed}
           split={sessionSplit!}
@@ -144,6 +146,8 @@ export function SessionOrders({
           orders={orders.data ?? []}
           participants={participants}
           userId={userId}
+          updatedBy={session.split_updated_by}
+          updatedAt={session.split_updated_at}
         />
       )}
     </section>

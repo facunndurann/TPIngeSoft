@@ -12,6 +12,7 @@ import {
   sessionRequestsOf,
   sessionRequestState,
 } from '../../packages/shared/src/pos.ts'
+import { splitPercentageAmounts } from '../../packages/shared/src/split.ts'
 import {
   acceptsPaymentMethod,
   enabledPaymentMethods,
@@ -263,6 +264,43 @@ test('a table waits with the requests it made, oldest first', () => {
   )
   // Cada tipo tiene rótulo propio: el plano no puede mostrar una clave cruda.
   for (const kind of sessionRequestKinds) assert.ok(sessionRequestLabels[kind])
+})
+
+test('percentage shares come from the whole bill and add up to it', () => {
+  // MI-43: mismo caso que supabase/tests/percentage-payments.sql, para que el
+  // celular no muestre un centavo distinto del que cobra session_percentage_share.
+  const participants = [{ id: 'c' }, { id: 'a' }, { id: 'b' }]
+  const shares = splitPercentageAmounts(100.01, participants, { a: 33.33, b: 33.33, c: 33.34 })
+  // El orden del resultado es el recibido, no el del desempate.
+  assert.deepEqual(shares.map((share) => share.participantId), ['c', 'a', 'b'])
+  assert.deepEqual(shares.map((share) => share.amount), [33.35, 33.33, 33.33])
+  assert.equal(shares.reduce((total, share) => total + share.amountCents, 0), 10001)
+
+  // Empate de fracciones: el centavo va al id menor, como el `order by
+  // remainder desc, participant_id` de la RPC.
+  assert.deepEqual(
+    splitPercentageAmounts(10.01, [{ id: 'b' }, { id: 'a' }], { a: 50, b: 50 })
+      .map((share) => share.amount),
+    [5, 5.01],
+  )
+
+  // El porcentaje se aplica al total, no al pendiente: lo que ya pagó otro no
+  // le cambia la parte a nadie.
+  assert.deepEqual(
+    splitPercentageAmounts(100, [{ id: 'a' }, { id: 'b' }], { a: 40, b: 60 })
+      .map((share) => share.amount),
+    [40, 60],
+  )
+
+  // Sin asignaciones no se reparte parejo: no hay porcentaje que cobrar.
+  assert.deepEqual(
+    splitPercentageAmounts(100, [{ id: 'a' }, { id: 'b' }], {}).map((share) => share.amount),
+    [0, 0],
+  )
+  assert.deepEqual(
+    splitPercentageAmounts(0, [{ id: 'a' }], { a: 100 }).map((share) => share.amount),
+    [0],
+  )
 })
 
 test('a branch offers only the payment methods it enabled', () => {
