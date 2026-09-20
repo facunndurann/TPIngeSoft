@@ -1,4 +1,9 @@
-import { calculateItemPrice, type Tables } from '@restaurant-platform/shared'
+import {
+  calculateItemPrice,
+  MAX_ITEM_QUANTITY,
+  MIN_ITEM_QUANTITY,
+  type Tables,
+} from '@restaurant-platform/shared'
 
 export type Ingredient = Tables<'product_ingredients'>
 export type ModifierOption = Tables<'modifier_options'>
@@ -85,8 +90,12 @@ export function selectionErrors(product: Product, selection: Selection): string[
   if (!product.is_available || !product.categoryActive) {
     errors.push('Este producto no está disponible.')
   }
-  if (!Number.isInteger(selection.quantity) || selection.quantity < 1 || selection.quantity > 99) {
-    errors.push('Elegí entre 1 y 99 unidades.')
+  if (
+    !Number.isInteger(selection.quantity) ||
+    selection.quantity < MIN_ITEM_QUANTITY ||
+    selection.quantity > MAX_ITEM_QUANTITY
+  ) {
+    errors.push(`Elegí entre ${MIN_ITEM_QUANTITY} y ${MAX_ITEM_QUANTITY} unidades.`)
   }
 
   const unknownRemoval = selection.removedIds.some(

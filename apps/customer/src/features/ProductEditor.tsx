@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { formatPrice, productMedia } from '@restaurant-platform/shared'
+import { QuantityField } from '@/components/QuantityField'
 import { MediaCarousel } from '@/features/MediaCarousel'
 import { price, selectionErrors } from '@/features/menu'
 import type { ModifierGroup, ModifierOption, Product } from '@/features/menu'
@@ -25,7 +26,9 @@ export function ProductEditor({ product, initial, onSave, onClose }: ProductEdit
       </button>
       <MediaCarousel media={productMedia(product)} variant="hero" alt={product.name} />
       <p className="eyebrow">{copy.product}</p>
-      <h1 id="product-title">{product.name}</h1>
+      <h2 className="hero-title" id="product-title">
+        {product.name}
+      </h2>
       <p>{product.description}</p>
       <strong>{formatPrice(product.base_price)}</strong>
       {product.food_info && <p className="notice">{product.food_info}</p>}
@@ -85,17 +88,13 @@ export function ProductEditor({ product, initial, onSave, onClose }: ProductEdit
         </fieldset>
       ))}
 
-      <label className="choice">
+      <div className="choice">
         <span>Cantidad</span>
-        <input
-          aria-label="Cantidad"
-          type="number"
-          min="1"
-          max="99"
+        <QuantityField
           value={item.quantity}
-          onChange={(event) => setItem({ ...item, quantity: Number(event.target.value) })}
+          onChange={(quantity) => setItem({ ...item, quantity })}
         />
-      </label>
+      </div>
       <label className="choice">
         <span>Para compartir con la mesa</span>
         <input

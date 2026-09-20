@@ -33,11 +33,20 @@ input {
 }
 input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--menu-accent); }
 input[type=number] { width: 76px; }
-h1, h2, h3, p { margin: 0 0 12px; }
-h1, h2, h3 { color: var(--menu-heading); font-family: var(--menu-font-display); }
-h1 { font-size: clamp(28px, 5vw, 40px); line-height: 1.15; font-weight: 750; letter-spacing: -.04em; }
-h2 { font-size: 23px; font-weight: 700; letter-spacing: -.025em; }
-h3 { font-size: 17px; font-weight: 700; }
+.quantity { display: inline-flex; align-items: center; gap: 6px; }
+.quantity button { min-width: 44px; padding: 10px 12px; font-size: 17px; line-height: 1; }
+.quantity input[type=number] { width: 58px; text-align: center; appearance: textfield; }
+/* Con − y + al lado, la flechita nativa sobra y descuadra el campo. */
+.quantity input::-webkit-inner-spin-button, .quantity input::-webkit-outer-spin-button { appearance: none; margin: 0; }
+.cart-quantity { display: inline-flex; align-items: center; gap: 8px; }
+h1, h2, h3, h4, p { margin: 0 0 12px; }
+h1, h2, h3, h4 { color: var(--menu-heading); font-family: var(--menu-font-display); }
+/* `.hero-title` y `.section-title` son el aspecto de un h1 y un h2 para encabezados
+   que, por estructura, van un nivel más abajo (el plato dentro de la pantalla de la
+   mesa, la categoría dentro de la carta). */
+h1, .hero-title { font-size: clamp(28px, 5vw, 40px); line-height: 1.15; font-weight: 750; letter-spacing: -.04em; }
+h2, .section-title { font-size: 23px; font-weight: 700; letter-spacing: -.025em; }
+h3, h4 { font-size: 17px; font-weight: 700; }
 p { line-height: 1.6; }
 .shell { max-width: 1000px; margin: auto; padding: 32px 20px 110px; background: var(--menu-bg); color: var(--menu-text); min-height: 100dvh; }
 header { border-bottom: 1px solid var(--menu-border); padding-bottom: 16px; }
@@ -49,7 +58,7 @@ header { border-bottom: 1px solid var(--menu-border); padding-bottom: 16px; }
 .name-form input { flex: 1; }
 .tabs { display: flex; gap: 10px; margin-bottom: 32px; }
 .tabs a { flex: 1; display: flex; align-items: center; justify-content: center; text-align: center; }
-button[aria-pressed=true], .tabs a[aria-current=page], .categories a[aria-current=true], button.primary, a.primary {
+button[aria-pressed=true], a[aria-current=page], button.primary, a.primary {
   background: var(--menu-accent);
   color: var(--menu-accent-text);
   border-color: var(--menu-accent);
@@ -127,7 +136,7 @@ footer { text-align: center; color: var(--menu-muted); font-size: 12px; margin-t
 .split-percent { display: inline-flex; align-items: center; gap: 6px; }
 .order-card { border: 1px solid var(--menu-border); background: var(--menu-surface); border-radius: calc(var(--menu-radius) + 4px); padding: 22px; margin: 24px 0; }
 .order-heading { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
-.order-heading h3 { margin-bottom: 8px; }
+.order-heading h3, .order-heading h4 { margin-bottom: 8px; }
 .order-heading .badge { margin-left: 0; }
 .order-line { border-bottom: 1px solid var(--menu-border); padding: 18px 0; }
 .order-line p { font-size: 13px; margin-bottom: 6px; }
@@ -137,7 +146,7 @@ footer { text-align: center; color: var(--menu-muted); font-size: 12px; margin-t
 .status-cancelled { background: var(--menu-danger-bg); color: var(--menu-danger); }
 a.btn { display: inline-flex; align-items: center; justify-content: center; }
 
-[data-layout="kiosk"] h1 { letter-spacing: .02em; text-transform: uppercase; }
+[data-layout="kiosk"] h1, [data-layout="kiosk"] .hero-title { letter-spacing: .02em; text-transform: uppercase; }
 [data-layout="kiosk"] .product-grid { grid-template-columns: 1fr; gap: 16px; }
 [data-layout="kiosk"] .product-card {
   flex-direction: column-reverse;
@@ -154,8 +163,8 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; }
 [data-layout="kiosk"] .categories a { border-radius: var(--menu-radius); }
 
 .shell[data-layout="editorial"] { max-width: 760px; padding-top: 40px; }
-[data-layout="editorial"] h1 { font-weight: 600; letter-spacing: -.03em; }
-[data-layout="editorial"] h2 { font-weight: 600; font-style: italic; }
+[data-layout="editorial"] h1, [data-layout="editorial"] .hero-title { font-weight: 600; letter-spacing: -.03em; }
+[data-layout="editorial"] h2, [data-layout="editorial"] .section-title { font-weight: 600; font-style: italic; }
 [data-layout="editorial"] .product-grid { grid-template-columns: 1fr; gap: 20px; }
 [data-layout="editorial"] .product-card { min-height: 0; padding: 28px; gap: 24px; }
 [data-layout="editorial"] .media-carousel.card { width: 120px; height: 140px; }
@@ -168,7 +177,7 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; }
   border-bottom: 2px solid transparent;
   padding: 8px 10px;
 }
-[data-layout="editorial"] .categories a[aria-current=true] {
+[data-layout="editorial"] .categories a[aria-current=page] {
   background: transparent;
   color: var(--menu-accent);
   border-bottom-color: var(--menu-accent);
@@ -252,7 +261,7 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; }
 .media-carousel.hero .carousel-btn.prev { left: 10px; }
 .media-carousel.hero .carousel-btn.next { right: 10px; }
 .media-carousel.hero .carousel-dots { bottom: 12px; }
-.media-carousel.hero .carousel-dots .dot { width: 8px; height: 8px; }
+.media-carousel.hero .carousel-dots .dot::before { width: 8px; height: 8px; }
 
 /* Por encima del enlace estirado de la tarjeta (z-index: 1). */
 .carousel-btn {
@@ -295,19 +304,33 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; }
   right: 0;
   display: flex;
   justify-content: center;
-  gap: 4px;
+  gap: 0;
   z-index: 2;
   pointer-events: none;
 }
 
 .carousel-dots .dot {
-  width: 5px;
-  height: 5px;
-  background: rgba(255, 255, 255, 0.5);
-  border-radius: 50%;
+  /* El botón es el área de toque; el punto visible lo dibuja ::before. */
+  width: 14px;
+  height: 14px;
+  min-height: auto;
+  padding: 0;
+  border: none;
+  background: transparent;
+  display: grid;
+  place-items: center;
+  pointer-events: auto;
 }
 
-.carousel-dots .dot.active {
+.carousel-dots .dot::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.carousel-dots .dot.active::before {
   background: white;
 }
 

@@ -222,9 +222,9 @@ function OrderLine({
   return (
     <div className="order-line">
       <div className="order-heading">
-        <h3>
+        <h4>
           {item.quantity} × {item.product_name}
-        </h3>
+        </h4>
         <strong>{formatPrice(item.total_price)}</strong>
       </div>
       <p className="muted">

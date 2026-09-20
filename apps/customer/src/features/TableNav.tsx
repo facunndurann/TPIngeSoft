@@ -1,4 +1,5 @@
-import { Link, useLocation } from 'react-router'
+import { useLocation } from 'react-router'
+import { CurrentLink } from '@/components/CurrentLink'
 import { cartPath, isMenuIndex, ordersPath, tableRoot, tableSection } from '@/features/table-paths'
 
 type TableNavProps = {
@@ -9,41 +10,21 @@ type TableNavProps = {
 export function TableNav({ token, cartCount }: TableNavProps) {
   const location = useLocation()
   const section = tableSection(location.pathname)
-  const menuHref = `${tableRoot(token)}${section === 'menu' || location.pathname.includes('/producto/') ? location.search : ''}`
-  const cartHref = cartPath(token)
-  const ordersHref = ordersPath(token)
+  // La carta conserva búsqueda y categoría mientras se la esté recorriendo.
+  const keepFilters = section === 'menu' || location.pathname.includes('/producto/')
+  const menuHref = `${tableRoot(token)}${keepFilters ? location.search : ''}`
 
   return (
     <nav className="tabs" aria-label="Navegación">
-      <Link
-        to={menuHref}
-        aria-current={section === 'menu' ? 'page' : undefined}
-        onClick={(event) => {
-          if (isMenuIndex(location.pathname) && `${location.pathname}${location.search}` === menuHref) {
-            event.preventDefault()
-          }
-        }}
-      >
+      <CurrentLink to={menuHref} current={section === 'menu' && isMenuIndex(location.pathname)}>
         La carta
-      </Link>
-      <Link
-        to={cartHref}
-        aria-current={section === 'cart' ? 'page' : undefined}
-        onClick={(event) => {
-          if (location.pathname === cartHref) event.preventDefault()
-        }}
-      >
+      </CurrentLink>
+      <CurrentLink to={cartPath(token)} current={section === 'cart'}>
         Mi carrito ({cartCount})
-      </Link>
-      <Link
-        to={ordersHref}
-        aria-current={section === 'orders' ? 'page' : undefined}
-        onClick={(event) => {
-          if (location.pathname === ordersHref) event.preventDefault()
-        }}
-      >
+      </CurrentLink>
+      <CurrentLink to={ordersPath(token)} current={section === 'orders'}>
         Pedidos y cuenta
-      </Link>
+      </CurrentLink>
     </nav>
   )
 }

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
+import { CurrentLink } from '@/components/CurrentLink'
 import { formatPrice, productMedia } from '@restaurant-platform/shared'
 import { MediaCarousel } from '@/features/MediaCarousel'
 import { useMenuDesign } from '@/features/menu-design'
@@ -54,23 +55,23 @@ export function MenuBrowse({ token, menu, canEdit, freshness }: MenuBrowseProps)
       </div>
 
       <div className="categories" aria-label="Categorías">
-        <FilterLink to={menuPath(token, 'all', search)} active={category === 'all'}>
+        <CurrentLink to={menuPath(token, 'all', search)} current={category === 'all'}>
           Todo
-        </FilterLink>
+        </CurrentLink>
         {menu.categories.map((entry) => (
-          <FilterLink
+          <CurrentLink
             key={entry.id}
             to={menuPath(token, entry.id, search)}
-            active={category === entry.id}
+            current={category === entry.id}
           >
             {entry.name}
-          </FilterLink>
+          </CurrentLink>
         ))}
       </div>
 
       {sections.map((entry) => (
         <section key={entry.id}>
-          <h2>{entry.name}</h2>
+          <h3 className="section-title">{entry.name}</h3>
           <div className="product-grid">
             {entry.products.map((product) => (
               <ProductCard
@@ -91,23 +92,6 @@ export function MenuBrowse({ token, menu, canEdit, freshness }: MenuBrowseProps)
   )
 }
 
-function FilterLink({ to, active, children }: { to: string; active: boolean; children: string }) {
-  const location = useLocation()
-  const current = `${location.pathname}${location.search}`
-
-  return (
-    <Link
-      to={to}
-      aria-current={active ? 'true' : undefined}
-      onClick={(event) => {
-        if (current === to) event.preventDefault()
-      }}
-    >
-      {children}
-    </Link>
-  )
-}
-
 function ProductCard({
   product,
   disabled,
@@ -123,9 +107,9 @@ function ProductCard({
   return (
     <article className={disabled ? 'product-card is-disabled' : 'product-card'}>
       <div className="product-card-body">
-        <h3>
+        <h4>
           {disabled ? product.name : <Link className="product-card-link" to={to}>{product.name}</Link>}
-        </h3>
+        </h4>
         <p>{product.description}</p>
         {product.dietary_tags.length > 0 && <small>{product.dietary_tags.join(' · ')}</small>}
         <strong>{formatPrice(product.base_price)}</strong>

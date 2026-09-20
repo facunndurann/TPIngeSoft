@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { AppError, formatPrice } from '@restaurant-platform/shared'
 import { useNavigate, useParams } from 'react-router'
+import { QuantityField } from '@/components/QuantityField'
 import type { Announce } from '@/features/announcements'
 import { MAX_CART_LINES, cartPhase } from '@/features/cart'
 import type { Review } from '@/features/cart'
@@ -278,22 +279,10 @@ function CartLine({
         </p>
       ))}
       <div className="cart-actions">
-        <label>
+        <span className="cart-quantity">
           Cantidad{' '}
-          <input
-            type="number"
-            min="1"
-            max="99"
-            value={item.quantity}
-            disabled={locked}
-            onChange={(event) => {
-              const quantity = Number(event.target.value)
-              if (Number.isInteger(quantity) && quantity >= 1 && quantity <= 99) {
-                onQuantityChange(quantity)
-              }
-            }}
-          />
-        </label>
+          <QuantityField value={item.quantity} disabled={locked} onChange={onQuantityChange} />
+        </span>
         <strong>{product ? formatPrice(price(product, item)) : '—'}</strong>
       </div>
       {errors.length > 0 && <p className="notice">{errors.join(' ')}</p>}

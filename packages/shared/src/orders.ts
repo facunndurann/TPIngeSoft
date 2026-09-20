@@ -7,9 +7,13 @@ const selectionIds = z.array(uuid).max(100).refine(
   'No se puede elegir la misma opción o ingrediente más de una vez',
 );
 
+/** Unidades por línea: el mismo rango que ofrece el control de cantidad del comensal. */
+export const MIN_ITEM_QUANTITY = 1;
+export const MAX_ITEM_QUANTITY = 99;
+
 export const orderItemSchema = z.object({
   productId: uuid,
-  quantity: z.number().int().min(1).max(99),
+  quantity: z.number().int().min(MIN_ITEM_QUANTITY).max(MAX_ITEM_QUANTITY),
   optionIds: selectionIds,
   removedIds: selectionIds,
   isShared: z.boolean(),

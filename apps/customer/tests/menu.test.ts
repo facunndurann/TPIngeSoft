@@ -5,7 +5,9 @@ import type { Menu, MenuRows } from '../src/features/menu'
 import {
   calculateItemPrice,
   DEFAULT_MENU_DESIGN,
+  MAX_ITEM_QUANTITY,
   MENU_DESIGN_IDS,
+  MIN_ITEM_QUANTITY,
   mediaElementSrc,
   mediaKindFromMimeType,
   menuDesignCssVarName,
@@ -413,12 +415,47 @@ test('product cards keep the link and the carousel controls as siblings', async 
 
   const [available, soldOut] = cards
   assert.match(available, /<a class="product-card-link" href="\/m\/t\/producto\/many"[^>]*>Plato<\/a>/)
-  assert.match(available, /aria-label="Foto siguiente"/)
+  // Las flechas nombran lo que van a mostrar y los puntos llevan a cada medio.
+  assert.match(available, /aria-label="Ver foto siguiente"/)
+  assert.match(available, /aria-label="Ver foto anterior"/)
+  assert.match(available, /<button type="button" class="dot active"[^>]*aria-pressed="true"/)
+  assert.match(available, /aria-label="Ver foto 2 de 2"[^>]*aria-pressed="false"/)
   assert.match(soldOut, /class="product-card is-disabled"/)
   assert.doesNotMatch(soldOut, /<a /, 'Unavailable dishes are not links')
   // Ningún control interactivo anidado dentro de otro.
   assert.doesNotMatch(html, /<a [^>]*>(?:(?!<\/a>)[\s\S])*<button/)
   assert.doesNotMatch(html, /<button[^>]*>(?:(?!<\/button>)[\s\S])*<(?:button|a) /)
+
+  // Cada categoría es una sección de la carta y cada plato una de su categoría: los
+  // niveles bajan de a uno y el h1 de la pantalla es del restaurante, no de la carta.
+  assert.doesNotMatch(html, /<h1/)
+  assert.match(html, /<h2>[^<]*<\/h2>[\s\S]*<h3 class="section-title">Platos<\/h3>/)
+  assert.match(html, /<h4><a class="product-card-link"/)
+  // Un solo valor de aria-current en toda la app, el del estándar.
+  assert.match(html, /aria-current="page"[^>]*>Todo</)
+  assert.doesNotMatch(html, /aria-current="true"/)
+})
+
+test('the quantity control offers the same range everywhere and cannot step out of it', async () => {
+  const { createElement } = await import('react')
+  const { renderToStaticMarkup } = await import('react-dom/server')
+  const { QuantityField } = await import('../src/components/QuantityField')
+  const noop = () => {}
+  const render = (value: number, disabled = false) =>
+    renderToStaticMarkup(createElement(QuantityField, { value, disabled, onChange: noop }))
+
+  const middle = render(5)
+  assert.match(middle, new RegExp(`min="${MIN_ITEM_QUANTITY}" max="${MAX_ITEM_QUANTITY}"`))
+  assert.match(middle, /value="5"/)
+  assert.doesNotMatch(middle, /disabled/)
+
+  // En los extremos del rango el botón que se pasaría queda apagado.
+  assert.match(render(MIN_ITEM_QUANTITY), /aria-label="Una unidad menos" disabled/)
+  assert.doesNotMatch(render(MIN_ITEM_QUANTITY), /aria-label="Una unidad más" disabled/)
+  assert.match(render(MAX_ITEM_QUANTITY), /aria-label="Una unidad más" disabled/)
+
+  // Con el carrito bloqueado no se toca nada del control.
+  assert.equal((render(5, true).match(/disabled/g) ?? []).length, 3)
 })
 
 test('design preview renders the real menu with each layout, offline and non-interactive', async () => {
