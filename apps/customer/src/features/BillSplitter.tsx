@@ -3,10 +3,10 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { allocationTotal, formatPrice, remainingPercentage, type SessionSplit, sessionSplitSchema, SPLIT_PERCENTAGE_TOTAL, splitBill, type SplitBill, type SplitOrder, type SplitParticipant, splitTypeDescriptions, splitTypeLabels, splitTypes } from '@restaurant-platform/shared'
 
 import { PercentField } from '@/components/PercentField'
-import { AGE_TICK_MS, relativeAge } from '@/features/freshness'
+import { useNow } from '@/features/clock'
+import { relativeAge } from '@/features/freshness'
 import { updateSessionSplit } from '@/features/orders-api'
 import { useTable } from '@/features/table-context'
-import { useNow } from '@/hooks/useNow'
 
 type BillSplitterProps = {
   sessionId: string
@@ -39,7 +39,7 @@ export function BillSplitter({
   // El aviso es de la mesa: el panel que lo monta no tiene que hacerle de túnel.
   const { announce } = useTable()
   const queryClient = useQueryClient()
-  const now = useNow(AGE_TICK_MS)
+  const now = useNow()
   // `null` es la vista de lectura; un borrador abre el editor.
   const [draft, setDraft] = useState<SessionSplit | null>(null)
 

@@ -1,6 +1,7 @@
 import { useMutation } from '@tanstack/react-query'
 import type { Announce } from '@/features/announcements'
-import { AGE_TICK_MS, relativeAge } from '@/features/freshness'
+import { useNow } from '@/features/clock'
+import { relativeAge } from '@/features/freshness'
 import {
   TABLE_SERVICE_KINDS,
   type TableServiceKind,
@@ -8,7 +9,6 @@ import {
   tableServiceCopy,
   tableServiceRequestedAt,
 } from '@/features/table-service'
-import { useNow } from '@/hooks/useNow'
 import type { loadSession } from '@/features/session'
 
 type Session = Awaited<ReturnType<typeof loadSession>>
@@ -26,7 +26,7 @@ type TableServiceProps = {
  * puede cancelar mientras el mozo no haya llegado.
  */
 export function TableService({ sessionId, session, onAnnounce, onDone }: TableServiceProps) {
-  const now = useNow(AGE_TICK_MS)
+  const now = useNow()
 
   const send = useMutation({
     mutationFn: ({ kind, requested }: { kind: TableServiceKind; requested: boolean }) =>

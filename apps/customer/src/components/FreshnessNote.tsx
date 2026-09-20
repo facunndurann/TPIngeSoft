@@ -1,5 +1,5 @@
-import { AGE_TICK_MS, relativeAge } from '@/features/freshness'
-import { useNow } from '@/hooks/useNow'
+import { useNow } from '@/features/clock'
+import { relativeAge } from '@/features/freshness'
 
 type FreshnessNoteProps = {
   /** Qué se está actualizando, en palabras del comensal: "la carta". */
@@ -16,7 +16,7 @@ type FreshnessNoteProps = {
  * "Cargando…" de cada panel), así que sin `updatedAt` no dibuja nada.
  */
 export function FreshnessNote({ label, updatedAt, isFetching, onRefresh }: FreshnessNoteProps) {
-  const now = useNow(AGE_TICK_MS)
+  const now = useNow()
   if (updatedAt === undefined) return null
 
   return (

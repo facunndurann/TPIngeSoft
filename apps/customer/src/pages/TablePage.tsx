@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useState } from 'react'
 import {
   Link,
   Navigate,
@@ -13,6 +13,7 @@ import { FreshnessNote } from '@/components/FreshnessNote'
 import { Toast } from '@/components/Toast'
 import { type Announce, type Announcement, toastDuration } from '@/features/announcements'
 import { cartKeyFor } from '@/features/cart'
+import { ClockContext } from '@/features/clock'
 import { CartPanel } from '@/features/CartPanel'
 import { MenuBrowse } from '@/features/MenuBrowse'
 import { cartPrice } from '@/features/menu'
@@ -31,6 +32,7 @@ import {
   tableSection,
 } from '@/features/table-paths'
 import { MenuShell } from '@/features/MenuShell'
+import { AGE_TICK_MS } from '@/features/freshness'
 import { MenuDesignContext } from '@/features/menu-design'
 import { rememberTable } from '@/features/last-table'
 import { useReorder } from '@/features/reorder'
@@ -48,6 +50,22 @@ function failureOf(query: {
   refetch: () => unknown
 }): Failure | undefined {
   return query.isError ? { error: query.error, retry: () => { void query.refetch() } } : undefined
+}
+
+/**
+ * Un solo intervalo para toda la mesa. El estado vive acá y no en `TableApp`:
+ * `children` entra como prop y no cambia con el tic, así que React solo vuelve a
+ * dibujar a quien lee la hora, no a la pantalla entera.
+ */
+function ClockProvider({ children }: { children: ReactNode }) {
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), AGE_TICK_MS)
+    return () => clearInterval(timer)
+  }, [])
+
+  return <ClockContext value={now}>{children}</ClockContext>
 }
 
 function useTableBack(fallback: string) {
@@ -130,87 +148,89 @@ function TableApp({ token }: { token: string }) {
   const design = MENU_DESIGNS[restaurant.menu_design]
 
   return (
-    <MenuDesignContext value={design}>
-      <TableContext
-        value={{
-          token,
-          client,
-          menu,
-          session,
-          sessionId,
-          userId: joined.data?.userId,
-          cartKey,
-          items,
-          sessionOpen,
-          named,
-          canEdit,
-          announce,
-        }}
-      >
-        <MenuShell>
-          {/* La bienvenida es para la carta, que es donde cae el QR: en el resto de
-              las pantallas el encabezado se reduce a decir dónde estás. */}
-          <TableHeader
-            restaurantName={restaurant.name}
-            branchName={branch.name}
-            tableLabel={currentTable.label}
-            compact={!atMenu}
-          />
+    <ClockProvider>
+      <MenuDesignContext value={design}>
+        <TableContext
+          value={{
+            token,
+            client,
+            menu,
+            session,
+            sessionId,
+            userId: joined.data?.userId,
+            cartKey,
+            items,
+            sessionOpen,
+            named,
+            canEdit,
+            announce,
+          }}
+        >
+          <MenuShell>
+            {/* La bienvenida es para la carta, que es donde cae el QR: en el resto de
+                las pantallas el encabezado se reduce a decir dónde estás. */}
+            <TableHeader
+              restaurantName={restaurant.name}
+              branchName={branch.name}
+              tableLabel={currentTable.label}
+              compact={!atMenu}
+            />
 
-          <SessionPanel
-            connecting={joined.isPending}
-            connection={failureOf(joined)}
-            read={failureOf(session)}
-            session={session.data}
-            displayName={displayName}
-            named={named}
-            hasPendingSubmission={!!cart.submissions[cartKey]}
-            cartCount={cartCount}
-            rename={rename}
-            onOpenNewSession={() => {
-              setAnnouncement(undefined)
-              cart.clear(cartKey)
-              void joined.refetch()
-            }}
-          />
+            <SessionPanel
+              connecting={joined.isPending}
+              connection={failureOf(joined)}
+              read={failureOf(session)}
+              session={session.data}
+              displayName={displayName}
+              named={named}
+              hasPendingSubmission={!!cart.submissions[cartKey]}
+              cartCount={cartCount}
+              rename={rename}
+              onOpenNewSession={() => {
+                setAnnouncement(undefined)
+                cart.clear(cartKey)
+                void joined.refetch()
+              }}
+            />
 
-          <TableNav token={token} cartCount={cartCount} />
+            <TableNav token={token} cartCount={cartCount} />
 
-          <Toast announcement={announcement} onDismiss={() => setAnnouncement(undefined)} />
+            <Toast announcement={announcement} onDismiss={() => setAnnouncement(undefined)} />
 
-          {section !== 'orders' && menu.isPending && <p role="status">Cargando la carta…</p>}
-          {section !== 'orders' && menu.isError && (
-            <ErrorMessage error={menu.error} retry={() => { void menu.refetch() }} />
-          )}
+            {section !== 'orders' && menu.isPending && <p role="status">Cargando la carta…</p>}
+            {section !== 'orders' && menu.isError && (
+              <ErrorMessage error={menu.error} retry={() => { void menu.refetch() }} />
+            )}
 
-          {section !== 'cart' && cart.submissions[cartKey] && (
-            <div className="notice">
-              <p>Tu último envío todavía necesita confirmación.</p>
-              <Link className="btn" to={cartPath(token)}>
-                Consultar o reintentar envío
+            {section !== 'cart' && cart.submissions[cartKey] && (
+              <div className="notice">
+                <p>Tu último envío todavía necesita confirmación.</p>
+                <Link className="btn" to={cartPath(token)}>
+                  Consultar o reintentar envío
+                </Link>
+              </div>
+            )}
+
+            <Outlet />
+
+            {(atMenu || section === 'orders') && items.length > 0 && (
+              <Link className="primary cart-bar" to={cartPath(token)}>
+                Ver mi carrito <strong>{formatPrice(total)}</strong>
               </Link>
-            </div>
-          )}
+            )}
 
-          <Outlet />
+            <TableService
+              sessionId={sessionId}
+              session={session.data}
+              onAnnounce={announce}
+              onDone={() => { void session.refetch() }}
+            />
 
-          {(atMenu || section === 'orders') && items.length > 0 && (
-            <Link className="primary cart-bar" to={cartPath(token)}>
-              Ver mi carrito <strong>{formatPrice(total)}</strong>
-            </Link>
-          )}
-
-          <TableService
-            sessionId={sessionId}
-            session={session.data}
-            onAnnounce={announce}
-            onDone={() => { void session.refetch() }}
-          />
-
-          <footer>{design.copy.footer}</footer>
-        </MenuShell>
-      </TableContext>
-    </MenuDesignContext>
+            <footer>{design.copy.footer}</footer>
+          </MenuShell>
+        </TableContext>
+      </MenuDesignContext>
+    </ClockProvider>
   )
 }
 

@@ -11,6 +11,9 @@ export default defineConfig({
         test: {
           name: 'customer',
           root: 'apps/customer',
+          // El store del carrito persiste apenas se importa: el localStorage de
+          // mentira tiene que existir antes que cualquier import de las pruebas.
+          setupFiles: ['tests/setup.ts'],
           // Vitest reemplaza los .css por un string vacío; el test de tokens lee index.css?raw.
           css: { include: [/index\.css/] },
         },
