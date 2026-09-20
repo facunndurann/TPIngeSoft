@@ -1,0 +1,54 @@
+/**
+ * Medios de pago habilitados por local (MI-48).
+ *
+ * `payment_method` es *con qué se paga*. No confundir con `payment_mode`
+ * ('full', 'own', 'equal_split', 'custom'), que es *cuánto paga cada uno* y lo
+ * decide la mesa al dividir la cuenta.
+ *
+ * Cada medio existe porque habilita algo concreto en la app del comensal; uno
+ * que no cambie nada de lo que ve la mesa no va acá.
+ */
+
+import type { Database } from './database.types.ts';
+
+/** Los define el enum `payment_method` de la base, que es lo que acepta la columna. */
+export type PaymentMethod = Database['public']['Enums']['payment_method'];
+
+/** Orden en que se ofrecen y se muestran, del más automático al más manual. */
+export const paymentMethods = ['mobile', 'in_person', 'external'] as const satisfies
+  readonly PaymentMethod[];
+
+export const paymentMethodLabels: Record<PaymentMethod, string> = {
+  mobile: 'Pago desde el celular',
+  in_person: 'Cobro en la mesa',
+  external: 'Efectivo o pago externo',
+};
+
+/** Qué habilita cada medio, para que el administrador sepa qué está prendiendo. */
+export const paymentMethodDescriptions: Record<PaymentMethod, string> = {
+  mobile: 'El comensal paga en la app con un medio electrónico.',
+  in_person: 'El comensal puede pedir que un mozo le cobre en la mesa.',
+  external: 'Se arregla fuera de la app: caja, efectivo o transferencia.',
+};
+
+/** Lo que hace falta saber de una sucursal para cobrarle a una mesa. */
+export type PaymentMethodSource = { payment_methods?: PaymentMethod[] | null };
+
+/**
+ * Medios habilitados de una sucursal, en el orden del catálogo. Se recorre el
+ * catálogo y no el array guardado, así un repetido o un orden raro en la
+ * columna no se filtra a la pantalla.
+ */
+export function enabledPaymentMethods(
+  branch: PaymentMethodSource | null | undefined,
+): PaymentMethod[] {
+  const enabled = branch?.payment_methods ?? [];
+  return paymentMethods.filter((method) => enabled.includes(method));
+}
+
+export function acceptsPaymentMethod(
+  branch: PaymentMethodSource | null | undefined,
+  method: PaymentMethod,
+): boolean {
+  return (branch?.payment_methods ?? []).includes(method);
+}

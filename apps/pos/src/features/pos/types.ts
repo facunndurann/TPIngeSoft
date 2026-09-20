@@ -47,7 +47,7 @@ export type PosDiningTable = Pick<
   | 'width'
   | 'height'
 > & {
-  branches: Pick<Tables<'branches'>, 'id' | 'name' | 'is_active'> | null
+  branches: Pick<Tables<'branches'>, 'id' | 'name' | 'is_active' | 'payment_methods'> | null
   floor_sections: Pick<Tables<'floor_sections'>, 'id' | 'name' | 'sort_order' | 'is_active'> | null
 }
 

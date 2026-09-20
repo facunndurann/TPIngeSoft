@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { formatPrice, orderStatusLabels, parseSessionSplit, type Tables } from '@restaurant-platform/shared'
+import { formatPrice, orderStatusLabels, parseSessionSplit, type PaymentMethod, type Tables } from '@restaurant-platform/shared'
 import { BillSplitter } from '@/features/BillSplitter'
 
 import { loadBill, loadOrders } from '@/features/orders-api'
@@ -18,9 +18,17 @@ type SessionOrdersProps = {
   participants: Participant[]
   userId?: string
   closed: boolean
+  paymentMethods: PaymentMethod[]
 }
 
-export function SessionOrders({ sessionId, session, participants, userId, closed }: SessionOrdersProps) {
+export function SessionOrders({
+  sessionId,
+  session,
+  participants,
+  userId,
+  closed,
+  paymentMethods,
+}: SessionOrdersProps) {
   const orders = useQuery({
     queryKey: ['orders', sessionId],
     queryFn: () => loadOrders(sessionId!),
@@ -66,7 +74,14 @@ export function SessionOrders({ sessionId, session, participants, userId, closed
         </div>
       )}
       {bill.data && <BillSummary bill={bill.data} />}
-      {session && <ServiceRequests sessionId={session.id} session={session} closed={closed} />}
+      {session && (
+        <ServiceRequests
+          sessionId={session.id}
+          session={session}
+          closed={closed}
+          paymentMethods={paymentMethods}
+        />
+      )}
 
       {orders.isPending && <p role="status">Cargando los pedidos…</p>}
       {orders.isError && (

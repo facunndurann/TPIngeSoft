@@ -70,6 +70,20 @@ CREATE TYPE "public"."order_transition_kind" AS ENUM (
 ALTER TYPE "public"."order_transition_kind" OWNER TO "postgres";
 
 
+CREATE TYPE "public"."payment_method" AS ENUM (
+    'mobile',
+    'in_person',
+    'external'
+);
+
+
+ALTER TYPE "public"."payment_method" OWNER TO "postgres";
+
+
+COMMENT ON TYPE "public"."payment_method" IS 'Medios con los que un local acepta que se salde la cuenta: mobile = pago electrónico desde la app (MI-40), in_person = un mozo cobra en la mesa (MI-46), external = se arregla fuera de la app (caja, efectivo, transferencia).';
+
+
+
 CREATE TYPE "public"."payment_mode" AS ENUM (
     'full',
     'own',
@@ -944,6 +958,14 @@ begin
     where session_id = p_session_id and user_id = auth.uid()
   ) then raise exception 'NOT_PARTICIPANT'; end if;
 
+  -- Pedir la cuenta no es pagar: eso se puede siempre. Que venga un mozo a
+  -- cobrar sí es un medio de pago, y la sucursal puede no ofrecerlo (MI-48).
+  if p_kind = 'in_person_payment' and not exists (
+    select 1 from public.tables t
+    join public.branches b on b.id = t.branch_id
+    where t.id = target.table_id and 'in_person' = any (b.payment_methods)
+  ) then raise exception 'PAYMENT_METHOD_DISABLED'; end if;
+
   requested := case p_kind
     when 'bill' then target.bill_requested_at
     else target.in_person_payment_requested_at end;
@@ -1636,11 +1658,16 @@ CREATE TABLE IF NOT EXISTS "public"."branches" (
     "name" "text" NOT NULL,
     "address" "text",
     "is_active" boolean DEFAULT true NOT NULL,
-    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "payment_methods" "public"."payment_method"[] DEFAULT '{in_person,external}'::"public"."payment_method"[] NOT NULL
 );
 
 
 ALTER TABLE "public"."branches" OWNER TO "postgres";
+
+
+COMMENT ON COLUMN "public"."branches"."payment_methods" IS 'Medios de pago habilitados en la sucursal (MI-48). Vacío es válido: el local no cobra por la app, el comensal solo puede pedir la cuenta.';
+
 
 
 CREATE TABLE IF NOT EXISTS "public"."floor_sections" (

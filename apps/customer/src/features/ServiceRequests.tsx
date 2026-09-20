@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   formatElapsed,
+  type PaymentMethod,
   type SessionRequestKind,
   sessionRequestKinds,
   type SessionRequestSource,
@@ -8,13 +9,15 @@ import {
 } from '@restaurant-platform/shared'
 
 import { requestSessionService } from '@/features/orders-api'
-import { serviceRequestCopy } from '@/features/service-requests'
+import { serviceRequestCopy, serviceRequestMethod } from '@/features/service-requests'
 
 type ServiceRequestsProps = {
   sessionId: string
   /** La sesión guardada: sus fechas dicen qué pidió la mesa y qué ya le atendieron. */
   session: SessionRequestSource
   closed: boolean
+  /** Medios habilitados en la sucursal (MI-48), en el orden del catálogo. */
+  paymentMethods: PaymentMethod[]
 }
 
 /**
@@ -24,7 +27,12 @@ type ServiceRequestsProps = {
  * su lugar. Esa confirmación la guarda la sesión, no la pantalla: sigue ahí si
  * el comensal recargó, entró desde otro teléfono o estaba mirando la carta.
  */
-export function ServiceRequests({ sessionId, session, closed }: ServiceRequestsProps) {
+export function ServiceRequests({
+  sessionId,
+  session,
+  closed,
+  paymentMethods,
+}: ServiceRequestsProps) {
   const queryClient = useQueryClient()
 
   const ask = useMutation({
@@ -32,11 +40,20 @@ export function ServiceRequests({ sessionId, session, closed }: ServiceRequestsP
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['session', sessionId] }),
   })
 
-  const entries = sessionRequestKinds.map((kind) => ({
-    kind,
-    copy: serviceRequestCopy[kind],
-    state: sessionRequestState(session, kind),
-  }))
+  // El local puede no ofrecer un medio; el aviso que ya está en curso se sigue
+  // viendo igual, porque el salón también lo sigue viendo.
+  const offered = (kind: SessionRequestKind) => {
+    const method = serviceRequestMethod[kind]
+    return method === null || paymentMethods.includes(method)
+  }
+
+  const entries = sessionRequestKinds
+    .map((kind) => ({
+      kind,
+      copy: serviceRequestCopy[kind],
+      state: sessionRequestState(session, kind),
+    }))
+    .filter((entry) => entry.state.status !== 'idle' || offered(entry.kind))
 
   // Cobrada la mesa, el comensal terminó: no tiene sentido que vuelva a pedir la
   // cuenta que ya pagó. Una mesa cerrada tampoco llama a nadie.
@@ -73,7 +90,8 @@ export function ServiceRequests({ sessionId, session, closed }: ServiceRequestsP
             {state.status === 'waiting' ? (
               <strong className="settled">Avisado</strong>
             ) : (
-              !done && (
+              !done &&
+              offered(kind) && (
                 <button disabled={ask.isPending} onClick={() => ask.mutate(kind)}>
                   {ask.isPending && ask.variables === kind
                     ? 'Avisando…'
@@ -87,6 +105,11 @@ export function ServiceRequests({ sessionId, session, closed }: ServiceRequestsP
           </li>
         ))}
       </ul>
+
+      {/* El pago desde el celular (MI-40) cuelga de `mobile`, en la fase 10. */}
+      {!done && paymentMethods.includes('external') && (
+        <p className="muted">También podés pagar en efectivo o en la caja del local.</p>
+      )}
 
       {ask.isError && (
         <p className="notice" role="alert">

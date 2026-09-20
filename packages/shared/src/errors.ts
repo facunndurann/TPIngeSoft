@@ -27,6 +27,7 @@ export const appErrors = {
   INVALID_MODIFIERS: { status: 409, retryable: false, message: 'Cambiaron las opciones disponibles de un plato. Revisá su personalización.' },
   INVALID_INGREDIENTS: { status: 409, retryable: false, message: 'Revisá los ingredientes: hay cambios en su disponibilidad o en cuáles se pueden quitar.' },
   INVALID_SPLIT: { status: 400, retryable: false, message: 'Revisá la división: los porcentajes tienen que sumar 100 y corresponder a comensales de esta mesa.' },
+  PAYMENT_METHOD_DISABLED: { status: 409, retryable: false, message: 'Este local no ofrece ese medio de pago. Pedí la cuenta y consultá con el personal.' },
   PRICE_CHANGED: { status: 409, retryable: false, message: 'El precio cambió. Revisá el total actualizado y volvé a confirmar.' },
   IDEMPOTENCY_CONFLICT: { status: 409, retryable: false, message: 'Este envío ya se usó para otro contenido. Revisá los pedidos de la mesa antes de continuar.' },
   REQUEST_ABANDONED: { status: 409, retryable: false, message: 'Cancelaste este envío. Revisá tu carrito y volvé a confirmar.' },

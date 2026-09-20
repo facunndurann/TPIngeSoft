@@ -1,10 +1,20 @@
 import { useEffect, useRef } from 'react'
 import {
+  type PaymentMethod,
   type SessionRequestKind,
   sessionRequestKinds,
   type SessionRequestSource,
   sessionRequestState,
 } from '@restaurant-platform/shared'
+
+/**
+ * Qué medio de pago necesita cada aviso (MI-48). Pedir la cuenta no necesita
+ * ninguno: querer ver lo que se debe no es elegir cómo pagarlo.
+ */
+export const serviceRequestMethod: Record<SessionRequestKind, PaymentMethod | null> = {
+  bill: null,
+  in_person_payment: 'in_person',
+}
 
 /**
  * Al comensal se le habla de lo suyo; el mismo pedido, en el salón, es «Cuenta

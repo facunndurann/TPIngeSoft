@@ -121,7 +121,7 @@ export async function loadRestaurantTables(restaurantId: string, branchId: strin
   const { data, error } = await supabase
     .from('tables')
     .select(
-      'id, label, branch_id, is_active, is_visible, section_id, position_x, position_y, seats, shape, width, height, branches (id, name, is_active), floor_sections (id, name, sort_order, is_active)',
+      'id, label, branch_id, is_active, is_visible, section_id, position_x, position_y, seats, shape, width, height, branches (id, name, is_active, payment_methods), floor_sections (id, name, sort_order, is_active)',
     )
     .eq('restaurant_id', restaurantId)
     .eq('branch_id', branchId)

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { asAmount, formatElapsed, formatPrice, getPosTableState, isKitchenTicket, type OrderStatus, posTableStateLabels, sessionRequestsOf } from '@restaurant-platform/shared'
+import { asAmount, enabledPaymentMethods, formatElapsed, formatPrice, getPosTableState, isKitchenTicket, type OrderStatus, paymentMethodLabels, posTableStateLabels, sessionRequestsOf } from '@restaurant-platform/shared'
 import { ArrowLeft, Clock3, PlayCircle, UserRound, Users } from 'lucide-react'
 import { Badge, Button, EmptyState, ErrorText, Modal, Spinner, SummaryItem, useSaveErrors } from '@restaurant-platform/ui'
 import { useCan, useRestaurant } from '@/context/pos-context'
@@ -107,6 +107,7 @@ export function TableCommand() {
 
   const open = session.data
   const state = getPosTableState(open)
+  const branchMethods = enabledPaymentMethods(table.branches)
   const kitchenOrders = (orders.data ?? []).filter((order) => isKitchenTicket(order.status)).length
 
   return (
@@ -119,6 +120,14 @@ export function TableCommand() {
           <p className="text-sm text-neutral-500">
             {table.floor_sections?.name ?? 'Sin sector'}
             {table.branches ? ` · ${table.branches.name}` : ''} · {table.seats} lugares
+          </p>
+          {/* Lo que el admin habilitó para esta sucursal (MI-48): es lo que el
+              comensal ve como opción y lo único que se le puede cobrar acá. */}
+          <p className="text-xs text-neutral-500">
+            Medios de pago:{' '}
+            {branchMethods.length === 0
+              ? 'ninguno habilitado'
+              : branchMethods.map((method) => paymentMethodLabels[method]).join(' · ')}
           </p>
         </div>
         <Badge color={open ? 'indigo' : 'green'}>{posTableStateLabels[state]}</Badge>

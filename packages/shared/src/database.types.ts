@@ -100,6 +100,7 @@ export type Database = {
           id: string
           is_active: boolean
           name: string
+          payment_methods: Database["public"]["Enums"]["payment_method"][]
           restaurant_id: string
         }
         Insert: {
@@ -108,6 +109,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           name: string
+          payment_methods?: Database["public"]["Enums"]["payment_method"][]
           restaurant_id: string
         }
         Update: {
@@ -116,6 +118,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           name?: string
+          payment_methods?: Database["public"]["Enums"]["payment_method"][]
           restaurant_id?: string
         }
         Relationships: [
@@ -1674,6 +1677,7 @@ export type Database = {
         | "delivered"
         | "cancelled"
       order_transition_kind: "advance" | "revert" | "cancel"
+      payment_method: "mobile" | "in_person" | "external"
       payment_mode: "full" | "own" | "equal_split" | "custom"
       payment_status: "pending" | "approved" | "rejected" | "cancelled"
       pos_type: "internal" | "fudo"
@@ -1829,6 +1833,7 @@ export const Constants = {
         "cancelled",
       ],
       order_transition_kind: ["advance", "revert", "cancel"],
+      payment_method: ["mobile", "in_person", "external"],
       payment_mode: ["full", "own", "equal_split", "custom"],
       payment_status: ["pending", "approved", "rejected", "cancelled"],
       pos_type: ["internal", "fudo"],

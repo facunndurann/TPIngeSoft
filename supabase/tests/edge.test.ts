@@ -13,6 +13,13 @@ import {
   sessionRequestState,
 } from '../../packages/shared/src/pos.ts'
 import {
+  acceptsPaymentMethod,
+  enabledPaymentMethods,
+  paymentMethodDescriptions,
+  paymentMethodLabels,
+  paymentMethods,
+} from '../../packages/shared/src/payments.ts'
+import {
   FLOOR_GRID,
   TABLE_SPAN,
   clampSpan,
@@ -161,7 +168,8 @@ test('reverting steps back exactly one stage, never to submitted nor from cancel
 
 test('the error catalog decides which failures keep a submission for retry', () => {
   // Rechazos definitivos: liberan el envío para que el comensal revise el carrito.
-  for (const code of ['PRICE_CHANGED', 'SESSION_CLOSED', 'IDEMPOTENCY_CONFLICT', 'REQUEST_ABANDONED']) {
+  for (const code of ['PRICE_CHANGED', 'SESSION_CLOSED', 'IDEMPOTENCY_CONFLICT', 'REQUEST_ABANDONED',
+    'PAYMENT_METHOD_DISABLED']) {
     assert.equal(isRetryableError(code), false, code)
   }
   // Fallas transitorias y códigos desconocidos (red caída): el envío se conserva.
@@ -213,6 +221,26 @@ test('a table waits with the requests it made, oldest first', () => {
   )
   // Cada tipo tiene rótulo propio: el plano no puede mostrar una clave cruda.
   for (const kind of sessionRequestKinds) assert.ok(sessionRequestLabels[kind])
+})
+
+test('a branch offers only the payment methods it enabled', () => {
+  assert.deepEqual(enabledPaymentMethods(null), [])
+  assert.deepEqual(enabledPaymentMethods({ payment_methods: null }), [])
+  // Se recorre el catálogo, no la columna: el orden guardado y un repetido no
+  // llegan a la pantalla.
+  assert.deepEqual(enabledPaymentMethods({ payment_methods: ['external', 'mobile', 'external'] }), [
+    'mobile',
+    'external',
+  ])
+  assert.equal(acceptsPaymentMethod({ payment_methods: ['in_person'] }, 'in_person'), true)
+  assert.equal(acceptsPaymentMethod({ payment_methods: ['in_person'] }, 'mobile'), false)
+  // Un local puede no cobrar por la app: el comensal solo pide la cuenta.
+  assert.deepEqual(enabledPaymentMethods({ payment_methods: [] }), [])
+
+  for (const method of paymentMethods) {
+    assert.ok(paymentMethodLabels[method])
+    assert.ok(paymentMethodDescriptions[method])
+  }
 })
 
 test('a diner reads, per request, whether nobody asked, they wait, or they were attended', () => {

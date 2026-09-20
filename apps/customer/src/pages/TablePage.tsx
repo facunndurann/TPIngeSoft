@@ -7,7 +7,7 @@ import {
   useNavigate,
   useParams,
 } from 'react-router'
-import { formatPrice, MENU_DESIGNS } from '@restaurant-platform/shared'
+import { enabledPaymentMethods, formatPrice, MENU_DESIGNS, type PaymentMethod } from '@restaurant-platform/shared'
 import { ErrorMessage } from '@/components/ErrorMessage'
 import { TOAST_DURATION_MS, Toast } from '@/components/Toast'
 import { cartKeyFor } from '@/features/cart'
@@ -44,6 +44,8 @@ type TableContextValue = {
   userId?: string
   cartKey: string
   items: CartItem[]
+  /** Medios de pago habilitados en la sucursal de la mesa (MI-48). */
+  paymentMethods: PaymentMethod[]
   sessionOpen: boolean
   canEdit: boolean
   setAnnouncement: (value: string) => void
@@ -132,6 +134,7 @@ function TableApp({ token }: { token: string }) {
           userId: joined.data?.userId,
           cartKey,
           items,
+          paymentMethods: enabledPaymentMethods(branch),
           sessionOpen,
           canEdit,
           setAnnouncement,
@@ -316,7 +319,7 @@ export function TableCartItemPage() {
 }
 
 export function TableOrdersPage() {
-  const { sessionId, session, userId } = useTable()
+  const { sessionId, session, userId, paymentMethods } = useTable()
   return (
     <SessionOrders
       sessionId={sessionId}
@@ -324,6 +327,7 @@ export function TableOrdersPage() {
       participants={session.data?.participants ?? []}
       userId={userId}
       closed={session.data?.status === 'closed'}
+      paymentMethods={paymentMethods}
     />
   )
 }
