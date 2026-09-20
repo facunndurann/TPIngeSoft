@@ -64,6 +64,7 @@ export type PosTableState =
   | 'order_pending'
   | 'in_preparation'
   | 'ready'
+  | 'attention_requested'
   | 'bill_requested'
   | 'payment_pending'
 
@@ -73,12 +74,14 @@ export const posTableStateLabels: Record<PosTableState, string> = {
   order_pending: 'Pedido pendiente',
   in_preparation: 'En preparación',
   ready: 'Listo para servir',
+  attention_requested: 'Llama al mozo',
   bill_requested: 'Cuenta solicitada',
   payment_pending: 'Cobro pendiente',
 }
 
 /** Sesión abierta tal como la leen el plano y la comanda. */
 export type PosTableStateSession = {
+  attention_requested_at?: string | null
   bill_requested_at?: string | null
   in_person_payment_requested_at?: string | null
   orders?: readonly { status: OrderStatus }[]
@@ -97,6 +100,7 @@ export function getPosTableState(session: PosTableStateSession | null | undefine
     session.in_person_payment_requested_at ||
     session.payments?.some((payment) => payment.status === 'pending')
   ) return 'payment_pending'
+  if (session.attention_requested_at) return 'attention_requested'
   if (session.bill_requested_at) return 'bill_requested'
 
   const statuses = (session.orders ?? []).map((order) => order.status)

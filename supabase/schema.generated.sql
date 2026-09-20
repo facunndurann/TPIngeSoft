@@ -859,6 +859,42 @@ COMMENT ON FUNCTION "public"."reorder_categories"("p_restaurant_id" "uuid", "p_c
 
 
 
+CREATE OR REPLACE FUNCTION "public"."request_table_service"("p_session_id" "uuid", "p_kind" "text", "p_requested" boolean DEFAULT true) RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  target public.table_sessions;
+  -- Null apaga el aviso; al encenderlo se conserva el momento del primero, así
+  -- dos comensales pidiendo lo mismo no reinician la espera que ve el mozo.
+  stamp timestamptz;
+begin
+  if auth.uid() is null then raise exception 'AUTH_REQUIRED'; end if;
+  if p_kind not in ('attention', 'bill') then raise exception 'INVALID_REQUEST'; end if;
+
+  select * into target from public.table_sessions where id = p_session_id for update;
+  if not found then raise exception 'SESSION_NOT_FOUND'; end if;
+  if target.status <> 'open' then raise exception 'SESSION_CLOSED'; end if;
+
+  if not exists (
+    select 1 from public.session_participants
+    where session_id = p_session_id and user_id = auth.uid()
+  ) then raise exception 'NOT_PARTICIPANT'; end if;
+
+  if p_kind = 'attention' then
+    stamp := case when p_requested then coalesce(target.attention_requested_at, now()) end;
+    update public.table_sessions set attention_requested_at = stamp where id = p_session_id;
+  else
+    stamp := case when p_requested then coalesce(target.bill_requested_at, now()) end;
+    update public.table_sessions set bill_requested_at = stamp where id = p_session_id;
+  end if;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."request_table_service"("p_session_id" "uuid", "p_kind" "text", "p_requested" boolean) OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."save_employee_account"("p_actor" "uuid", "p_restaurant" "uuid", "p_user" "uuid", "p_full_name" "text", "p_roles" "public"."member_role"[], "p_branches" "uuid"[], "p_active" boolean, "p_username" "text" DEFAULT NULL::"text", "p_legacy" "uuid" DEFAULT NULL::"uuid") RETURNS "uuid"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -1739,7 +1775,8 @@ CREATE TABLE IF NOT EXISTS "public"."table_sessions" (
     "in_person_payment_requested_at" timestamp with time zone,
     "assigned_user_id" "uuid",
     "split_updated_by" "uuid",
-    "split_updated_at" timestamp with time zone
+    "split_updated_at" timestamp with time zone,
+    "attention_requested_at" timestamp with time zone
 );
 
 
@@ -1763,6 +1800,10 @@ COMMENT ON COLUMN "public"."table_sessions"."split_updated_by" IS 'Comensal que 
 
 
 COMMENT ON COLUMN "public"."table_sessions"."split_updated_at" IS 'Momento del último cambio de división. Null mientras la mesa nunca la cambió.';
+
+
+
+COMMENT ON COLUMN "public"."table_sessions"."attention_requested_at" IS 'Momento en que la mesa llamó al mozo. Null cuando no hay llamado pendiente.';
 
 
 
@@ -3091,6 +3132,12 @@ GRANT ALL ON FUNCTION "public"."reject_abandoned_order_request"() TO "service_ro
 REVOKE ALL ON FUNCTION "public"."reorder_categories"("p_restaurant_id" "uuid", "p_category_ids" "uuid"[]) FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."reorder_categories"("p_restaurant_id" "uuid", "p_category_ids" "uuid"[]) TO "authenticated";
 GRANT ALL ON FUNCTION "public"."reorder_categories"("p_restaurant_id" "uuid", "p_category_ids" "uuid"[]) TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."request_table_service"("p_session_id" "uuid", "p_kind" "text", "p_requested" boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."request_table_service"("p_session_id" "uuid", "p_kind" "text", "p_requested" boolean) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."request_table_service"("p_session_id" "uuid", "p_kind" "text", "p_requested" boolean) TO "service_role";
 
 
 

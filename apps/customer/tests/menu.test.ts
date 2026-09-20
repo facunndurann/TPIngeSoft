@@ -318,15 +318,73 @@ test('productMedia classifies each url and mediaElementSrc only tweaks videos', 
 test('Toast keeps its live region mounted and schedules the fade within its own duration', async () => {
   const { createElement } = await import('react')
   const { renderToStaticMarkup } = await import('react-dom/server')
-  const { Toast, TOAST_DURATION_MS } = await import('../src/components/Toast')
+  const { Toast } = await import('../src/components/Toast')
+  const { toastDuration } = await import('../src/features/announcements')
+  const noop = () => {}
+  const timingOf = (html: string) =>
+    [/animation-duration:(\d+)ms/, /animation-delay:0ms, (\d+)ms/].map((pattern) => Number(html.match(pattern)?.[1]))
 
-  assert.equal(renderToStaticMarkup(createElement(Toast, { message: '' })), '<div class="toast-container" role="status"></div>')
+  assert.equal(renderToStaticMarkup(createElement(Toast, { onDismiss: noop })), '<div class="toast-container" role="status"></div>')
 
-  const html = renderToStaticMarkup(createElement(Toast, { message: 'Pedido enviado' }))
-  assert.match(html, /role="status"><div class="toast"/)
-  const [duration, delay] = [/animation-duration:(\d+)ms/, /animation-delay:0ms, (\d+)ms/].map((pattern) => Number(html.match(pattern)?.[1]))
+  const plain = renderToStaticMarkup(createElement(Toast, { announcement: { id: 1, message: 'Pedido enviado' }, onDismiss: noop }))
+  assert.match(plain, /role="status"><div class="toast"/)
+  assert.doesNotMatch(plain, /Deshacer/)
+  const [duration, delay] = timingOf(plain)
   // El dueño limpia el mensaje justo cuando termina la salida animada.
-  assert.equal(delay + duration, TOAST_DURATION_MS)
+  assert.equal(delay + duration, toastDuration(false))
+
+  // Un aviso con deshacer dura más: el botón tiene que ser alcanzable.
+  const undoable = renderToStaticMarkup(createElement(Toast, { announcement: { id: 2, message: 'Se quitó', undo: noop }, onDismiss: noop }))
+  assert.match(undoable, /class="toast-undo"[^>]*>Deshacer</)
+  const [undoDuration, undoDelay] = timingOf(undoable)
+  assert.equal(undoDelay + undoDuration, toastDuration(true))
+  assert.ok(toastDuration(true) > toastDuration(false))
+})
+
+test('the cart puts an undone plate back in its place and starting over drops the draft', async () => {
+  const { useCart } = await import('../src/stores/cart')
+  const key = 'undo-session:diner'
+  const plate = (id: string) => ({ id, productId: 'p', quantity: 1, optionIds: [], removedIds: [], isShared: false })
+
+  useCart.setState({ carts: { [key]: [plate('a'), plate('b'), plate('c')] }, submissions: {} })
+  useCart.getState().remove(key, 'b')
+  useCart.getState().restore(key, plate('b'), 1)
+  assert.deepEqual(useCart.getState().carts[key].map((item) => item.id), ['a', 'b', 'c'])
+
+  // Deshacer dos veces no puede duplicar el plato.
+  useCart.getState().restore(key, plate('b'), 1)
+  assert.equal(useCart.getState().carts[key].length, 3)
+
+  // Un carrito más corto que cuando se quitó recibe el plato al final.
+  useCart.getState().remove(key, 'a')
+  useCart.getState().remove(key, 'c')
+  useCart.getState().restore(key, plate('c'), 2)
+  assert.deepEqual(useCart.getState().carts[key].map((item) => item.id), ['b', 'c'])
+
+  useCart.getState().clear(key)
+  assert.equal(useCart.getState().carts[key], undefined)
+
+  // Con un envío sin resolver el carrito está bloqueado: nada lo toca.
+  useCart.setState({ carts: { [key]: [plate('a')] }, submissions: { [key]: { input: { sessionId: 's', requestId: 'r', expectedTotal: 1, items: [] }, snapshot: [] } } as unknown as Record<string, PendingSubmission> })
+  useCart.getState().clear(key)
+  useCart.getState().restore(key, plate('z'), 0)
+  assert.deepEqual(useCart.getState().carts[key].map((item) => item.id), ['a'])
+  useCart.setState({ carts: {}, submissions: {} })
+})
+
+test('the remembered table survives only as three usable strings', async () => {
+  const { lastTable, rememberTable } = await import('../src/features/last-table')
+
+  assert.equal(lastTable(), undefined)
+  rememberTable({ token: 'qr-1', tableLabel: 'Mesa 4', restaurantName: 'La Parrilla' })
+  assert.deepEqual(lastTable(), { token: 'qr-1', tableLabel: 'Mesa 4', restaurantName: 'La Parrilla' })
+
+  // Un valor viejo, incompleto o roto no puede ofrecer un enlace a medias.
+  for (const stored of ['{"token":"qr-1"}', '{"token":"","tableLabel":"Mesa 4","restaurantName":"R"}', 'no-json', 'null']) {
+    globalThis.localStorage.setItem('customer-last-table', stored)
+    assert.equal(lastTable(), undefined)
+  }
+  globalThis.localStorage.removeItem('customer-last-table')
 })
 
 test('product cards keep the link and the carousel controls as siblings', async () => {

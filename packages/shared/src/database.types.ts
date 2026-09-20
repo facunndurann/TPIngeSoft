@@ -1190,6 +1190,7 @@ export type Database = {
         Row: {
           assigned_employee_id: string | null
           assigned_user_id: string | null
+          attention_requested_at: string | null
           bill_requested_at: string | null
           closed_at: string | null
           id: string
@@ -1206,6 +1207,7 @@ export type Database = {
         Insert: {
           assigned_employee_id?: string | null
           assigned_user_id?: string | null
+          attention_requested_at?: string | null
           bill_requested_at?: string | null
           closed_at?: string | null
           id?: string
@@ -1222,6 +1224,7 @@ export type Database = {
         Update: {
           assigned_employee_id?: string | null
           assigned_user_id?: string | null
+          attention_requested_at?: string | null
           bill_requested_at?: string | null
           closed_at?: string | null
           id?: string
@@ -1527,6 +1530,10 @@ export type Database = {
       }
       reorder_categories: {
         Args: { p_category_ids: string[]; p_restaurant_id: string }
+        Returns: undefined
+      }
+      request_table_service: {
+        Args: { p_kind: string; p_requested?: boolean; p_session_id: string }
         Returns: undefined
       }
       save_employee_account: {

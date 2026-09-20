@@ -242,6 +242,11 @@ const stateStyles: Record<PosTableState, { table: string; badge: string; dot: st
     badge: 'bg-cyan-200 text-cyan-950',
     dot: 'bg-cyan-600',
   },
+  attention_requested: {
+    table: 'border-fuchsia-600 bg-fuchsia-50 text-fuchsia-950',
+    badge: 'bg-fuchsia-200 text-fuchsia-950',
+    dot: 'bg-fuchsia-600',
+  },
   bill_requested: {
     table: 'border-violet-600 bg-violet-50 text-violet-950',
     badge: 'bg-violet-200 text-violet-950',
@@ -260,6 +265,7 @@ const legendStates: PosTableState[] = [
   'order_pending',
   'in_preparation',
   'ready',
+  'attention_requested',
   'bill_requested',
   'payment_pending',
 ]

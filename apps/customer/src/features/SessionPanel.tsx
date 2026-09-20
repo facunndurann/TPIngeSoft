@@ -1,5 +1,5 @@
 import type { UseQueryResult } from '@tanstack/react-query'
-import type { FormEvent } from 'react'
+import { type FormEvent, useState } from 'react'
 import { ErrorMessage } from '@/components/ErrorMessage'
 import type { loadSession } from '@/features/session'
 
@@ -11,6 +11,7 @@ type SessionPanelProps = {
   session: UseQueryResult<Session>
   userId?: string
   hasPendingSubmission: boolean
+  cartCount: number
   name: string
   onNameChange: (value: string) => void
   rename: { mutate: () => void; isPending: boolean; isError: boolean; error: unknown }
@@ -22,6 +23,7 @@ export function SessionPanel({
   session,
   userId,
   hasPendingSubmission,
+  cartCount,
   name,
   onNameChange,
   rename,
@@ -56,6 +58,7 @@ export function SessionPanel({
           {session.data.status === 'closed' ? (
             <ClosedSessionNotice
               hasPendingSubmission={hasPendingSubmission}
+              cartCount={cartCount}
               onOpenNewSession={onOpenNewSession}
             />
           ) : (
@@ -91,19 +94,48 @@ export function SessionPanel({
 
 function ClosedSessionNotice({
   hasPendingSubmission,
+  cartCount,
   onOpenNewSession,
 }: {
   hasPendingSubmission: boolean
+  cartCount: number
   onOpenNewSession: () => void
 }) {
+  const [confirming, setConfirming] = useState(false)
+  const plates = `${cartCount} ${cartCount === 1 ? 'plato' : 'platos'}`
+
   const message = hasPendingSubmission
     ? 'Revisá el envío pendiente antes de empezar de nuevo.'
-    : 'Los productos del carrito no se enviarán.'
+    : cartCount > 0
+      ? `Tenés ${plates} sin enviar en el carrito.`
+      : ''
+
+  // Empezar de nuevo descarta el carrito y eso no se puede deshacer, así que se
+  // pregunta antes. Con el carrito vacío no hay nada que perder ni que preguntar.
+  if (confirming) {
+    return (
+      <div className="notice">
+        <p>
+          Si empezás de nuevo, se descartan los {plates} que todavía no enviaste. No vas a poder
+          recuperarlos.
+        </p>
+        <div className="cart-actions">
+          <button onClick={() => setConfirming(false)}>Seguir en esta cuenta</button>
+          <button className="primary" onClick={onOpenNewSession}>
+            Descartar y empezar de nuevo
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="notice">
       <p>La mesa cerró su cuenta. Podés seguir consultando sus pedidos. {message}</p>
-      <button disabled={hasPendingSubmission} onClick={onOpenNewSession}>
+      <button
+        disabled={hasPendingSubmission}
+        onClick={() => (cartCount > 0 ? setConfirming(true) : onOpenNewSession())}
+      >
         Empezar de nuevo en esta mesa
       </button>
     </div>

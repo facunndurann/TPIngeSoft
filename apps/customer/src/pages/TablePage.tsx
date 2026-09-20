@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import {
   Link,
   Navigate,
@@ -10,7 +10,8 @@ import {
 import { formatPrice, MENU_DESIGNS } from '@restaurant-platform/shared'
 import { ErrorMessage } from '@/components/ErrorMessage'
 import { FreshnessNote } from '@/components/FreshnessNote'
-import { TOAST_DURATION_MS, Toast } from '@/components/Toast'
+import { Toast } from '@/components/Toast'
+import { type Announce, type Announcement, toastDuration } from '@/features/announcements'
 import { cartKeyFor } from '@/features/cart'
 import { CartPanel } from '@/features/CartPanel'
 import { MenuBrowse } from '@/features/MenuBrowse'
@@ -30,6 +31,8 @@ import {
 } from '@/features/table-paths'
 import { MenuShell } from '@/features/MenuShell'
 import { MenuDesignContext } from '@/features/menu-design'
+import { rememberTable } from '@/features/last-table'
+import { TableService } from '@/features/TableService'
 import { useTableSession } from '@/hooks/useTableSession'
 import { useCart } from '@/stores/cart'
 import type { CartItem } from '@/stores/cart'
@@ -46,7 +49,7 @@ type TableContextValue = {
   items: CartItem[]
   sessionOpen: boolean
   canEdit: boolean
-  setAnnouncement: (value: string) => void
+  announce: Announce
 }
 
 const TableContext = createContext<TableContextValue | null>(null)
@@ -75,7 +78,7 @@ function TableApp({ token }: { token: string }) {
   const { client, table, menu, joined, session, sessionId, name, setName, rename } =
     useTableSession(token)
   const location = useLocation()
-  const [announcement, setAnnouncement] = useState('')
+  const [announcement, setAnnouncement] = useState<Announcement>()
   const cart = useCart()
   const cartKey = cartKeyFor(sessionId, joined.data?.userId)
   const items = cart.carts[cartKey] ?? []
@@ -86,6 +89,10 @@ function TableApp({ token }: { token: string }) {
   const atMenu = isMenuIndex(location.pathname)
   const total = menu.data ? cartPrice(menu.data, items) : 0
 
+  const announce: Announce = useCallback((message, undo) => {
+    setAnnouncement((current) => ({ id: (current?.id ?? 0) + 1, message, undo }))
+  }, [])
+
   useEffect(() => {
     window.scrollTo(0, 0)
   }, [location.pathname])
@@ -93,9 +100,19 @@ function TableApp({ token }: { token: string }) {
   // Cada aviso nuevo reinicia el plazo; uno anterior nunca puede borrar al siguiente.
   useEffect(() => {
     if (!announcement) return
-    const timer = setTimeout(() => setAnnouncement(''), TOAST_DURATION_MS)
+    const timer = setTimeout(() => setAnnouncement(undefined), toastDuration(!!announcement.undo))
     return () => clearTimeout(timer)
   }, [announcement])
+
+  // Rastro mínimo para poder volver a la mesa desde una URL que no existe.
+  useEffect(() => {
+    if (!table.data) return
+    rememberTable({
+      token,
+      tableLabel: table.data.table.label,
+      restaurantName: table.data.restaurant.name,
+    })
+  }, [token, table.data])
 
   if (table.isPending) {
     return (
@@ -131,7 +148,7 @@ function TableApp({ token }: { token: string }) {
           items,
           sessionOpen,
           canEdit,
-          setAnnouncement,
+          announce,
         }}
       >
         <MenuShell>
@@ -146,18 +163,20 @@ function TableApp({ token }: { token: string }) {
             session={session}
             userId={joined.data?.userId}
             hasPendingSubmission={!!cart.submissions[cartKey]}
+            cartCount={cartCount}
             name={name}
             onNameChange={setName}
             rename={rename}
             onOpenNewSession={() => {
-              setAnnouncement('')
+              setAnnouncement(undefined)
+              cart.clear(cartKey)
               void joined.refetch()
             }}
           />
 
           <TableNav token={token} cartCount={cartCount} />
 
-          <Toast message={announcement} />
+          <Toast announcement={announcement} onDismiss={() => setAnnouncement(undefined)} />
 
           {section !== 'orders' && menu.isPending && <p role="status">Cargando la carta…</p>}
           {section !== 'orders' && menu.isError && (
@@ -180,6 +199,13 @@ function TableApp({ token }: { token: string }) {
               Ver mi carrito <strong>{formatPrice(total)}</strong>
             </Link>
           )}
+
+          <TableService
+            sessionId={sessionId}
+            session={session.data}
+            onAnnounce={announce}
+            onDone={() => { void session.refetch() }}
+          />
 
           <footer>{design.copy.footer}</footer>
         </MenuShell>
@@ -209,7 +235,7 @@ export function TableMenuPage() {
 }
 
 export function TableCartPage({ reviewing = false }: { reviewing?: boolean }) {
-  const { token, client, menu, sessionId, sessionOpen, cartKey, items, setAnnouncement } = useTable()
+  const { token, client, menu, sessionId, sessionOpen, cartKey, items, announce } = useTable()
   const pending = useCart((state) => state.submissions[cartKey])
   const navigate = useNavigate()
 
@@ -226,9 +252,9 @@ export function TableCartPage({ reviewing = false }: { reviewing?: boolean }) {
       sessionOpen={sessionOpen}
       reviewing={reviewing}
       refreshMenu={() => menu.refetch({ throwOnError: true })}
-      onAnnounce={setAnnouncement}
+      onAnnounce={announce}
       onSubmitted={() => {
-        setAnnouncement(
+        announce(
           'Tu pedido fue enviado. Podés seguir su estado y consultar la cuenta de la mesa.',
         )
         navigate(ordersPath(token), { replace: true })
@@ -240,7 +266,7 @@ export function TableCartPage({ reviewing = false }: { reviewing?: boolean }) {
 }
 
 export function TableProductPage() {
-  const { token, menu, canEdit, cartKey, setAnnouncement } = useTable()
+  const { token, menu, canEdit, cartKey, announce } = useTable()
   const { productId = '' } = useParams()
   const location = useLocation()
   const back = useTableBack(`${menuPath(token)}${location.search}`)
@@ -280,7 +306,7 @@ export function TableProductPage() {
       onClose={back}
       onSave={(item) => {
         cart.save(cartKey, item)
-        setAnnouncement(`${product.name} guardado en tu carrito`)
+        announce(`${product.name} guardado en tu carrito`)
         back()
       }}
     />
@@ -288,7 +314,7 @@ export function TableProductPage() {
 }
 
 export function TableCartItemPage() {
-  const { token, menu, canEdit, cartKey, items, setAnnouncement } = useTable()
+  const { token, menu, canEdit, cartKey, items, announce } = useTable()
   const { itemId = '' } = useParams()
   const back = useTableBack(cartPath(token))
   const cart = useCart()
@@ -321,7 +347,7 @@ export function TableCartItemPage() {
       onClose={back}
       onSave={(next) => {
         cart.save(cartKey, next)
-        setAnnouncement(`${product.name} guardado en tu carrito`)
+        announce(`${product.name} guardado en tu carrito`)
         back()
       }}
     />
@@ -329,7 +355,7 @@ export function TableCartItemPage() {
 }
 
 export function TableOrdersPage() {
-  const { sessionId, session, userId, setAnnouncement } = useTable()
+  const { sessionId, session, userId, announce } = useTable()
   return (
     <SessionOrders
       sessionId={sessionId}
@@ -337,7 +363,7 @@ export function TableOrdersPage() {
       participants={session.data?.participants ?? []}
       userId={userId}
       closed={session.data?.status === 'closed'}
-      onAnnounce={setAnnouncement}
+      onAnnounce={announce}
     />
   )
 }

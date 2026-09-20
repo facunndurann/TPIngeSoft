@@ -24,7 +24,9 @@ export default function App() {
         <Route path="*" element={<TableCatchAll />} />
       </Route>
       <Route path="/vista-previa/:designId" element={<DesignPreviewPage />} />
-      <Route path="*" element={<LandingPage />} />
+      <Route path="/" element={<LandingPage />} />
+      {/* Todo lo demás es una URL que no existe, y la pantalla lo dice. */}
+      <Route path="*" element={<LandingPage notFound />} />
     </Routes>
   )
 }

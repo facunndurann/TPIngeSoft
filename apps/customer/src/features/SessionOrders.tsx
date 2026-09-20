@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { formatPrice, orderStatusLabels, parseSessionSplit, type Tables } from '@restaurant-platform/shared'
 import { FreshnessNote } from '@/components/FreshnessNote'
+import type { Announce } from '@/features/announcements'
 import { BillSplitter } from '@/features/BillSplitter'
 import { oldestUpdate } from '@/features/freshness'
 
@@ -20,7 +21,7 @@ type SessionOrdersProps = {
   userId?: string
   closed: boolean
   /** Avisos al comensal; los muestra el Toast de la mesa. */
-  onAnnounce: (message: string) => void
+  onAnnounce: Announce
 }
 
 export function SessionOrders({

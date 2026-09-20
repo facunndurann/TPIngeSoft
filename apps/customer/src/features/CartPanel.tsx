@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { AppError, formatPrice } from '@restaurant-platform/shared'
 import { useNavigate, useParams } from 'react-router'
+import type { Announce } from '@/features/announcements'
 import { MAX_CART_LINES, cartPhase } from '@/features/cart'
 import type { Review } from '@/features/cart'
 import { cartPrice, price, productOptions, selectionErrors } from '@/features/menu'
@@ -20,7 +21,7 @@ type CartPanelProps = {
   refreshMenu: () => Promise<unknown>
   onSubmitted: () => void
   /** Avisos al comensal; los muestra el Toast de la mesa. */
-  onAnnounce: (message: string) => void
+  onAnnounce: Announce
 }
 
 export function CartPanel({
@@ -124,7 +125,7 @@ export function CartPanel({
         <p className="empty">Tu carrito está vacío. Explorá la carta para agregar algo rico.</p>
       )}
 
-      {items.map((item) => (
+      {items.map((item, index) => (
         <CartLine
           key={item.id}
           item={item}
@@ -135,7 +136,11 @@ export function CartPanel({
           onRemove={() => {
             cart.remove(cartKey, item.id)
             const name = menu?.productsById.get(item.productId)?.name
-            onAnnounce(name ? `${name} se quitó de tu carrito` : 'El plato se quitó de tu carrito')
+            // Deshacer lo devuelve a su posición: quitar de más no cuesta nada.
+            onAnnounce(
+              name ? `${name} se quitó de tu carrito` : 'El plato se quitó de tu carrito',
+              () => cart.restore(cartKey, item, index),
+            )
           }}
         />
       ))}

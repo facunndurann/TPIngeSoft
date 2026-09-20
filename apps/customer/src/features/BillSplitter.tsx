@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { allocationTotal, formatPrice, type SessionSplit, sessionSplitSchema, SPLIT_PERCENTAGE_TOTAL, splitBill, type SplitBill, type SplitOrder, type SplitParticipant, splitTypeDescriptions, splitTypeLabels, splitTypes } from '@restaurant-platform/shared'
 
+import type { Announce } from '@/features/announcements'
 import { AGE_TICK_MS, relativeAge } from '@/features/freshness'
 import { updateSessionSplit } from '@/features/orders-api'
 import { useNow } from '@/hooks/useNow'
@@ -18,7 +19,7 @@ type BillSplitterProps = {
   updatedBy?: string | null
   updatedAt?: string | null
   /** Avisos al comensal; los muestra el Toast de la mesa. */
-  onAnnounce: (message: string) => void
+  onAnnounce: Announce
 }
 
 /**

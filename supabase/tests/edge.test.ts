@@ -185,6 +185,16 @@ test('table map states follow operational priority without inventing occupancy',
     bill_requested_at: '2026-09-18T12:00:00Z',
     payments: [{ status: 'pending' }],
   }), 'payment_pending')
+  // Una mano levantada pasa delante de la cuenta pedida, pero no del cobro.
+  assert.equal(getPosTableState({ attention_requested_at: '2026-09-18' }), 'attention_requested')
+  assert.equal(getPosTableState({
+    attention_requested_at: '2026-09-18T12:00:00Z',
+    bill_requested_at: '2026-09-18T12:05:00Z',
+  }), 'attention_requested')
+  assert.equal(getPosTableState({
+    attention_requested_at: '2026-09-18T12:00:00Z',
+    payments: [{ status: 'pending' }],
+  }), 'payment_pending')
 })
 
 test('the database default menu design matches DEFAULT_MENU_DESIGN', () => {

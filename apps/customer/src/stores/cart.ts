@@ -12,6 +12,8 @@ type CartState = {
   submissions: Record<string, PendingSubmission | undefined>
   save: (key: string, item: CartItem) => void
   remove: (key: string, id: string) => void
+  restore: (key: string, item: CartItem, index: number) => void
+  clear: (key: string) => void
   beginSubmission: (key: string, sessionId: string, expectedTotal: number) => PendingSubmission | undefined
   finishSubmission: (key: string, requestId: string) => void
   rejectSubmission: (key: string, requestId: string) => void
@@ -42,6 +44,26 @@ export const useCart = create<CartState>()(
               [key]: (state.carts[key] ?? []).filter((item) => item.id !== id),
             },
           }
+        }),
+
+      restore: (key, item, index) =>
+        set((state) => {
+          if (state.submissions[key]) return state
+          const items = state.carts[key] ?? []
+          // Deshacer dos veces no puede duplicar el plato.
+          if (items.some((entry) => entry.id === item.id)) return state
+          const next = [...items]
+          // Vuelve a su posición original; si el carrito se acortó, al final.
+          next.splice(Math.min(index, next.length), 0, item)
+          return { carts: { ...state.carts, [key]: next } }
+        }),
+
+      clear: (key) =>
+        set((state) => {
+          if (state.submissions[key]) return state
+          const carts = { ...state.carts }
+          delete carts[key]
+          return { carts }
         }),
 
       beginSubmission: (key, sessionId, expectedTotal) => {
