@@ -6,7 +6,8 @@ import { branchesQuery } from '@/queries/branches'
 import { myRestaurantQuery } from '@/queries/restaurant'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { DesignPicker } from '@/features/DesignPicker'
-import { Badge, Button, ErrorText, Field, Input, Spinner, Textarea, Toggle } from '@/components/ui'
+import { Badge, Button, ErrorText, Field, Input, Spinner, Textarea, Toggle, useSaveErrors } from '@restaurant-platform/ui'
+import { fromPostgres } from '@restaurant-platform/shared'
 
 export function SettingsPage() {
   const restaurant = useRestaurant()
@@ -15,9 +16,9 @@ export function SettingsPage() {
   const [description, setDescription] = useState(restaurant.description ?? '')
   const [menuDesign, setMenuDesign] = useState(restaurant.menu_design)
   const [savedMessage, setSavedMessage] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const errors = useSaveErrors()
 
-  const saveMutation = useMutation({
+  const saveMutation = useMutation(errors.saving('No pudimos guardar los datos del restaurante.', {
     mutationFn: async () => {
       const { error: mErr } = await supabase
         .from('restaurants')
@@ -34,8 +35,7 @@ export function SettingsPage() {
       setSavedMessage(true)
       setTimeout(() => setSavedMessage(false), 2000)
     },
-    onError: (e) => setError(e.message),
-  })
+  }))
 
   return (
     <div className="mx-auto max-w-2xl space-y-5">
@@ -60,7 +60,7 @@ export function SettingsPage() {
           onChange={setMenuDesign}
           hint="Elegí cómo se ve el menú que abren los comensales desde el QR."
         />
-        <ErrorText message={error} />
+        <ErrorText message={errors.message} />
         <div className="flex items-center gap-3">
           <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
             {saveMutation.isPending ? 'Guardando…' : 'Guardar'}
@@ -78,13 +78,13 @@ function BranchesSection({ restaurantId }: { restaurantId: string }) {
   const queryClient = useQueryClient()
   const [newName, setNewName] = useState('')
   const [newAddress, setNewAddress] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  const errors = useSaveErrors()
 
   const { data: branches, isLoading } = useQuery(branchesQuery(restaurantId))
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: branchesQuery(restaurantId).queryKey })
 
-  const createMutation = useMutation({
+  const createMutation = useMutation(errors.saving('No pudimos crear la sucursal.', {
     mutationFn: async () => {
       const { error: mErr } = await supabase.from('branches').insert({
         restaurant_id: restaurantId,
@@ -98,31 +98,24 @@ function BranchesSection({ restaurantId }: { restaurantId: string }) {
       setNewAddress('')
       invalidate()
     },
-    onError: (e) => setError(e.message),
-  })
+  }))
 
-  const updateMutation = useMutation({
+  const updateMutation = useMutation(errors.saving('No pudimos guardar la sucursal.', {
     mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
       const { error: mErr } = await supabase.from('branches').update({ is_active }).eq('id', id)
       if (mErr) throw mErr
     },
     onSuccess: invalidate,
-    onError: (e) => setError(e.message),
-  })
+  }))
 
-  const deleteMutation = useMutation({
+  const deleteMutation = useMutation(errors.saving('No pudimos eliminar la sucursal.', {
     mutationFn: async (id: string) => {
       const { error: mErr } = await supabase.from('branches').delete().eq('id', id)
-      if (mErr) throw mErr
+      // tables_branch_id_fkey ya tiene su mensaje en el catálogo.
+      if (mErr) throw fromPostgres(mErr)
     },
     onSuccess: invalidate,
-    onError: (e) =>
-      setError(
-        e.message.includes('violates foreign key')
-          ? 'No se puede eliminar: la sucursal tiene mesas asociadas.'
-          : e.message,
-      ),
-  })
+  }))
 
   function handleCreate(e: FormEvent) {
     e.preventDefault()
@@ -149,7 +142,7 @@ function BranchesSection({ restaurantId }: { restaurantId: string }) {
         </Button>
       </form>
 
-      <ErrorText message={error} />
+      <ErrorText message={errors.message} />
 
       {isLoading ? (
         <Spinner />

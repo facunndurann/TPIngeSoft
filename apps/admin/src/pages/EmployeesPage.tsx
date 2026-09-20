@@ -5,7 +5,7 @@ import { useMembership } from '@/restaurant/restaurant-context'
 import { supabase } from '@/lib/supabase'
 import { changeEmployee, loadEmployees, type Employee } from '@/features/employees/api'
 import { auditActorLabel } from '@/features/employees/audit'
-import { Badge, Button, ErrorText, Field, Input, Modal, Select, Spinner } from '@/components/ui'
+import { Badge, Button, ErrorText, Field, Input, Modal, Select, Spinner } from '@restaurant-platform/ui'
 
 export function EmployeesPage() {
   const { restaurant, role } = useMembership()

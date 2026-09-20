@@ -7,6 +7,7 @@ import {
   tableFootprint,
   type Footprint,
 } from '@restaurant-platform/shared'
+import { FloorGrid } from '@restaurant-platform/ui'
 import type { FloorTable } from './floor-api'
 
 type Gesture =
@@ -76,25 +77,19 @@ export function FloorCanvas({
     tables.filter((other) => other.id !== tableId).map(layoutOf)
 
   const cellFromPointer = (event: { clientX: number; clientY: number }) => {
-    const box = surface.current?.getBoundingClientRect()
-    if (!box) return { x: 0, y: 0 }
-    const cell = box.width / FLOOR_GRID.cols
-    return { x: (event.clientX - box.left) / cell, y: (event.clientY - box.top) / cell }
+    const grid = surface.current?.firstElementChild?.getBoundingClientRect()
+    if (!grid) return { x: 0, y: 0 }
+    const cell = grid.width / FLOOR_GRID.cols
+    return { x: (event.clientX - grid.left) / cell, y: (event.clientY - grid.top) / cell }
   }
 
-  /** Lo que se dibuja ahora: el gesto en curso gana sobre lo guardado. */
+  /** Caja del gesto en curso; sin gesto, FloorGrid dibuja la posición guardada. */
   const previewOf = (table: FloorTable) => {
+    if (gesture?.tableId !== table.id) return null
     const saved = layoutOf(table)
-    if (gesture?.tableId !== table.id) return { ...saved, invalid: false }
-    if (gesture.kind === 'move') {
-      return { footprint: saved.footprint, x: gesture.x, y: gesture.y, invalid: !gesture.valid }
-    }
-    return {
-      footprint: { w: gesture.width, h: gesture.height },
-      x: saved.x,
-      y: saved.y,
-      invalid: !gesture.valid,
-    }
+    return gesture.kind === 'move'
+      ? { footprint: saved.footprint, x: gesture.x, y: gesture.y }
+      : { footprint: { w: gesture.width, h: gesture.height }, x: saved.x, y: saved.y }
   }
 
   function startMove(event: ReactPointerEvent<HTMLElement>, table: FloorTable) {
@@ -192,31 +187,17 @@ export function FloorCanvas({
   }
 
   return (
-    <div className="overflow-auto rounded-xl border border-neutral-200 bg-white p-3">
-      <div
-        ref={surface}
-        className="relative touch-none"
-        style={{
-          width: FLOOR_GRID.cols * FLOOR_GRID.cell,
-          height: FLOOR_GRID.rows * FLOOR_GRID.cell,
-          backgroundSize: `${FLOOR_GRID.cell}px ${FLOOR_GRID.cell}px`,
-          backgroundImage:
-            'linear-gradient(to right, #f1f1f1 1px, transparent 1px), linear-gradient(to bottom, #f1f1f1 1px, transparent 1px)',
-        }}
-        role="group"
-        aria-label="Plano del sector"
-      >
-        {tables.map((table) => {
-          const { footprint, x, y, invalid } = previewOf(table)
+    <div ref={surface} className="overflow-auto rounded-xl border border-neutral-200 bg-white p-3">
+      <FloorGrid
+        tables={tables}
+        ariaLabel="Plano del sector"
+        emptyMessage="Este sector todavía no tiene mesas."
+        preview={previewOf}
+        renderTable={(table, tile) => {
           const active = gesture?.tableId === table.id
+          const invalid = active && !gesture.valid
           const selected = selectedId === table.id
           const muted = !table.is_active || !table.is_visible
-          const box = {
-            left: x * FLOOR_GRID.cell,
-            top: y * FLOOR_GRID.cell,
-            width: footprint.w * FLOOR_GRID.cell - 6,
-            height: footprint.h * FLOOR_GRID.cell - 6,
-          }
 
           return (
             <div key={table.id} className="contents">
@@ -229,7 +210,7 @@ export function FloorCanvas({
                 onKeyDown={(event) => handleKeyDown(event, table)}
                 className={`absolute flex flex-col items-center justify-center overflow-hidden border-2 text-center transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none ${
                   editable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
-                } ${table.shape === 'round' ? 'rounded-full' : 'rounded-lg'} ${
+                } ${tile.shapeClass} ${
                   invalid
                     ? 'border-red-500 bg-red-50 text-red-700'
                     : selected
@@ -238,7 +219,7 @@ export function FloorCanvas({
                         ? 'border-dashed border-neutral-300 bg-neutral-50 text-neutral-400'
                         : 'border-neutral-300 bg-white text-neutral-700 hover:border-indigo-400'
                 }`}
-                style={{ ...box, margin: 3, zIndex: active ? 10 : 1 }}
+                style={{ ...tile.box, zIndex: active ? 10 : 1 }}
                 aria-label={`${table.label}, ${table.seats} lugares${muted ? ', no operable' : ''}${
                   editable ? '. Flechas para mover.' : ''
                 }`}
@@ -251,9 +232,9 @@ export function FloorCanvas({
               {editable && selected && (
                 <span
                   role="slider"
-                  aria-label={`Tamaño de ${table.label}: ${footprint.w} por ${footprint.h} celdas`}
-                  aria-valuetext={`${footprint.w} por ${footprint.h} celdas`}
-                  aria-valuenow={footprint.w}
+                  aria-label={`Tamaño de ${table.label}: ${tile.footprint.w} por ${tile.footprint.h} celdas`}
+                  aria-valuetext={`${tile.footprint.w} por ${tile.footprint.h} celdas`}
+                  aria-valuenow={tile.footprint.w}
                   tabIndex={-1}
                   onPointerDown={(event) => startResize(event, table)}
                   onPointerMove={(event) => resizeTo(event, table)}
@@ -261,22 +242,16 @@ export function FloorCanvas({
                   onPointerCancel={() => setGesture(null)}
                   className="absolute h-3.5 w-3.5 cursor-se-resize rounded-sm border-2 border-white bg-indigo-600 shadow"
                   style={{
-                    left: box.left + box.width - 1,
-                    top: box.top + box.height - 1,
+                    left: tile.box.left + tile.box.width - 4,
+                    top: tile.box.top + tile.box.height - 4,
                     zIndex: active ? 11 : 2,
                   }}
                 />
               )}
             </div>
           )
-        })}
-
-        {tables.length === 0 && (
-          <p className="absolute inset-0 flex items-center justify-center text-sm text-neutral-400">
-            Este sector todavía no tiene mesas.
-          </p>
-        )}
-      </div>
+        }}
+      />
     </div>
   )
 }

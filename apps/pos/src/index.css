@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* Tailwind v4 solo escanea la raíz del proyecto: sin esto, las clases que solo
+   viven en el paquete de UI (Spinner, SummaryItem) no llegan al CSS. */
+@source "../../../packages/ui/src";
+
 /* Al imprimir un QR, mostrar únicamente el contenido del modal */
 @media print {
   body * {

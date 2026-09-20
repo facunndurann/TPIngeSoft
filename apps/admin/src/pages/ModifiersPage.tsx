@@ -2,11 +2,10 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { formatPrice } from '@/lib/format'
-import { rpcError } from '@/lib/rpc-error'
+import { formatPrice, fromPostgres } from '@restaurant-platform/shared'
 import { modifierGroupsQuery, type ModifierGroupWithOptions } from '@/queries/modifier-groups'
 import { useRestaurant } from '@/restaurant/restaurant-context'
-import { Badge, Button, EmptyState, ErrorText, Field, Input, Modal, Spinner, Toggle } from '@/components/ui'
+import { Badge, Button, EmptyState, ErrorText, Field, Input, Modal, Spinner, Toggle } from '@restaurant-platform/ui'
 
 /** Opción tal como se envía a save_modifier_group; sin `id` es una opción nueva. */
 type OptionDraft = {
@@ -176,7 +175,7 @@ function GroupEditor({
         p_is_available: isAvailable,
         p_options: options,
       })
-      if (rpcErr) throw rpcError(rpcErr)
+      if (rpcErr) throw fromPostgres(rpcErr)
 
       onSaved()
     } catch (err) {

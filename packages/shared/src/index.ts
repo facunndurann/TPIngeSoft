@@ -8,4 +8,5 @@ export * from './floor';
 export * from './designs';
 export * from './product-media';
 export * from './errors';
+export * from './supabase-client';
 export * from './employees';

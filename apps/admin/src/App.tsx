@@ -1,6 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router'
-import { useAuth } from '@/auth/useAuth'
-import { Spinner } from '@/components/ui'
+import { Spinner, useAuth } from '@restaurant-platform/ui'
 import { LoginPage } from '@/pages/LoginPage'
 import { RestaurantGate } from '@/restaurant/RestaurantGate'
 import { RequireAdmin } from '@/restaurant/RequireAdmin'

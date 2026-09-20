@@ -1,14 +1,7 @@
 import { Undo2 } from 'lucide-react'
-import {
-  orderStatusLabels,
-  posActions,
-  transitionPermission,
-  type OrderStatus,
-} from '@restaurant-platform/shared'
-import { formatPrice } from '@/lib/format'
-import { Badge, Button } from '@/components/ui'
+import { formatElapsed, formatPrice, type OrderStatus, orderStatusLabels, posActions, transitionPermission } from '@restaurant-platform/shared'
+import { Badge, Button } from '@restaurant-platform/ui'
 import type { PosOrder, PosOrderItem } from './api'
-import { formatElapsed } from './time'
 import { usePosContext } from '@/context/pos-context'
 
 function participantName(order: PosOrder, participantId: string | null) {

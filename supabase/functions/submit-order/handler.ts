@@ -1,5 +1,5 @@
 import { submitOrderSchema, type SubmitOrderError } from '../../../packages/shared/src/orders.ts';
-import { OrderError } from '../_shared/errors.ts';
+import { AppError } from '../../../packages/shared/src/errors.ts';
 import type { OrderGateway } from '../_shared/order-gateway.ts';
 
 const headers = {
@@ -11,13 +11,13 @@ const headers = {
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status, headers: { ...headers, 'Content-Type': 'application/json' },
 });
-const errorResponse = ({ code, message, status }: OrderError) =>
+const errorResponse = ({ code, message, status }: AppError) =>
   json({ error: { code, message } } satisfies SubmitOrderError, status);
 
 async function readBody(request: Request): Promise<unknown> {
   const limit = 128 * 1024;
   const reader = request.body?.getReader();
-  if (!reader) throw new OrderError('INVALID_REQUEST');
+  if (!reader) throw new AppError('INVALID_REQUEST');
   const chunks: Uint8Array[] = [];
   let length = 0;
   while (true) {
@@ -26,7 +26,7 @@ async function readBody(request: Request): Promise<unknown> {
     length += value.length;
     if (length > limit) {
       await reader.cancel();
-      throw new OrderError('PAYLOAD_TOO_LARGE');
+      throw new AppError('PAYLOAD_TOO_LARGE');
     }
     chunks.push(value);
   }
@@ -34,25 +34,25 @@ async function readBody(request: Request): Promise<unknown> {
   let offset = 0;
   for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
   try { return JSON.parse(new TextDecoder().decode(bytes)); }
-  catch { throw new OrderError('INVALID_REQUEST'); }
+  catch { throw new AppError('INVALID_REQUEST'); }
 }
 
 export function createSubmitOrderHandler(authenticate: (jwt: string) => Promise<OrderGateway>) {
   return async (request: Request): Promise<Response> => {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers });
-    if (request.method !== 'POST') return errorResponse(new OrderError('METHOD_NOT_ALLOWED'));
+    if (request.method !== 'POST') return errorResponse(new AppError('METHOD_NOT_ALLOWED'));
     try {
       const token = request.headers.get('Authorization')?.match(/^Bearer\s+(\S+)$/i)?.[1];
-      if (!token) throw new OrderError('AUTH_REQUIRED');
+      if (!token) throw new AppError('AUTH_REQUIRED');
       if (request.headers.get('Content-Type')?.split(';')[0].trim().toLowerCase() !== 'application/json') {
-        throw new OrderError('INVALID_REQUEST');
+        throw new AppError('INVALID_REQUEST');
       }
       const parsed = submitOrderSchema.safeParse(await readBody(request));
-      if (!parsed.success) throw new OrderError('INVALID_REQUEST');
+      if (!parsed.success) throw new AppError('INVALID_REQUEST');
       const gateway = await authenticate(token);
       return json(await gateway.submit(parsed.data));
     } catch (error) {
-      return errorResponse(error instanceof OrderError ? error : new OrderError('SERVER_ERROR'));
+      return errorResponse(error instanceof AppError ? error : new AppError('SERVER_ERROR'));
     }
   };
 }

@@ -1,8 +1,8 @@
 import { Link, useLocation, useSearchParams } from 'react-router'
-import { productMedia } from '@restaurant-platform/shared'
+import { formatPrice, productMedia } from '@restaurant-platform/shared'
 import { MediaCarousel } from '@/features/MediaCarousel'
 import { useMenuDesign } from '@/features/menu-design'
-import { matchesSearch, money } from '@/features/menu'
+import { matchesSearch } from '@/features/menu'
 import type { Menu, Product } from '@/features/menu'
 import { menuPath, parseMenuFilters, productPath } from '@/features/table-paths'
 
@@ -124,7 +124,7 @@ function ProductCard({
         </h3>
         <p>{product.description}</p>
         {product.dietary_tags.length > 0 && <small>{product.dietary_tags.join(' · ')}</small>}
-        <strong>{money(product.base_price)}</strong>
+        <strong>{formatPrice(product.base_price)}</strong>
         {!product.is_available && <span className="unavailable">Agotado</span>}
       </div>
       <MediaCarousel media={productMedia(product)} variant="card" alt={product.name} />

@@ -1,29 +1,12 @@
-import type { Tables } from '@restaurant-platform/shared'
+import { fromPostgres, type Tables } from '@restaurant-platform/shared'
 import { supabase } from '@/lib/supabase'
 
 export type FloorSection = Tables<'floor_sections'>
 export type FloorTable = Tables<'tables'>
 
-/**
- * Traduce los errores del schema a algo que el administrador entienda. Los dos
- * que importan son las restricciones de unicidad de MI-66.
- */
-export class FloorError extends Error {
-  constructor(raw: string) {
-    super(
-      raw.includes('floor_sections_branch_id_name_key')
-        ? 'Ya existe un sector con ese nombre en esta sucursal.'
-        : raw.includes('tables_label_unique_per_branch')
-          ? 'Ya existe una mesa con ese identificador en esta sucursal.'
-          : raw.includes('tables_section_same_branch')
-            ? 'El sector pertenece a otra sucursal.'
-            : raw,
-    )
-  }
-}
-
 function unwrap<T>({ data, error }: { data: T; error: { message: string } | null }): T {
-  if (error) throw new FloorError(error.message)
+  // Los nombres de constraint de MI-66 ya están en el catálogo compartido.
+  if (error) throw fromPostgres(error)
   return data
 }
 

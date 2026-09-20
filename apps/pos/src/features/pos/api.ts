@@ -1,21 +1,14 @@
 import { queryOptions } from '@tanstack/react-query'
-import type { OrderStatus, Tables } from '@restaurant-platform/shared'
-import { isOperable, posErrorMessage } from '@restaurant-platform/shared'
+import { AppError, fromPostgres, isOperable, localDateKey, type OrderStatus, type Tables } from '@restaurant-platform/shared'
 import { supabase } from '@/lib/supabase'
-import { localDateKey } from './time'
 import type { PosBill, PosDiningTable, PosFloorSection, PosOpenSession, PosOrder } from './types'
 import { posOrderSelect, posSessionSelect } from './types'
 
 export type { PosBill, PosDiningTable, PosFloorSection, PosOpenSession, PosOrder, PosOrderItem } from './types'
 
-export class PosActionError extends Error {
-  constructor(message: string) {
-    super(posErrorMessage(message))
-  }
-}
-
 function throwIfError(error: { message: string } | null): void {
-  if (error) throw new PosActionError(error.message)
+  // fromPostgres conserva el código, así que quien llama puede ramificar.
+  if (error) throw fromPostgres(error)
 }
 
 async function rowsOf<Row>(
@@ -163,7 +156,7 @@ export async function openPosTableSession(tableId: string) {
     p_table_id: tableId,
   })
   throwIfError(error)
-  if (!data) throw new PosActionError('SESSION_NOT_FOUND')
+  if (!data) throw new AppError('SESSION_NOT_FOUND')
   return data as string
 }
 

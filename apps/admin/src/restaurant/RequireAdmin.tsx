@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Button, ErrorText } from '@/components/ui'
+import { Button, ErrorText } from '@restaurant-platform/ui'
 import { supabase } from '@/lib/supabase'
 import { useIsAdmin } from './restaurant-context'
 

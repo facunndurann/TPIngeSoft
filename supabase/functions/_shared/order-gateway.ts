@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '../../../packages/shared/src/database.types.ts';
 import type { SubmitOrderInput, SubmitOrderResult } from '../../../packages/shared/src/orders.ts';
-import { databaseError, OrderError } from './errors.ts';
+import { AppError, fromPostgres } from '../../../packages/shared/src/errors.ts';
 
 export interface OrderGateway {
   submit(input: SubmitOrderInput): Promise<SubmitOrderResult>;
@@ -14,7 +14,7 @@ export async function authenticateOrderGateway(url: string, anonKey: string, jwt
   });
   // Validate with Auth, including anonymous sign-ins; never trust an unverified JWT payload.
   const { data, error } = await client.auth.getUser(jwt);
-  if (error || !data.user) throw new OrderError('AUTH_REQUIRED');
+  if (error || !data.user) throw new AppError('AUTH_REQUIRED');
   return {
     async submit(input) {
       // Una sola transacción valida, guarda y (con el POS interno) acepta el pedido.
@@ -26,7 +26,7 @@ export async function authenticateOrderGateway(url: string, anonKey: string, jwt
         p_expected_total: input.expectedTotal,
         ...(input.notes === undefined ? {} : { p_notes: input.notes }),
       });
-      if (error) throw databaseError(error);
+      if (error) throw fromPostgres(error);
       return { orderId: order.id, status: order.status, totalAmount: order.total_amount };
     },
   };

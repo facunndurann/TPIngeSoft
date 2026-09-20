@@ -1,8 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
-import { orderStatusLabels, parseSessionSplit } from '@restaurant-platform/shared'
-import type { Tables } from '@restaurant-platform/shared'
+import { formatPrice, orderStatusLabels, parseSessionSplit, type Tables } from '@restaurant-platform/shared'
 import { BillSplitter } from '@/features/BillSplitter'
-import { money } from '@/features/menu'
+
 import { loadBill, loadOrders } from '@/features/orders-api'
 import type { loadSession } from '@/features/session'
 
@@ -100,19 +99,19 @@ function BillSummary({ bill }: { bill: Bill }) {
       <dl className="bill-grid">
         <div>
           <dt>Enviado, por confirmar</dt>
-          <dd>{money(bill.submitted_amount ?? 0)}</dd>
+          <dd>{formatPrice(bill.submitted_amount ?? 0)}</dd>
         </div>
         <div>
           <dt>En cuenta</dt>
-          <dd>{money(bill.total_amount ?? 0)}</dd>
+          <dd>{formatPrice(bill.total_amount ?? 0)}</dd>
         </div>
         <div>
           <dt>Pagado</dt>
-          <dd>{money(bill.paid_amount ?? 0)}</dd>
+          <dd>{formatPrice(bill.paid_amount ?? 0)}</dd>
         </div>
         <div>
           <dt>Pendiente de pago</dt>
-          <dd>{money(bill.pending_amount ?? 0)}</dd>
+          <dd>{formatPrice(bill.pending_amount ?? 0)}</dd>
         </div>
       </dl>
       <p className="muted">
@@ -157,7 +156,7 @@ function OrderCard({
       {order.notes && <p>{order.notes}</p>}
       <div className="total">
         <span>Total del pedido</span>
-        <strong>{money(order.total_amount)}</strong>
+        <strong>{formatPrice(order.total_amount)}</strong>
       </div>
     </article>
   )
@@ -178,14 +177,14 @@ function OrderLine({
         <h3>
           {item.quantity} × {item.product_name}
         </h3>
-        <strong>{money(item.total_price)}</strong>
+        <strong>{formatPrice(item.total_price)}</strong>
       </div>
       <p className="muted">
-        {owner} · Base por unidad: {money(item.base_price)}
+        {owner} · Base por unidad: {formatPrice(item.base_price)}
       </p>
       {item.order_item_modifiers.map((modifier) => (
         <p key={modifier.id}>
-          + {modifier.group_name}: {modifier.option_name} ({money(modifier.price_delta)} por unidad)
+          + {modifier.group_name}: {modifier.option_name} ({formatPrice(modifier.price_delta)} por unidad)
         </p>
       ))}
       {item.order_item_removed_ingredients.map((ingredient) => (

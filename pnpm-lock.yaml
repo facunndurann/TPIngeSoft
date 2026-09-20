@@ -20,6 +20,9 @@ importers:
       '@restaurant-platform/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@restaurant-platform/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       '@supabase/supabase-js':
         specifier: ^2.112.4
         version: 2.112.4
@@ -163,6 +166,9 @@ importers:
       '@restaurant-platform/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@restaurant-platform/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       '@supabase/supabase-js':
         specifier: ^2.112.4
         version: 2.112.4
@@ -239,10 +245,38 @@ importers:
 
   packages/shared:
     dependencies:
+      '@supabase/supabase-js':
+        specifier: ^2.112.4
+        version: 2.112.4
       zod:
         specifier: ^3.24.0
         version: 3.25.76
     devDependencies:
+      typescript:
+        specifier: ~5.8.3
+        version: 5.8.3
+
+  packages/ui:
+    dependencies:
+      '@restaurant-platform/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      '@supabase/supabase-js':
+        specifier: ^2.112.4
+        version: 2.112.4
+      '@tanstack/react-query':
+        specifier: ^5.102.8
+        version: 5.102.8(react@19.2.8)
+      '@types/react':
+        specifier: ^19.1.2
+        version: 19.2.18
+      lucide-react:
+        specifier: ^1.35.0
+        version: 1.35.0(react@19.2.8)
+      react:
+        specifier: ^19.1.0
+        version: 19.2.8
       typescript:
         specifier: ~5.8.3
         version: 5.8.3

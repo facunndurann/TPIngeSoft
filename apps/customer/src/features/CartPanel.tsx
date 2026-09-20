@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { isRetryableError } from '@restaurant-platform/shared'
+import { AppError, formatPrice } from '@restaurant-platform/shared'
 import { useNavigate, useParams } from 'react-router'
 import { MAX_CART_LINES, cartPhase } from '@/features/cart'
 import type { Review } from '@/features/cart'
-import { cartPrice, money, price, productOptions, selectionErrors } from '@/features/menu'
+import { cartPrice, price, productOptions, selectionErrors } from '@/features/menu'
 import type { Menu } from '@/features/menu'
-import { SubmissionError, abandonSubmission, submitOrder } from '@/features/orders-api'
+import { abandonSubmission, submitOrder } from '@/features/orders-api'
 import { cartItemPath, cartPath, cartReviewPath } from '@/features/table-paths'
 import { useCart } from '@/stores/cart'
 import type { CartItem } from '@/stores/cart'
@@ -62,7 +62,7 @@ export function CartPanel({
     onError: async (error, input) => {
       // Solo un rechazo definitivo libera el envío; si se puede reintentar, queda
       // pendiente para repetirlo con el mismo requestId sin duplicar el pedido.
-      if (error instanceof SubmissionError && !isRetryableError(error.code)) {
+      if (error instanceof AppError && !error.retryable) {
         cart.rejectSubmission(cartKey, input.requestId)
         if (reviewing) navigate(cartPath(token))
         await refresh()
@@ -162,7 +162,7 @@ export function CartPanel({
         <>
           <div className="total">
             <span>Total estimado</span>
-            <strong>{menu ? money(total) : '—'}</strong>
+            <strong>{menu ? formatPrice(total) : '—'}</strong>
           </div>
           <p className="muted">
             Productos sin enviar. Al confirmar, el restaurante recibirá el pedido y validará
@@ -189,7 +189,7 @@ export function CartPanel({
               <h3>Confirmá tu pedido</h3>
               <p>Revisá los platos, las cantidades y los productos para compartir de arriba.</p>
               <p>
-                Total revisado: <strong>{money(phase.review?.total ?? total)}</strong>
+                Total revisado: <strong>{formatPrice(phase.review?.total ?? total)}</strong>
               </p>
               {phase.outdated && (
                 <p role="alert" className="notice">
@@ -250,12 +250,12 @@ function CartLine({
       <h3>
         {title} {item.isShared && <span className="badge">Para compartir</span>}
       </h3>
-      <p>Base: {product ? money(product.base_price) : '—'}</p>
+      <p>Base: {product ? formatPrice(product.base_price) : '—'}</p>
       {item.optionIds.map((id) => {
         const option = options.find((entry) => entry.id === id)
         return (
           <p key={id}>
-            + {option ? `${option.name} (${money(option.price_delta)})` : 'Opción pendiente de actualizar'}
+            + {option ? `${option.name} (${formatPrice(option.price_delta)})` : 'Opción pendiente de actualizar'}
           </p>
         )
       })}
@@ -281,7 +281,7 @@ function CartLine({
             }}
           />
         </label>
-        <strong>{product ? money(price(product, item)) : '—'}</strong>
+        <strong>{product ? formatPrice(price(product, item)) : '—'}</strong>
       </div>
       {errors.length > 0 && <p className="notice">{errors.join(' ')}</p>}
       <div className="cart-actions">
@@ -314,7 +314,7 @@ function PendingSubmission({
     <div className="confirmation" aria-live="polite">
       <h3>{status === 'sending' ? 'Enviando tu pedido…' : 'Hay un envío por confirmar'}</h3>
       <p>
-        {itemCount} productos · {money(total)}
+        {itemCount} productos · {formatPrice(total)}
       </p>
       <p>
         Conservamos este envío y bloqueamos su edición hasta conocer el resultado. Podés

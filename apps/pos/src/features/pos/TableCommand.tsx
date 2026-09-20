@@ -1,17 +1,9 @@
 import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  asAmount,
-  formatElapsed,
-  getPosTableState,
-  isKitchenTicket,
-  posTableStateLabels,
-  type OrderStatus,
-} from '@restaurant-platform/shared'
+import { asAmount, formatElapsed, formatPrice, getPosTableState, isKitchenTicket, type OrderStatus, posTableStateLabels } from '@restaurant-platform/shared'
 import { ArrowLeft, Clock3, PlayCircle, UserRound, Users } from 'lucide-react'
-import { Badge, Button, EmptyState, ErrorText, Modal, Spinner } from '@/components/ui'
-import { formatPrice } from '@/lib/format'
+import { Badge, Button, EmptyState, ErrorText, Modal, Spinner, SummaryItem, useSaveErrors } from '@restaurant-platform/ui'
 import { useRestaurant, usePosContext } from '@/context/pos-context'
 import {
   closePosSession,
@@ -38,7 +30,7 @@ export function TableCommand() {
   const queryClient = useQueryClient()
   const now = useNow()
   const [closing, setClosing] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const errors = useSaveErrors()
   const [pendingOrderId, setPendingOrderId] = useState<string | null>(null)
 
   const backToMap = `/salon${searchParams.toString() ? `?${searchParams}` : ''}`
@@ -71,37 +63,26 @@ export function TableCommand() {
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['pos', restaurant.id] })
 
-  const openSession = useMutation({
+  const openSession = useMutation(errors.saving('No pudimos abrir la comanda.', {
     mutationFn: () => openPosTableSession(tableId),
-    onMutate: () => setError(null),
     onSuccess: refresh,
-    onError: (err) =>
-      setError(err instanceof Error ? err.message : 'No pudimos abrir la comanda.'),
-  })
+  }))
 
-  const transition = useMutation({
+  const transition = useMutation(errors.saving('No pudimos actualizar el pedido.', {
     mutationFn: ({ orderId, status }: { orderId: string; status: OrderStatus }) =>
       transitionPosOrder(orderId, status),
-    onMutate: ({ orderId }) => {
-      setPendingOrderId(orderId)
-      setError(null)
-    },
+    onMutate: ({ orderId }) => setPendingOrderId(orderId),
     onSuccess: refresh,
-    onError: (err) =>
-      setError(err instanceof Error ? err.message : 'No pudimos actualizar el pedido.'),
     onSettled: () => setPendingOrderId(null),
-  })
+  }))
 
-  const close = useMutation({
+  const close = useMutation(errors.saving('No pudimos cerrar la sesión.', {
     mutationFn: () => closePosSession(sessionId!),
-    onMutate: () => setError(null),
     onSuccess: () => {
       setClosing(false)
       refresh()
     },
-    onError: (err) =>
-      setError(err instanceof Error ? err.message : 'No pudimos cerrar la sesión.'),
-  })
+  }))
 
   if (tables.isLoading || session.isLoading) return <Spinner />
 
@@ -124,13 +105,7 @@ export function TableCommand() {
   }
 
   const open = session.data
-  const state = getPosTableState({
-    hasOpenSession: !!open,
-    orderStatuses: open?.orders.map((order) => order.status),
-    billRequestedAt: open?.bill_requested_at,
-    inPersonPaymentRequestedAt: open?.in_person_payment_requested_at,
-    hasPendingPayment: open?.payments.some((payment) => payment.status === 'pending'),
-  })
+  const state = getPosTableState(open)
   const kitchenOrders = (orders.data ?? []).filter((order) => isKitchenTicket(order.status)).length
 
   return (
@@ -148,7 +123,7 @@ export function TableCommand() {
         <Badge color={open ? 'indigo' : 'green'}>{posTableStateLabels[state]}</Badge>
       </div>
 
-      <ErrorText message={error} />
+      <ErrorText message={errors.message} />
 
       {!open ? (
         <div className="space-y-3 rounded-xl border border-neutral-200 bg-white p-6 text-center">
@@ -172,17 +147,19 @@ export function TableCommand() {
       ) : (
         <>
           <dl className="flex flex-wrap gap-x-8 gap-y-3 rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm">
-            <SummaryItem icon={Clock3} label="Abierta" value={formatElapsed(open.opened_at, now)} />
+            <SummaryItem as="dl-pair" icon={Clock3} label="Abierta" value={formatElapsed(open.opened_at, now)} />
             {permissions.includes('payments.read') && <>
-              <SummaryItem label="En cuenta" value={formatPrice(asAmount(bill?.total_amount))} />
-              <SummaryItem label="Pendiente" value={formatPrice(asAmount(bill?.pending_amount))} />
+              <SummaryItem as="dl-pair" label="En cuenta" value={formatPrice(bill?.total_amount)} />
+              <SummaryItem as="dl-pair" label="Pendiente" value={formatPrice(bill?.pending_amount)} />
             </>}
             <SummaryItem
+              as="dl-pair"
               icon={UserRound}
               label="Responsable"
               value={open.assigned_employee?.full_name ?? 'Sin asignar'}
             />
             <SummaryItem
+              as="dl-pair"
               icon={Users}
               label="Comensales"
               value={String(open.session_participants.length)}
@@ -240,7 +217,7 @@ export function TableCommand() {
             </p>
             {permissions.includes('payments.read') && asAmount(bill?.pending_amount) > 0 && (
               <p className="rounded-lg bg-amber-50 px-3 py-2 text-amber-950">
-                Queda {formatPrice(asAmount(bill?.pending_amount))} pendiente.
+                Queda {formatPrice(bill?.pending_amount)} pendiente.
               </p>
             )}
             {kitchenOrders > 0 && (
@@ -249,7 +226,7 @@ export function TableCommand() {
                 seguir visibles en el tablero.
               </p>
             )}
-            <ErrorText message={error} />
+            <ErrorText message={errors.message} />
             <div className="flex gap-2">
               <Button variant="secondary" className="flex-1" onClick={() => setClosing(false)}>
                 Seguir abierta
@@ -279,25 +256,5 @@ function BackLink({ to }: { to: string }) {
       <ArrowLeft size={16} />
       Volver al plano
     </Link>
-  )
-}
-
-function SummaryItem({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon?: typeof Clock3
-  label: string
-  value: string
-}) {
-  return (
-    <div className="min-w-28">
-      <dt className="flex items-center gap-1 text-[10px] font-medium tracking-wide text-neutral-400 uppercase">
-        {Icon && <Icon size={12} aria-hidden="true" />}
-        {label}
-      </dt>
-      <dd className="mt-0.5 font-medium text-neutral-800">{value}</dd>
-    </div>
   )
 }

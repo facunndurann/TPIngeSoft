@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { employeeEmail } from '@restaurant-platform/shared'
-import { Button, ErrorText, Field, Input } from '@/components/ui'
+import { Button, ErrorText, Field, Input } from '@restaurant-platform/ui'
 import { supabase } from '@/lib/supabase'
 
 export function LoginPage() {

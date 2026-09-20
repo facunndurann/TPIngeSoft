@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, ErrorText, Modal, Select, Spinner } from '@/components/ui'
+import { Button, ErrorText, Modal, Select, Spinner } from '@restaurant-platform/ui'
 import { useRestaurant } from '@/context/pos-context'
 import { loadOpenSessions, loadRestaurantTables, movePosTableSession } from './api'
 import type { PosDiningTable } from './types'

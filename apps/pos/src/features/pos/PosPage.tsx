@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { Link, NavLink, Outlet } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
-import { Button } from '@/components/ui'
+import { Button } from '@restaurant-platform/ui'
 import { usePosContext } from '@/context/pos-context'
 import { supabase } from '@/lib/supabase'
 import { subscribeToRestaurantPos } from './realtime'

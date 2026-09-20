@@ -1,19 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import {
-  SPLIT_PERCENTAGE_TOTAL,
-  allocationTotal,
-  sessionSplitSchema,
-  splitBill,
-  splitTypeDescriptions,
-  splitTypeLabels,
-  splitTypes,
-  type SessionSplit,
-  type SplitBill,
-  type SplitOrder,
-  type SplitParticipant,
-} from '@restaurant-platform/shared'
-import { money } from '@/features/menu'
+import { allocationTotal, formatPrice, type SessionSplit, sessionSplitSchema, SPLIT_PERCENTAGE_TOTAL, splitBill, type SplitBill, type SplitOrder, type SplitParticipant, splitTypeDescriptions, splitTypeLabels, splitTypes } from '@restaurant-platform/shared'
+
 import { updateSessionSplit } from '@/features/orders-api'
 
 type BillSplitterProps = {
@@ -121,7 +109,7 @@ export function BillSplitter({
               ) : amount === 0 ? (
                 <small>No debe nada</small>
               ) : (
-                <strong>{money(amount)}</strong>
+                <strong>{formatPrice(amount)}</strong>
               )}
             </li>
           )

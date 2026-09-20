@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import { TABLE_SPAN, tableShapeLabels, tableShapes } from '@restaurant-platform/shared'
-import { Button, Field, Input, Select, Toggle } from '@/components/ui'
+import { Button, Field, Input, Select, Toggle } from '@restaurant-platform/ui'
 import type { FloorSection, FloorTable, TableLayoutPatch } from './floor-api'
 
 type TableInspectorProps = {

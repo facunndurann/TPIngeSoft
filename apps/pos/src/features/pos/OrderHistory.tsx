@@ -1,12 +1,9 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { orderStatusLabels } from '@restaurant-platform/shared'
-import type { OrderStatus } from '@restaurant-platform/shared'
-import { formatPrice } from '@/lib/format'
+import { formatPrice, localDateKey, type OrderStatus, orderStatusLabels, POS_TIME_ZONE } from '@restaurant-platform/shared'
 import { useRestaurant } from '@/context/pos-context'
-import { Badge, EmptyState, ErrorText, Input, Modal, Select, Spinner } from '@/components/ui'
+import { Badge, EmptyState, ErrorText, Input, Modal, Select, Spinner } from '@restaurant-platform/ui'
 import { posHistoryQuery, type PosOrder } from './api'
-import { localDateKey, POS_TIME_ZONE } from './time'
 
 const statusFilterOptions: Array<{ value: 'all' | OrderStatus; label: string }> = [
   { value: 'all', label: 'Todos los estados' },

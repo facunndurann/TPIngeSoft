@@ -1,5 +1,4 @@
-import { productMedia } from '@restaurant-platform/shared'
-import type { ProductMedia } from '@restaurant-platform/shared'
+import { type ProductMedia, productMedia } from '@restaurant-platform/shared'
 import { supabase } from '@/lib/supabase'
 
 const BUCKET = 'product-images'

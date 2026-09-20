@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
-import { PRODUCT_MEDIA_LIMIT } from '@restaurant-platform/shared'
-import { rpcError } from '@/lib/rpc-error'
+import { fromPostgres, PRODUCT_MEDIA_LIMIT } from '@restaurant-platform/shared'
 import { supabase } from '@/lib/supabase'
 import { categoriesQuery } from '@/queries/categories'
 import { modifierGroupsQuery } from '@/queries/modifier-groups'
@@ -11,7 +10,7 @@ import { productQuery, productsByCategoryQuery } from '@/queries/products'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { MediaUploader } from '@/features/MediaUploader'
 import { savedMediaDrafts, uploadMediaDrafts, type MediaDraft } from '@/features/product-media'
-import { Button, ErrorText, Field, Input, Select, Spinner, Textarea, Toggle } from '@/components/ui'
+import { Button, ErrorText, Field, Input, Select, Spinner, Textarea, Toggle } from '@restaurant-platform/ui'
 
 const DIETARY_TAGS = [
   { value: 'vegetariano', label: 'Vegetariano' },
@@ -128,7 +127,7 @@ export function ProductEditPage() {
       if (rpcErr) {
         // No se guardó nada, así que ningún producto referencia los archivos recién subidos.
         await discardUploads()
-        throw rpcError(rpcErr)
+        throw fromPostgres(rpcErr)
       }
 
       await queryClient.invalidateQueries({ queryKey: productsByCategoryQuery(restaurant.id).queryKey })

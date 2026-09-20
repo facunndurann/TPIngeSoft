@@ -13,6 +13,7 @@
     "lint": "echo 'no lint configured for shared yet'"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.112.4",
     "zod": "^3.24.0"
   },
   "devDependencies": {
