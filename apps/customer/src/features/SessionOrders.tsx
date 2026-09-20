@@ -1,11 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
-import { orderStatusLabels } from '@restaurant-platform/shared'
+import { orderStatusLabels, parseSessionSplit } from '@restaurant-platform/shared'
 import type { Tables } from '@restaurant-platform/shared'
-import { loadBill, loadOrders } from '@/features/orders-api'
+import { BillSplitter } from '@/features/BillSplitter'
 import { money } from '@/features/menu'
-import { useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { updateSessionSplit } from '@/features/orders-api'
+import { loadBill, loadOrders } from '@/features/orders-api'
 import type { loadSession } from '@/features/session'
 
 type SessionData = Awaited<ReturnType<typeof loadSession>>
@@ -82,13 +80,14 @@ export function SessionOrders({ sessionId, session, participants, userId, closed
       {orders.data?.map((order) => (
         <OrderCard key={order.id} order={order} participantName={participantName} />
       ))}
-      {bill.data && session && (
-        <BillSplitter 
-          session={session} 
-          bill={bill.data} 
-          orders={orders.data}
-          participants={participants} 
-          userId={userId} 
+      {bill.data && session && participants.length > 0 && (
+        <BillSplitter
+          sessionId={session.id}
+          split={parseSessionSplit(session.split_type, session.split_allocations)}
+          bill={bill.data}
+          orders={orders.data ?? []}
+          participants={participants}
+          userId={userId}
         />
       )}
     </section>
@@ -195,163 +194,4 @@ function OrderLine({
       {item.notes && <p>{item.notes}</p>}
     </div>
   )
-}
-
-function BillSplitter({
-  session,
-  bill,
-  orders,
-  participants,
-  userId,
-}: {
-  session: SessionData
-  bill: Bill
-  orders?: Order[]
-  participants: Participant[]
-  userId?: string
-}) {
-  const queryClient = useQueryClient();
-  const [isEditing, setIsEditing] = useState(false);
-  
-  const currentType = session?.split_type || 'none';
-  const currentAllocations = (session?.split_allocations as Record<string, number>) || {};
-
-  const [mode, setMode] = useState<'none' | 'equal' | 'percentages'>(currentType as 'none' | 'equal' | 'percentages');
-  const [allocations, setAllocations] = useState<Record<string, number>>(currentAllocations);
-
-  const total = bill.pending_amount ?? 0;
-
-  const mutation = useMutation({
-    mutationFn: () => updateSessionSplit(session.id, mode, allocations),
-    onSuccess: () => {
-      setIsEditing(false);
-      queryClient.invalidateQueries({ queryKey: ['session', session.id] });
-    }
-  });
-
-  if (total === 0) return null;
-
-  const individualTotals: Record<string, number> = {};
-  let sharedTotal = 0;
-  
-  participants.forEach((p: Participant) => individualTotals[p.id] = 0);
-
-  orders?.forEach((order: Order) => {
-    if (['accepted', 'in_preparation', 'ready', 'delivered'].includes(order.status)) {
-      order.order_items.forEach((item: OrderItem) => {
-        if (item.is_shared) {
-          sharedTotal += Number(item.total_price);
-        } else if (item.participant_id) {
-          individualTotals[item.participant_id] = (individualTotals[item.participant_id] || 0) + Number(item.total_price);
-        }
-      });
-    }
-  });
-
-  const sharedPerPerson = participants.length > 0 ? sharedTotal / participants.length : 0;
-
-  // 1. Vista de Lectura
-  if (!isEditing) {
-    return (
-      <div className="bill-panel" style={{ marginTop: '24px' }}>
-        <h3>División de la cuenta</h3>
-        
-        <p className="muted">
-          {currentType === 'none' && 'Cada uno paga lo que pidió (y lo compartido se divide).'}
-          {currentType === 'equal' && 'Dividido en partes iguales.'}
-          {currentType === 'percentages' && 'Dividido por porcentajes.'}
-        </p>
-
-        <ul style={{ listStyle: 'none', padding: 0, margin: '16px 0' }}>
-          {participants.map((p: Participant) => {
-            const isMe = p.user_id === userId;
-            let amount = 0;
-            
-            if (currentType === 'none') {
-              amount = (individualTotals[p.id] || 0) + sharedPerPerson;
-            } else if (currentType === 'equal') {
-              amount = total / participants.length;
-            } else if (currentType === 'percentages') {
-              const pct = currentAllocations[p.id] || 0;
-              amount = (total * pct) / 100;
-            }
-
-            return (
-              <li key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--menu-border)' }}>
-                <span style={{ fontWeight: isMe ? 'bold' : 'normal', color: 'var(--menu-text)' }}>
-                  {p.display_name} {isMe && '(vos)'}
-                </span>
-                {amount === 0 ? (
-                  <span className="muted" style={{ fontSize: '0.9em' }}>No debe nada</span>
-                ) : (
-                  <strong style={{ color: 'var(--menu-heading)' }}>{money(amount)}</strong>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-
-        <div className="cart-actions" style={{ marginTop: '16px' }}>
-          <button onClick={() => {
-            setMode(currentType as 'none' | 'equal' | 'percentages');
-            setAllocations(currentAllocations);
-            setIsEditing(true);
-          }}>
-            {currentType === 'none' ? 'Dividir cuenta' : 'Editar división'}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // 2. Vista de Edición
-  const sum = Object.values(allocations).reduce((a, b) => a + (Number(b) || 0), 0);
-  const isValid = mode !== 'percentages' || sum === 100;
-
-  return (
-    <div className="bill-panel" style={{ marginTop: '24px' }}>
-      <h3>¿Cómo quieren dividir la cuenta?</h3>
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
-        <button className={mode === 'none' ? 'primary' : ''} onClick={() => setMode('none')}>Cada uno lo suyo</button>
-        <button className={mode === 'equal' ? 'primary' : ''} onClick={() => setMode('equal')}>Partes iguales</button>
-        <button className={mode === 'percentages' ? 'primary' : ''} onClick={() => setMode('percentages')}>Porcentajes</button>
-      </div>
-
-      {mode === 'percentages' && (
-        <div style={{ marginBottom: '16px' }}>
-          {participants.map((p: Participant) => (
-            <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <span style={{ color: 'var(--menu-text)' }}>{p.display_name}</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  style={{ width: '70px', padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--menu-border)', background: 'var(--menu-bg)', color: 'var(--menu-text)' }}
-                  value={allocations[p.id] ?? ''} 
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setAllocations(prev => ({ ...prev, [p.id]: val === '' ? 0 : Number(val) }))
-                  }}
-                />
-                <span style={{ color: 'var(--menu-muted)' }}>%</span>
-              </div>
-            </div>
-          ))}
-          {!isValid && <p className="notice" style={{ marginTop: '8px' }}>Los porcentajes deben sumar 100% (actual: {sum}%)</p>}
-        </div>
-      )}
-
-      <div className="cart-actions">
-        <button onClick={() => setIsEditing(false)}>Cancelar</button>
-        <button 
-          className="primary" 
-          disabled={!isValid || mutation.isPending} 
-          onClick={() => mutation.mutate()}
-        >
-          {mutation.isPending ? 'Guardando...' : 'Guardar división'}
-        </button>
-      </div>
-    </div>
-  );
 }

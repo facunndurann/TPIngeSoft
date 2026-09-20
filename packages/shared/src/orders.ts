@@ -51,3 +51,20 @@ export const submitOrderErrorSchema = z.object({
   error: z.object({ code: z.string(), message: z.string() }),
 });
 export type SubmitOrderError = z.infer<typeof submitOrderErrorSchema>;
+
+/**
+ * Estados que forman parte de la cuenta. Es el espejo exacto del
+ * `filter (where status in (…))` de la vista `session_bills`
+ * (supabase/migrations/20260919040000_employee_read_scope.sql): si cambia uno,
+ * tienen que cambiar los dos, y supabase/tests/split.sql lo verifica.
+ */
+export const billedOrderStatuses = [
+  'accepted',
+  'in_preparation',
+  'ready',
+  'delivered',
+] as const satisfies readonly OrderStatus[];
+
+export function isBilledStatus(status: OrderStatus): boolean {
+  return (billedOrderStatuses as readonly OrderStatus[]).includes(status);
+}

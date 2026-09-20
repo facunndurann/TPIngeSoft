@@ -108,6 +108,11 @@ footer { text-align: center; color: var(--menu-muted); font-size: 12px; margin-t
 .bill-grid dt { color: var(--menu-bill-muted); font-size: 13px; }
 .bill-grid dd { margin: 8px 0 0; font-size: clamp(18px, 4vw, 25px); font-weight: 750; }
 .settled { color: var(--menu-success-text); font-weight: 700; }
+.split-modes { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+.split-list { list-style: none; padding: 0; margin: 0 0 6px; }
+.split-list .choice { border-bottom: 1px solid var(--menu-border); }
+.split-list .choice:last-child { border-bottom: none; }
+.split-percent { display: inline-flex; align-items: center; gap: 6px; }
 .order-card { border: 1px solid var(--menu-border); background: var(--menu-surface); border-radius: calc(var(--menu-radius) + 4px); padding: 22px; margin: 24px 0; }
 .order-heading { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
 .order-heading h3 { margin-bottom: 8px; }

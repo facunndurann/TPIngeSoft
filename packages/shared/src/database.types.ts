@@ -1197,7 +1197,7 @@ export type Database = {
           opened_at: string
           restaurant_id: string
           split_allocations: Json
-          split_type: string
+          split_type: Database["public"]["Enums"]["split_type"]
           status: Database["public"]["Enums"]["session_status"]
           table_id: string
         }
@@ -1211,7 +1211,7 @@ export type Database = {
           opened_at?: string
           restaurant_id: string
           split_allocations?: Json
-          split_type?: string
+          split_type?: Database["public"]["Enums"]["split_type"]
           status?: Database["public"]["Enums"]["session_status"]
           table_id: string
         }
@@ -1225,7 +1225,7 @@ export type Database = {
           opened_at?: string
           restaurant_id?: string
           split_allocations?: Json
-          split_type?: string
+          split_type?: Database["public"]["Enums"]["split_type"]
           status?: Database["public"]["Enums"]["session_status"]
           table_id?: string
         }
@@ -1608,9 +1608,9 @@ export type Database = {
       }
       update_session_split: {
         Args: {
-          p_allocations: Json
+          p_allocations?: Json
           p_session_id: string
-          p_split_type: string
+          p_split_type: Database["public"]["Enums"]["split_type"]
         }
         Returns: undefined
       }
@@ -1654,6 +1654,7 @@ export type Database = {
       payment_status: "pending" | "approved" | "rejected" | "cancelled"
       pos_type: "internal" | "fudo"
       session_status: "open" | "closed"
+      split_type: "none" | "equal" | "percentages"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1807,6 +1808,7 @@ export const Constants = {
       payment_status: ["pending", "approved", "rejected", "cancelled"],
       pos_type: ["internal", "fudo"],
       session_status: ["open", "closed"],
+      split_type: ["none", "equal", "percentages"],
     },
   },
 } as const

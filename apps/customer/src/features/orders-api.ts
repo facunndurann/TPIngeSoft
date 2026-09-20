@@ -1,7 +1,10 @@
 import { FunctionsHttpError } from '@supabase/supabase-js'
 import {
+  appErrorMessage,
+  isAppErrorCode,
   submitOrderErrorSchema,
   submitOrderResultSchema,
+  type SessionSplit,
   type SubmitOrderInput,
   type SubmitOrderResult,
 } from '@restaurant-platform/shared'
@@ -87,15 +90,21 @@ export async function loadBill(sessionId: string) {
   return data
 }
 
-export async function updateSessionSplit(
-  sessionId: string,
-  splitType: 'none' | 'equal' | 'percentages',
-  allocations: Record<string, number> = {}
-) {
+/**
+ * Las RPC levantan el código del catálogo tal cual (`raise exception
+ * 'SESSION_CLOSED'`), así que el mensaje crudo ES el código. Se conserva para
+ * que quien llama pueda distinguir "sesión cerrada" de "división inválida".
+ */
+function rpcSubmissionError(message: string): SubmissionError {
+  const code = isAppErrorCode(message) ? message : 'SERVER_ERROR'
+  return new SubmissionError(code, appErrorMessage(code, message))
+}
+
+export async function updateSessionSplit(sessionId: string, split: SessionSplit) {
   const { error } = await supabase.rpc('update_session_split', {
     p_session_id: sessionId,
-    p_split_type: splitType,
-    p_allocations: allocations,
+    p_split_type: split.type,
+    p_allocations: split.allocations,
   })
-  if (error) throw new SubmissionError('SPLIT_ERROR', 'No pudimos actualizar la división de la cuenta.')
+  if (error) throw rpcSubmissionError(error.message)
 }
