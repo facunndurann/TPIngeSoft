@@ -199,45 +199,15 @@ function PaymentHistory({
 }
 
 function BillSummary({ bill }: { bill: Bill }) {
-  // Cada cifra dice qué pasó con el pedido, no su estado contable, y lleva su
-  // propia aclaración: el párrafo al pie obligaba a leerlo entero para entender
-  // una sola de las cuatro.
-  const figures = [
-    {
-      term: 'Esperando al restaurante',
-      amount: bill.submitted_amount,
-      hint: 'Ya lo enviaste; se suma a la cuenta cuando el restaurante lo recibe.',
-    },
-    {
-      term: 'Ya en la cuenta',
-      amount: bill.total_amount,
-      hint: 'Lo que el restaurante aceptó. Lo cancelado no se cobra.',
-    },
-    {
-      term: 'Pagado',
-      amount: bill.paid_amount,
-      hint: 'Solo los pagos ya aprobados.',
-    },
-    {
-      term: 'Falta pagar',
-      amount: bill.pending_amount,
-      hint: 'Lo que está en la cuenta y todavía no se pagó.',
-    },
-  ]
-
   return (
     <div className="bill-panel" aria-label="Resumen de cuenta">
-      <dl className="bill-grid">
-        {figures.map(({ term, amount, hint }) => (
-          <div key={term}>
-            <dt>{term}</dt>
-            <dd>
-              {formatPrice(amount ?? 0)}
-              <small>{hint}</small>
-            </dd>
-          </div>
-        ))}
-      </dl>
+      <div className="space-y-1">
+        <p className="text-sm text-neutral-300">Falta pagar</p>
+        <p className="text-2xl font-bold text-white">{formatPrice(bill.pending_amount ?? 0)}</p>
+        <p className="text-xs text-neutral-400 mt-1">
+          Lo que está en la cuenta y todavía no se pagó.
+        </p>
+      </div>
       {bill.is_settled && (bill.total_amount ?? 0) > 0 && <p className="settled">Cuenta pagada</p>}
     </div>
   )
