@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import { TABLE_SPAN, tableShapeLabels, tableShapes } from '@restaurant-platform/shared'
 import { Button, Field, Input, Select, Toggle } from '@restaurant-platform/ui'
@@ -13,19 +13,88 @@ type TableInspectorProps = {
 }
 
 /**
+ * React `onChange` es el evento `input`. Las flechas nativas (botones o teclado)
+ * suelen mandar `increment`/`decrement`, reemplazar el número entero, o no
+ * declarar `inputType`. Escribir "12" llega como insert/delete y espera al blur.
+ */
+export function isStepperChange(nativeEvent: Event, previous: string, next: string) {
+  const inputType = 'inputType' in nativeEvent ? String(nativeEvent.inputType) : ''
+  if (inputType.startsWith('insert') && inputType !== 'insertReplacementText') return false
+  if (inputType.startsWith('delete') || inputType.startsWith('history')) return false
+  if (
+    !inputType ||
+    inputType === 'increment' ||
+    inputType === 'decrement' ||
+    inputType === 'insertReplacementText'
+  ) {
+    return true
+  }
+  const from = Number(previous)
+  const to = Number(next)
+  return Number.isInteger(from) && Number.isInteger(to) && Math.abs(to - from) === 1
+}
+
+/**
  * Campo que se guarda al salir, no en cada tecla: escribir "12" no puede dejar
- * la mesa en 1 ni disparar dos escrituras.
+ * la mesa en 1 ni disparar dos escrituras. El stepper sí guarda al toque.
  */
 function useCommittedField(value: string, commit: (draft: string) => void) {
   const [draft, setDraft] = useState(value)
-  useEffect(() => setDraft(value), [value])
+  const draftRef = useRef(value)
+  const commitRef = useRef(commit)
+  const nodeCleanup = useRef<(() => void) | null>(null)
+  commitRef.current = commit
+
+  useEffect(() => {
+    setDraft(value)
+    draftRef.current = value
+  }, [value])
+
+  function take(next: string) {
+    setDraft(next)
+    draftRef.current = next
+  }
+
+  function flush(next = draftRef.current) {
+    take(next)
+    commitRef.current(next)
+  }
+
+  const bindNode = useCallback((node: HTMLInputElement | null) => {
+    nodeCleanup.current?.()
+    nodeCleanup.current = null
+    if (!node || node.type !== 'number') return
+    const onNativeChange = () => {
+      const next = node.value
+      setDraft(next)
+      draftRef.current = next
+      commitRef.current(next)
+    }
+    node.addEventListener('change', onNativeChange)
+    nodeCleanup.current = () => node.removeEventListener('change', onNativeChange)
+  }, [])
+
   return {
     value: draft,
-    onChange: (event: { target: { value: string } }) => setDraft(event.target.value),
-    onBlur: () => commit(draft),
+    // El `change` nativo (no el onChange de React) es el que disparan las flechas
+    // del input number en Safari/Chrome sin soltar el foco.
+    ref: bindNode,
+    onChange: (event: React.ChangeEvent<HTMLInputElement>) => {
+      const previous = draftRef.current
+      const next = event.target.value
+      take(next)
+      if (event.currentTarget.type === 'number' && isStepperChange(event.nativeEvent, previous, next)) {
+        commitRef.current(next)
+      }
+    },
+    onBlur: () => commitRef.current(draftRef.current),
     onKeyDown: (event: React.KeyboardEvent<HTMLInputElement>) => {
       if (event.key === 'Enter') event.currentTarget.blur()
-      if (event.key === 'Escape') setDraft(value)
+      if (event.key === 'Escape') take(value)
+      if (event.currentTarget.type === 'number' && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+        const node = event.currentTarget
+        requestAnimationFrame(() => flush(node.value))
+      }
     },
   }
 }

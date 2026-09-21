@@ -25,9 +25,10 @@ export function Button({
   )
 }
 
-export function Input({ className = '', ...props }: InputHTMLAttributes<HTMLInputElement>) {
+export function Input({ className = '', ref, ...props }: InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
+      ref={ref}
       className={`w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 ${className}`}
       {...props}
     />

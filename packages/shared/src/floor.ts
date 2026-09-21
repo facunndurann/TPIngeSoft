@@ -61,6 +61,23 @@ export function clampToGrid(x: number, y: number, footprint: Footprint) {
   }
 }
 
+/**
+ * Huella nueva + posición recortada. Solo esas cuatro columnas: un intent de
+ * resize trae `kind` y eso no puede ir al UPDATE.
+ */
+export function resizePlacement(
+  table: { position_x: number; position_y: number },
+  span: TableSpan,
+) {
+  const position = clampToGrid(table.position_x, table.position_y, tableFootprint(span))
+  return {
+    width: span.width,
+    height: span.height,
+    position_x: position.x,
+    position_y: position.y,
+  }
+}
+
 type Placed = { x: number; y: number; footprint: Footprint }
 
 function overlaps(a: Placed, b: Placed) {

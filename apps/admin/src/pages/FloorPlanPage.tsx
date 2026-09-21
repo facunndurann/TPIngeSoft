@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Eye, LayoutGrid, Pencil, Plus, SquarePen, Trash2, X } from 'lucide-react'
-import { clampToGrid, findFreeCell, isOperable, tableFootprint } from '@restaurant-platform/shared'
+import { findFreeCell, isOperable, resizePlacement, tableFootprint } from '@restaurant-platform/shared'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { Badge, Button, EmptyState, ErrorText, Input, Select, Spinner, Toggle, useSaveErrors } from '@restaurant-platform/ui'
 import { FloorCanvas } from '@/features/floor/FloorCanvas'
@@ -149,11 +149,9 @@ export function FloorPlanPage() {
    * recalcula junto con la huella nueva.
    */
   function resizeTable(table: FloorTable, span: { width: number; height: number }) {
-    const footprint = tableFootprint(span)
-    const position = clampToGrid(table.position_x, table.position_y, footprint)
     patchTable.mutate({
       id: table.id,
-      patch: { ...span, position_x: position.x, position_y: position.y },
+      patch: resizePlacement(table, span),
     })
   }
 
