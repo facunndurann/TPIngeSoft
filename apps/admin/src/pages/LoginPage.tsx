@@ -60,7 +60,7 @@ export function LoginPage() {
               required
             />
           </Field>
-          <ErrorText message={error} />
+          <ErrorText error={error} />
           <Button type="submit" disabled={submitting} className="w-full">
             {submitting ? 'Enviando…' : mode === 'login' ? 'Ingresar' : 'Crear cuenta'}
           </Button>

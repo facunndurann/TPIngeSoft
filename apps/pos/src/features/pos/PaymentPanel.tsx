@@ -108,7 +108,7 @@ export function PaymentPanel({ sessionId, bill, enabledMethods }: PaymentPanelPr
             />
           </label>
           <div className="sm:col-span-2">
-            <ErrorText message={errors.message} />
+            <ErrorText error={errors.message} />
             <Button disabled={record.isPending || invalidAmount || !method}>
               {record.isPending ? 'Registrando…' : `Registrar ${formatPrice(numericAmount || 0)}`}
             </Button>
@@ -120,7 +120,7 @@ export function PaymentPanel({ sessionId, bill, enabledMethods }: PaymentPanelPr
         <p className="text-sm text-amber-800">No hay un medio presencial o externo habilitado para registrar el cobro.</p>
       )}
 
-      {payments.isError && <ErrorText message="No pudimos cargar el historial de pagos." />}
+      {payments.isError && <ErrorText error={payments.error} fallback="No pudimos cargar el historial de pagos." />}
       {payments.data?.length === 0 && <p className="text-sm text-neutral-500">Todavía no hay pagos registrados.</p>}
       {(payments.data?.length ?? 0) > 0 && (
         <ul className="divide-y divide-neutral-100 text-sm">

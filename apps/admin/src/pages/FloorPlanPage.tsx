@@ -250,7 +250,7 @@ export function FloorPlanPage() {
         </div>
       </div>
 
-      <ErrorText message={errors.message} />
+      <ErrorText error={errors.message} />
 
       <SectionTabs
         sections={sections.data ?? []}

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { AppError, formatPrice } from '@restaurant-platform/shared'
+import { errorMessage } from '@restaurant-platform/ui'
 import { useNavigate, useParams } from 'react-router'
 import { QuantityField } from '@/components/QuantityField'
 import { MAX_CART_LINES, cartPhase, plateCount } from '@/features/cart'
@@ -160,9 +161,7 @@ export function CartPanel({ reviewing = false, refreshMenu, onSubmitted }: CartP
 
       {send.isError && (
         <p className="notice" role="alert">
-          {send.error instanceof Error
-            ? send.error.message
-            : 'No pudimos enviar el pedido. Intentá nuevamente.'}
+          {errorMessage(send.error, 'No pudimos enviar el pedido. Intentá nuevamente.')}
         </p>
       )}
       {abandon.isError && (

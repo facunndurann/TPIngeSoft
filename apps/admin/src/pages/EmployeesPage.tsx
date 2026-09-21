@@ -37,7 +37,7 @@ export function EmployeesPage() {
       <div><h1 className="text-xl font-bold">Empleados</h1><p className="text-sm text-neutral-500">Cuentas personales, permisos y sucursales de trabajo.</p></div>
       <Button onClick={() => setEditing('new')}>Agregar empleado</Button>
     </header>
-    {employees.isError && <ErrorText message="No pudimos cargar los empleados." />}
+    {employees.isError && <ErrorText error="No pudimos cargar los empleados." />}
     {employees.isPending ? <Spinner /> : <ul className="divide-y rounded-xl bg-white">
       {employees.data?.map(e => <li key={e.user_id} className="flex flex-wrap items-center justify-between gap-3 p-4">
         <div><p className="font-medium">{e.full_name} <span className="text-neutral-500">@{e.username}</span></p><p className="text-sm text-neutral-500">{e.roles.map(r => employeeRoleLabels[r as EmployeeRole] ?? r).join(' · ')}</p></div>
@@ -50,7 +50,7 @@ export function EmployeesPage() {
     </ul>}
     <section className="space-y-3">
       <h2 className="font-semibold">Auditoría POS</h2>
-      {audit.isError && <ErrorText message="No pudimos cargar la auditoría." />}
+      {audit.isError && <ErrorText error="No pudimos cargar la auditoría." />}
       <ul className="divide-y rounded-xl bg-white text-sm">{audit.data?.map(e => {
         const details = e.details && typeof e.details === 'object' && !Array.isArray(e.details) ? e.details : {}
         const actor = auditActorLabel(e, employees.data ?? [])
@@ -63,7 +63,7 @@ export function EmployeesPage() {
       <form className="space-y-4" onSubmit={e => { e.preventDefault(); reset.mutate() }}>
         <Field label="Nueva contraseña"><Input type="password" autoComplete="new-password" minLength={10} maxLength={128} value={password} onChange={e => setPassword(e.target.value)} required /></Field>
         <p className="text-sm text-neutral-500">La contraseña cambia para todos los restaurantes de esta cuenta.</p>
-        <ErrorText message={reset.error?.message ?? null} /><Button disabled={reset.isPending}>Restablecer</Button>
+        <ErrorText error={reset.error} fallback="No pudimos restablecer la contraseña." /><Button disabled={reset.isPending}>Restablecer</Button>
       </form>
     </Modal>}
   </div>
@@ -120,7 +120,7 @@ function EmployeeForm({ employee, restaurantId, owner, onClose, onSaved }: {
       {legacy.data && legacy.data.length > 0 && <Field label="Vincular registro de empleado anterior (opcional)"><Select value={legacyId} onChange={e => setLegacyId(e.target.value)}><option value="">Sin vincular</option>{legacy.data.map(e => <option key={e.id} value={e.id}>{e.full_name}</option>)}</Select></Field>}
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} />Acceso habilitado en este restaurante</label>
       <p className="text-xs text-neutral-500">Desactivar conserva la cuenta y su historial. El nombre es compartido por todos sus restaurantes.</p>
-      <ErrorText message={save.error?.message ?? (branches.isError || legacy.isError || accounts.isError ? 'No pudimos cargar los datos del formulario.' : null)} />
+      <ErrorText error={save.error ?? (branches.isError || legacy.isError || accounts.isError ? 'No pudimos cargar los datos del formulario.' : null)} />
       <Button disabled={save.isPending || !roles.length || !branchIds.length}>{save.isPending ? 'Guardando…' : 'Guardar'}</Button>
     </form>
   </Modal>

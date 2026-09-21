@@ -106,6 +106,7 @@ export function FloorMap() {
     (sessions.isSuccess && bills.isLoading)
   ) return <Spinner />
   const queryFailed = sections.isError || tables.isError || sessions.isError || bills.isError
+  const queryError = sections.error ?? tables.error ?? sessions.error ?? bills.error
 
   return (
     <div className="min-w-0 space-y-4">
@@ -138,7 +139,7 @@ export function FloorMap() {
       </div>
 
       {queryFailed ? (
-        <ErrorText message="No pudimos cargar el plano del salón." />
+        <ErrorText error={queryError} fallback="No pudimos cargar el plano del salón." />
       ) : branches.length === 0 ? (
         <EmptyState message="Todavía no hay sectores activos configurados para operar." />
       ) : (

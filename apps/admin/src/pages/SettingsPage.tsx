@@ -61,7 +61,7 @@ export function SettingsPage() {
           onChange={setMenuDesign}
           hint="Elegí cómo se ve el menú que abren los comensales desde el QR."
         />
-        <ErrorText message={errors.message} />
+        <ErrorText error={errors.message} />
         <div className="flex items-center gap-3">
           <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
             {saveMutation.isPending ? 'Guardando…' : 'Guardar'}
@@ -153,7 +153,7 @@ function BranchesSection({ restaurantId }: { restaurantId: string }) {
         </Button>
       </form>
 
-      <ErrorText message={errors.message} />
+      <ErrorText error={errors.message} />
 
       {isLoading ? (
         <Spinner />

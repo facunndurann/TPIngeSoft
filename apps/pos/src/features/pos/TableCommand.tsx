@@ -91,7 +91,7 @@ export function TableCommand() {
     return (
       <div className="space-y-3">
         <BackLink to={backToMap} />
-        <ErrorText message="No pudimos cargar la comanda de la mesa." />
+        <ErrorText error={tables.error ?? session.error} fallback="No pudimos cargar la comanda de la mesa." />
       </div>
     )
   }
@@ -133,7 +133,7 @@ export function TableCommand() {
         <Badge color={open ? 'indigo' : 'green'}>{posTableStateLabels[state]}</Badge>
       </div>
 
-      <ErrorText message={errors.message} />
+      <ErrorText error={errors.message} />
 
       {!open ? (
         <div className="space-y-3 rounded-xl border border-neutral-200 bg-white p-6 text-center">
@@ -253,7 +253,7 @@ export function TableCommand() {
                 seguir visibles en el tablero.
               </p>
             )}
-            <ErrorText message={errors.message} />
+            <ErrorText error={errors.message} />
             <div className="flex gap-2">
               <Button variant="secondary" className="flex-1" onClick={() => setClosing(false)}>
                 Seguir abierta

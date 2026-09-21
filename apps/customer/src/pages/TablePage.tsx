@@ -8,8 +8,7 @@ import {
   useParams,
 } from 'react-router'
 import { enabledPaymentMethods, formatPrice, MENU_DESIGNS } from '@restaurant-platform/shared'
-import { ClockProvider } from '@restaurant-platform/ui'
-import { ErrorMessage } from '@/components/ErrorMessage'
+import { ClockProvider, ErrorText } from '@restaurant-platform/ui'
 import { FreshnessNote } from '@/components/FreshnessNote'
 import { Toast } from '@/components/Toast'
 import { type Announce, type Announcement, toastDuration } from '@/features/announcements'
@@ -121,7 +120,8 @@ function TableApp({ token }: { token: string }) {
     return (
       <MenuShell>
         <h1>No pudimos abrir esta mesa</h1>
-        <ErrorMessage
+        <ErrorText
+          variant="menu"
           error={table.error}
           retry={() => { void table.refetch() }}
           recover={{ label: 'Ir al inicio', onAction: () => navigate('/') }}
@@ -186,7 +186,7 @@ function TableApp({ token }: { token: string }) {
 
             {section !== 'orders' && menu.isPending && <p role="status">Cargando la carta…</p>}
             {section !== 'orders' && menu.isError && (
-              <ErrorMessage error={menu.error} retry={() => { void menu.refetch() }} />
+              <ErrorText variant="menu" error={menu.error} retry={() => { void menu.refetch() }} />
             )}
 
             {section !== 'cart' && cart.submissions[cartKey] && (

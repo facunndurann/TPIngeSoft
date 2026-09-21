@@ -46,7 +46,7 @@ export function MoveTableSession({
       <div className="space-y-4 text-sm text-neutral-700">
         <p>Elegí una mesa libre de esta sucursal. Se conservan los pedidos, los comensales y la cuenta.</p>
         {tables.isLoading || sessions.isLoading ? <Spinner /> : failed ? (
-          <ErrorText message="No pudimos cargar las mesas disponibles. Cerrá y volvé a intentar." />
+          <ErrorText error={tables.error ?? sessions.error} fallback="No pudimos cargar las mesas disponibles. Cerrá y volvé a intentar." />
         ) : destinations.length === 0 ? (
           <p>No hay mesas libres disponibles en esta sucursal.</p>
         ) : (
@@ -63,7 +63,7 @@ export function MoveTableSession({
             </Select>
           </label>
         )}
-        <ErrorText message={move.error?.message ?? null} />
+        <ErrorText error={move.error} fallback="No pudimos mover la comanda." />
         <div className="flex justify-end gap-2">
           <Button variant="secondary" disabled={move.isPending} onClick={onClose}>Cancelar</Button>
           <Button disabled={!available || failed || move.isPending || sessions.isLoading}

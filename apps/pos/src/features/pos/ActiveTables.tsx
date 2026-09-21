@@ -59,7 +59,7 @@ export function ActiveTables() {
       </div>
 
       {(sessions.isError || tables.isError) && (
-        <ErrorText message="No pudimos actualizar el estado de las mesas." />
+        <ErrorText error={sessions.error ?? tables.error} fallback="No pudimos actualizar el estado de las mesas." />
       )}
 
       {calling.length > 0 && (
@@ -216,7 +216,7 @@ export function ActiveTables() {
                 Hay pedidos enviados sin aceptar. Podés cancelarlos desde Comandas.
               </p>
             )}
-            <ErrorText message={errors.message} />
+            <ErrorText error={errors.message} />
             <div className="flex gap-2">
               <Button variant="secondary" className="flex-1" onClick={() => setClosing(null)}>
                 Seguir abierta

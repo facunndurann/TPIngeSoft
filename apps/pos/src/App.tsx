@@ -75,7 +75,7 @@ function AuthenticatedPos({ userId }: { userId: string }) {
       <main className="mx-auto max-w-md space-y-4 p-8">
         <h1 className="text-xl font-semibold">Acceso no habilitado</h1>
         <ErrorText
-          message={
+          error={
             contexts.isError
               ? 'No pudimos verificar tu acceso. Reintentá.'
               : 'Tu cuenta no tiene una sucursal POS habilitada. Contactá a tu administrador.'

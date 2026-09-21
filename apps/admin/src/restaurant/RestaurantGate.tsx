@@ -26,7 +26,7 @@ export function RestaurantGate({ children }: { children: ReactNode }) {
   if (isError) {
     return (
       <div className="p-8">
-        <ErrorText message="Tu cuenta no tiene acceso administrativo o no pudimos verificarlo." />
+        <ErrorText error="Tu cuenta no tiene acceso administrativo o no pudimos verificarlo." />
         <Button onClick={() => supabase.auth.signOut()}>Cerrar sesión</Button>
       </div>
     )
@@ -52,7 +52,7 @@ function CreateRestaurantScreen() {
   const [description, setDescription] = useState('')
   const [menuDesign, setMenuDesign] = useState(DEFAULT_MENU_DESIGN)
   const [branchName, setBranchName] = useState('Casa Central')
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<unknown>(null)
   const [submitting, setSubmitting] = useState(false)
 
   async function handleSubmit(e: FormEvent) {
@@ -71,7 +71,7 @@ function CreateRestaurantScreen() {
 
       await queryClient.invalidateQueries({ queryKey: ['my-restaurant'] })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error creando el restaurante')
+      setError(err)
     } finally {
       setSubmitting(false)
     }
@@ -109,7 +109,7 @@ function CreateRestaurantScreen() {
             onChange={setMenuDesign}
             hint="Podés cambiarlo después desde Restaurante."
           />
-          <ErrorText message={error} />
+          <ErrorText error={error} fallback="Error creando el restaurante" />
           <Button type="submit" disabled={submitting} className="w-full">
             {submitting ? 'Creando…' : 'Crear restaurante'}
           </Button>

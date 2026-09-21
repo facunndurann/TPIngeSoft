@@ -53,7 +53,7 @@ export function ProductEditPage() {
     return (
       <div className="mx-auto max-w-2xl space-y-4">
         <BackLink />
-        <ErrorText message="No pudimos cargar este producto. Volvé a la lista e intentá de nuevo." />
+        <ErrorText error="No pudimos cargar este producto. Volvé a la lista e intentá de nuevo." />
       </div>
     )
   }
@@ -294,7 +294,7 @@ function ProductForm({ productId, title, initial, categories, groups }: ProductF
         )}
       </section>
 
-      <ErrorText message={errors.message} />
+      <ErrorText error={errors.message} />
 
       <div className="flex justify-end gap-2 pb-8">
         <Link to="/productos">

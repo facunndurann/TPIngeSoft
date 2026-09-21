@@ -120,7 +120,7 @@ export function AttendRequestButtons({
           </Button>
         ))}
       </div>
-      <ErrorText message={errors.message} />
+      <ErrorText error={errors.message} />
     </div>
   )
 }

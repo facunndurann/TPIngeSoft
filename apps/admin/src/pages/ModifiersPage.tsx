@@ -47,7 +47,7 @@ export function ModifiersPage() {
         </Button>
       </div>
 
-      <ErrorText message={error} />
+      <ErrorText error={error} fallback="No pudimos eliminar el grupo." />
 
       {isLoading ? (
         <Spinner />
@@ -144,7 +144,7 @@ function GroupEditor({
       is_available: o.is_available,
     })) ?? [],
   )
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<unknown>(null)
   const [saving, setSaving] = useState(false)
 
   function updateOption(index: number, patch: Partial<OptionDraft>) {
@@ -179,7 +179,7 @@ function GroupEditor({
 
       onSaved()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error guardando el grupo')
+      setError(err)
     } finally {
       setSaving(false)
     }
@@ -257,7 +257,7 @@ function GroupEditor({
           </Button>
         </div>
 
-        <ErrorText message={error} />
+        <ErrorText error={error} fallback="Error guardando el grupo" />
 
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>

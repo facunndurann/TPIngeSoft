@@ -1,5 +1,5 @@
 import { type FormEvent, useState } from 'react'
-import { ErrorMessage } from '@/components/ErrorMessage'
+import { ErrorText } from '@restaurant-platform/ui'
 import { NAME_FIELD_ID } from '@/features/name-field'
 import type { loadSession } from '@/features/session'
 import type { RenameField } from '@/hooks/useTableSession'
@@ -50,8 +50,8 @@ export function SessionPanel({
   return (
     <section className="session-panel" aria-label="Tu mesa">
       {connecting && <p role="status">Conectando con tu mesa…</p>}
-      {connection && <ErrorMessage {...connection} />}
-      {read && <ErrorMessage {...read} />}
+      {connection && <ErrorText {...connection} variant="menu" />}
+      {read && <ErrorText {...read} variant="menu" />}
 
       {session && (
         <>

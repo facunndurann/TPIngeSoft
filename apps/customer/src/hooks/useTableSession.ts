@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AppError, participantNameSchema } from '@restaurant-platform/shared'
+import { errorMessage } from '@restaurant-platform/ui'
 import { loadMenu, loadTable } from '@/features/menu-api'
 import { connectSession, joinSession, loadSession } from '@/features/session'
 import { subscribeToTableSession } from '@/features/session-realtime'
@@ -25,7 +26,7 @@ export type RenameField = {
 
 /** El fallo de guardar en palabras; lo que no es Error no tiene nada que decirle al comensal. */
 function renameMessage(error: unknown): string {
-  return error instanceof Error ? error.message : 'No pudimos guardar tu nombre. Intentá nuevamente.'
+  return errorMessage(error, 'No pudimos guardar tu nombre. Intentá nuevamente.')
 }
 
 export function useTableSession(token: string) {

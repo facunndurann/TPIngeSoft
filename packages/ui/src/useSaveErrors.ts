@@ -1,8 +1,12 @@
 import { useCallback, useState } from 'react'
 import type { UseMutationOptions } from '@tanstack/react-query'
 
-/** Mensaje mostrable de cualquier throw. `AppError` ya trae el del catálogo. */
+/**
+ * Mensaje mostrable de cualquier throw. `AppError` ya trae el del catálogo, y un
+ * string es su propio mensaje: así llega lo que alguien ya resolvió antes.
+ */
 export function errorMessage(error: unknown, fallback: string): string {
+  if (typeof error === 'string') return error || fallback
   return error instanceof Error && error.message ? error.message : fallback
 }
 

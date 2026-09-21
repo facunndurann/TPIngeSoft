@@ -18,7 +18,7 @@ export function CommandBoard() {
   const queryClient = useQueryClient()
   const now = useNow()
   const [pendingId, setPendingId] = useState<string | null>(null)
-  const [actionError, setActionError] = useState<{ id: string; message: string } | null>(null)
+  const [actionError, setActionError] = useState<{ id: string; error: unknown } | null>(null)
 
   const board = useQuery(posBoardQuery(restaurant.id, restaurant.branchId))
   const invalidate = () =>
@@ -32,12 +32,7 @@ export function CommandBoard() {
       setActionError(null)
     },
     onSuccess: invalidate,
-    onError: (error, { orderId }) => {
-      setActionError({
-        id: orderId,
-        message: error instanceof Error ? error.message : 'No pudimos actualizar el pedido.',
-      })
-    },
+    onError: (error, { orderId }) => setActionError({ id: orderId, error }),
     onSettled: () => setPendingId(null),
   })
 
@@ -59,9 +54,7 @@ export function CommandBoard() {
       </div>
 
       {board.isError && (
-        <ErrorText
-          message={board.error instanceof Error ? board.error.message : 'No pudimos cargar las comandas.'}
-        />
+        <ErrorText error={board.error} fallback="No pudimos cargar las comandas." />
       )}
       {board.isLoading ? (
         <Spinner />
@@ -93,7 +86,7 @@ export function CommandBoard() {
                       order={order}
                       now={now}
                       busy={pendingId === order.id}
-                      error={actionError?.id === order.id ? actionError.message : null}
+                      error={actionError?.id === order.id ? actionError.error : null}
                       onTransition={(to) => handleTransition(order, to)}
                     />
                   ))}

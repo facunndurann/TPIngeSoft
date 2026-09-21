@@ -2,18 +2,23 @@ import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import { AppError } from '@restaurant-platform/shared'
 
+// ErrorText vive en packages/ui y lo usan las tres apps; se prueba desde el
+// comensal, que es de donde salió y el único que monta la variante `menu`.
 test('an error only offers to retry when repeating can work', async () => {
   const { createElement } = await import('react')
   const { renderToStaticMarkup } = await import('react-dom/server')
-  const { ErrorMessage } = await import('../src/components/ErrorMessage')
+  const { ErrorText } = await import('@restaurant-platform/ui')
   const noop = () => {}
   const render = (error: unknown, recover?: { label: string; onAction: () => void }) =>
-    renderToStaticMarkup(createElement(ErrorMessage, { error, retry: noop, recover }))
+    renderToStaticMarkup(createElement(ErrorText, { variant: 'menu', error, retry: noop, recover }))
 
   // Red caída y errores sin código se asumen reintentables.
   assert.match(render(new AppError('CONNECTION_ERROR')), /Reintentar<\/button>/)
   assert.match(render(new Error('Algo raro pasó')), /Algo raro pasó[\s\S]*Reintentar/)
-  assert.match(render('ni un Error'), /No pudimos conectar/)
+  // Un mensaje ya resuelto es su propio error; un throw mudo cae al fallback.
+  assert.match(render('ni un Error'), /ni un Error[\s\S]*Reintentar/)
+  assert.match(render(new Error('')), /No pudimos conectar/)
+  assert.equal(render(null), '')
 
   // Un rechazo definitivo no invita a chocar de nuevo: ofrece otra salida.
   const dead = new AppError('TABLE_UNAVAILABLE')
@@ -24,6 +29,31 @@ test('an error only offers to retry when repeating can work', async () => {
   assert.match(render(new AppError('CONNECTION_ERROR'), { label: 'Ir al inicio', onAction: noop }), /Reintentar<\/button>/)
 
   assert.match(render(dead), /role="alert"/)
+})
+
+test('a panel that cannot retry stays a message, and never grows a dead button', async () => {
+  const { createElement } = await import('react')
+  const { renderToStaticMarkup } = await import('react-dom/server')
+  const { ErrorText } = await import('@restaurant-platform/ui')
+  const fallback = 'No pudimos cargar las comandas.'
+
+  // Admin y POS casi siempre solo informan: sin `retry` el aviso no crece botones.
+  const plain = renderToStaticMarkup(
+    createElement(ErrorText, { error: new Error('Falló la consulta'), fallback }),
+  )
+  assert.match(plain, /role="alert"/)
+  assert.match(plain, /Falló la consulta/)
+  assert.doesNotMatch(plain, /<button/)
+
+  // El fallback solo aparece cuando el error no trae mensaje del catálogo.
+  const mute = renderToStaticMarkup(createElement(ErrorText, { error: { nada: true }, fallback }))
+  assert.match(mute, /No pudimos cargar las comandas\./)
+
+  // Y cuando el panel sí ofrece repetir, el catálogo decide igual que en la carta.
+  const retry = (error: unknown) =>
+    renderToStaticMarkup(createElement(ErrorText, { error, retry: () => {}, fallback }))
+  assert.match(retry(new AppError('POS_UNAVAILABLE')), /Reintentar<\/button>/)
+  assert.doesNotMatch(retry(new AppError('INVALID_TRANSITION')), /Reintentar/)
 })
 
 test('Toast keeps its live region mounted and schedules the fade within its own duration', async () => {

@@ -90,9 +90,7 @@ export function OrderHistory() {
       </p>
 
       {history.isError && (
-        <ErrorText
-          message={history.error instanceof Error ? history.error.message : 'No pudimos cargar el historial.'}
-        />
+        <ErrorText error={history.error} fallback="No pudimos cargar el historial." />
       )}
       {history.isLoading ? (
         <Spinner />

@@ -104,7 +104,7 @@ export function CategoriesPage() {
         </Button>
       </form>
 
-      <ErrorText message={errors.message} />
+      <ErrorText error={errors.message} />
 
       {isLoading ? (
         <Spinner />

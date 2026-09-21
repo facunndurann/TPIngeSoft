@@ -1,5 +1,6 @@
 export * from './clock'
 export * from './components'
+export * from './ErrorText'
 export * from './SummaryItem'
 export * from './FloorGrid'
 export * from './auth'
