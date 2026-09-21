@@ -2286,7 +2286,7 @@ COMMENT ON COLUMN "public"."table_sessions"."split_equal_parts" IS 'Cantidad de 
 
 
 
-COMMENT ON COLUMN "public"."table_sessions"."split_updated_by" IS 'Comensal que guardó la división vigente. Null si la guardó alguien que ya no está en la mesa.';
+COMMENT ON COLUMN "public"."table_sessions"."split_updated_by" IS 'Comensal (session_participants.id) que guardó la división vigente. Sin FK a propósito: ver la migración.';
 
 
 
@@ -3169,11 +3169,6 @@ ALTER TABLE ONLY "public"."table_sessions"
 
 ALTER TABLE ONLY "public"."table_sessions"
     ADD CONSTRAINT "table_sessions_restaurant_id_fkey" FOREIGN KEY ("restaurant_id") REFERENCES "public"."restaurants"("id") ON DELETE CASCADE;
-
-
-
-ALTER TABLE ONLY "public"."table_sessions"
-    ADD CONSTRAINT "table_sessions_split_updated_by_fkey" FOREIGN KEY ("split_updated_by") REFERENCES "auth"."users"("id") ON DELETE SET NULL;
 
 
 
