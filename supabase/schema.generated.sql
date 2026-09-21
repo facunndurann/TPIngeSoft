@@ -186,6 +186,31 @@ COMMENT ON FUNCTION "public"."abandon_order_request"("p_session_id" "uuid", "p_r
 
 
 
+CREATE OR REPLACE FUNCTION "public"."add_guest_participant"("p_session_id" "uuid", "p_display_name" "text") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+DECLARE
+  v_participant_id uuid;
+BEGIN
+  IF auth.uid() IS NULL THEN RAISE EXCEPTION 'AUTH_REQUIRED'; END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM public.session_participants WHERE session_id = p_session_id AND user_id = auth.uid()) THEN 
+    RAISE EXCEPTION 'NOT_PARTICIPANT'; 
+  END IF;
+  
+  INSERT INTO public.session_participants(session_id, display_name)
+  VALUES (p_session_id, trim(p_display_name))
+  RETURNING id INTO v_participant_id;
+  
+  RETURN v_participant_id;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."add_guest_participant"("p_session_id" "uuid", "p_display_name" "text") OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."audit_employee_password_reset"("p_actor" "uuid", "p_restaurant" "uuid", "p_user" "uuid", "p_completed" boolean DEFAULT false) RETURNS "void"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -1108,6 +1133,33 @@ $$;
 
 
 ALTER FUNCTION "public"."pos_transition_order"("p_order_id" "uuid", "p_status" "public"."order_status") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."reassign_order_items"("p_item_ids" "uuid"[], "p_new_participant_id" "uuid") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+DECLARE
+  v_session_id uuid;
+BEGIN
+  IF auth.uid() IS NULL THEN RAISE EXCEPTION 'AUTH_REQUIRED'; END IF;
+  
+  SELECT session_id INTO v_session_id FROM public.session_participants WHERE id = p_new_participant_id;
+  IF NOT FOUND THEN RAISE EXCEPTION 'INVALID_PARTICIPANT'; END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM public.session_participants WHERE session_id = v_session_id AND user_id = auth.uid()) THEN 
+    RAISE EXCEPTION 'NOT_PARTICIPANT'; 
+  END IF;
+
+  UPDATE public.order_items 
+  SET participant_id = p_new_participant_id 
+  WHERE id = ANY(p_item_ids) 
+  AND order_id IN (SELECT id FROM public.orders WHERE session_id = v_session_id);
+END;
+$$;
+
+
+ALTER FUNCTION "public"."reassign_order_items"("p_item_ids" "uuid"[], "p_new_participant_id" "uuid") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."record_pos_action"("p_restaurant_id" "uuid", "p_branch_id" "uuid", "p_action" "text", "p_order_id" "uuid", "p_session_id" "uuid", "p_details" "jsonb" DEFAULT '{}'::"jsonb") RETURNS "void"
@@ -2320,7 +2372,7 @@ ALTER VIEW "public"."session_bills" OWNER TO "postgres";
 CREATE TABLE IF NOT EXISTS "public"."session_participants" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "session_id" "uuid" NOT NULL,
-    "user_id" "uuid" NOT NULL,
+    "user_id" "uuid",
     "display_name" "text" NOT NULL,
     "joined_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "named_at" timestamp with time zone
@@ -3504,6 +3556,12 @@ GRANT ALL ON FUNCTION "public"."abandon_order_request"("p_session_id" "uuid", "p
 
 
 
+GRANT ALL ON FUNCTION "public"."add_guest_participant"("p_session_id" "uuid", "p_display_name" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."add_guest_participant"("p_session_id" "uuid", "p_display_name" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."add_guest_participant"("p_session_id" "uuid", "p_display_name" "text") TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."audit_employee_password_reset"("p_actor" "uuid", "p_restaurant" "uuid", "p_user" "uuid", "p_completed" boolean) FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."audit_employee_password_reset"("p_actor" "uuid", "p_restaurant" "uuid", "p_user" "uuid", "p_completed" boolean) TO "service_role";
 
@@ -3661,6 +3719,12 @@ GRANT ALL ON FUNCTION "public"."pos_resolve_session_request"("p_session_id" "uui
 REVOKE ALL ON FUNCTION "public"."pos_transition_order"("p_order_id" "uuid", "p_status" "public"."order_status") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."pos_transition_order"("p_order_id" "uuid", "p_status" "public"."order_status") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."pos_transition_order"("p_order_id" "uuid", "p_status" "public"."order_status") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."reassign_order_items"("p_item_ids" "uuid"[], "p_new_participant_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."reassign_order_items"("p_item_ids" "uuid"[], "p_new_participant_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."reassign_order_items"("p_item_ids" "uuid"[], "p_new_participant_id" "uuid") TO "service_role";
 
 
 

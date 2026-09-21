@@ -4,7 +4,7 @@ import type { PendingSubmission } from '../stores/cart'
 type RecoverableSession = {
   id: string
   table_id: string
-  session_participants: { user_id: string }[]
+  session_participants: { user_id: string | null }[]
 }
 
 const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
