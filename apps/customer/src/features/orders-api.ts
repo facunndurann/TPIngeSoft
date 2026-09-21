@@ -138,3 +138,22 @@ export async function updateSessionSplit(sessionId: string, split: SessionSplit)
   })
   if (error) throw fromPostgres(error)
 }
+
+export async function addGuestParticipant(sessionId: string, name: string): Promise<string> {
+  const rpc = supabase.rpc as unknown as (fn: string, args: object) => Promise<{ data: string, error: unknown }>
+  const { data, error } = await rpc('add_guest_participant', {
+    p_session_id: sessionId,
+    p_display_name: name,
+  })
+  if (error) throw fromPostgres(error as { message: string })
+  return data
+}
+
+export async function reassignOrderItems(itemIds: string[], newParticipantId: string): Promise<void> {
+  const rpc = supabase.rpc as unknown as (fn: string, args: object) => Promise<{ error: unknown }>
+  const { error } = await rpc('reassign_order_items', {
+    p_item_ids: itemIds,
+    p_new_participant_id: newParticipantId,
+  })
+  if (error) throw fromPostgres(error as { message: string })
+}
