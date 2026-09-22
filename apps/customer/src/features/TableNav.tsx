@@ -1,30 +1,29 @@
-import { useLocation } from 'react-router'
-import { CurrentLink } from '@/components/CurrentLink'
-import { cartPath, isMenuIndex, ordersPath, tableRoot, tableSection } from '@/features/table-paths'
+import { NavLink, useLocation } from 'react-router'
+import { cartPath, ordersPath, tableRoot } from '@/features/table-paths'
 
 type TableNavProps = {
   token: string
   cartCount: number
 }
 
+/**
+ * Las pestañas de la mesa. `NavLink` marca `aria-current="page"` según la ruta: la
+ * carta con `end`, porque dentro de un plato ya no se está mirando la carta; el
+ * carrito cuenta también al revisarlo o al editar una línea.
+ */
 export function TableNav({ token, cartCount }: TableNavProps) {
-  const location = useLocation()
-  const section = tableSection(location.pathname)
-  // La carta conserva búsqueda y categoría mientras se la esté recorriendo.
-  const keepFilters = section === 'menu' || location.pathname.includes('/producto/')
-  const menuHref = `${tableRoot(token)}${keepFilters ? location.search : ''}`
+  const { search } = useLocation()
+  // La query solo la usan la carta y sus platos (categoría y búsqueda): llevarla es
+  // volver a la carta con los filtros con que se la estaba recorriendo.
+  const menuHref = `${tableRoot(token)}${search}`
 
   return (
     <nav className="tabs" aria-label="Navegación">
-      <CurrentLink to={menuHref} current={section === 'menu' && isMenuIndex(location.pathname)}>
+      <NavLink to={menuHref} end>
         La carta
-      </CurrentLink>
-      <CurrentLink to={cartPath(token)} current={section === 'cart'}>
-        Mi carrito ({cartCount})
-      </CurrentLink>
-      <CurrentLink to={ordersPath(token)} current={section === 'orders'}>
-        Pedidos
-      </CurrentLink>
+      </NavLink>
+      <NavLink to={cartPath(token)}>Mi carrito ({cartCount})</NavLink>
+      <NavLink to={ordersPath(token)}>Pedidos</NavLink>
     </nav>
   )
 }

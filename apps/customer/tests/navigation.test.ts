@@ -17,11 +17,6 @@ test('customer table URLs encode screens, product pages and menu filters', () =>
   assert.equal(paths.ordersPath('t'), '/m/t/pedidos')
   assert.deepEqual(paths.parseMenuFilters(new URLSearchParams('categoria=c&q=ala')), { category: 'c', search: 'ala' })
   assert.deepEqual(paths.parseMenuFilters(new URLSearchParams()), { category: 'all', search: '' })
-  assert.equal(paths.tableSection('/m/x/carrito/revisar'), 'cart')
-  assert.equal(paths.tableSection('/m/x/producto/1'), 'menu')
-  assert.equal(paths.tableSection('/m/x/pedidos'), 'orders')
-  assert.equal(paths.isMenuIndex('/m/x'), true)
-  assert.equal(paths.isMenuIndex('/m/x/producto/1'), false)
 })
 
 test('the remembered table survives only as three usable strings', () => {

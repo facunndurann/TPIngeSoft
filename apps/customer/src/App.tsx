@@ -10,11 +10,12 @@ import {
   TableProductPage,
   TableRoute,
 } from '@/pages/TablePage'
+import { TABLE_ROUTE } from '@/features/table-paths'
 
 export default function App() {
   return (
     <Routes>
-      <Route path="/m/:token" element={<TableRoute />}>
+      <Route path={TABLE_ROUTE} element={<TableRoute />}>
         <Route index element={<TableMenuPage />} />
         <Route path="producto/:productId" element={<TableProductPage />} />
         <Route path="carrito" element={<TableCartPage />} />
