@@ -5,13 +5,11 @@ import { useNow } from '@restaurant-platform/ui'
 
 import { PercentField } from '@/components/PercentField'
 import { toastDuration } from '@/features/announcements'
-import { updateSessionSplit, addGuestParticipant, reassignOrderItems } from '@/features/orders-api'
+import { updateSessionSplit } from '@/features/orders-api'
 import { useTable } from '@/features/table-context'
 import type { loadOrders } from '@/features/orders-api'
-import type { loadSession } from '@/features/session'
 
 type Order = Awaited<ReturnType<typeof loadOrders>>[number]
-type Participant = Awaited<ReturnType<typeof loadSession>>['participants'][number]
 
 type BillSplitterProps = {
   split: SessionSplit
@@ -29,8 +27,7 @@ export function BillSplitter({ split, bill, orders }: BillSplitterProps) {
   const now = useNow()
   const [draft, setDraft] = useState<SessionSplit | null>(null)
   const [changedBy, setChangedBy] = useState<string | null>(null)
-  const [isAddingGuest, setIsAddingGuest] = useState(false)
-  
+
   const lastSaved = useRef<string | null>(updatedAt)
   const currentParticipantId = participants.find((entry) => entry.user_id === userId)?.id
 
@@ -103,23 +100,6 @@ export function BillSplitter({ split, bill, orders }: BillSplitterProps) {
         ?? Math.min(MAX_EQUAL_PARTS, Math.max(MIN_EQUAL_PARTS, participants.length)),
     } : {}),
   })
-
-  if (isAddingGuest) {
-    return (
-      <section className="bill-panel">
-        <AddGuestFlow 
-          sessionId={session.id} 
-          orders={orders} 
-          participants={participants}
-          onComplete={async () => {
-            setIsAddingGuest(false)
-            await refreshTable()
-          }}
-          onCancel={() => setIsAddingGuest(false)}
-        />
-      </section>
-    )
-  }
 
   return (
     <section className="bill-panel" aria-label="División de la cuenta">
@@ -238,18 +218,6 @@ export function BillSplitter({ split, bill, orders }: BillSplitterProps) {
         </p>
       )}
 
-      {!draft && (
-        <div style={{ textAlign: 'center', marginBottom: '20px', marginTop: '10px' }}>
-          <button 
-            type="button" 
-            className="text-button" 
-            onClick={() => setIsAddingGuest(true)}
-          >
-            Agregar invitado a la cuenta
-          </button>
-        </div>
-      )}
-
       <div className="cart-actions">
         {draft ? (
           <>
@@ -277,104 +245,5 @@ export function BillSplitter({ split, bill, orders }: BillSplitterProps) {
         )}
       </div>
     </section>
-  )
-}
-
-type AddGuestFlowProps = {
-  sessionId: string
-  orders: readonly Order[]
-  participants: readonly Participant[]
-  onComplete: () => void
-  onCancel: () => void
-}
-
-function AddGuestFlow({ sessionId, orders, participants, onComplete, onCancel }: AddGuestFlowProps) {
-  const [name, setName] = useState('')
-  const [selectedItems, setSelectedItems] = useState<string[]>([])
-  const [isSaving, setIsSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  
-  const allItems = orders
-    .filter((o) => o.status !== 'cancelled' && o.status !== 'submitted')
-    .flatMap((o) => o.order_items)
-
-  const handleSave = async () => {
-    if (!name.trim()) return
-    setIsSaving(true)
-    setError(null)
-    try {
-      const guestId = await addGuestParticipant(sessionId, name)
-      if (selectedItems.length > 0) {
-        await reassignOrderItems(selectedItems, guestId)
-      }
-      onComplete()
-    } catch (e) {
-      if (e instanceof Error) {
-        setError(e.message)
-      } else {
-        setError('Ocurrió un error al guardar.')
-      }
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
-  const toggleItem = (id: string) => {
-    setSelectedItems(current => current.includes(id) 
-      ? current.filter(i => i !== id) 
-      : [...current, id]
-    )
-  }
-
-  return (
-    <div className="confirmation">
-      <h3>Agregar invitado a la cuenta</h3>
-      <p className="muted">Agregá a alguien que no escaneó el QR y asignale lo que consumió.</p>
-      
-      <input 
-        placeholder="Nombre" 
-        value={name} 
-        onChange={(e) => setName(e.target.value)} 
-        disabled={isSaving}
-        className="wide"
-        style={{ marginBottom: '16px' }}
-      />
-
-      {allItems.length > 0 && (
-        <fieldset className="payment-items">
-          <legend>¿Qué ítems consumió?</legend>
-          {allItems.map((item) => {
-            const ownerName = participants.find((p) => p.id === item.participant_id)?.display_name || 'Compartido'
-            return (
-              <label key={item.id} className="payment-item">
-                <input
-                  type="checkbox"
-                  checked={selectedItems.includes(item.id)}
-                  onChange={() => toggleItem(item.id)}
-                  disabled={isSaving}
-                />
-                <span>
-                  <strong>{item.quantity} × {item.product_name}</strong>
-                  <small>Pedida por: {ownerName}</small>
-                </span>
-              </label>
-            )
-          })}
-        </fieldset>
-      )}
-
-      {error && (
-        <p className="notice" role="alert" style={{ marginBottom: '16px' }}>
-          {error}
-        </p>
-      )}
-
-      <div className="cart-actions">
-        <button onClick={onCancel} disabled={isSaving}>Cancelar</button>
-        <button className="primary" onClick={handleSave} disabled={isSaving || !name.trim()}>
-          {isSaving ? 'Guardando...' : 'Crear y reasignar ítems'}
-        </button>
-      </div>
-    </div>
   )
 }

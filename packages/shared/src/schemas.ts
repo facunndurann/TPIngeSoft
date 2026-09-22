@@ -5,8 +5,11 @@ import { z } from 'zod';
  * payloads en edge functions). Se amplían a medida que avanza el proyecto.
  */
 
+/** Largo máximo de un nombre en la mesa: el mismo que revalidan las RPC del comensal. */
+export const PARTICIPANT_NAME_MAX_LENGTH = 40;
+
 export const participantNameSchema = z
   .string()
   .trim()
   .min(1, 'El nombre no puede estar vacío')
-  .max(40, 'El nombre es demasiado largo');
+  .max(PARTICIPANT_NAME_MAX_LENGTH, 'El nombre es demasiado largo');

@@ -1462,7 +1462,11 @@ export type Database = {
         Returns: string
       }
       add_guest_participant: {
-        Args: { p_display_name: string; p_session_id: string }
+        Args: {
+          p_display_name: string
+          p_item_ids?: string[]
+          p_session_id: string
+        }
         Returns: string
       }
       audit_employee_password_reset: {
@@ -1606,10 +1610,6 @@ export type Database = {
           p_status: Database["public"]["Enums"]["order_status"]
         }
         Returns: string
-      }
-      reassign_order_items: {
-        Args: { p_item_ids: string[]; p_new_participant_id: string }
-        Returns: undefined
       }
       record_pos_action: {
         Args: {

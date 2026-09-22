@@ -8,6 +8,7 @@ import {
   paymentStatusLabels,
 } from '@restaurant-platform/shared'
 import { FreshnessNote } from '@/components/FreshnessNote'
+import { AddGuest } from '@/features/AddGuest'
 import { BillSplitter } from '@/features/BillSplitter'
 import { plateCount } from '@/features/cart'
 import { oldestUpdate } from '@/features/freshness'
@@ -131,6 +132,14 @@ export function SessionOrders({ onReorder }: SessionOrdersProps) {
       ))}
       {bill.data && (
         <BillSplitter split={sessionSplit} bill={bill.data} orders={orders.data ?? []} />
+      )}
+      {/* Con la mesa cerrada ya no se suma gente: la RPC lo rechazaría. */}
+      {bill.data && !closed && (
+        <AddGuest
+          sessionId={sessionId}
+          orders={orders.data ?? []}
+          participantName={participantName}
+        />
       )}
     </section>
   )
