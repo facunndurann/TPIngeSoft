@@ -11,6 +11,7 @@ const idleRename: RenameField = {
   setEditing: () => {},
   submit: () => {},
   isPending: false,
+  canSubmit: false,
 }
 
 function participant(id: string, display_name: string, overrides: Partial<Participant> = {}): Participant {

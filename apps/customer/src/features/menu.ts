@@ -84,6 +84,37 @@ export function productOptions(product: Product): ModifierOption[] {
   return product.groups.flatMap((group) => group.options)
 }
 
+/** Lo que el comensal eligió de un plato, con nombre: lo que se agrega y lo que se quita. */
+export type SelectionDescription = {
+  /** `priceDelta` falta cuando la opción ya no está en la carta: no hay precio que mostrar. */
+  options: { id: string; name: string; priceDelta?: number }[]
+  removed: { id: string; name: string }[]
+}
+
+/**
+ * Nombra las opciones e ingredientes de una selección contra la carta de ahora. Lo
+ * que la carta ya no tiene (o todavía no cargó) se nombra igual en todas partes, así
+ * la línea editable del carrito y su resumen no pueden decir cosas distintas.
+ */
+export function describeSelection(
+  product: Product | undefined,
+  selection: Pick<Selection, 'optionIds' | 'removedIds'>,
+): SelectionDescription {
+  const options = product ? productOptions(product) : []
+  return {
+    options: selection.optionIds.map((id) => {
+      const option = options.find((entry) => entry.id === id)
+      return option
+        ? { id, name: option.name, priceDelta: option.price_delta }
+        : { id, name: 'opción por actualizar' }
+    }),
+    removed: selection.removedIds.map((id) => ({
+      id,
+      name: product?.ingredients.find((ingredient) => ingredient.id === id)?.name ?? 'ingrediente por actualizar',
+    })),
+  }
+}
+
 /** Cuántas opciones de este grupo están elegidas. */
 export function selectedInGroup(group: ModifierGroup, optionIds: string[]): number {
   return group.options.filter((option) => optionIds.includes(option.id)).length

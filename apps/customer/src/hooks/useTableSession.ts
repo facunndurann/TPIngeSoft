@@ -21,6 +21,8 @@ export type RenameField = {
   setEditing: (editing: boolean) => void
   submit: () => void
   isPending: boolean
+  /** Hay un nombre válido y ningún guardado en curso. */
+  canSubmit: boolean
   /** El último intento fallido, ya en palabras. */
   message?: string
 }
@@ -82,11 +84,13 @@ export function useTableSession(token: string) {
   // El formulario abierto es de quien guarda el nombre, no del panel: así se
   // cierra cuando el guardado terminó y no cuando cambia un flag de la mutación.
   const [editingName, setEditingName] = useState(false)
+  const name = draftName ?? savedName
+  // El mismo límite que revalida customer_join_table_session: habilita el botón y
+  // decide qué se envía, así los dos no pueden discrepar.
+  const validName = participantNameSchema.safeParse(name)
 
   const rename = useMutation({
     mutationFn: async () => {
-      // El mismo límite que revalida customer_join_table_session, con su mensaje.
-      const validName = participantNameSchema.safeParse(draftName ?? savedName)
       if (!validName.success) throw new AppError('INVALID_NAME')
       const result = await joinSession(token, validName.data)
       client.setQueryData(['join', token], result)
@@ -113,12 +117,13 @@ export function useTableSession(token: string) {
     sessionOpen: session.data?.status === 'open' && !session.isError,
     ...diner,
     rename: {
-      name: draftName ?? savedName,
+      name,
       setName: setDraftName,
       editing: editingName,
       setEditing: setEditingName,
       submit: () => rename.mutate(),
       isPending: rename.isPending,
+      canSubmit: validName.success && !rename.isPending,
       message: rename.isError ? renameMessage(rename.error) : undefined,
     } satisfies RenameField,
   }

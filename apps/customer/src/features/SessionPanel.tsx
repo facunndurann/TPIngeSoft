@@ -1,7 +1,8 @@
 import { type FormEvent, useState } from 'react'
 import { ErrorText } from '@restaurant-platform/ui'
+import { plateCount } from '@/features/cart'
+import { NameInput } from '@/features/NameInput'
 import { NameModal } from '@/features/NameModal'
-import { NAME_FIELD_ID } from '@/features/name-field'
 import { useTable } from '@/features/table-context'
 import type { RenameField } from '@/hooks/useTableSession'
 import { useCart } from '@/stores/cart'
@@ -61,6 +62,8 @@ export function SessionPanel({ connecting, connection, rename, onOpenNewSession 
   const names = participants.map((participant) => participant.display_name).join(' · ')
   const showPanel = connecting || !!connection || session.isError || (!!me && named) || closed
   const canRename = named && !closed
+  // Mientras hay un envío sin resolver el nombre queda como está, en el chip y en el diálogo.
+  const canSaveName = rename.canSubmit && !hasPendingSubmission
 
   function handleRename(event: FormEvent) {
     event.preventDefault()
@@ -94,23 +97,8 @@ export function SessionPanel({ connecting, connection, rename, onOpenNewSession 
                     }
                   }}
                 >
-                  <label className="sr-only" htmlFor={NAME_FIELD_ID}>
-                    Tu nombre
-                  </label>
-                  <input
-                    id={NAME_FIELD_ID}
-                    value={rename.name}
-                    maxLength={40}
-                    required
-                    autoFocus
-                    autoComplete="given-name"
-                    onChange={(event) => rename.setName(event.target.value)}
-                  />
-                  <button
-                    className="icon-button"
-                    aria-label="Guardar nombre"
-                    disabled={rename.isPending || !rename.name.trim() || hasPendingSubmission}
-                  >
+                  <NameInput rename={rename} />
+                  <button className="icon-button" aria-label="Guardar nombre" disabled={!canSaveName}>
                     <CheckIcon />
                   </button>
                   <button
@@ -162,7 +150,7 @@ export function SessionPanel({ connecting, connection, rename, onOpenNewSession 
       )}
 
       {needsName && (
-        <NameModal rename={rename} hasPendingSubmission={hasPendingSubmission} />
+        <NameModal rename={rename} canSave={canSaveName} />
       )}
     </>
   )
@@ -178,7 +166,7 @@ function ClosedSessionNotice({
   onOpenNewSession: () => void
 }) {
   const [confirming, setConfirming] = useState(false)
-  const plates = `${cartCount} ${cartCount === 1 ? 'plato' : 'platos'}`
+  const plates = plateCount(cartCount)
 
   const message = hasPendingSubmission
     ? 'Revisá el envío pendiente antes de empezar de nuevo.'

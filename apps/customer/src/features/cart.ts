@@ -1,4 +1,4 @@
-import type { SubmitOrderInput } from '@restaurant-platform/shared'
+import { MAX_ORDER_LINES, type SubmitOrderInput } from '@restaurant-platform/shared'
 import { selectionErrors } from './menu'
 import type { Menu, Selection } from './menu'
 
@@ -7,9 +7,6 @@ export type CartItem = Selection & { id: string; productId: string }
 
 /** Un envío guardado sin resultado: lo que se mandó, tal cual, y las líneas que lo formaban. */
 export type PendingSubmission = { input: SubmitOrderInput; snapshot: CartItem[] }
-
-/** Líneas distintas por pedido; es el mismo máximo que valida submitOrderSchema. */
-export const MAX_CART_LINES = 50
 
 /** "3 platos" / "1 plato": el plural aparece en los avisos del carrito. */
 export function plateCount(count: number) {
@@ -109,7 +106,7 @@ export function cartPhase(input: CartPhaseInput): CartPhase {
 function validDraft(menu: Menu | undefined, items: CartItem[]) {
   return (
     !!menu &&
-    items.length <= MAX_CART_LINES &&
+    items.length <= MAX_ORDER_LINES &&
     items.every((item) => {
       const product = menu.productsById.get(item.productId)
       return !!product && selectionErrors(product, item).length === 0

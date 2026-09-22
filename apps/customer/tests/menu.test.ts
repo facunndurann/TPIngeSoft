@@ -6,7 +6,7 @@ import {
   mediaKindFromMimeType,
   productMedia,
 } from '@restaurant-platform/shared'
-import { buildMenu, cartPrice, groupSelectionHint, price, productOptions, selectedInGroup, selectionErrors } from '../src/features/menu'
+import { buildMenu, cartPrice, describeSelection, groupSelectionHint, price, productOptions, selectedInGroup, selectionErrors } from '../src/features/menu'
 import type { Menu, MenuRows, ModifierGroup } from '../src/features/menu'
 import { menu, product, productAfter, selection } from './fixtures'
 
@@ -92,4 +92,25 @@ test('productMedia classifies each url and mediaElementSrc only tweaks videos', 
   assert.deepEqual(productMedia({ media_urls: [] }), [])
   assert.equal(mediaKindFromMimeType('video/quicktime'), 'video')
   assert.equal(mediaKindFromMimeType('image/png'), 'image')
+})
+
+test('a selection reads the same in the editable cart line and in its summary', () => {
+  const named = productAfter((rows) => {
+    rows.products[0].product_ingredients[0].name = 'Cebolla'
+    rows.groups[0].modifier_options[0].name = 'Criolla'
+  })
+  const picked = { optionIds: ['o'], removedIds: ['i'] }
+
+  assert.deepEqual(describeSelection(named, picked), {
+    options: [{ id: 'o', name: 'Criolla', priceDelta: 0.2 }],
+    removed: [{ id: 'i', name: 'Cebolla' }],
+  })
+
+  // Lo que la carta ya no tiene, o todavía no cargó, se nombra igual en las dos vistas y sin precio.
+  const pending = { options: [{ id: 'o', name: 'opción por actualizar' }], removed: [{ id: 'i', name: 'ingrediente por actualizar' }] }
+  assert.deepEqual(describeSelection(undefined, picked), pending)
+  assert.deepEqual(describeSelection(named, { optionIds: ['vieja'], removedIds: ['otro'] }), {
+    options: [{ id: 'vieja', name: 'opción por actualizar' }],
+    removed: [{ id: 'otro', name: 'ingrediente por actualizar' }],
+  })
 })

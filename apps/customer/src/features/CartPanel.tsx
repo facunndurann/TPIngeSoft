@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { AppError, formatPrice } from '@restaurant-platform/shared'
+import { AppError, formatPrice, MAX_ORDER_LINES } from '@restaurant-platform/shared'
 import { ErrorText } from '@restaurant-platform/ui'
 import { useNavigate, useParams } from 'react-router'
 import { QuantityField } from '@/components/QuantityField'
-import { MAX_CART_LINES, cartPhase, plateCount } from '@/features/cart'
+import { cartPhase, plateCount } from '@/features/cart'
 import type { CartItem, Review } from '@/features/cart'
-import { cartPrice, price, productOptions, selectionErrors } from '@/features/menu'
+import { cartPrice, describeSelection, price, selectionErrors } from '@/features/menu'
 import type { Menu } from '@/features/menu'
 import { abandonSubmission, submitOrder } from '@/features/orders-api'
 import { useTable } from '@/features/table-context'
@@ -193,9 +193,9 @@ export function CartPanel({ reviewing = false, refreshMenu, onSubmitted }: CartP
               </p>
             </>
           )}
-          {items.length > MAX_CART_LINES && (
+          {items.length > MAX_ORDER_LINES && (
             <p className="notice">
-              Podés enviar hasta {MAX_CART_LINES} platos distintos por pedido.
+              Podés enviar hasta {MAX_ORDER_LINES} platos distintos por pedido.
             </p>
           )}
           {!sessionOpen && (
@@ -265,7 +265,7 @@ function CartLine({
   onRemove: () => void
 }) {
   const product = menu?.productsById.get(item.productId)
-  const options = product ? productOptions(product) : []
+  const { options, removed } = describeSelection(product, item)
   const errors = menu
     ? product
       ? selectionErrors(product, item)
@@ -279,18 +279,14 @@ function CartLine({
         {title} {item.isShared && <span className="badge">Para compartir</span>}
       </h3>
       <p>Base: {product ? formatPrice(product.base_price) : '—'}</p>
-      {item.optionIds.map((id) => {
-        const option = options.find((entry) => entry.id === id)
-        return (
-          <p key={id}>
-            + {option ? `${option.name} (${formatPrice(option.price_delta)})` : 'Opción pendiente de actualizar'}
-          </p>
-        )
-      })}
-      {item.removedIds.map((id) => (
-        <p key={id}>
-          Sin {product?.ingredients.find((ingredient) => ingredient.id === id)?.name ?? 'ingrediente pendiente de actualizar'}
+      {options.map((option) => (
+        <p key={option.id}>
+          + {option.name}
+          {option.priceDelta !== undefined && ` (${formatPrice(option.priceDelta)})`}
         </p>
+      ))}
+      {removed.map((ingredient) => (
+        <p key={ingredient.id}>Sin {ingredient.name}</p>
       ))}
       <div className="choice">
         <span>Cantidad</span>
@@ -330,16 +326,11 @@ function CartSummary({
     <ul className="cart-summary">
       {items.map((item) => {
         const product = menu?.productsById.get(item.productId)
-        const options = product ? productOptions(product) : []
+        const { options, removed } = describeSelection(product, item)
         // Personalizaciones en una línea: en la confirmación se leen, no se editan.
         const details = [
-          ...item.optionIds.map(
-            (id) => options.find((option) => option.id === id)?.name ?? 'opción por actualizar',
-          ),
-          ...item.removedIds.map(
-            (id) =>
-              `sin ${product?.ingredients.find((ingredient) => ingredient.id === id)?.name ?? 'ingrediente por actualizar'}`,
-          ),
+          ...options.map((option) => option.name),
+          ...removed.map((ingredient) => `sin ${ingredient.name}`),
         ]
 
         return (

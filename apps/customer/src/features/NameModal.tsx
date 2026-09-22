@@ -1,13 +1,14 @@
 import { type FormEvent, useEffect } from 'react'
-import { NAME_FIELD_ID } from '@/features/name-field'
+import { NameInput } from '@/features/NameInput'
 import type { RenameField } from '@/hooks/useTableSession'
 
 type NameModalProps = {
   rename: RenameField
-  hasPendingSubmission: boolean
+  /** Lo decide el panel: nombre válido, nada guardándose y ningún envío sin resolver. */
+  canSave: boolean
 }
 
-export function NameModal({ rename, hasPendingSubmission }: NameModalProps) {
+export function NameModal({ rename, canSave }: NameModalProps) {
   useEffect(() => {
     const previous = document.body.style.overflow
     document.body.style.overflow = 'hidden'
@@ -39,23 +40,8 @@ export function NameModal({ rename, hasPendingSubmission }: NameModalProps) {
         <h2 id="name-modal-title">¿Cómo te llamás?</h2>
         <p className="muted">Así sabemos qué pidió cada uno.</p>
         <form className="name-form" onSubmit={handleSubmit}>
-          <label className="sr-only" htmlFor={NAME_FIELD_ID}>
-            Tu nombre
-          </label>
-          <input
-            id={NAME_FIELD_ID}
-            placeholder="Tu nombre"
-            value={rename.name}
-            maxLength={40}
-            required
-            autoFocus
-            autoComplete="given-name"
-            onChange={(event) => rename.setName(event.target.value)}
-          />
-          <button
-            className="primary"
-            disabled={rename.isPending || !rename.name.trim() || hasPendingSubmission}
-          >
+          <NameInput rename={rename} />
+          <button className="primary" disabled={!canSave}>
             {rename.isPending ? 'Guardando…' : 'Continuar'}
           </button>
           {rename.message && <p role="alert">{rename.message}</p>}
