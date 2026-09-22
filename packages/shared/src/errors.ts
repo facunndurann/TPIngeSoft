@@ -1,3 +1,5 @@
+import { z } from 'zod'
+
 /**
  * Catálogo único de errores de negocio. Las RPCs de Postgres levantan el código
  * (`raise exception 'PRICE_CHANGED'`), la función submit-order responde con su
@@ -122,13 +124,24 @@ export class AppError extends Error {
 }
 
 /**
+ * Cuerpo de error de las Edge Functions: el código del catálogo y el mensaje que
+ * ya eligió el servidor. Lo arman los handlers desde un AppError y el cliente lo
+ * vuelve a convertir en uno, así que es el mismo para todas las funciones.
+ */
+export const appErrorBodySchema = z.object({
+  error: z.object({ code: z.string(), message: z.string() }),
+})
+export type AppErrorBody = z.infer<typeof appErrorBodySchema>
+
+/**
  * Traductor único de errores crudos de Postgres. Cubre las tres formas en que
  * llega un error: el código pelado (`raise exception 'PRICE_CHANGED'`), el
  * código prefijado por Postgres (`P0001: PRICE_CHANGED`) y la violación de un
- * constraint, que trae el nombre del índice. Lo desconocido es SERVER_ERROR con
- * el mensaje del catálogo: el detalle interno no se expone.
+ * constraint, que trae el nombre del índice. Lo desconocido es SERVER_ERROR:
+ * con `fallback` si quien llama puede decir qué operación falló, y si no con el
+ * mensaje del catálogo. El detalle interno nunca se expone.
  */
-export function fromPostgres(raw: string | { message: string }): AppError {
+export function fromPostgres(raw: string | { message: string }, fallback?: string): AppError {
   const message = typeof raw === 'string' ? raw : raw.message
   if (isAppErrorCode(message)) return new AppError(message)
 
@@ -142,5 +155,5 @@ export function fromPostgres(raw: string | { message: string }): AppError {
     if (message.includes(constraint)) return new AppError(code, undefined, message)
   }
 
-  return new AppError('SERVER_ERROR', undefined, message)
+  return new AppError('SERVER_ERROR', fallback, message)
 }

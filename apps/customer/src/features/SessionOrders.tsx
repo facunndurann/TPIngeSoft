@@ -7,6 +7,7 @@ import {
   paymentModeLabels,
   paymentStatusLabels,
 } from '@restaurant-platform/shared'
+import { ErrorText } from '@restaurant-platform/ui'
 import { FreshnessNote } from '@/components/FreshnessNote'
 import { AddGuest } from '@/features/AddGuest'
 import { BillSplitter } from '@/features/BillSplitter'
@@ -73,12 +74,8 @@ export function SessionOrders({ onReorder }: SessionOrdersProps) {
       />
 
       {bill.isPending && <p role="status">Actualizando la cuenta…</p>}
-      {bill.isError && (
-        <div className="notice" role="alert">
-          <p>No pudimos actualizar la cuenta.</p>
-          <button onClick={() => { void bill.refetch() }}>Reintentar cuenta</button>
-        </div>
-      )}
+      {/* Cada lectura dice qué falló (lo pone su loader) y el catálogo decide si reintentar. */}
+      <ErrorText variant="menu" error={bill.error} retry={() => { void bill.refetch() }} />
       {bill.data && <BillSummary bill={bill.data} />}
       {bill.data && session && me && paymentMethods.includes('mobile') && (
         <MobilePayment
@@ -96,18 +93,13 @@ export function SessionOrders({ onReorder }: SessionOrdersProps) {
       <PaymentHistory
         payments={payments.data}
         loading={payments.isPending}
-        error={payments.isError}
+        error={payments.error}
         retry={() => { void payments.refetch() }}
       />
       <ServiceRequests />
 
       {orders.isPending && <p role="status">Cargando los pedidos…</p>}
-      {orders.isError && (
-        <div className="notice" role="alert">
-          <p>No pudimos actualizar los pedidos.</p>
-          <button onClick={() => { void orders.refetch() }}>Reintentar pedidos</button>
-        </div>
-      )}
+      <ErrorText variant="menu" error={orders.error} retry={() => { void orders.refetch() }} />
       {orders.data?.length === 0 && (
         <p className="empty">Todavía no hay pedidos enviados en esta mesa.</p>
       )}
@@ -136,19 +128,12 @@ function PaymentHistory({
 }: {
   payments?: Payment[]
   loading: boolean
-  error: boolean
+  error: Error | null
   retry: () => void
 }) {
   const { nameOf } = useTable()
   if (loading) return <p role="status">Actualizando los pagos…</p>
-  if (error) {
-    return (
-      <div className="notice" role="alert">
-        <p>No pudimos actualizar el historial de pagos.</p>
-        <button onClick={retry}>Reintentar pagos</button>
-      </div>
-    )
-  }
+  if (error) return <ErrorText variant="menu" error={error} retry={retry} />
   if (!payments?.length) return null
 
   return (

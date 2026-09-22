@@ -1,6 +1,6 @@
 import { useMutation } from '@tanstack/react-query'
 import { formatElapsed, type SessionRequestState, sessionRequestState } from '@restaurant-platform/shared'
-import { useNow } from '@restaurant-platform/ui'
+import { ErrorText, useNow } from '@restaurant-platform/ui'
 
 import { requestSessionService } from '@/features/orders-api'
 import { serviceRequestCopy } from '@/features/service-requests'
@@ -41,11 +41,7 @@ export function ServiceRequests() {
       {!paid && paymentMethods.includes('external') && (
         <p className="muted">También podés pagar en caja.</p>
       )}
-      {ask.isError && (
-        <p className="notice" role="alert">
-          {ask.error.message}
-        </p>
-      )}
+      <ErrorText variant="menu" error={ask.error} />
     </section>
   )
 }

@@ -102,7 +102,3 @@ export const mobilePaymentResultSchema = z.object({
   status: z.enum(['pending', 'approved', 'rejected', 'cancelled']),
 });
 export type MobilePaymentResult = z.infer<typeof mobilePaymentResultSchema>;
-
-export const mobilePaymentErrorSchema = z.object({
-  error: z.object({ code: z.string(), message: z.string() }),
-});

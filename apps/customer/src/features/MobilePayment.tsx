@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { formatPrice } from '@restaurant-platform/shared'
+import { ErrorText } from '@restaurant-platform/ui'
 import {
   type PaymentPlanInput,
   type PaymentRequest,
@@ -40,7 +41,6 @@ export function MobilePayment({ sessionId, ...account }: MobilePaymentProps) {
       await refreshTable()
     },
   })
-  const error = start.error ?? confirm.error
 
   const toggleItem = (id: string) => {
     requestId.current = crypto.randomUUID()
@@ -95,11 +95,7 @@ export function MobilePayment({ sessionId, ...account }: MobilePaymentProps) {
         onPay={(request) => start.mutate(request)}
         onConfirm={(paymentId, outcome) => confirm.mutate({ paymentId, outcome })}
       />
-      {error && (
-        <p className="notice" role="alert">
-          {error.message}
-        </p>
-      )}
+      <ErrorText variant="menu" error={start.error ?? confirm.error} />
     </div>
   )
 }

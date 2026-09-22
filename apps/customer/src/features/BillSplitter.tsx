@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { allocationTotal, formatElapsed, formatPrice, MAX_EQUAL_PARTS, MIN_EQUAL_PARTS, remainingPercentage, type SessionSplit, sessionSplitSchema, SPLIT_PERCENTAGE_TOTAL, splitBill, splitEqualAmounts, splitPercentageAmounts, type SplitBill, splitTypeDescriptions, splitTypeLabels, splitTypes } from '@restaurant-platform/shared'
-import { useNow } from '@restaurant-platform/ui'
+import { ErrorText, useNow } from '@restaurant-platform/ui'
 
 import { PercentField } from '@/components/PercentField'
 import { toastDuration } from '@/features/announcements'
@@ -212,11 +212,7 @@ export function BillSplitter({ split, bill, orders }: BillSplitterProps) {
         </p>
       )}
 
-      {save.isError && (
-        <p className="notice" role="alert">
-          {save.error.message}
-        </p>
-      )}
+      <ErrorText variant="menu" error={save.error} />
 
       <div className="cart-actions">
         {draft ? (

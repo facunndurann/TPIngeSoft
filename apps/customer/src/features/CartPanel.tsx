@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { AppError, formatPrice } from '@restaurant-platform/shared'
-import { errorMessage } from '@restaurant-platform/ui'
+import { ErrorText } from '@restaurant-platform/ui'
 import { useNavigate, useParams } from 'react-router'
 import { QuantityField } from '@/components/QuantityField'
 import { MAX_CART_LINES, cartPhase, plateCount } from '@/features/cart'
@@ -158,16 +158,13 @@ export function CartPanel({ reviewing = false, refreshMenu, onSubmitted }: CartP
         </div>
       )}
 
-      {send.isError && (
-        <p className="notice" role="alert">
-          {errorMessage(send.error, 'No pudimos enviar el pedido. Intentá nuevamente.')}
-        </p>
-      )}
-      {abandon.isError && (
-        <p className="notice" role="alert">
-          {abandon.error.message}
-        </p>
-      )}
+      {/* Sin `retry`: reintentar o cancelar el envío ya son botones del envío pendiente. */}
+      <ErrorText
+        variant="menu"
+        error={send.error}
+        fallback="No pudimos enviar el pedido. Intentá nuevamente."
+      />
+      <ErrorText variant="menu" error={abandon.error} />
 
       {phase.kind === 'pending' && (
         <PendingSubmission

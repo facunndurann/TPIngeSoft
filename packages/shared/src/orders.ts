@@ -50,11 +50,6 @@ export const submitOrderResultSchema = z.object({
 });
 export type SubmitOrderResult = z.infer<typeof submitOrderResultSchema>;
 
-/** Respuesta de error de submit-order. `code` es un código de `appErrors` (errors.ts). */
-export const submitOrderErrorSchema = z.object({
-  error: z.object({ code: z.string(), message: z.string() }),
-});
-export type SubmitOrderError = z.infer<typeof submitOrderErrorSchema>;
 
 /**
  * Estados que forman parte de la cuenta. Es el espejo exacto del

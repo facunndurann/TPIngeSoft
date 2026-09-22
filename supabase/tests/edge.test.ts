@@ -1,7 +1,7 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
-import { type OrderStatus, submitOrderErrorSchema, submitOrderResultSchema, submitOrderSchema } from '../../packages/shared/src/orders.ts'
-import { AppError, appErrorMessage, appErrors, fromPostgres, isRetryableError } from '../../packages/shared/src/errors.ts'
+import { type OrderStatus, submitOrderResultSchema, submitOrderSchema } from '../../packages/shared/src/orders.ts'
+import { AppError, appErrorBodySchema, appErrorMessage, appErrors, fromPostgres, isRetryableError } from '../../packages/shared/src/errors.ts'
 import { formatElapsed } from '../../packages/shared/src/time.ts'
 import {
   sessionRequestKinds,
@@ -108,7 +108,7 @@ test('database errors answer with the status, code and message of the shared cat
     gateway.submit = async () => { throw fromPostgres({ message: code }) }
     const response = await handler(request())
     assert.equal(response.status, appErrors[code].status)
-    const body = submitOrderErrorSchema.parse(await response.json())
+    const body = appErrorBodySchema.parse(await response.json())
     assert.deepEqual(body.error, { code, message: appErrors[code].message })
   }
 })
@@ -217,6 +217,12 @@ test('elapsed time reads naturally and POS errors stay coded', () => {
   assert.equal(unknown.detail, 'relation "x" does not exist')
   assert.equal(unknown.status, 503)
   assert.equal(unknown.retryable, true)
+  // Quien sabe qué operación falló lo dice; un código conocido conserva su mensaje.
+  const read = fromPostgres('fetch failed', 'No pudimos actualizar la cuenta.')
+  assert.equal(read.code, 'SERVER_ERROR')
+  assert.equal(read.message, 'No pudimos actualizar la cuenta.')
+  assert.equal(read.detail, 'fetch failed')
+  assert.equal(fromPostgres('FORBIDDEN', 'No pudimos actualizar la cuenta.').message, appErrors.FORBIDDEN.message)
 })
 
 test('reverting steps back exactly one stage, never to submitted nor from cancelled', () => {
