@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation } from '@tanstack/react-query'
 import { allocationTotal, formatElapsed, formatPrice, MAX_EQUAL_PARTS, MIN_EQUAL_PARTS, remainingPercentage, type SessionSplit, sessionSplitSchema, SPLIT_PERCENTAGE_TOTAL, splitBill, splitEqualAmounts, splitPercentageAmounts, type SplitBill, splitTypeDescriptions, splitTypeLabels, splitTypes } from '@restaurant-platform/shared'
 import { useNow } from '@restaurant-platform/ui'
 
@@ -20,13 +20,12 @@ type BillSplitterProps = {
 }
 
 export function BillSplitter({ split, bill, orders }: BillSplitterProps) {
-  const { session: sessionQuery, userId } = useTable()
+  const { session: sessionQuery, userId, refreshTable } = useTable()
   const session = sessionQuery.data
   const participants = session?.participants ?? []
   const updatedBy = session?.split_updated_by ?? null
   const updatedAt = session?.split_updated_at ?? null
 
-  const queryClient = useQueryClient()
   const now = useNow()
   const [draft, setDraft] = useState<SessionSplit | null>(null)
   const [changedBy, setChangedBy] = useState<string | null>(null)
@@ -53,10 +52,10 @@ export function BillSplitter({ split, bill, orders }: BillSplitterProps) {
   const save = useMutation({
     mutationFn: ({ sessionId, next }: { sessionId: string; next: SessionSplit }) =>
       updateSessionSplit(sessionId, next),
-    onSuccess: async (_result, { sessionId }) => {
+    onSuccess: async () => {
       setDraft(null)
       setChangedBy(null)
-      await queryClient.invalidateQueries({ queryKey: ['session', sessionId] })
+      await refreshTable()
     },
   })
 
@@ -114,8 +113,7 @@ export function BillSplitter({ split, bill, orders }: BillSplitterProps) {
           participants={participants}
           onComplete={async () => {
             setIsAddingGuest(false)
-            await queryClient.invalidateQueries({ queryKey: ['orders', session.id] })
-            await queryClient.invalidateQueries({ queryKey: ['session', session.id] })
+            await refreshTable()
           }}
           onCancel={() => setIsAddingGuest(false)}
         />

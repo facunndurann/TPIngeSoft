@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AppError, participantNameSchema } from '@restaurant-platform/shared'
 import { errorMessage } from '@restaurant-platform/ui'
 import { loadMenu, loadTable } from '@/features/menu-api'
-import { connectSession, joinSession, loadSession } from '@/features/session'
+import { connectSession, joinSession, sessionKey, sessionQuery } from '@/features/session'
 import { subscribeToTableSession } from '@/features/session-realtime'
 
 /**
@@ -55,25 +55,20 @@ export function useTableSession(token: string) {
 
   const sessionId = joined.data?.id
 
-  const session = useQuery({
-    queryKey: ['session', sessionId],
-    queryFn: () => loadSession(sessionId!),
-    enabled: !!sessionId,
-    refetchInterval: 15000,
-  })
+  const session = useQuery(sessionQuery(sessionId))
+
+  // Toda la mesa de una vez: sesión, pedidos, cuenta y pagos cuelgan de la misma
+  // raíz. Se resuelve cuando terminaron de releerse, así quien espera ya ve lo nuevo.
+  const refreshTable = useCallback(async () => {
+    if (sessionId) await client.invalidateQueries({ queryKey: sessionKey(sessionId) })
+  }, [client, sessionId])
 
   useEffect(() => {
     if (!sessionId) return
-
-    const refresh = () => {
-      void client.invalidateQueries({ queryKey: ['session', sessionId] })
-      void client.invalidateQueries({ queryKey: ['orders', sessionId] })
-      void client.invalidateQueries({ queryKey: ['bill', sessionId] })
-      void client.invalidateQueries({ queryKey: ['payments', sessionId] })
-    }
-
-    return subscribeToTableSession(sessionId, refresh)
-  }, [sessionId, client])
+    return subscribeToTableSession(sessionId, () => {
+      void refreshTable()
+    })
+  }, [sessionId, refreshTable])
 
   const participant = session.data?.participants.find(
     (entry) => entry.user_id === joined.data?.userId,
@@ -96,7 +91,8 @@ export function useTableSession(token: string) {
       if (!validName.success) throw new AppError('INVALID_NAME')
       const result = await joinSession(token, validName.data)
       client.setQueryData(['join', token], result)
-      await client.invalidateQueries({ queryKey: ['session', result.id] })
+      // Por el id devuelto y no por `sessionId`: el render que lo actualiza todavía no pasó.
+      await client.invalidateQueries({ queryKey: sessionKey(result.id) })
     },
     // Guardado el nombre, el campo vuelve a mostrar lo que hay en la mesa y el
     // formulario se cierra: ya cumplió y deja de ocupar la pantalla en cada pedido.
@@ -107,12 +103,13 @@ export function useTableSession(token: string) {
   })
 
   return {
-    client,
     table,
     menu,
     joined,
     session,
     sessionId,
+    /** Relee todo lo de la mesa; lo que cambió algo lo llama en vez de elegir consultas. */
+    refreshTable,
     /** Cómo se llama este comensal en la mesa; sin nombre elegido, el genérico. */
     displayName: participant?.display_name ?? 'Comensal',
     /** Si eligió su nombre. Único origen del invariante: lo leen la compuerta del

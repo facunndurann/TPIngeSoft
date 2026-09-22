@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation } from '@tanstack/react-query'
 import {
   formatElapsed,
   type SessionRequestKind,
@@ -12,16 +12,14 @@ import { serviceRequestCopy, serviceRequestMethod } from '@/features/service-req
 import { useTable } from '@/features/table-context'
 
 export function ServiceRequests() {
-  const { session: sessionQuery, paymentMethods } = useTable()
-  const queryClient = useQueryClient()
+  const { session: sessionQuery, paymentMethods, refreshTable } = useTable()
   const now = useNow()
   const session = sessionQuery.data
 
   const ask = useMutation({
     mutationFn: ({ sessionId, kind }: { sessionId: string; kind: SessionRequestKind }) =>
       requestSessionService(sessionId, kind),
-    onSuccess: (_result, { sessionId }) =>
-      queryClient.invalidateQueries({ queryKey: ['session', sessionId] }),
+    onSuccess: refreshTable,
   })
 
   if (!session) return null

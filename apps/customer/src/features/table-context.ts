@@ -13,10 +13,11 @@ type TableSession = ReturnType<typeof useTableSession>
  */
 export type TableContextValue = {
   token: string
-  client: TableSession['client']
   menu: TableSession['menu']
   session: TableSession['session']
   sessionId?: string
+  /** Relee sesión, pedidos, cuenta y pagos; se resuelve cuando ya están al día. */
+  refreshTable: TableSession['refreshTable']
   userId?: string
   cartKey: string
   items: CartItem[]

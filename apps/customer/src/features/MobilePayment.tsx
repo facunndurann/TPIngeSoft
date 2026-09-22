@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation } from '@tanstack/react-query'
 import { formatPrice, isBilledStatus, type OrderStatus, type SessionSplit, splitEqualAmounts, splitPercentageAmounts, type SplitParticipant, type Tables } from '@restaurant-platform/shared'
 import { runMobilePayment } from './orders-api'
+import { useTable } from './table-context'
 
 type Payment = Pick<Tables<'payments'>, 'id'|'participant_id'|'amount'|'method'|'mode'|'status'> & {
   payment_order_items: { order_item_id: string }[]
@@ -34,7 +35,7 @@ export function MobilePayment({
   orders: PayableOrder[]
   participantName: (id: string | null) => string
 }) {
-  const client=useQueryClient()
+  const {refreshTable}=useTable()
   const requestId=useRef(crypto.randomUUID())
   const [selected,setSelected]=useState<Set<string>>(() => new Set())
   const ownPending=payments.find(payment => payment.participant_id===participantId
@@ -87,19 +88,12 @@ export function MobilePayment({
       return next
     })
   }
-  const refresh=async () => {
-    await Promise.all([
-      client.invalidateQueries({queryKey:['bill',sessionId]}),
-      client.invalidateQueries({queryKey:['payments',sessionId]}),
-      client.invalidateQueries({queryKey:['session',sessionId]}),
-    ])
-  }
   const start=useMutation({
     mutationFn:() => runMobilePayment({
       action:'create',sessionId,requestId:requestId.current,mode:paymentMode,
       ...(paymentMode==='custom' ? {itemIds:selectedItems.map(item => item.id)} : {}),
     }),
-    onSuccess:refresh,
+    onSuccess:refreshTable,
   })
   const confirm=useMutation({
     mutationFn:(outcome:'approved'|'rejected') => runMobilePayment({
@@ -108,7 +102,7 @@ export function MobilePayment({
     onSuccess:async () => {
       requestId.current=crypto.randomUUID()
       setSelected(new Set())
-      await refresh()
+      await refreshTable()
     },
   })
   const error=start.error??confirm.error

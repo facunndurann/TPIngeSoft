@@ -65,7 +65,7 @@ export function TableRoute() {
 }
 
 function TableApp({ token }: { token: string }) {
-  const { client, table, menu, joined, session, sessionId, displayName, named, rename } =
+  const { table, menu, joined, session, sessionId, refreshTable, displayName, named, rename } =
     useTableSession(token)
   const location = useLocation()
   const navigate = useNavigate()
@@ -139,10 +139,10 @@ function TableApp({ token }: { token: string }) {
         <TableContext
           value={{
             token,
-            client,
             menu,
             session,
             sessionId,
+            refreshTable,
             userId: joined.data?.userId,
             cartKey,
             items,
@@ -236,7 +236,7 @@ export function TableMenuPage() {
 }
 
 export function TableCartPage({ reviewing = false }: { reviewing?: boolean }) {
-  const { token, client, menu, sessionId, cartKey, items, announce } = useTable()
+  const { token, menu, refreshTable, cartKey, items, announce } = useTable()
   const pending = useCart((state) => state.submissions[cartKey])
   const navigate = useNavigate()
 
@@ -254,8 +254,7 @@ export function TableCartPage({ reviewing = false }: { reviewing?: boolean }) {
           'Tu pedido fue enviado. Podés seguir su estado y consultar la cuenta de la mesa.',
         )
         navigate(ordersPath(token), { replace: true })
-        void client.invalidateQueries({ queryKey: ['orders', sessionId] })
-        void client.invalidateQueries({ queryKey: ['bill', sessionId] })
+        void refreshTable()
       }}
     />
   )

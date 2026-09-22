@@ -1,3 +1,4 @@
+import { queryOptions, skipToken } from '@tanstack/react-query'
 import { FunctionsHttpError } from '@supabase/supabase-js'
 import {
   AppError,
@@ -14,6 +15,7 @@ import {
   type MobilePaymentRequest,
   type MobilePaymentResult,
 } from '@restaurant-platform/shared'
+import { SESSION_POLL_MS, sessionKey } from '@/features/session'
 import { supabase } from '@/lib/supabase'
 
 export async function submitOrder(input: SubmitOrderInput): Promise<SubmitOrderResult> {
@@ -79,6 +81,15 @@ export async function loadOrders(sessionId: string) {
   return data
 }
 
+// Pedidos, cuenta y pagos cuelgan de la sesión: se refrescan con ella (ver sessionKey).
+export function ordersQuery(sessionId: string | undefined) {
+  return queryOptions({
+    queryKey: [...sessionKey(sessionId), 'orders'],
+    queryFn: sessionId ? () => loadOrders(sessionId) : skipToken,
+    refetchInterval: SESSION_POLL_MS,
+  })
+}
+
 export async function loadBill(sessionId: string) {
   const { data, error } = await supabase
     .from('session_bills')
@@ -87,6 +98,14 @@ export async function loadBill(sessionId: string) {
     .single()
   if (error) throw fromPostgres(error)
   return data
+}
+
+export function billQuery(sessionId: string | undefined) {
+  return queryOptions({
+    queryKey: [...sessionKey(sessionId), 'bill'],
+    queryFn: sessionId ? () => loadBill(sessionId) : skipToken,
+    refetchInterval: SESSION_POLL_MS,
+  })
 }
 
 /** Movimientos de la cuenta. El saldo se calcula aparte en session_bills. */
@@ -98,6 +117,14 @@ export async function loadPayments(sessionId: string) {
     .order('created_at', { ascending: false })
   if (error) throw error
   return data
+}
+
+export function paymentsQuery(sessionId: string | undefined) {
+  return queryOptions({
+    queryKey: [...sessionKey(sessionId), 'payments'],
+    queryFn: sessionId ? () => loadPayments(sessionId) : skipToken,
+    refetchInterval: SESSION_POLL_MS,
+  })
 }
 
 export async function runMobilePayment(input: MobilePaymentRequest): Promise<MobilePaymentResult> {

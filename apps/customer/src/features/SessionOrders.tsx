@@ -12,7 +12,14 @@ import { BillSplitter } from '@/features/BillSplitter'
 import { plateCount } from '@/features/cart'
 import { oldestUpdate } from '@/features/freshness'
 import { MobilePayment } from '@/features/MobilePayment'
-import { loadBill, loadOrders, loadPayments } from '@/features/orders-api'
+import {
+  billQuery,
+  type loadBill,
+  type loadOrders,
+  type loadPayments,
+  ordersQuery,
+  paymentsQuery,
+} from '@/features/orders-api'
 import { ServiceRequests } from '@/features/ServiceRequests'
 import { useTable } from '@/features/table-context'
 
@@ -39,24 +46,9 @@ export function SessionOrders({ onReorder }: SessionOrdersProps) {
     session?.split_equal_parts,
   )
 
-  const orders = useQuery({
-    queryKey: ['orders', sessionId],
-    queryFn: () => loadOrders(sessionId!),
-    enabled: !!sessionId,
-    refetchInterval: 15000,
-  })
-  const bill = useQuery({
-    queryKey: ['bill', sessionId],
-    queryFn: () => loadBill(sessionId!),
-    enabled: !!sessionId,
-    refetchInterval: 15000,
-  })
-  const payments = useQuery({
-    queryKey: ['payments', sessionId],
-    queryFn: () => loadPayments(sessionId!),
-    enabled: !!sessionId,
-    refetchInterval: 15000,
-  })
+  const orders = useQuery(ordersQuery(sessionId))
+  const bill = useQuery(billQuery(sessionId))
+  const payments = useQuery(paymentsQuery(sessionId))
 
   const participantName = (id: string | null) => {
     const participant = participants.find((entry) => entry.id === id)
