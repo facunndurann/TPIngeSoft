@@ -180,33 +180,35 @@ function TableApp({ token }: { token: string }) {
               }}
             />
 
-            <TableNav token={token} cartCount={cartCount} />
+            <div {...(session.data?.status === 'open' && !named ? { inert: true } : {})}>
+              <TableNav token={token} cartCount={cartCount} />
 
-            <Toast announcement={announcement} onDismiss={() => setAnnouncement(undefined)} />
+              <Toast announcement={announcement} onDismiss={() => setAnnouncement(undefined)} />
 
-            {section !== 'orders' && menu.isPending && <p role="status">Cargando la carta…</p>}
-            {section !== 'orders' && menu.isError && (
-              <ErrorText variant="menu" error={menu.error} retry={() => { void menu.refetch() }} />
-            )}
+              {section !== 'orders' && menu.isPending && <p role="status">Cargando la carta…</p>}
+              {section !== 'orders' && menu.isError && (
+                <ErrorText variant="menu" error={menu.error} retry={() => { void menu.refetch() }} />
+              )}
 
-            {section !== 'cart' && cart.submissions[cartKey] && (
-              <div className="notice">
-                <p>Tu último envío todavía necesita confirmación.</p>
-                <Link className="btn" to={cartPath(token)}>
-                  Consultar o reintentar envío
+              {section !== 'cart' && cart.submissions[cartKey] && (
+                <div className="notice">
+                  <p>Tu último envío todavía necesita confirmación.</p>
+                  <Link className="btn" to={cartPath(token)}>
+                    Consultar o reintentar envío
+                  </Link>
+                </div>
+              )}
+
+              <Outlet />
+
+              {(atMenu || section === 'orders') && items.length > 0 && (
+                <Link className="primary cart-bar" to={cartPath(token)}>
+                  Ver mi carrito <strong>{formatPrice(total)}</strong>
                 </Link>
-              </div>
-            )}
+              )}
 
-            <Outlet />
-
-            {(atMenu || section === 'orders') && items.length > 0 && (
-              <Link className="primary cart-bar" to={cartPath(token)}>
-                Ver mi carrito <strong>{formatPrice(total)}</strong>
-              </Link>
-            )}
-
-            <footer>{design.copy.footer}</footer>
+              <footer>{design.copy.footer}</footer>
+            </div>
           </MenuShell>
         </TableContext>
       </MenuDesignContext>
@@ -227,7 +229,6 @@ export function TableMenuPage() {
           label="la carta"
           updatedAt={menu.dataUpdatedAt || undefined}
           isFetching={menu.isFetching}
-          onRefresh={() => { void menu.refetch() }}
         />
       }
     />

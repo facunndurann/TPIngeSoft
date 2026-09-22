@@ -49,49 +49,48 @@ export function ServiceRequests() {
     : done
       ? entries.filter((entry) => entry.state.status === 'attended')
       : entries
-      
+
   if (visible.length === 0) return null
 
   return (
     <section className="bill-panel" aria-label="Atención en tu mesa">
       <h3>{paid ? '¡Gracias por tu visita!' : closed ? 'Atención en tu mesa' : '¿Terminaron?'}</h3>
-      {!done && (
-        <p className="muted">
-          Avisale al restaurante sin levantar la mano: la mesa queda marcada en el salón.
-        </p>
-      )}
 
-      <ul className="split-list">
-        {visible.map(({ kind, copy, state }) => (
-          <li key={kind} className="choice">
-            <span>
-              {state.status === 'waiting' && `${copy.waiting} · ${formatElapsed(state.since, now)}`}
-              {state.status === 'attended' && copy.attended}
-              {state.status === 'idle' && copy.action}
-              <small className="muted">
-                {state.status === 'attended' ? formatElapsed(state.at, now) : copy.help}
-              </small>
-            </span>
-            {state.status === 'waiting' ? (
+      {visible.map(({ kind, copy, state }) => (
+        <div key={kind}>
+          {state.status === 'waiting' && (
+            <>
+              <p className="muted">
+                {copy.waiting} · {formatElapsed(state.since, now)}
+              </p>
               <strong className="settled">Avisado</strong>
-            ) : (
-              !done &&
-              offered(kind) && (
-                <button disabled={ask.isPending} onClick={() => ask.mutate({ sessionId: session.id, kind })}>
-                  {ask.isPending && ask.variables?.kind === kind
-                    ? 'Avisando…'
-                    : state.status === 'attended'
-                      ? 'Volver a avisar'
-                      : copy.action}
+            </>
+          )}
+          {state.status === 'attended' && (
+            <>
+              <p>{copy.attended}</p>
+              <small className="muted">{formatElapsed(state.at, now)}</small>
+            </>
+          )}
+          {state.status === 'idle' && (
+            <>
+              <p className="muted">{copy.help}</p>
+              {offered(kind) && (
+                <button
+                  className="primary wide"
+                  disabled={ask.isPending}
+                  onClick={() => ask.mutate({ sessionId: session.id, kind })}
+                >
+                  {ask.isPending && ask.variables?.kind === kind ? 'Avisando…' : copy.action}
                 </button>
-              )
-            )}
-          </li>
-        ))}
-      </ul>
+              )}
+            </>
+          )}
+        </div>
+      ))}
 
       {!done && paymentMethods.includes('external') && (
-        <p className="muted">También podés pagar en efectivo o en la caja del local.</p>
+        <p className="muted">También podés pagar en caja.</p>
       )}
 
       {ask.isError && (

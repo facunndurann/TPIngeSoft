@@ -4,7 +4,7 @@ type TableHeaderProps = {
   restaurantName: string
   branchName: string
   tableLabel: string
-  /** Fuera de la carta el encabezado es contexto, no bienvenida: va en una línea. */
+  /** Fuera de la carta el encabezado es contexto, no bienvenida: va compacto. */
   compact?: boolean
 }
 
@@ -20,10 +20,11 @@ export function TableHeader({
   if (compact) {
     return (
       <header className="compact">
-        <h1>
-          {restaurantName} <span className="muted">· {branchName}</span>
-          <span className="badge">{tableLabel}</span>
-        </h1>
+        <div className="compact-copy">
+          <h1>{restaurantName}</h1>
+          <p className="muted">{branchName}</p>
+        </div>
+        <span className="badge">{tableLabel}</span>
       </header>
     )
   }

@@ -41,7 +41,7 @@ export function MenuBrowse({ token, menu, canEdit, freshness }: MenuBrowseProps)
         <input
           id="search"
           type="search"
-          placeholder="Buscar en la carta…"
+          placeholder="Buscar…"
           value={search}
           onChange={(event) => {
             const query = event.target.value

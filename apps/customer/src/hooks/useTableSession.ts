@@ -14,8 +14,8 @@ export type RenameField = {
   /** Lo que muestra el campo: el borrador mientras se edita, si no lo guardado. */
   name: string
   setName: (name: string) => void
-  /** Si el formulario está abierto. Solo decide algo cuando ya hay nombre elegido:
-   *  sin nombre se muestra igual, porque la mesa lo necesita antes del primer pedido. */
+  /** Si el comensal está editando el nombre en el chip. La primera vez el
+   *  diálogo se muestra solo por `named`, no por este flag. */
   editing: boolean
   setEditing: (editing: boolean) => void
   submit: () => void

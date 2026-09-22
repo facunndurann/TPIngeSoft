@@ -9,7 +9,6 @@ import type { Review } from '@/features/cart'
 import { cartPrice, price, productOptions, selectionErrors } from '@/features/menu'
 import type { Menu } from '@/features/menu'
 import { abandonSubmission, submitOrder } from '@/features/orders-api'
-import { focusNameField } from '@/features/name-field'
 import { useTable } from '@/features/table-context'
 import { cartItemPath, cartPath, cartReviewPath } from '@/features/table-paths'
 import { useCart } from '@/stores/cart'
@@ -208,15 +207,6 @@ export function CartPanel({ reviewing = false, refreshMenu, onSubmitted }: CartP
               Para enviar tu pedido, la mesa tiene que estar abierta y con conexión.
             </p>
           )}
-          {sessionOpen && !named && (
-            <div className="notice">
-              <p>
-                Poné tu nombre antes de enviar: es lo que permite saber qué pidió cada uno y
-                repartir la cuenta.
-              </p>
-              <button onClick={focusNameField}>Poner mi nombre</button>
-            </div>
-          )}
           {needsMenuRefresh && (
             <div className="notice">
               <p>Necesitamos actualizar la carta antes de que vuelvas a confirmar.</p>
@@ -230,7 +220,7 @@ export function CartPanel({ reviewing = false, refreshMenu, onSubmitted }: CartP
               {/* La revisión se fijó al entrar: es la que respalda el total que se confirma. */}
               <CartSummary items={phase.review?.items ?? items} menu={menu} />
               <div className="total">
-                <span>Total revisado</span>
+                <span>Total</span>
                 <strong>{formatPrice(phase.review?.total ?? total)}</strong>
               </div>
               {phase.outdated && (
@@ -241,7 +231,7 @@ export function CartPanel({ reviewing = false, refreshMenu, onSubmitted }: CartP
               <div className="cart-actions">
                 <button onClick={() => navigate(cartPath(token))}>Volver a editar</button>
                 <button className="primary" disabled={!phase.confirmable} onClick={confirm}>
-                  Confirmar y enviar
+                  Confirmar
                 </button>
               </div>
             </div>
@@ -306,13 +296,13 @@ function CartLine({
           Sin {product?.ingredients.find((ingredient) => ingredient.id === id)?.name ?? 'ingrediente pendiente de actualizar'}
         </p>
       ))}
-      <div className="cart-actions">
-        <span className="cart-quantity">
-          Cantidad{' '}
-          <QuantityField value={item.quantity} disabled={locked} onChange={onQuantityChange} />
-        </span>
-        <strong>{product ? formatPrice(price(product, item)) : '—'}</strong>
+      <div className="choice">
+        <span>Cantidad</span>
+        <QuantityField value={item.quantity} disabled={locked} onChange={onQuantityChange} />
       </div>
+      <p className="cart-line-price">
+        <strong>{product ? formatPrice(price(product, item)) : '—'}</strong>
+      </p>
       {errors.length > 0 && <p className="notice">{errors.join(' ')}</p>}
       <div className="cart-actions">
         <button disabled={!product || locked} onClick={onEdit}>

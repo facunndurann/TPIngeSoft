@@ -23,7 +23,7 @@ export function TableNav({ token, cartCount }: TableNavProps) {
         Mi carrito ({cartCount})
       </CurrentLink>
       <CurrentLink to={ordersPath(token)} current={section === 'orders'}>
-        Pedidos y cuenta
+        Pedidos
       </CurrentLink>
     </nav>
   )

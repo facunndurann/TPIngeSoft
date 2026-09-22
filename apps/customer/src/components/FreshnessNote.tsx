@@ -7,7 +7,6 @@ type FreshnessNoteProps = {
   /** `dataUpdatedAt` de la consulta; sin lectura previa el aviso no se muestra. */
   updatedAt?: number
   isFetching: boolean
-  onRefresh: () => void
 }
 
 /**
@@ -15,7 +14,7 @@ type FreshnessNoteProps = {
  * hay una en curso. La primera carga no le corresponde (de eso avisa el
  * "Cargando…" de cada panel), así que sin `updatedAt` no dibuja nada.
  */
-export function FreshnessNote({ label, updatedAt, isFetching, onRefresh }: FreshnessNoteProps) {
+export function FreshnessNote({ label, updatedAt, isFetching }: FreshnessNoteProps) {
   const now = useNow()
   if (updatedAt === undefined) return null
 
@@ -25,9 +24,6 @@ export function FreshnessNote({ label, updatedAt, isFetching, onRefresh }: Fresh
       <p role="status">
         {isFetching ? `Actualizando ${label}…` : `Actualizado ${formatElapsed(updatedAt, now)}`}
       </p>
-      <button type="button" disabled={isFetching} onClick={onRefresh}>
-        Actualizar
-      </button>
     </div>
   )
 }

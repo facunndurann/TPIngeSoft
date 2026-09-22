@@ -334,7 +334,7 @@ function AddGuestFlow({ sessionId, orders, participants, onComplete, onCancel }:
       <p className="muted">Agregá a alguien que no escaneó el QR y asignale lo que consumió.</p>
       
       <input 
-        placeholder="Nombre del invitado" 
+        placeholder="Nombre" 
         value={name} 
         onChange={(e) => setName(e.target.value)} 
         disabled={isSaving}

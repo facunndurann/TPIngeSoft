@@ -68,16 +68,15 @@ export function SessionOrders({ onReorder }: SessionOrdersProps) {
   if (!sessionId) {
     return (
       <section>
-        <h2>Pedidos y cuenta</h2>
+        <h2>Pedidos</h2>
         <p className="notice">Escaneá el QR de tu mesa para consultar sus pedidos y su cuenta.</p>
       </section>
     )
   }
 
   return (
-    <section aria-label="Pedidos y cuenta de la mesa">
-      <p className="eyebrow">TODOS EN LA MISMA MESA</p>
-      <h2>Pedidos y cuenta</h2>
+    <section aria-label="Pedidos de la mesa">
+      <h2>Pedidos</h2>
       {closed && (
         <p className="muted">La mesa ya cerró su cuenta; podés seguir consultando el detalle.</p>
       )}
@@ -86,10 +85,6 @@ export function SessionOrders({ onReorder }: SessionOrdersProps) {
         label="los pedidos y la cuenta"
         updatedAt={oldestUpdate(orders.dataUpdatedAt, bill.dataUpdatedAt)}
         isFetching={orders.isFetching || bill.isFetching}
-        onRefresh={() => {
-          void orders.refetch()
-          void bill.refetch()
-        }}
       />
 
       {bill.isPending && <p role="status">Actualizando la cuenta…</p>}
@@ -201,13 +196,10 @@ function PaymentHistory({
 function BillSummary({ bill }: { bill: Bill }) {
   return (
     <div className="bill-panel" aria-label="Resumen de cuenta">
-      <div className="space-y-1">
-        <p className="text-sm text-neutral-300">Falta pagar</p>
-        <p className="text-2xl font-bold text-white">{formatPrice(bill.pending_amount ?? 0)}</p>
-        <p className="text-xs text-neutral-400 mt-1">
-          Lo que está en la cuenta y todavía no se pagó.
-        </p>
-      </div>
+      <dl className="bill-due">
+        <dt>Falta pagar</dt>
+        <dd>{formatPrice(bill.pending_amount ?? 0)}</dd>
+      </dl>
       {bill.is_settled && (bill.total_amount ?? 0) > 0 && <p className="settled">Cuenta pagada</p>}
     </div>
   )
@@ -239,13 +231,15 @@ function OrderCard({
       <details className="order-details">
         <summary className="disclosure">
           <div className="order-summary">
-            <h3>Pedido {position} de la mesa</h3>
+            <div className="order-heading">
+              <h3>Pedido {position}</h3>
+              <span className={`badge status-${order.status}`}>{orderStatusLabels[order.status]}</span>
+            </div>
             <p className="muted">
               {participantName(order.submitted_by)} · {plateCount(plates)} ·{' '}
               {formatPrice(order.total_amount)} · {createdAt}
             </p>
           </div>
-          <span className={`badge status-${order.status}`}>{orderStatusLabels[order.status]}</span>
           <span className="chevron" aria-hidden="true">›</span>
         </summary>
 
@@ -260,14 +254,13 @@ function OrderCard({
         ))}
         {order.notes && <p>{order.notes}</p>}
         <div className="total">
-          <span>Total del pedido</span>
+          <span>Total</span>
           <strong>{formatPrice(order.total_amount)}</strong>
         </div>
+        {onReorder && (
+          <button onClick={() => onReorder(order)}>Pedir de nuevo</button>
+        )}
       </details>
-      {/* La ronda es el caso típico: repetir lo mismo sin rearmarlo plato por plato. */}
-      {onReorder && (
-        <button onClick={() => onReorder(order)}>Pedir de nuevo</button>
-      )}
     </article>
   )
 }

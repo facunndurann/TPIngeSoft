@@ -32,10 +32,10 @@ export const serviceRequestCopy: Record<
     help: 'El restaurante la prepara y te la acerca a la mesa.',
   },
   in_person_payment: {
-    action: 'Que venga un mozo a cobrar',
+    action: 'Llamar mozo',
     waiting: 'Pediste cobrar en la mesa',
     attended: '¡Listo! Tu pago fue procesado. Ya podés retirarte.',
-    help: 'Un mozo se acerca para cobrarte ahí mismo.',
+    help: 'Un mozo se acerca a cobrar.',
   },
 }
 

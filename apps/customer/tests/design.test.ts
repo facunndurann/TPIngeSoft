@@ -79,14 +79,15 @@ test('the table header welcomes on the menu and is only context elsewhere', asyn
   assert.match(welcome, /class="eyebrow"/)
   assert.match(welcome, /<h1>La Parrilla<\/h1>/)
 
-  // Compacto: una línea con el mismo dato, sin eyebrow ni párrafo aparte, y un solo h1.
+  // Compacto: restaurante + sucursal en bloque, mesa a la derecha, un solo h1.
   const compact = renderToStaticMarkup(createElement(TableHeader, { ...props, compact: true }))
   assert.doesNotMatch(compact, /class="eyebrow"/)
-  assert.match(compact, /<header class="compact"><h1>La Parrilla/)
+  assert.match(compact, /<header class="compact">/)
+  assert.match(compact, /class="compact-copy"/)
+  assert.match(compact, /<h1>La Parrilla<\/h1>/)
   assert.match(compact, /Centro/)
   assert.match(compact, /Mesa 4/)
   assert.equal((compact.match(/<h1/g) ?? []).length, 1)
-  assert.ok(compact.length < welcome.length)
 })
 
 test('product cards keep the link and the carousel controls as siblings', async () => {

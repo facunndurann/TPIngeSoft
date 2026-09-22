@@ -1,5 +1,6 @@
 import { type FormEvent, useState } from 'react'
 import { ErrorText } from '@restaurant-platform/ui'
+import { NameModal } from '@/features/NameModal'
 import { NAME_FIELD_ID } from '@/features/name-field'
 import type { loadSession } from '@/features/session'
 import type { RenameField } from '@/hooks/useTableSession'
@@ -28,6 +29,36 @@ type SessionPanelProps = {
   onOpenNewSession: () => void
 }
 
+function PencilIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function CheckIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M20 6 9 17l-5-5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function CloseIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 export function SessionPanel({
   connecting,
   connection,
@@ -41,84 +72,107 @@ export function SessionPanel({
   onOpenNewSession,
 }: SessionPanelProps) {
   const names = session?.participants.map((p) => p.display_name).join(' · ') ?? ''
+  const askName = !!session && session.status !== 'closed' && !named
+  const showPanel = connecting || !!connection || !!read || (!!session && named) || session?.status === 'closed'
+  const canRename = named && session?.status !== 'closed'
 
-  function handleSubmit(event: FormEvent) {
+  function handleRename(event: FormEvent) {
     event.preventDefault()
     rename.submit()
   }
 
   return (
-    <section className="session-panel" aria-label="Tu mesa">
-      {connecting && <p role="status">Conectando con tu mesa…</p>}
-      {connection && <ErrorText {...connection} variant="menu" />}
-      {read && <ErrorText {...read} variant="menu" />}
+    <>
+      {showPanel && (
+        <section className="session-panel" aria-label="Tu mesa">
+          {connecting && <p role="status">Conectando con tu mesa…</p>}
+          {connection && <ErrorText {...connection} variant="menu" />}
+          {read && <ErrorText {...read} variant="menu" />}
 
-      {session && (
-        <>
-          {/* En reposo el panel es una línea: quién sos y cuántos son. Los nombres
-              de la mesa quedan a un toque, sin ocupar el pliegue de la carta. */}
-          <div className="table-people">
-            <details>
-              <summary className="disclosure">
-                <span>
-                  <strong>{displayName}</strong> · {session.participants.length} en la mesa
-                </span>
-                <span className="chevron" aria-hidden="true">›</span>
-              </summary>
-              <p className="muted">{names}</p>
-            </details>
-            {named && !rename.editing && session.status !== 'closed' && (
-              <button className="text-button" onClick={() => rename.setEditing(true)}>
-                Cambiar mi nombre
-              </button>
-            )}
-          </div>
+          {session && named && (
+            <div className="table-people">
+              {rename.editing ? (
+                <form
+                  className="name-inline"
+                  onSubmit={handleRename}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Escape') {
+                      event.preventDefault()
+                      rename.setEditing(false)
+                    }
+                  }}
+                >
+                  <label className="sr-only" htmlFor={NAME_FIELD_ID}>
+                    Tu nombre
+                  </label>
+                  <input
+                    id={NAME_FIELD_ID}
+                    value={rename.name}
+                    maxLength={40}
+                    required
+                    autoFocus
+                    autoComplete="given-name"
+                    onChange={(event) => rename.setName(event.target.value)}
+                  />
+                  <button
+                    className="icon-button"
+                    aria-label="Guardar nombre"
+                    disabled={rename.isPending || !rename.name.trim() || hasPendingSubmission}
+                  >
+                    <CheckIcon />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label="Cancelar"
+                    disabled={rename.isPending}
+                    onClick={() => rename.setEditing(false)}
+                  >
+                    <CloseIcon />
+                  </button>
+                  {rename.message && <p role="alert">{rename.message}</p>}
+                </form>
+              ) : (
+                <>
+                  <span className="who">
+                    <strong>{displayName}</strong>
+                    {canRename && (
+                      <button
+                        type="button"
+                        className="icon-button edit-name"
+                        aria-label="Editar nombre"
+                        onClick={() => rename.setEditing(true)}
+                      >
+                        <PencilIcon />
+                      </button>
+                    )}
+                  </span>
+                  <details>
+                    <summary className="disclosure">
+                      <span className="muted">{session.participants.length} en la mesa</span>
+                      <span className="chevron" aria-hidden="true">›</span>
+                    </summary>
+                    <p className="muted">{names}</p>
+                  </details>
+                </>
+              )}
+            </div>
+          )}
 
-          {session.status === 'closed' ? (
+          {session?.status === 'closed' && (
             <ClosedSessionNotice
               hasPendingSubmission={hasPendingSubmission}
               cartCount={cartCount}
               onOpenNewSession={onOpenNewSession}
             />
-          ) : named && !rename.editing ? null : (
-            <>
-              {/* Se pide antes del primer pedido, con el motivo: un comensal sin
-                  nombre no se puede distinguir en la cuenta de la mesa. */}
-              {!named && (
-                <p>Poné tu nombre así la mesa sabe qué pidió cada uno al dividir la cuenta.</p>
-              )}
-              <form className="name-form" onSubmit={handleSubmit}>
-                <label className="sr-only" htmlFor={NAME_FIELD_ID}>
-                  Tu nombre
-                </label>
-                <input
-                  id={NAME_FIELD_ID}
-                  placeholder="Tu nombre para la mesa"
-                  value={rename.name}
-                  maxLength={40}
-                  required
-                  autoComplete="given-name"
-                  onChange={(event) => rename.setName(event.target.value)}
-                />
-                <button disabled={rename.isPending || !rename.name.trim() || hasPendingSubmission}>
-                  {rename.isPending ? 'Guardando…' : 'Guardar nombre'}
-                </button>
-                {named && (
-                  <button
-                    type="button"
-                    disabled={rename.isPending}
-                    onClick={() => rename.setEditing(false)}
-                  >
-                    Cancelar
-                  </button>
-                )}
-                {rename.message && <p role="alert">{rename.message}</p>}
-              </form>
-            </>
           )}
-        </>
+        </section>
       )}
-    </section>
+
+      {askName && (
+        <NameModal rename={rename} hasPendingSubmission={hasPendingSubmission} />
+      )}
+    </>
   )
 }
 
