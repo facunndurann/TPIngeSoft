@@ -13,6 +13,20 @@ type NumericDraft = {
 }
 
 /**
+ * El `parse` de un campo de enteros con rango, como la cantidad o las partes de la
+ * cuenta: solo un entero dentro de [min, max] se confirma; vacío, decimales o fuera
+ * de rango quedan como borrador hasta el blur.
+ */
+export function integerIn(min: number, max: number) {
+  return (text: string) => {
+    const value = Number(text)
+    // `Number('')` es 0, así que el campo vacío se descarta antes de mirar el rango.
+    if (text === '' || !Number.isInteger(value)) return undefined
+    return value >= min && value <= max ? value : undefined
+  }
+}
+
+/**
  * Máquina única de los controles numéricos del comensal. Mientras se tipea hay
  * un borrador local y solo un texto que `parse` acepta llega al estado de la
  * app; salir del campo con algo incompleto o fuera de rango no cambia nada.

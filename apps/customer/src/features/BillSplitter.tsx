@@ -3,8 +3,8 @@ import { useMutation } from '@tanstack/react-query'
 import { allocationTotal, formatElapsed, formatPrice, MAX_EQUAL_PARTS, MIN_EQUAL_PARTS, remainingPercentage, type SessionSplit, sessionSplitSchema, SPLIT_PERCENTAGE_TOTAL, splitBill, splitEqualAmounts, splitPercentageAmounts, type SplitBill, splitTypeDescriptions, splitTypeLabels, splitTypes } from '@restaurant-platform/shared'
 import { ErrorText, useNow } from '@restaurant-platform/ui'
 
+import { PartsField } from '@/components/PartsField'
 import { PercentField } from '@/components/PercentField'
-import { toastDuration } from '@/features/announcements'
 import { updateSessionSplit } from '@/features/orders-api'
 import { useTable } from '@/features/table-context'
 import type { loadOrders } from '@/features/orders-api'
@@ -18,40 +18,34 @@ type BillSplitterProps = {
 }
 
 export function BillSplitter({ split, bill, orders }: BillSplitterProps) {
-  const { session: sessionQuery, me, refreshTable } = useTable()
+  const { session: sessionQuery, me, refreshTable, announce } = useTable()
   const session = sessionQuery.data
   const participants = session?.participants ?? []
   const updatedBy = session?.split_updated_by ?? null
   const updatedAt = session?.split_updated_at ?? null
+  const author = participants.find((participant) => participant.id === updatedBy)
 
   const now = useNow()
   const [draft, setDraft] = useState<SessionSplit | null>(null)
-  const [changedBy, setChangedBy] = useState<string | null>(null)
 
   const lastSaved = useRef<string | null>(updatedAt)
   const currentParticipantId = me?.id
 
+  // Si otro comensal guarda una división, la suya manda: el borrador propio se
+  // descarta en vez de pisarla, y el aviso llega como cualquier otro de la mesa.
   useEffect(() => {
     if (updatedAt === lastSaved.current) return
     lastSaved.current = updatedAt
     if (!updatedAt || !currentParticipantId || updatedBy === currentParticipantId) return
-    const author = session?.participants.find((entry) => entry.id === updatedBy)
     setDraft(null)
-    setChangedBy(author?.display_name ?? 'Otro comensal')
-  }, [updatedAt, updatedBy, session, currentParticipantId])
-
-  useEffect(() => {
-    if (!changedBy) return
-    const timer = setTimeout(() => setChangedBy(null), toastDuration(false))
-    return () => clearTimeout(timer)
-  }, [changedBy])
+    announce(`${author?.display_name ?? 'Otro comensal'} cambió los detalles del pago.`)
+  }, [updatedAt, updatedBy, author, currentParticipantId, announce])
 
   const save = useMutation({
     mutationFn: ({ sessionId, next }: { sessionId: string; next: SessionSplit }) =>
       updateSessionSplit(sessionId, next),
     onSuccess: async () => {
       setDraft(null)
-      setChangedBy(null)
       await refreshTable()
     },
   })
@@ -59,20 +53,21 @@ export function BillSplitter({ split, bill, orders }: BillSplitterProps) {
   if (!session || participants.length === 0) return null
 
   const active = draft ?? split
-  const shares = splitBill(bill, orders, participants, active)
+  // Cada modo se calcula una sola vez, con su propia base: partes iguales reparten el
+  // pendiente en partes; porcentajes, el total en cuenta (MI-43); «cada uno lo suyo»,
+  // el pendiente según lo que pidió cada uno.
   const equalAmounts = active.type === 'equal' && active.equalParts
     ? splitEqualAmounts(bill, active.equalParts)
     : []
-  
-  const percentageShares = active.type === 'percentages'
-    ? splitPercentageAmounts(bill.total_amount, participants, active.allocations)
-    : []
-    
+  const shares =
+    active.type === 'percentages'
+      ? splitPercentageAmounts(bill.total_amount, participants, active.allocations)
+      : active.type === 'none'
+        ? splitBill(bill, orders, participants, active)
+        : []
   const amountOf = (participantId: string) =>
-    (active.type === 'percentages' ? percentageShares : shares)
-      .find((share) => share.participantId === participantId)?.amount ?? 0
+    shares.find((share) => share.participantId === participantId)?.amount ?? 0
 
-  const author = participants.find((participant) => participant.id === updatedBy)
   const changedByMe = !!updatedBy && updatedBy === currentParticipantId
   const changedAt = updatedAt ? Date.parse(updatedAt) : NaN
   const lastChange =
@@ -125,20 +120,10 @@ export function BillSplitter({ split, bill, orders }: BillSplitterProps) {
       {active.type === 'equal' && (
         <div className="equal-split-summary">
           {draft ? (
-            <label>
-              Cantidad de personas
-              <input
-                type="number"
-                min={MIN_EQUAL_PARTS}
-                max={MAX_EQUAL_PARTS}
-                step={1}
-                value={draft.equalParts ?? ''}
-                onChange={(event) => setDraft((current) => current && ({
-                  ...current,
-                  equalParts: event.target.value === '' ? undefined : Number(event.target.value),
-                }))}
-              />
-            </label>
+            <PartsField
+              value={draft.equalParts ?? null}
+              onChange={(equalParts) => setDraft((current) => current && { ...current, equalParts })}
+            />
           ) : (
             <strong>{active.equalParts} personas</strong>
           )}
@@ -204,12 +189,6 @@ export function BillSplitter({ split, bill, orders }: BillSplitterProps) {
 
       {validation && !validation.success && (
         <p className="notice">{validation.error.issues[0].message}</p>
-      )}
-
-      {changedBy && (
-        <p className="notice" role="status">
-          {changedBy} cambió los detalles del pago.
-        </p>
       )}
 
       <ErrorText variant="menu" error={save.error} />
