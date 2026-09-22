@@ -18,7 +18,7 @@ type BillSplitterProps = {
 }
 
 export function BillSplitter({ split, bill, orders }: BillSplitterProps) {
-  const { session: sessionQuery, userId, refreshTable } = useTable()
+  const { session: sessionQuery, me, refreshTable } = useTable()
   const session = sessionQuery.data
   const participants = session?.participants ?? []
   const updatedBy = session?.split_updated_by ?? null
@@ -29,7 +29,7 @@ export function BillSplitter({ split, bill, orders }: BillSplitterProps) {
   const [changedBy, setChangedBy] = useState<string | null>(null)
 
   const lastSaved = useRef<string | null>(updatedAt)
-  const currentParticipantId = participants.find((entry) => entry.user_id === userId)?.id
+  const currentParticipantId = me?.id
 
   useEffect(() => {
     if (updatedAt === lastSaved.current) return
@@ -156,7 +156,7 @@ export function BillSplitter({ split, bill, orders }: BillSplitterProps) {
       {active.type !== 'equal' && (
         <ul className="split-list">
           {participants.map((participant) => {
-            const isYou = participant.user_id === userId
+            const isYou = participant.id === currentParticipantId
             const amount = amountOf(participant.id)
             return (
               <li key={participant.id} className="choice">

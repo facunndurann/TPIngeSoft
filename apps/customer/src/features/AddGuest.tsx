@@ -14,7 +14,6 @@ type Order = Awaited<ReturnType<typeof loadOrders>>[number]
 type AddGuestProps = {
   sessionId: string
   orders: readonly Order[]
-  participantName: (id: string | null) => string
 }
 
 /**
@@ -39,10 +38,9 @@ export function AddGuest(props: AddGuestProps) {
 function GuestForm({
   sessionId,
   orders,
-  participantName,
   onClose,
 }: AddGuestProps & { onClose: () => void }) {
-  const { refreshTable } = useTable()
+  const { refreshTable, nameOf } = useTable()
   const [name, setName] = useState('')
   const [itemIds, setItemIds] = useState<ReadonlySet<string>>(() => new Set())
   // El mismo límite que revalida la RPC: un nombre inválido ni siquiera se envía.
@@ -98,7 +96,7 @@ function GuestForm({
                   {item.quantity} × {item.product_name}
                 </strong>
                 <small>
-                  Pedida por: {item.is_shared ? 'Compartido' : participantName(item.participant_id)}
+                  Pedida por: {item.is_shared ? 'Compartido' : nameOf(item.participant_id)}
                 </small>
               </span>
             </label>

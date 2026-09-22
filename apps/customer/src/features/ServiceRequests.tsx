@@ -15,7 +15,7 @@ const kind = 'in_person_payment'
 const copy = serviceRequestCopy[kind]
 
 export function ServiceRequests() {
-  const { session: sessionQuery, paymentMethods, refreshTable } = useTable()
+  const { session: sessionQuery, closed, paymentMethods, refreshTable } = useTable()
   const session = sessionQuery.data
 
   const ask = useMutation({
@@ -26,7 +26,6 @@ export function ServiceRequests() {
   if (!session) return null
   const state = sessionRequestState(session, kind)
   const paid = state.status === 'attended'
-  const closed = session.status === 'closed'
   // Cobrar en la mesa depende de que la sucursal lo tenga habilitado (MI-48).
   const offered = paymentMethods.includes('in_person')
 

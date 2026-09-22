@@ -35,10 +35,9 @@ type SessionOrdersProps = {
 }
 
 export function SessionOrders({ onReorder }: SessionOrdersProps) {
-  const { sessionId, session: sessionQuery, userId, paymentMethods } = useTable()
+  const { sessionId, session: sessionQuery, me, closed, paymentMethods } = useTable()
   const session = sessionQuery.data
   const participants = session?.participants ?? []
-  const closed = session?.status === 'closed'
   // `parseSessionSplit` acepta lo que venga y cae en `none`: sin mesa leída no
   // hay división, y así el valor nunca es nulo para quien lo muestra.
   const sessionSplit = parseSessionSplit(
@@ -50,13 +49,6 @@ export function SessionOrders({ onReorder }: SessionOrdersProps) {
   const orders = useQuery(ordersQuery(sessionId))
   const bill = useQuery(billQuery(sessionId))
   const payments = useQuery(paymentsQuery(sessionId))
-
-  const participantName = (id: string | null) => {
-    const participant = participants.find((entry) => entry.id === id)
-    const suffix = participant?.user_id === userId ? ' (vos)' : ''
-    return `${participant?.display_name ?? 'Comensal'}${suffix}`
-  }
-  const currentParticipantId = participants.find(participant => participant.user_id === userId)?.id
 
   if (!sessionId) {
     return (
@@ -88,25 +80,23 @@ export function SessionOrders({ onReorder }: SessionOrdersProps) {
         </div>
       )}
       {bill.data && <BillSummary bill={bill.data} />}
-      {bill.data && session && currentParticipantId && paymentMethods.includes('mobile') && (
+      {bill.data && session && me && paymentMethods.includes('mobile') && (
         <MobilePayment
           sessionId={session.id}
           pending={Number(bill.data.pending_amount ?? 0)}
           accountTotal={Number(bill.data.total_amount ?? 0)}
-          participantId={currentParticipantId}
+          participantId={me.id}
           participants={participants}
           payments={payments.data ?? []}
           closed={closed}
           split={sessionSplit}
           orders={orders.data ?? []}
-          participantName={participantName}
         />
       )}
       <PaymentHistory
         payments={payments.data}
         loading={payments.isPending}
         error={payments.isError}
-        participantName={participantName}
         retry={() => { void payments.refetch() }}
       />
       <ServiceRequests />
@@ -126,7 +116,6 @@ export function SessionOrders({ onReorder }: SessionOrdersProps) {
           key={order.id}
           order={order}
           position={orders.data.length - index}
-          participantName={participantName}
           onReorder={onReorder}
         />
       ))}
@@ -134,13 +123,7 @@ export function SessionOrders({ onReorder }: SessionOrdersProps) {
         <BillSplitter split={sessionSplit} bill={bill.data} orders={orders.data ?? []} />
       )}
       {/* Con la mesa cerrada ya no se suma gente: la RPC lo rechazaría. */}
-      {bill.data && !closed && (
-        <AddGuest
-          sessionId={sessionId}
-          orders={orders.data ?? []}
-          participantName={participantName}
-        />
-      )}
+      {bill.data && !closed && <AddGuest sessionId={sessionId} orders={orders.data ?? []} />}
     </section>
   )
 }
@@ -149,15 +132,14 @@ function PaymentHistory({
   payments,
   loading,
   error,
-  participantName,
   retry,
 }: {
   payments?: Payment[]
   loading: boolean
   error: boolean
-  participantName: (id: string | null) => string
   retry: () => void
 }) {
+  const { nameOf } = useTable()
   if (loading) return <p role="status">Actualizando los pagos…</p>
   if (error) {
     return (
@@ -179,7 +161,7 @@ function PaymentHistory({
             <span>{paymentStatusLabels[payment.status]}</span>
             <p className="muted">
               {paymentMethodLabels[payment.method]} · {paymentModeLabels[payment.mode]}
-              {payment.participant_id ? ` · ${participantName(payment.participant_id)}` : ''}
+              {payment.participant_id ? ` · ${nameOf(payment.participant_id)}` : ''}
             </p>
           </div>
           <time dateTime={payment.created_at}>
@@ -209,15 +191,14 @@ function BillSummary({ bill }: { bill: Bill }) {
 function OrderCard({
   order,
   position,
-  participantName,
   onReorder,
 }: {
   order: Order
   /** Número del pedido dentro de la mesa, contando desde el primero. */
   position: number
-  participantName: (id: string | null) => string
   onReorder?: (order: Order) => void
 }) {
+  const { nameOf } = useTable()
   const createdAt = new Intl.DateTimeFormat('es-AR', {
     dateStyle: 'short',
     timeStyle: 'short',
@@ -237,7 +218,7 @@ function OrderCard({
               <span className={`badge status-${order.status}`}>{orderStatusLabels[order.status]}</span>
             </div>
             <p className="muted">
-              {participantName(order.submitted_by)} · {plateCount(plates)} ·{' '}
+              {nameOf(order.submitted_by)} · {plateCount(plates)} ·{' '}
               {formatPrice(order.total_amount)} · {createdAt}
             </p>
           </div>
@@ -251,7 +232,7 @@ function OrderCard({
           <p className="muted">Este pedido fue cancelado y no se cobra.</p>
         )}
         {order.order_items.map((item) => (
-          <OrderLine key={item.id} item={item} participantName={participantName} />
+          <OrderLine key={item.id} item={item} />
         ))}
         {order.notes && <p>{order.notes}</p>}
         <div className="total">
@@ -266,14 +247,9 @@ function OrderCard({
   )
 }
 
-function OrderLine({
-  item,
-  participantName,
-}: {
-  item: OrderItem
-  participantName: (id: string | null) => string
-}) {
-  const owner = item.is_shared ? 'Para compartir en la mesa' : participantName(item.participant_id)
+function OrderLine({ item }: { item: OrderItem }) {
+  const { nameOf } = useTable()
+  const owner = item.is_shared ? 'Para compartir en la mesa' : nameOf(item.participant_id)
 
   return (
     <div className="order-line">

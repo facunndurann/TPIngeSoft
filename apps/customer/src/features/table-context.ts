@@ -18,13 +18,20 @@ export type TableContextValue = {
   sessionId?: string
   /** Relee sesión, pedidos, cuenta y pagos; se resuelve cuando ya están al día. */
   refreshTable: TableSession['refreshTable']
-  userId?: string
+  // Quién es este comensal y cómo se nombra a cada uno: lo decide `dinerIn`, una
+  // sola vez por lectura de la sesión, y nadie lo vuelve a derivar.
+  me: TableSession['me']
+  nameOf: TableSession['nameOf']
+  named: boolean
+  /** Falta que elija su nombre: el diálogo lo pide y el resto de la pantalla espera. */
+  needsName: boolean
+  sessionOpen: boolean
+  /** La mesa cerró su cuenta; no es lo contrario de `sessionOpen`, que además exige una lectura sana. */
+  closed: boolean
   cartKey: string
   items: CartItem[]
   /** Medios de pago habilitados en la sucursal de la mesa (MI-48). */
   paymentMethods: PaymentMethod[]
-  sessionOpen: boolean
-  named: boolean
   /** El carrito admite cambios: mesa abierta y sin envíos pendientes. */
   canEdit: boolean
   announce: Announce

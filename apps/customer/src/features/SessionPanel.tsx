@@ -2,29 +2,23 @@ import { type FormEvent, useState } from 'react'
 import { ErrorText } from '@restaurant-platform/ui'
 import { NameModal } from '@/features/NameModal'
 import { NAME_FIELD_ID } from '@/features/name-field'
-import type { loadSession } from '@/features/session'
+import { useTable } from '@/features/table-context'
 import type { RenameField } from '@/hooks/useTableSession'
-
-type Session = Awaited<ReturnType<typeof loadSession>>
+import { useCart } from '@/stores/cart'
 
 /** Una falla a mostrar, con su reintento ya resuelto por quien hizo la consulta. */
 export type Failure = { error: unknown; retry: () => void }
 
+/**
+ * Lo que sabe de la mesa (sesión, quién es este comensal, su carrito) lo lee del
+ * contexto. Por props llega solo el ingreso, que es de la pantalla que lo monta,
+ * el campo del nombre y lo que se puede hacer.
+ */
 type SessionPanelProps = {
   /** Todavía conectando con la mesa. */
   connecting: boolean
   /** No se pudo entrar a la mesa. */
   connection?: Failure
-  /** No se pudo leer la mesa. */
-  read?: Failure
-  /** La mesa leída; hasta que llegue, el panel solo informa el estado. */
-  session?: Session
-  /** Cómo se llama este comensal y si el nombre lo eligió él: los decide el hook
-      dueño de la sesión, así que acá no se vuelven a derivar. */
-  displayName: string
-  named: boolean
-  hasPendingSubmission: boolean
-  cartCount: number
   rename: RenameField
   onOpenNewSession: () => void
 }
@@ -59,22 +53,14 @@ function CloseIcon() {
   )
 }
 
-export function SessionPanel({
-  connecting,
-  connection,
-  read,
-  session,
-  displayName,
-  named,
-  hasPendingSubmission,
-  cartCount,
-  rename,
-  onOpenNewSession,
-}: SessionPanelProps) {
-  const names = session?.participants.map((p) => p.display_name).join(' · ') ?? ''
-  const askName = !!session && session.status !== 'closed' && !named
-  const showPanel = connecting || !!connection || !!read || (!!session && named) || session?.status === 'closed'
-  const canRename = named && session?.status !== 'closed'
+export function SessionPanel({ connecting, connection, rename, onOpenNewSession }: SessionPanelProps) {
+  const { session, me, named, needsName, closed, cartKey, items } = useTable()
+  const hasPendingSubmission = useCart((state) => !!state.submissions[cartKey])
+  const cartCount = items.reduce((total, item) => total + item.quantity, 0)
+  const participants = session.data?.participants ?? []
+  const names = participants.map((participant) => participant.display_name).join(' · ')
+  const showPanel = connecting || !!connection || session.isError || (!!me && named) || closed
+  const canRename = named && !closed
 
   function handleRename(event: FormEvent) {
     event.preventDefault()
@@ -87,9 +73,15 @@ export function SessionPanel({
         <section className="session-panel" aria-label="Tu mesa">
           {connecting && <p role="status">Conectando con tu mesa…</p>}
           {connection && <ErrorText {...connection} variant="menu" />}
-          {read && <ErrorText {...read} variant="menu" />}
+          {session.isError && (
+            <ErrorText
+              variant="menu"
+              error={session.error}
+              retry={() => { void session.refetch() }}
+            />
+          )}
 
-          {session && named && (
+          {me && named && (
             <div className="table-people">
               {rename.editing ? (
                 <form
@@ -135,7 +127,7 @@ export function SessionPanel({
               ) : (
                 <>
                   <span className="who">
-                    <strong>{displayName}</strong>
+                    <strong>{me.display_name}</strong>
                     {canRename && (
                       <button
                         type="button"
@@ -149,7 +141,7 @@ export function SessionPanel({
                   </span>
                   <details>
                     <summary className="disclosure">
-                      <span className="muted">{session.participants.length} en la mesa</span>
+                      <span className="muted">{participants.length} en la mesa</span>
                       <span className="chevron" aria-hidden="true">›</span>
                     </summary>
                     <p className="muted">{names}</p>
@@ -159,7 +151,7 @@ export function SessionPanel({
             </div>
           )}
 
-          {session?.status === 'closed' && (
+          {closed && (
             <ClosedSessionNotice
               hasPendingSubmission={hasPendingSubmission}
               cartCount={cartCount}
@@ -169,7 +161,7 @@ export function SessionPanel({
         </section>
       )}
 
-      {askName && (
+      {needsName && (
         <NameModal rename={rename} hasPendingSubmission={hasPendingSubmission} />
       )}
     </>

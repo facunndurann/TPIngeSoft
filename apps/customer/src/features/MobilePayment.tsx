@@ -11,17 +11,14 @@ import {
 import { runMobilePayment } from '@/features/orders-api'
 import { useTable } from '@/features/table-context'
 
-type MobilePaymentProps = Omit<PaymentPlanInput, 'selected'> & {
-  sessionId: string
-  participantName: (id: string | null) => string
-}
+type MobilePaymentProps = Omit<PaymentPlanInput, 'selected'> & { sessionId: string }
 
 type Outcome = 'approved' | 'rejected'
 
 const coverageLabels = { approved: 'Pagado', pending: 'Pago pendiente' } as const
 
-export function MobilePayment({ sessionId, participantName, ...account }: MobilePaymentProps) {
-  const { refreshTable } = useTable()
+export function MobilePayment({ sessionId, ...account }: MobilePaymentProps) {
+  const { refreshTable, nameOf } = useTable()
   // Clave de idempotencia del próximo pago: se renueva cuando cambia lo que se va a
   // pagar, así un reintento del mismo pago no crea otro.
   const requestId = useRef(crypto.randomUUID())
@@ -75,7 +72,7 @@ export function MobilePayment({ sessionId, participantName, ...account }: Mobile
                   {item.quantity} × {item.product_name}
                 </strong>
                 <small>
-                  {item.is_shared ? 'Compartido' : participantName(item.participant_id)}
+                  {item.is_shared ? 'Compartido' : nameOf(item.participant_id)}
                   {coverage && ` · ${coverageLabels[coverage]}`}
                 </small>
               </span>

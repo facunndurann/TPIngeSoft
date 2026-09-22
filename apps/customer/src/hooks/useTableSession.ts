@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AppError, participantNameSchema } from '@restaurant-platform/shared'
 import { errorMessage } from '@restaurant-platform/ui'
+import { dinerIn } from '@/features/diner'
 import { loadMenu, loadTable } from '@/features/menu-api'
 import { connectSession, joinSession, sessionKey, sessionQuery } from '@/features/session'
 import { subscribeToTableSession } from '@/features/session-realtime'
@@ -15,7 +16,7 @@ export type RenameField = {
   name: string
   setName: (name: string) => void
   /** Si el comensal está editando el nombre en el chip. La primera vez el
-   *  diálogo se muestra solo por `named`, no por este flag. */
+   *  diálogo se muestra solo por `needsName`, no por este flag. */
   editing: boolean
   setEditing: (editing: boolean) => void
   submit: () => void
@@ -70,12 +71,10 @@ export function useTableSession(token: string) {
     })
   }, [sessionId, refreshTable])
 
-  const participant = session.data?.participants.find(
-    (entry) => entry.user_id === joined.data?.userId,
-  )
+  const diner = dinerIn(session.data, joined.data?.userId)
   // Solo se precarga un nombre elegido: precargar el que puso el sistema
   // invitaría a guardarlo como propio.
-  const savedName = participant?.named_at ? participant.display_name : ''
+  const savedName = diner.named ? diner.me?.display_name ?? '' : ''
 
   // `undefined` = el campo muestra lo guardado. Mientras se edita manda el
   // borrador, así el refetch cada 15 segundos no pisa lo que se está tipeando.
@@ -110,11 +109,9 @@ export function useTableSession(token: string) {
     sessionId,
     /** Relee todo lo de la mesa; lo que cambió algo lo llama en vez de elegir consultas. */
     refreshTable,
-    /** Cómo se llama este comensal en la mesa; sin nombre elegido, el genérico. */
-    displayName: participant?.display_name ?? 'Comensal',
-    /** Si eligió su nombre. Único origen del invariante: lo leen la compuerta del
-     *  carrito y el panel, que ya no lo vuelve a derivar de los participantes. */
-    named: !!participant?.named_at,
+    /** Se puede pedir: la mesa está abierta y su última lectura no falló. */
+    sessionOpen: session.data?.status === 'open' && !session.isError,
+    ...diner,
     rename: {
       name: draftName ?? savedName,
       setName: setDraftName,

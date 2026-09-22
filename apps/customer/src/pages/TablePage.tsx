@@ -58,15 +58,27 @@ export function TableRoute() {
 }
 
 function TableApp({ token }: { token: string }) {
-  const { table, menu, joined, session, sessionId, refreshTable, displayName, named, rename } =
-    useTableSession(token)
+  const {
+    table,
+    menu,
+    joined,
+    session,
+    sessionId,
+    refreshTable,
+    sessionOpen,
+    me,
+    nameOf,
+    named,
+    needsName,
+    closed,
+    rename,
+  } = useTableSession(token)
   const location = useLocation()
   const navigate = useNavigate()
   const [announcement, setAnnouncement] = useState<Announcement>()
   const cart = useCart()
   const cartKey = cartKeyFor(sessionId, joined.data?.userId)
   const items = cart.carts[cartKey] ?? []
-  const sessionOpen = session.data?.status === 'open' && !session.isError
   const canEdit = sessionOpen && !cart.submissions[cartKey]
   const cartCount = items.reduce((total, item) => total + item.quantity, 0)
   // La portada de la carta es la ruta de la mesa sin nada más: lo decide el router,
@@ -136,12 +148,15 @@ function TableApp({ token }: { token: string }) {
             session,
             sessionId,
             refreshTable,
-            userId: joined.data?.userId,
+            me,
+            nameOf,
+            named,
+            needsName,
+            sessionOpen,
+            closed,
             cartKey,
             items,
             paymentMethods: enabledPaymentMethods(branch),
-            sessionOpen,
-            named,
             canEdit,
             announce,
           }}
@@ -156,15 +171,11 @@ function TableApp({ token }: { token: string }) {
               compact={!atMenu}
             />
 
+            {/* Lo que el panel sabe de la mesa lo lee del contexto; acá solo recibe el
+                ingreso, que es de esta pantalla, y lo que puede hacer. */}
             <SessionPanel
               connecting={joined.isPending}
               connection={failureOf(joined)}
-              read={failureOf(session)}
-              session={session.data}
-              displayName={displayName}
-              named={named}
-              hasPendingSubmission={!!cart.submissions[cartKey]}
-              cartCount={cartCount}
               rename={rename}
               onOpenNewSession={() => {
                 setAnnouncement(undefined)
@@ -173,7 +184,7 @@ function TableApp({ token }: { token: string }) {
               }}
             />
 
-            <div {...(session.data?.status === 'open' && !named ? { inert: true } : {})}>
+            <div {...(needsName ? { inert: true } : {})}>
               <TableNav token={token} cartCount={cartCount} />
 
               <Toast announcement={announcement} onDismiss={() => setAnnouncement(undefined)} />
