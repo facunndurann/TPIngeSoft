@@ -1,7 +1,12 @@
+import type { SubmitOrderInput } from '@restaurant-platform/shared'
 import { selectionErrors } from './menu'
-import type { Menu } from './menu'
-// Solo tipos: importar el store en runtime lo crearía antes de que exista localStorage.
-import type { CartItem, PendingSubmission } from '../stores/cart'
+import type { Menu, Selection } from './menu'
+
+/** Una línea del carrito: la selección de un plato, con id propio para editarla o quitarla. */
+export type CartItem = Selection & { id: string; productId: string }
+
+/** Un envío guardado sin resultado: lo que se mandó, tal cual, y las líneas que lo formaban. */
+export type PendingSubmission = { input: SubmitOrderInput; snapshot: CartItem[] }
 
 /** Líneas distintas por pedido; es el mismo máximo que valida submitOrderSchema. */
 export const MAX_CART_LINES = 50

@@ -5,14 +5,13 @@ import { ErrorText } from '@restaurant-platform/ui'
 import { useNavigate, useParams } from 'react-router'
 import { QuantityField } from '@/components/QuantityField'
 import { MAX_CART_LINES, cartPhase, plateCount } from '@/features/cart'
-import type { Review } from '@/features/cart'
+import type { CartItem, Review } from '@/features/cart'
 import { cartPrice, price, productOptions, selectionErrors } from '@/features/menu'
 import type { Menu } from '@/features/menu'
 import { abandonSubmission, submitOrder } from '@/features/orders-api'
 import { useTable } from '@/features/table-context'
 import { cartItemPath, cartPath, cartReviewPath } from '@/features/table-paths'
 import { useCart } from '@/stores/cart'
-import type { CartItem } from '@/stores/cart'
 
 type CartPanelProps = {
   reviewing?: boolean

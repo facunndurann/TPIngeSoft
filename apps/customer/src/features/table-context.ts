@@ -1,8 +1,8 @@
 import { createContext, useContext } from 'react'
 import type { PaymentMethod } from '@restaurant-platform/shared'
 import type { Announce } from '@/features/announcements'
+import type { CartItem } from '@/features/cart'
 import type { useTableSession } from '@/hooks/useTableSession'
-import type { CartItem } from '@/stores/cart'
 
 type TableSession = ReturnType<typeof useTableSession>
 

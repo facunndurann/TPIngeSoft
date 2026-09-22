@@ -1,5 +1,5 @@
 import { cartKeyFor } from './cart'
-import type { PendingSubmission } from '../stores/cart'
+import type { PendingSubmission } from './cart'
 
 type RecoverableSession = {
   id: string

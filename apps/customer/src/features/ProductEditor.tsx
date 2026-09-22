@@ -5,7 +5,7 @@ import { MediaCarousel } from '@/features/MediaCarousel'
 import { groupSelectionHint, price, selectedInGroup, selectionErrors } from '@/features/menu'
 import type { ModifierGroup, ModifierOption, Product } from '@/features/menu'
 import { useMenuDesign } from '@/features/menu-design'
-import type { CartItem } from '@/stores/cart'
+import type { CartItem } from '@/features/cart'
 
 type ProductEditorProps = {
   product: Product
