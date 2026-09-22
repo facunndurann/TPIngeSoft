@@ -2,11 +2,11 @@ import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { AppError, formatPrice, MAX_ORDER_LINES } from '@restaurant-platform/shared'
 import { ErrorText } from '@restaurant-platform/ui'
-import { useNavigate, useParams } from 'react-router'
+import { useNavigate } from 'react-router'
 import { QuantityField } from '@/components/QuantityField'
 import { cartPhase, plateCount } from '@/features/cart'
 import type { CartItem, Review } from '@/features/cart'
-import { cartPrice, describeSelection, price, selectionErrors } from '@/features/menu'
+import { describeSelection, price, selectionErrors } from '@/features/menu'
 import type { Menu } from '@/features/menu'
 import { abandonSubmission, submitOrder } from '@/features/orders-api'
 import { useTable } from '@/features/table-context'
@@ -25,13 +25,20 @@ type CartPanelProps = {
  * acciones que decide la pantalla que lo monta.
  */
 export function CartPanel({ reviewing = false, refreshMenu, onSubmitted }: CartPanelProps) {
-  const { cartKey, sessionId, menu: menuQuery, sessionOpen, named, announce } = useTable()
+  const {
+    token,
+    cartKey,
+    items,
+    cartTotal: total,
+    sessionId,
+    menu: menuQuery,
+    sessionOpen,
+    named,
+    announce,
+  } = useTable()
   const menu = menuQuery.data
-  const { token = '' } = useParams()
   const navigate = useNavigate()
   const cart = useCart()
-  const items = cart.carts[cartKey] ?? []
-  const total = menu ? cartPrice(menu, items) : 0
   const [needsMenuRefresh, setNeedsMenuRefresh] = useState(false)
 
   // La revisión se fija una sola vez por montaje, apenas hay precios. El panel se
@@ -106,6 +113,18 @@ export function CartPanel({ reviewing = false, refreshMenu, onSubmitted }: CartP
     if (submission) send.mutate(submission.input)
   }
 
+  // Lo que frena un envío se dice igual al armar el carrito y al revisarlo.
+  const blockers = (
+    <SendBlockers
+      tooManyLines={items.length > MAX_ORDER_LINES}
+      sessionOpen={sessionOpen}
+      needsMenuRefresh={needsMenuRefresh}
+      onRefreshMenu={() => { void refresh() }}
+    />
+  )
+
+  // Cada fase dibuja lo suyo en su bloque, y ningún bloque vuelve a preguntar la
+  // fase: las líneas van arriba, los errores del envío al medio y el cierre abajo.
   return (
     <section aria-label="Tu carrito">
       <p className="eyebrow">ANTES DE PEDIR</p>
@@ -119,42 +138,45 @@ export function CartPanel({ reviewing = false, refreshMenu, onSubmitted }: CartP
         <p className="empty">Tu carrito está vacío. Explorá la carta para agregar algo rico.</p>
       )}
 
-      {phase.kind === 'editing' && items.map((item, index) => (
-        <CartLine
-          key={item.id}
-          item={item}
-          menu={menu}
-          locked={phase.kind !== 'editing' || !phase.editable}
-          onQuantityChange={(quantity) => cart.save(cartKey, { ...item, quantity })}
-          onEdit={() => navigate(cartItemPath(token, item.id))}
-          onRemove={() => {
-            cart.remove(cartKey, item.id)
-            const name = menu?.productsById.get(item.productId)?.name
-            // Deshacer lo devuelve a su posición: quitar de más no cuesta nada.
-            announce(
-              name ? `${name} se quitó de tu carrito` : 'El plato se quitó de tu carrito',
-              () => cart.restore(cartKey, item, index),
-            )
-          }}
-        />
-      ))}
-
-      {phase.kind === 'editing' && phase.editable && items.length > 1 && (
-        <div className="cart-actions">
-          <button
-            className="text-button"
-            onClick={() => {
-              const discarded = items
-              cart.clear(cartKey)
-              // El reverso está en el aviso: vaciar de más no cuesta nada.
-              announce(`Vaciamos tu carrito (${plateCount(discarded.length)})`, () =>
-                cart.restoreAll(cartKey, discarded),
-              )
-            }}
-          >
-            Vaciar carrito
-          </button>
-        </div>
+      {phase.kind === 'editing' && (
+        <>
+          {items.map((item, index) => (
+            <CartLine
+              key={item.id}
+              item={item}
+              menu={menu}
+              locked={!phase.editable}
+              onQuantityChange={(quantity) => cart.save(cartKey, { ...item, quantity })}
+              onEdit={() => navigate(cartItemPath(token, item.id))}
+              onRemove={() => {
+                cart.remove(cartKey, item.id)
+                const name = menu?.productsById.get(item.productId)?.name
+                // Deshacer lo devuelve a su posición: quitar de más no cuesta nada.
+                announce(
+                  name ? `${name} se quitó de tu carrito` : 'El plato se quitó de tu carrito',
+                  () => cart.restore(cartKey, item, index),
+                )
+              }}
+            />
+          ))}
+          {phase.editable && items.length > 1 && (
+            <div className="cart-actions">
+              <button
+                className="text-button"
+                onClick={() => {
+                  const discarded = items
+                  cart.clear(cartKey)
+                  // El reverso está en el aviso: vaciar de más no cuesta nada.
+                  announce(`Vaciamos tu carrito (${plateCount(discarded.length)})`, () =>
+                    cart.restoreAll(cartKey, discarded),
+                  )
+                }}
+              >
+                Vaciar carrito
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {/* Sin `retry`: reintentar o cancelar el envío ya son botones del envío pendiente. */}
@@ -179,73 +201,89 @@ export function CartPanel({ reviewing = false, refreshMenu, onSubmitted }: CartP
         />
       )}
 
-      {(phase.kind === 'editing' || phase.kind === 'reviewing') && (
+      {phase.kind === 'editing' && (
         <>
-          {phase.kind === 'editing' && (
-            <>
-              <div className="total">
-                <span>Total estimado</span>
-                <strong>{menu ? formatPrice(total) : '—'}</strong>
-              </div>
-              <p className="muted">
-                Productos sin enviar. Al confirmar, el restaurante recibirá el pedido y validará
-                precios y disponibilidad.
+          <div className="total">
+            <span>Total estimado</span>
+            <strong>{menu ? formatPrice(total) : '—'}</strong>
+          </div>
+          <p className="muted">
+            Productos sin enviar. Al confirmar, el restaurante recibirá el pedido y validará
+            precios y disponibilidad.
+          </p>
+          {blockers}
+          <button
+            className="primary wide"
+            disabled={!phase.canReview}
+            onClick={() => {
+              send.reset()
+              navigate(cartReviewPath(token))
+            }}
+          >
+            Revisar pedido
+          </button>
+        </>
+      )}
+
+      {phase.kind === 'reviewing' && (
+        <>
+          {blockers}
+          <div className="confirmation" aria-label="Confirmación del pedido">
+            <h3>Confirmá tu pedido</h3>
+            <p>Esto es lo que va a recibir el restaurante:</p>
+            {/* La revisión se fijó al entrar: es la que respalda el total que se confirma. */}
+            <CartSummary items={phase.review?.items ?? items} menu={menu} />
+            <div className="total">
+              <span>Total</span>
+              <strong>{formatPrice(phase.review?.total ?? total)}</strong>
+            </div>
+            {phase.outdated && (
+              <p role="alert" className="notice">
+                La carta o el carrito cambiaron. Volvé a revisar el pedido antes de enviarlo.
               </p>
-            </>
-          )}
-          {items.length > MAX_ORDER_LINES && (
-            <p className="notice">
-              Podés enviar hasta {MAX_ORDER_LINES} platos distintos por pedido.
-            </p>
-          )}
-          {!sessionOpen && (
-            <p className="notice">
-              Para enviar tu pedido, la mesa tiene que estar abierta y con conexión.
-            </p>
-          )}
-          {needsMenuRefresh && (
-            <div className="notice">
-              <p>Necesitamos actualizar la carta antes de que vuelvas a confirmar.</p>
-              <button onClick={() => { void refresh() }}>Actualizar carta</button>
+            )}
+            <div className="cart-actions">
+              <button onClick={() => navigate(cartPath(token))}>Volver a editar</button>
+              <button className="primary" disabled={!phase.confirmable} onClick={confirm}>
+                Confirmar
+              </button>
             </div>
-          )}
-          {phase.kind === 'reviewing' ? (
-            <div className="confirmation" aria-label="Confirmación del pedido">
-              <h3>Confirmá tu pedido</h3>
-              <p>Esto es lo que va a recibir el restaurante:</p>
-              {/* La revisión se fijó al entrar: es la que respalda el total que se confirma. */}
-              <CartSummary items={phase.review?.items ?? items} menu={menu} />
-              <div className="total">
-                <span>Total</span>
-                <strong>{formatPrice(phase.review?.total ?? total)}</strong>
-              </div>
-              {phase.outdated && (
-                <p role="alert" className="notice">
-                  La carta o el carrito cambiaron. Volvé a revisar el pedido antes de enviarlo.
-                </p>
-              )}
-              <div className="cart-actions">
-                <button onClick={() => navigate(cartPath(token))}>Volver a editar</button>
-                <button className="primary" disabled={!phase.confirmable} onClick={confirm}>
-                  Confirmar
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              className="primary wide"
-              disabled={!phase.canReview}
-              onClick={() => {
-                send.reset()
-                navigate(cartReviewPath(token))
-              }}
-            >
-              Revisar pedido
-            </button>
-          )}
+          </div>
         </>
       )}
     </section>
+  )
+}
+
+/** Lo que impide enviar aunque el carrito esté bien armado. */
+function SendBlockers({
+  tooManyLines,
+  sessionOpen,
+  needsMenuRefresh,
+  onRefreshMenu,
+}: {
+  tooManyLines: boolean
+  sessionOpen: boolean
+  needsMenuRefresh: boolean
+  onRefreshMenu: () => void
+}) {
+  return (
+    <>
+      {tooManyLines && (
+        <p className="notice">Podés enviar hasta {MAX_ORDER_LINES} platos distintos por pedido.</p>
+      )}
+      {!sessionOpen && (
+        <p className="notice">
+          Para enviar tu pedido, la mesa tiene que estar abierta y con conexión.
+        </p>
+      )}
+      {needsMenuRefresh && (
+        <div className="notice">
+          <p>Necesitamos actualizar la carta antes de que vuelvas a confirmar.</p>
+          <button onClick={onRefreshMenu}>Actualizar carta</button>
+        </div>
+      )}
+    </>
   )
 }
 
@@ -378,7 +416,7 @@ function PendingSubmission({
         Conservamos este envío y bloqueamos su edición hasta conocer el resultado. Podés
         reintentarlo sin duplicar el pedido, o cancelarlo si todavía no llegó al restaurante.
       </p>
-      <div className="cart-actions" style={{ marginTop: '16px' }}>
+      <div className="cart-actions">
         <button onClick={onCancel} disabled={busy}>
           {status === 'cancelling' ? 'Cancelando…' : 'Cancelar y editar'}
         </button>

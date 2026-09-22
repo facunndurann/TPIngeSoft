@@ -30,6 +30,15 @@ type OrderItem = Order['order_items'][number]
 type Bill = Awaited<ReturnType<typeof loadBill>>
 type Payment = Awaited<ReturnType<typeof loadPayments>>[number]
 
+// Una instancia por formato, como `formatPrice`: se usan fila por fila en cada render.
+const paymentTime = new Intl.DateTimeFormat('es-AR', {
+  day: '2-digit',
+  month: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+const orderTime = new Intl.DateTimeFormat('es-AR', { dateStyle: 'short', timeStyle: 'short' })
+
 type SessionOrdersProps = {
   /** Repite un pedido en el carrito. Ausente cuando la mesa no admite pedir. */
   onReorder?: (order: Order) => void
@@ -150,9 +159,7 @@ function PaymentHistory({
             </p>
           </div>
           <time dateTime={payment.created_at}>
-            {new Intl.DateTimeFormat('es-AR', {
-              day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
-            }).format(new Date(payment.created_at))}
+            {paymentTime.format(new Date(payment.created_at))}
           </time>
         </div>
       ))}
@@ -184,10 +191,7 @@ function OrderCard({
   onReorder?: (order: Order) => void
 }) {
   const { nameOf } = useTable()
-  const createdAt = new Intl.DateTimeFormat('es-AR', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-  }).format(new Date(order.created_at))
+  const createdAt = orderTime.format(new Date(order.created_at))
 
   const plates = order.order_items.reduce((sum, item) => sum + item.quantity, 0)
 

@@ -1,7 +1,6 @@
 import { Link } from 'react-router'
 import { formatPrice } from '@restaurant-platform/shared'
 import { ErrorText } from '@restaurant-platform/ui'
-import { cartPrice } from '@/features/menu'
 import { useTable } from '@/features/table-context'
 import { cartPath } from '@/features/table-paths'
 import { useCart } from '@/stores/cart'
@@ -39,13 +38,12 @@ export function PendingSubmissionNotice() {
 
 /** Atajo al carrito desde donde se elige qué pedir o se mira lo pedido. */
 export function CartBar() {
-  const { token, menu, items } = useTable()
+  const { token, items, cartTotal } = useTable()
   if (items.length === 0) return null
-  const total = menu.data ? cartPrice(menu.data, items) : 0
 
   return (
     <Link className="primary cart-bar" to={cartPath(token)}>
-      Ver mi carrito <strong>{formatPrice(total)}</strong>
+      Ver mi carrito <strong>{formatPrice(cartTotal)}</strong>
     </Link>
   )
 }

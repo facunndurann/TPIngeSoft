@@ -30,6 +30,8 @@ export type TableContextValue = {
   closed: boolean
   cartKey: string
   items: CartItem[]
+  /** Total estimado del carrito con los precios de la carta de ahora; 0 hasta que la carta carga. */
+  cartTotal: number
   /** Medios de pago habilitados en la sucursal de la mesa (MI-48). */
   paymentMethods: PaymentMethod[]
   /** El carrito admite cambios: mesa abierta y sin envíos pendientes. */

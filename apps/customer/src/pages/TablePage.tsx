@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useState } from 'react'
 import {
   Navigate,
   Outlet,
@@ -12,9 +12,10 @@ import { ClockProvider, ErrorText } from '@restaurant-platform/ui'
 import { FreshnessNote } from '@/components/FreshnessNote'
 import { Toast } from '@/components/Toast'
 import { type Announce, type Announcement, toastDuration } from '@/features/announcements'
-import { cartKeyFor } from '@/features/cart'
+import { type CartItem, cartKeyFor } from '@/features/cart'
 import { CartPanel } from '@/features/CartPanel'
 import { MenuBrowse } from '@/features/MenuBrowse'
+import { cartPrice, type Product } from '@/features/menu'
 import { ProductEditor } from '@/features/ProductEditor'
 import { SessionOrders } from '@/features/SessionOrders'
 import { type Failure, SessionPanel } from '@/features/SessionPanel'
@@ -81,6 +82,7 @@ function TableApp({ token }: { token: string }) {
   const items = cart.carts[cartKey] ?? []
   const canEdit = sessionOpen && !cart.submissions[cartKey]
   const cartCount = items.reduce((total, item) => total + item.quantity, 0)
+  const cartTotal = menu.data ? cartPrice(menu.data, items) : 0
   // La portada de la carta es la ruta de la mesa sin nada más: lo decide el router,
   // no una búsqueda en el texto de la URL.
   const atMenu = useMatch(TABLE_ROUTE) !== null
@@ -156,6 +158,7 @@ function TableApp({ token }: { token: string }) {
             closed,
             cartKey,
             items,
+            cartTotal,
             paymentMethods: enabledPaymentMethods(branch),
             canEdit,
             announce,
@@ -266,49 +269,26 @@ export function TableProductPage() {
 }
 
 function ProductScreen() {
-  const { token, menu, canEdit, cartKey, announce } = useTable()
+  const { token, menu } = useTable()
   const { productId = '' } = useParams()
   const location = useLocation()
   const back = useTableBack(`${menuPath(token)}${location.search}`)
-  const cart = useCart()
   const product = menu.data?.productsById.get(productId)
 
   if (!menu.data) return null
   if (!product) {
     return (
-      <section>
-        <button className="text-button" onClick={back}>
-          ← Volver
-        </button>
+      <BackWithNotice onBack={back}>
         <p className="empty">No encontramos este plato.</p>
-      </section>
-    )
-  }
-
-  if (!canEdit) {
-    return (
-      <section>
-        <button className="text-button" onClick={back}>
-          ← Volver
-        </button>
-        <p className="notice">
-          Para personalizar y agregar al carrito, la mesa tiene que estar abierta y sin envíos
-          pendientes.
-        </p>
-      </section>
+      </BackWithNotice>
     )
   }
 
   return (
-    <ProductEditor
-      key={product.id}
+    <CartItemEditor
       product={product}
-      onClose={back}
-      onSave={(item) => {
-        cart.save(cartKey, item)
-        announce(`${product.name} guardado en tu carrito`)
-        back()
-      }}
+      back={back}
+      locked="Para personalizar y agregar al carrito, la mesa tiene que estar abierta y sin envíos pendientes."
     />
   )
 }
@@ -323,43 +303,84 @@ export function TableCartItemPage() {
 }
 
 function CartItemScreen() {
-  const { token, menu, canEdit, cartKey, items, announce } = useTable()
+  const { token, menu, items } = useTable()
   const { itemId = '' } = useParams()
   const back = useTableBack(cartPath(token))
-  const cart = useCart()
   const item = items.find((entry) => entry.id === itemId)
   const product = item && menu.data?.productsById.get(item.productId)
 
   if (!item) return <Navigate to={cartPath(token)} replace />
   if (!menu.data) return null
-
-  if (!product || !canEdit) {
+  if (!product) {
     return (
-      <section>
-        <button className="text-button" onClick={back}>
-          ← Volver
-        </button>
-        <p className="notice">
-          {product
-            ? 'Para editar este plato, la mesa tiene que estar abierta y sin envíos pendientes.'
-            : 'Este plato ya no está en la carta.'}
-        </p>
-      </section>
+      <BackWithNotice onBack={back}>
+        <p className="notice">Este plato ya no está en la carta.</p>
+      </BackWithNotice>
+    )
+  }
+
+  return (
+    <CartItemEditor
+      product={product}
+      initial={item}
+      back={back}
+      locked="Para editar este plato, la mesa tiene que estar abierta y sin envíos pendientes."
+    />
+  )
+}
+
+/**
+ * Armar un plato para el carrito, nuevo o ya guardado. Con la mesa sin admitir
+ * cambios se explica por qué; al guardar se avisa y se vuelve a donde se estaba.
+ */
+function CartItemEditor({
+  product,
+  initial,
+  back,
+  locked,
+}: {
+  product: Product
+  /** La línea que se edita; sin ella, el plato entra como línea nueva. */
+  initial?: CartItem
+  back: () => void
+  /** Por qué no se puede editar ahora, en palabras de esta pantalla. */
+  locked: string
+}) {
+  const { canEdit, cartKey, announce } = useTable()
+  const save = useCart((state) => state.save)
+
+  if (!canEdit) {
+    return (
+      <BackWithNotice onBack={back}>
+        <p className="notice">{locked}</p>
+      </BackWithNotice>
     )
   }
 
   return (
     <ProductEditor
-      key={item.id}
+      key={initial?.id ?? product.id}
       product={product}
-      initial={item}
+      initial={initial}
       onClose={back}
-      onSave={(next) => {
-        cart.save(cartKey, next)
+      onSave={(item) => {
+        save(cartKey, item)
         announce(`${product.name} guardado en tu carrito`)
         back()
       }}
     />
+  )
+}
+
+/** La pantalla que no puede mostrar lo pedido: la vuelta y el porqué. */
+function BackWithNotice({ onBack, children }: { onBack: () => void; children: ReactNode }) {
+  return (
+    <section>
+      <button className="text-button" onClick={onBack}>
+        ← Volver
+      </button>
+      {children}
+    </section>
   )
 }
 
