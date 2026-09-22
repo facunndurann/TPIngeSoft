@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react'
+import type { ButtonHTMLAttributes, ComponentProps, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react'
 import { X } from 'lucide-react'
 
 type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost'
@@ -25,7 +25,7 @@ export function Button({
   )
 }
 
-export function Input({ className = '', ref, ...props }: InputHTMLAttributes<HTMLInputElement>) {
+export function Input({ className = '', ref, ...props }: ComponentProps<'input'>) {
   return (
     <input
       ref={ref}
