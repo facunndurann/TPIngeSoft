@@ -20,6 +20,7 @@
     "db:schema": "supabase db dump --local --schema public -f supabase/schema.generated.sql"
   },
   "devDependencies": {
+    "happy-dom": "^20.14.5",
     "supabase": "^2.45.5",
     "vitest": "^5.0.1"
   },

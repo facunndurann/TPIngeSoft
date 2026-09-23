@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { AppError, formatPrice, MAX_ORDER_LINES } from '@restaurant-platform/shared'
 import { ErrorText } from '@restaurant-platform/ui'
-import { useNavigate } from 'react-router'
+import { Navigate, useNavigate } from 'react-router'
 import { QuantityField } from '@/components/QuantityField'
 import { cartPhase, plateCount } from '@/features/cart'
 import type { CartItem, Review } from '@/features/cart'
@@ -45,6 +45,14 @@ export function CartPanel({ reviewing = false, refreshMenu, onSubmitted }: CartP
   // remonta al entrar o salir de revisar (key en TablePage), así que no hace falta limpiarla.
   const [review, setReview] = useState<Review>()
   if (reviewing && menu && !review) setReview({ items, total })
+
+  // Si al llegar a revisar no había nada, se vuelve al carrito. Se decide una sola
+  // vez, al montar: que el carrito se vacíe estando acá es que el pedido salió, y
+  // adónde seguir lo decide `onSubmitted`. Una vuelta que reaccionara al carrito
+  // vacío pisaría esa navegación, porque el store avisa antes de que cambie la ruta.
+  const [nothingToReview] = useState(
+    () => reviewing && items.length === 0 && !cart.submissions[cartKey],
+  )
 
   const refresh = async () => {
     setNeedsMenuRefresh(true)
@@ -90,6 +98,8 @@ export function CartPanel({ reviewing = false, refreshMenu, onSubmitted }: CartP
       navigate(cartPath(token))
     },
   })
+
+  if (nothingToReview) return <Navigate to={cartPath(token)} replace />
 
   const phase = cartPhase({
     items,

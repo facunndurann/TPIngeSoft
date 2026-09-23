@@ -230,15 +230,11 @@ export function TableMenuPage() {
 }
 
 export function TableCartPage({ reviewing = false }: { reviewing?: boolean }) {
-  const { token, menu, refreshTable, cartKey, items, announce } = useTable()
-  const pending = useCart((state) => state.submissions[cartKey])
+  const { token, menu, refreshTable, cartKey, announce } = useTable()
   const navigate = useNavigate()
 
-  if (reviewing && items.length === 0 && !pending) {
-    return <Navigate to={cartPath(token)} replace />
-  }
-
-  // Sin aviso de envío pendiente: el carrito ya lo muestra con sus acciones.
+  // Sin aviso de envío pendiente: el carrito ya lo muestra con sus acciones. Llegar
+  // a revisar sin nada que revisar lo resuelve el panel, que sabe qué había al entrar.
   return (
     <>
       <MenuStatus />
