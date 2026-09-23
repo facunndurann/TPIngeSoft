@@ -167,7 +167,7 @@ function PaymentStepView({
       )
     case 'exceeds':
       return (
-        <p className="notice" role="alert">
+        <p className="error-notice" role="alert">
           El subtotal elegido supera el saldo pendiente de {formatPrice(step.balance)}. Deseleccioná
           algún ítem.
         </p>

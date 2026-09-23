@@ -65,10 +65,11 @@ export function ErrorText({
   const action = actionFor(!(error instanceof AppError) || error.retryable, retry, recover)
 
   // La carta del comensal la tematiza cada restaurante desde CSS: ahí el aviso es
-  // `.notice` con un botón pelado, que la hoja de estilos ya viste.
+  // `.error-notice`, en el tono de peligro del diseño, con un botón pelado que la hoja
+  // de estilos ya viste. `.notice` queda para lo que solo informa.
   if (variant === 'menu') {
     return (
-      <div className="notice" role="alert">
+      <div className="error-notice" role="alert">
         <p>{message}</p>
         {action && <button onClick={action.onAction}>{action.label}</button>}
       </div>

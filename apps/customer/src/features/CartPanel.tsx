@@ -285,7 +285,7 @@ function CartLine({
       <p className="cart-line-price">
         <strong>{product ? formatPrice(price(product, item)) : '—'}</strong>
       </p>
-      {errors.length > 0 && <p className="notice">{errors.join(' ')}</p>}
+      {errors.length > 0 && <p className="error-notice">{errors.join(' ')}</p>}
       <div className="cart-actions">
         <button disabled={!product || locked} onClick={onEdit}>
           Editar plato

@@ -160,3 +160,43 @@ test('design preview renders the real menu with each layout, offline and non-int
   assert.match(fallback, /^<div inert="">/, 'The preview is for looking only')
   assert.doesNotMatch(fallback, /src="https?:/, 'Sample photos are embedded, not fetched')
 })
+
+/** Las reglas de index.css, sin comentarios, con su lista de selectores y sus declaraciones. */
+function cssRules() {
+  const css = customerCss.replace(/\/\*[\s\S]*?\*\//g, '')
+  return [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(([, selectors, body]) => ({
+    selectors: selectors.split(',').map((selector) => selector.trim().replace(/\s+/g, ' ')),
+    body,
+  }))
+}
+
+/** Todo lo que index.css le declara a `selector` en las reglas que lo nombran tal cual. */
+const declarationsOf = (selector: string) =>
+  cssRules().filter((rule) => rule.selectors.includes(selector)).map((rule) => rule.body).join(';')
+
+test('each status color means one thing: neutral panels, info apart from errors, choices apart from the main action', async () => {
+  // Lo que agrupa es neutro: el tono de éxito queda para lo que salió bien.
+  for (const panel of ['.bill-panel', '.confirmation', '.order-card']) {
+    assert.match(declarationsOf(panel), /background: var\(--menu-surface\)/, panel)
+    assert.doesNotMatch(declarationsOf(panel), /success|accent/, panel)
+  }
+
+  // Informar y avisar un error no se ven igual, y el error no depende solo del tono.
+  assert.doesNotMatch(declarationsOf('.notice'), /danger/)
+  assert.match(declarationsOf('.error-notice'), /background: var\(--menu-danger-bg\)/)
+  assert.match(declarationsOf('.error-notice'), /border-left: 4px solid var\(--menu-danger\)/)
+
+  // Lo elegido nunca comparte regla con la acción principal, ni su relleno de acento.
+  const mixed = cssRules().some((rule) =>
+    rule.selectors.includes('button.primary') && rule.selectors.some((selector) => /aria-(pressed|current)/.test(selector)))
+  assert.equal(mixed, false)
+  assert.doesNotMatch(declarationsOf('button[aria-pressed=true]'), /--menu-accent-text/)
+  assert.match(declarationsOf('button[aria-pressed=true]'), /background: var\(--menu-surface\)/)
+
+  // Un fallo de red o del servidor llega como error, no como información.
+  const { createElement } = await import('react')
+  const { renderToStaticMarkup } = await import('react-dom/server')
+  const { ErrorText } = await import('@restaurant-platform/ui')
+  const html = renderToStaticMarkup(createElement(ErrorText, { variant: 'menu', error: new Error('Sin red') }))
+  assert.match(html, /^<div class="error-notice" role="alert">/)
+})

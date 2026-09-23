@@ -109,7 +109,7 @@ export function SessionPanel({ connecting, connection, rename, onOpenNewSession 
               >
                 <CloseIcon />
               </button>
-              {rename.message && <p role="alert">{rename.message}</p>}
+              {rename.message && <p className="field-error" role="alert">{rename.message}</p>}
             </form>
           ) : (
             <>

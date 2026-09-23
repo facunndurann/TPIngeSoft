@@ -67,7 +67,7 @@ export function NameModal({ rename, canSave, onSaved, onCancel }: NameModalProps
           <button type="button" disabled={rename.isPending} onClick={cancel}>
             Ahora no
           </button>
-          {rename.message && <p role="alert">{rename.message}</p>}
+          {rename.message && <p className="field-error" role="alert">{rename.message}</p>}
         </form>
       </div>
     </div>

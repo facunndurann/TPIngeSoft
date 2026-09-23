@@ -188,7 +188,7 @@ export function BillSplitter({ split, bill, orders }: BillSplitterProps) {
       )}
 
       {validation && !validation.success && (
-        <p className="notice">{validation.error.issues[0].message}</p>
+        <p className="error-notice">{validation.error.issues[0].message}</p>
       )}
 
       <ErrorText variant="menu" error={save.error} />

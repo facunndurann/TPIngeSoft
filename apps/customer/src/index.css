@@ -181,10 +181,20 @@ header.compact .badge { margin-left: 0; flex-shrink: 0; }
   border-bottom-color: var(--menu-accent);
   font-weight: 700;
 }
-button[aria-pressed=true], a[aria-current=page], button.primary, a.primary {
+button.primary, a.primary {
   background: var(--menu-accent);
   color: var(--menu-accent-text);
   border-color: var(--menu-accent);
+}
+/* Lo elegido (un modo de la división, la categoría que se está viendo) no es la acción
+   principal: queda sobre la superficie, marcado por un borde doble y el peso del texto,
+   así no compite con el botón primario ni depende solo del color. */
+button[aria-pressed=true], .categories a[aria-current=page] {
+  background: var(--menu-surface);
+  color: var(--menu-accent);
+  border-color: var(--menu-accent);
+  box-shadow: inset 0 0 0 1px var(--menu-accent);
+  font-weight: 700;
 }
 .menu-heading { margin-bottom: 20px; }
 .menu-heading input { width: 100%; margin-top: 8px; }
@@ -204,8 +214,12 @@ section { margin-bottom: 28px; }
 .product-card p { font-size: 13px; color: var(--menu-muted); }
 .product-card strong, .product-card small { display: block; margin-top: 8px; }
 .unavailable { display: block; color: var(--menu-unavailable); font-size: 13px; margin-top: 6px; }
-.notice { padding: 14px 18px; background: var(--menu-notice-bg); color: var(--menu-notice-text); border-radius: var(--menu-radius); margin: 16px 0; font-size: 14px; }
-ul.notice { padding-left: 32px; list-style: disc; }
+/* Dos avisos que no se confunden: `.notice` informa (alérgenos, un envío pendiente, por
+   qué algo está apagado) y `.error-notice` dice que algo salió mal o hay que corregirlo.
+   El error lleva además una marca al costado: su tono no es lo único que lo distingue. */
+.notice, .error-notice { padding: 14px 18px; border-radius: var(--menu-radius); margin: 16px 0; font-size: 14px; }
+.notice { background: var(--menu-notice-bg); color: var(--menu-notice-text); }
+.error-notice { background: var(--menu-danger-bg); color: var(--menu-danger); border-left: 4px solid var(--menu-danger); }
 .empty { text-align: center; padding: 45px 15px; color: var(--menu-muted); }
 .editor { max-width: 620px; margin: auto; }
 .text-button { margin-bottom: 20px; }
@@ -263,10 +277,12 @@ footer { text-align: center; color: var(--menu-muted); font-size: 12px; margin-t
 .service-request { flex: 1; min-width: 180px; }
 .service-request button { width: 100%; }
 .service-request p { margin: 8px 0 0; }
-.confirmation, .bill-panel {
+/* Un solo panel neutro para lo que agrupa (la cuenta, un pedido, un envío pendiente):
+   el color de éxito queda para lo que salió bien, como «Cuenta pagada». */
+.confirmation, .bill-panel, .order-card {
   padding: 22px;
-  border: 1px solid var(--menu-accent);
-  background: var(--menu-success-bg);
+  border: 1px solid var(--menu-border);
+  background: var(--menu-surface);
   border-radius: calc(var(--menu-radius) + 4px);
   margin: 24px 0;
 }
@@ -292,7 +308,6 @@ footer { text-align: center; color: var(--menu-muted); font-size: 12px; margin-t
 .payment-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--menu-border); }
 .payment-item span { display: grid; gap: 2px; }
 .payment-item small { color: var(--menu-muted); }
-.order-card { border: 1px solid var(--menu-border); background: var(--menu-surface); border-radius: calc(var(--menu-radius) + 4px); padding: 22px; margin: 24px 0; }
 .order-card .disclosure { align-items: flex-start; flex-wrap: nowrap; }
 .order-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .order-heading h3, .order-heading h4 { margin-bottom: 0; }
@@ -346,6 +361,7 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; }
   background: transparent;
   color: var(--menu-accent);
   border-bottom-color: var(--menu-accent);
+  box-shadow: none;
 }
 [data-layout="editorial"] .tabs a { border-radius: 0; }
 [data-layout="editorial"] header { border-bottom-width: 0; padding-bottom: 8px; }
