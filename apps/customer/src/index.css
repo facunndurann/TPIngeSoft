@@ -147,7 +147,7 @@ header.compact .badge { margin-left: 0; flex-shrink: 0; }
 .name-modal h2 { margin-bottom: 8px; }
 .name-modal .name-form { flex-direction: column; flex-wrap: nowrap; }
 .name-modal .name-form input,
-.name-modal .name-form .primary { width: 100%; }
+.name-modal .name-form button { width: 100%; }
 .tabs {
   display: flex;
   gap: 0;

@@ -32,8 +32,8 @@ export function CartPanel({ refreshMenu, onSubmitted }: CartPanelProps) {
     sessionId,
     menu: menuQuery,
     sessionOpen,
-    named,
     announce,
+    requireName,
   } = useTable()
   const menu = menuQuery.data
   const navigate = useNavigate()
@@ -90,7 +90,6 @@ export function CartPanel({ refreshMenu, onSubmitted }: CartPanelProps) {
     total,
     sessionId,
     sessionOpen,
-    named,
     submission: cart.submissions[cartKey],
     menuOutdated: needsMenuRefresh,
     sending: send.isPending,
@@ -199,7 +198,7 @@ export function CartPanel({ refreshMenu, onSubmitted }: CartPanelProps) {
             needsMenuRefresh={needsMenuRefresh}
             onRefreshMenu={() => { void refresh() }}
           />
-          <button className="primary wide" disabled={!phase.sendable} onClick={submit}>
+          <button className="primary wide" disabled={!phase.sendable} onClick={() => requireName(submit)}>
             {menu ? `Enviar pedido · ${formatPrice(total)}` : 'Enviar pedido'}
           </button>
         </>

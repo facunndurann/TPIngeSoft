@@ -19,10 +19,8 @@ export function dinerIn(session: SessionView | undefined, userId: string | undef
   return {
     /** La fila de este comensal; `undefined` hasta que la sesión lo incluye. */
     me,
-    /** Si eligió su nombre, o sigue con el que puso el sistema. */
+    /** Si eligió su nombre, o sigue con el que puso el sistema. Se le pide recién al agregar algo. */
     named,
-    /** El nombre se pide con la mesa abierta: cerrada, ya no se pide nada a nombre de nadie. */
-    needsName: session?.status === 'open' && !named,
     closed: session?.status === 'closed',
     /**
      * Cómo se nombra a un comensal en las listas de la mesa: por su nombre, con

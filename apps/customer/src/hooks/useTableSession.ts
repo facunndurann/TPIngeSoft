@@ -15,11 +15,12 @@ export type RenameField = {
   /** Lo que muestra el campo: el borrador mientras se edita, si no lo guardado. */
   name: string
   setName: (name: string) => void
-  /** Si el comensal está editando el nombre en el chip. La primera vez el
-   *  diálogo se muestra solo por `needsName`, no por este flag. */
+  /** Si el comensal está editando el nombre en el chip. La primera vez lo pide
+   *  el diálogo que abre `requireName`, no este flag. */
   editing: boolean
   setEditing: (editing: boolean) => void
-  submit: () => void
+  /** Guarda el nombre; `onSaved` corre recién con la mesa ya releída con él. */
+  submit: (onSaved?: () => void) => void
   isPending: boolean
   /** Hay un nombre válido y ningún guardado en curso. */
   canSubmit: boolean
@@ -121,7 +122,7 @@ export function useTableSession(token: string) {
       setName: setDraftName,
       editing: editingName,
       setEditing: setEditingName,
-      submit: () => rename.mutate(),
+      submit: (onSaved) => rename.mutate(undefined, { onSuccess: onSaved }),
       isPending: rename.isPending,
       canSubmit: validName.success && !rename.isPending,
       message: rename.isError ? renameMessage(rename.error) : undefined,

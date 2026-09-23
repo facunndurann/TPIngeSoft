@@ -2,7 +2,6 @@ import { type FormEvent, useState } from 'react'
 import { ErrorText } from '@restaurant-platform/ui'
 import { plateCount } from '@/features/cart'
 import { NameInput } from '@/features/NameInput'
-import { NameModal } from '@/features/NameModal'
 import { useTable } from '@/features/table-context'
 import type { RenameField } from '@/hooks/useTableSession'
 import { useCart } from '@/stores/cart'
@@ -55,14 +54,14 @@ function CloseIcon() {
 }
 
 export function SessionPanel({ connecting, connection, rename, onOpenNewSession }: SessionPanelProps) {
-  const { session, me, named, needsName, closed, cartKey, items } = useTable()
+  const { session, me, named, closed, cartKey, items } = useTable()
   const hasPendingSubmission = useCart((state) => !!state.submissions[cartKey])
   const cartCount = items.reduce((total, item) => total + item.quantity, 0)
   const participants = session.data?.participants ?? []
   const names = participants.map((participant) => participant.display_name).join(' · ')
   const showPanel = connecting || !!connection || session.isError || (!!me && named) || closed
   const canRename = named && !closed
-  // Mientras hay un envío sin resolver el nombre queda como está, en el chip y en el diálogo.
+  // Mientras hay un envío sin resolver el nombre queda como está (el diálogo de la mesa sigue la misma regla).
   const canSaveName = rename.canSubmit && !hasPendingSubmission
 
   function handleRename(event: FormEvent) {
@@ -70,89 +69,83 @@ export function SessionPanel({ connecting, connection, rename, onOpenNewSession 
     rename.submit()
   }
 
-  return (
-    <>
-      {showPanel && (
-        <section className="session-panel" aria-label="Tu mesa">
-          {connecting && <p role="status">Conectando con tu mesa…</p>}
-          {connection && <ErrorText {...connection} variant="menu" />}
-          {session.isError && (
-            <ErrorText
-              variant="menu"
-              error={session.error}
-              retry={() => { void session.refetch() }}
-            />
-          )}
+  if (!showPanel) return null
 
-          {me && named && (
-            <div className="table-people">
-              {rename.editing ? (
-                <form
-                  className="name-inline"
-                  onSubmit={handleRename}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Escape') {
-                      event.preventDefault()
-                      rename.setEditing(false)
-                    }
-                  }}
-                >
-                  <NameInput rename={rename} />
-                  <button className="icon-button" aria-label="Guardar nombre" disabled={!canSaveName}>
-                    <CheckIcon />
-                  </button>
+  return (
+    <section className="session-panel" aria-label="Tu mesa">
+      {connecting && <p role="status">Conectando con tu mesa…</p>}
+      {connection && <ErrorText {...connection} variant="menu" />}
+      {session.isError && (
+        <ErrorText
+          variant="menu"
+          error={session.error}
+          retry={() => { void session.refetch() }}
+        />
+      )}
+
+      {me && named && (
+        <div className="table-people">
+          {rename.editing ? (
+            <form
+              className="name-inline"
+              onSubmit={handleRename}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  event.preventDefault()
+                  rename.setEditing(false)
+                }
+              }}
+            >
+              <NameInput rename={rename} />
+              <button className="icon-button" aria-label="Guardar nombre" disabled={!canSaveName}>
+                <CheckIcon />
+              </button>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="Cancelar"
+                disabled={rename.isPending}
+                onClick={() => rename.setEditing(false)}
+              >
+                <CloseIcon />
+              </button>
+              {rename.message && <p role="alert">{rename.message}</p>}
+            </form>
+          ) : (
+            <>
+              <span className="who">
+                <strong>{me.display_name}</strong>
+                {canRename && (
                   <button
                     type="button"
-                    className="icon-button"
-                    aria-label="Cancelar"
-                    disabled={rename.isPending}
-                    onClick={() => rename.setEditing(false)}
+                    className="icon-button edit-name"
+                    aria-label="Editar nombre"
+                    onClick={() => rename.setEditing(true)}
                   >
-                    <CloseIcon />
+                    <PencilIcon />
                   </button>
-                  {rename.message && <p role="alert">{rename.message}</p>}
-                </form>
-              ) : (
-                <>
-                  <span className="who">
-                    <strong>{me.display_name}</strong>
-                    {canRename && (
-                      <button
-                        type="button"
-                        className="icon-button edit-name"
-                        aria-label="Editar nombre"
-                        onClick={() => rename.setEditing(true)}
-                      >
-                        <PencilIcon />
-                      </button>
-                    )}
-                  </span>
-                  <details>
-                    <summary className="disclosure">
-                      <span className="muted">{participants.length} en la mesa</span>
-                      <span className="chevron" aria-hidden="true">›</span>
-                    </summary>
-                    <p className="muted">{names}</p>
-                  </details>
-                </>
-              )}
-            </div>
+                )}
+              </span>
+              <details>
+                <summary className="disclosure">
+                  <span className="muted">{participants.length} en la mesa</span>
+                  <span className="chevron" aria-hidden="true">›</span>
+                </summary>
+                <p className="muted">{names}</p>
+              </details>
+            </>
           )}
-
-          {closed && (
-            <ClosedSessionNotice
-              hasPendingSubmission={hasPendingSubmission}
-              cartCount={cartCount}
-              onOpenNewSession={onOpenNewSession}
-            />
-          )}
-        </section>
+        </div>
       )}
 
-      {needsName && (
-        <NameModal rename={rename} canSave={canSaveName} />
+      {closed && (
+        <ClosedSessionNotice
+          hasPendingSubmission={hasPendingSubmission}
+          cartCount={cartCount}
+          onOpenNewSession={onOpenNewSession}
+        />
       )}
-    </>
+    </section>
   )
 }
 

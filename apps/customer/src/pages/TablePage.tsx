@@ -28,6 +28,8 @@ import { TableNav } from '@/features/TableNav'
 import { cartPath, menuPath, ordersPath, TABLE_ROUTE, tableRoot } from '@/features/table-paths'
 import { MenuShell } from '@/features/MenuShell'
 import { MenuDesignContext } from '@/features/menu-design'
+import { useNameGate } from '@/features/name-gate'
+import { NameModal } from '@/features/NameModal'
 import { rememberTable } from '@/features/last-table'
 import { useReorder } from '@/features/reorder'
 import { useTableSession } from '@/hooks/useTableSession'
@@ -71,7 +73,6 @@ function TableApp({ token }: { token: string }) {
     me,
     nameOf,
     named,
-    needsName,
     closed,
     rename,
   } = useTableSession(token)
@@ -81,7 +82,9 @@ function TableApp({ token }: { token: string }) {
   const cart = useCart()
   const cartKey = cartKeyFor(sessionId, joined.data?.userId)
   const items = cart.carts[cartKey] ?? []
-  const editLock = cartLock({ sessionOpen, closed, pending: !!cart.submissions[cartKey] })
+  const pending = !!cart.submissions[cartKey]
+  const editLock = cartLock({ sessionOpen, closed, pending })
+  const nameGate = useNameGate(named)
   const cartCount = items.reduce((total, item) => total + item.quantity, 0)
   const cartTotal = menu.data ? cartPrice(menu.data, items) : 0
   // La portada de la carta es la ruta de la mesa sin nada más: lo decide el router,
@@ -154,7 +157,7 @@ function TableApp({ token }: { token: string }) {
             me,
             nameOf,
             named,
-            needsName,
+            requireName: nameGate.requireName,
             sessionOpen,
             closed,
             cartKey,
@@ -188,7 +191,17 @@ function TableApp({ token }: { token: string }) {
               }}
             />
 
-            <div {...(needsName ? { inert: true } : {})}>
+            {nameGate.asking && (
+              <NameModal
+                rename={rename}
+                // Mientras hay un envío sin resolver el nombre queda como está, igual que en el chip.
+                canSave={rename.canSubmit && !pending}
+                onSaved={nameGate.resolve}
+                onCancel={nameGate.cancel}
+              />
+            )}
+
+            <div {...(nameGate.asking ? { inert: true } : {})}>
               <TableNav token={token} cartCount={cartCount} />
 
               <Toast announcement={announcement} onDismiss={() => setAnnouncement(undefined)} />
@@ -329,7 +342,7 @@ function CartItemEditor({
   initial?: CartItem
   back: () => void
 }) {
-  const { editLock, cartKey, announce } = useTable()
+  const { editLock, cartKey, announce, requireName } = useTable()
   const save = useCart((state) => state.save)
 
   return (
@@ -339,11 +352,12 @@ function CartItemEditor({
       initial={initial}
       locked={editLock}
       onClose={back}
-      onSave={(item) => {
+      // El primer plato es el que pide el nombre: guardado, el plato entra solo.
+      onSave={(item) => requireName(() => {
         save(cartKey, item)
         announce(`${product.name} guardado en tu carrito`)
         back()
-      }}
+      })}
     />
   )
 }
@@ -361,13 +375,13 @@ function BackWithNotice({ onBack, children }: { onBack: () => void; children: Re
 }
 
 export function TableOrdersPage() {
-  const { menu, editLock, cartKey, announce } = useTable()
+  const { menu, editLock, cartKey, announce, requireName } = useTable()
   const reorder = useReorder({ cartKey, menu: menu.data, canEdit: !editLock, announce })
   // Los pedidos no necesitan la carta para mostrarse, así que no esperan su carga.
   return (
     <>
       <PendingSubmissionNotice />
-      <SessionOrders onReorder={reorder} />
+      <SessionOrders onReorder={reorder && ((order) => requireName(() => reorder(order)))} />
       <CartBar />
     </>
   )

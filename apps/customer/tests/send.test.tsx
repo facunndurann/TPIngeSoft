@@ -69,3 +69,21 @@ test('an old link to the removed review screen lands on the cart', async () => {
   assert.equal(pathnameIn(container), cartPath(token))
   assert.equal(vi.mocked(submitOrder).mock.calls.length, 0)
 })
+
+test('without a chosen name, sending asks for it first and sends once it is saved', async () => {
+  useCart.getState().save(cartKey, line)
+  const waiting: (() => void)[] = []
+  const container = await renderTable(cartPath(token), cartRoutes, { requireName: (action) => waiting.push(action) })
+
+  const send = [...container.querySelectorAll('button')].find((button) => button.textContent?.startsWith('Enviar pedido'))
+  // El botón no queda apagado por el nombre: tocarlo es lo que lo pide.
+  assert.ok(send && !send.disabled)
+  await act(async () => send.click())
+  assert.equal(waiting.length, 1)
+  assert.equal(vi.mocked(submitOrder).mock.calls.length, 0)
+
+  await act(async () => waiting[0]())
+  await settle()
+  assert.equal(vi.mocked(submitOrder).mock.calls.length, 1)
+  assert.equal(pathnameIn(container), ordersPath(token))
+})

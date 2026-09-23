@@ -61,7 +61,6 @@ test('the table decides once who this diner is and how everyone is named', () =>
   const diner = dinerIn(open, 'user-ana')
   assert.equal(diner.me, ana)
   assert.equal(diner.named, true)
-  assert.equal(diner.needsName, false)
   assert.equal(diner.closed, false)
   // «(vos)» es solo para este comensal; quien ya no está en la mesa es «Comensal».
   assert.equal(diner.nameOf('ana'), 'Ana (vos)')
@@ -69,34 +68,27 @@ test('the table decides once who this diner is and how everyone is named', () =>
   assert.equal(diner.nameOf('se-fue'), 'Comensal')
   assert.equal(diner.nameOf(null), 'Comensal')
 
-  // Con el nombre del sistema, el nombre se pide solo mientras la mesa está abierta.
+  // Con el nombre que puso el sistema, el comensal todavía no eligió el suyo.
   const unnamed = { status: 'open' as const, participants: [{ ...ana, named_at: null }] }
-  assert.equal(dinerIn(unnamed, 'user-ana').needsName, true)
+  assert.equal(dinerIn(unnamed, 'user-ana').named, false)
   const closed = { status: 'closed' as const, participants: [{ ...ana, named_at: null }] }
-  assert.equal(dinerIn(closed, 'user-ana').needsName, false)
   assert.equal(dinerIn(closed, 'user-ana').closed, true)
 
   // Sin ingreso todavía nadie es «vos», ni siquiera un invitado sin user_id.
   const anonymous = dinerIn(open, undefined)
   assert.equal(anonymous.me, undefined)
   assert.equal(anonymous.nameOf('carla'), 'Carla')
-  assert.equal(dinerIn(undefined, 'user-ana').needsName, false)
+  assert.equal(dinerIn(undefined, 'user-ana').named, false)
 })
 
-test('an unnamed diner gets a required name dialog and no inline prompt', async () => {
+test('an unnamed diner lands on the menu: no dialog and no name chip until one is needed', async () => {
   const html = await renderPanel(
     [participant('ana', 'Comensal', { named_at: null })],
     { ...idleRename, name: '' },
   )
 
-  assert.match(html, /role="dialog"/)
-  assert.match(html, /¿Cómo te llamás\?/)
-  assert.match(html, /Así sabemos qué pidió cada uno/)
-  assert.match(html, />Continuar</)
-  assert.doesNotMatch(html, /Poné tu nombre así/)
-  assert.doesNotMatch(html, /en la mesa/)
-  assert.doesNotMatch(html, /Cambiar/)
-  assert.doesNotMatch(html, />Cancelar</)
+  // El nombre lo pide la primera acción que lo necesita (ver name.test.tsx), no la llegada.
+  assert.equal(html, '')
 })
 
 test('a named diner sees a compact chip and edits the name in place', async () => {

@@ -1,6 +1,7 @@
 import { createContext, useContext } from 'react'
 import type { PaymentMethod } from '@restaurant-platform/shared'
 import type { Announce } from '@/features/announcements'
+import type { RequireName } from '@/features/name-gate'
 import type { CartItem } from '@/features/cart'
 import type { useTableSession } from '@/hooks/useTableSession'
 
@@ -23,8 +24,11 @@ export type TableContextValue = {
   me: TableSession['me']
   nameOf: TableSession['nameOf']
   named: boolean
-  /** Falta que elija su nombre: el diálogo lo pide y el resto de la pantalla espera. */
-  needsName: boolean
+  /**
+   * Envuelve lo que deja algo a nombre del comensal (agregar, repetir, enviar): sin
+   * nombre elegido, abre el diálogo y lo hace apenas lo guarde.
+   */
+  requireName: RequireName
   sessionOpen: boolean
   /** La mesa cerró su cuenta; no es lo contrario de `sessionOpen`, que además exige una lectura sana. */
   closed: boolean

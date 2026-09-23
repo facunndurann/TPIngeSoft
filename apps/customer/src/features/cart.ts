@@ -74,8 +74,6 @@ type CartPhaseInput = {
   total: number
   sessionId?: string
   sessionOpen: boolean
-  /** Si el comensal eligió su nombre: sin eso, la cuenta no se puede repartir. */
-  named: boolean
   submission?: PendingSubmission
   menuOutdated: boolean
   sending: boolean
@@ -95,10 +93,9 @@ export function cartPhase(input: CartPhaseInput): CartPhase {
   // Un envío en curso sin envío guardado es un rechazo definitivo que todavía está
   // refrescando la carta: el borrador espera a que termine.
   const editable = input.sessionOpen && !input.sending
-  // El nombre se exige para enviar, no para armar el carrito: se puede elegir
-  // platos mientras se piensa, pero el pedido llega a la mesa con un dueño.
-  const canSend =
-    editable && input.named && !input.menuOutdated && validDraft(input.menu, items)
+  // El nombre no frena el envío: si falta, el botón lo pide (`requireName`) y
+  // después envía, así el pedido llega a la mesa con un dueño sin un paso más.
+  const canSend = editable && !input.menuOutdated && validDraft(input.menu, items)
   // Se firma el total que el comensal ve en el botón. Si el servidor ya no llega al
   // mismo, rechaza el envío y el carrito pide actualizar la carta antes de reintentar.
   const sendable = canSend && sessionId ? { sessionId, expectedTotal: input.total } : undefined

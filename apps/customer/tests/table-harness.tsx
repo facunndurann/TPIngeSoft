@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-quer
 import type { PaymentMethod } from '@restaurant-platform/shared'
 import { cartKeyFor, cartLock } from '../src/features/cart'
 import { dinerIn } from '../src/features/diner'
+import type { RequireName } from '../src/features/name-gate'
 import { cartPrice } from '../src/features/menu'
 import { type loadSession, sessionQuery } from '../src/features/session'
 import { TableContext } from '../src/features/table-context'
@@ -63,6 +64,8 @@ type TableOptions = {
   paymentMethods?: PaymentMethod[]
   /** Lo que la mesa ya leyó, además de la sesión: como si la red hubiera respondido. */
   seed?: (client: QueryClient) => void
+  /** Cómo se pide el nombre. Por defecto Ana ya lo eligió y todo pasa en el acto. */
+  requireName?: RequireName
 }
 
 const cleanups: (() => void)[] = []
@@ -77,7 +80,7 @@ export function cleanupTables() {
 export async function renderTable(
   path: string,
   routes: ReactNode,
-  { paymentMethods = ['in_person', 'external'], seed }: TableOptions = {},
+  { paymentMethods = ['in_person', 'external'], seed, requireName = (action) => action() }: TableOptions = {},
 ) {
   // Sin refetch al montar ni reintentos: lo sembrado es lo que hay.
   const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } })
@@ -98,7 +101,7 @@ export async function renderTable(
       <QueryClientProvider client={client}>
         <MemoryRouter initialEntries={[path]}>
           <Routes>
-            <Route path={TABLE_ROUTE} element={<Table paymentMethods={paymentMethods} />}>
+            <Route path={TABLE_ROUTE} element={<Table paymentMethods={paymentMethods} requireName={requireName} />}>
               {routes}
             </Route>
           </Routes>
@@ -119,7 +122,7 @@ export async function settle() {
 /** La ruta en la que quedó la mesa: la escribe `Table` en un `<output>`. */
 export const pathnameIn = (container: HTMLElement) => container.querySelector('output')?.textContent
 
-function Table({ paymentMethods }: { paymentMethods: PaymentMethod[] }) {
+function Table({ paymentMethods, requireName }: { paymentMethods: PaymentMethod[]; requireName: RequireName }) {
   const menuQuery = useQuery({ queryKey: ['menu'], queryFn: () => menu, initialData: menu })
   const session = useQuery(sessionQuery(sessionId))
   const items = useCart((state) => state.carts[cartKey]) ?? []
@@ -137,6 +140,7 @@ function Table({ paymentMethods }: { paymentMethods: PaymentMethod[] }) {
         sessionId,
         refreshTable: async () => {},
         ...diner,
+        requireName,
         sessionOpen,
         cartKey,
         items,

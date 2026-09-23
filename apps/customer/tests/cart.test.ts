@@ -70,14 +70,11 @@ test('a successful response matches submitted lines by value, not by key or opti
 
 test('the cart phase is the single source for what the diner can do', () => {
   const item = { ...selection, id: 'line', productId: 'p' }
-  const draft = { items: [item], menu, total: 30.9, sessionId: 'session', sessionOpen: true, named: true, menuOutdated: false, sending: false, cancelling: false }
+  const draft = { items: [item], menu, total: 30.9, sessionId: 'session', sessionOpen: true, menuOutdated: false, sending: false, cancelling: false }
   assert.deepEqual(cartPhase(draft), { kind: 'editing', editable: true, sendable: { sessionId: 'session', expectedTotal: 30.9 } })
   // Se firma el total de ahora, el mismo que muestra el botón: no hay una revisión
   // anterior con la que tenga que coincidir.
   assert.deepEqual(cartPhase({ ...draft, total: 31 }), { kind: 'editing', editable: true, sendable: { sessionId: 'session', expectedTotal: 31 } })
-  // Sin nombre elegido se puede armar el carrito, pero no enviarlo: la cuenta no
-  // sabría de quién es cada plato.
-  assert.deepEqual(cartPhase({ ...draft, named: false }), { kind: 'editing', editable: true, sendable: undefined })
   assert.deepEqual(cartPhase({ ...draft, items: [] }), { kind: 'empty' })
   assert.deepEqual(cartPhase({ ...draft, menuOutdated: true }), { kind: 'editing', editable: true, sendable: undefined })
   assert.deepEqual(cartPhase({ ...draft, menu: undefined }), { kind: 'editing', editable: true, sendable: undefined })
