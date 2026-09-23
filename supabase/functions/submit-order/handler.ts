@@ -1,5 +1,5 @@
-import { submitOrderSchema, type SubmitOrderError } from '../../../packages/shared/src/orders.ts';
-import { AppError } from '../../../packages/shared/src/errors.ts';
+import { submitOrderSchema } from '../../../packages/shared/src/orders.ts';
+import { AppError, type AppErrorBody } from '../../../packages/shared/src/errors.ts';
 import type { OrderGateway } from '../_shared/order-gateway.ts';
 
 const headers = {
@@ -12,7 +12,7 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
   status, headers: { ...headers, 'Content-Type': 'application/json' },
 });
 const errorResponse = ({ code, message, status }: AppError) =>
-  json({ error: { code, message } } satisfies SubmitOrderError, status);
+  json({ error: { code, message } } satisfies AppErrorBody, status);
 
 async function readBody(request: Request): Promise<unknown> {
   const limit = 128 * 1024;

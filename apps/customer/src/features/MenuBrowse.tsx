@@ -1,8 +1,7 @@
-import type { ReactNode } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
 import { CurrentLink } from '@/components/CurrentLink'
-import { formatPrice, productMedia } from '@restaurant-platform/shared'
-import { MediaCarousel } from '@/features/MediaCarousel'
+import { dietaryTagsText, formatPrice, productMedia } from '@restaurant-platform/shared'
+import { MediaThumb } from '@/features/MediaCarousel'
 import { useMenuDesign } from '@/features/menu-design'
 import { matchesSearch } from '@/features/menu'
 import type { Menu, Product } from '@/features/menu'
@@ -11,12 +10,9 @@ import { menuPath, parseMenuFilters, productPath } from '@/features/table-paths'
 type MenuBrowseProps = {
   token: string
   menu: Menu
-  canEdit: boolean
-  /** Estado del refresco de la carta; lo arma quien tiene la consulta. */
-  freshness?: ReactNode
 }
 
-export function MenuBrowse({ token, menu, canEdit, freshness }: MenuBrowseProps) {
+export function MenuBrowse({ token, menu }: MenuBrowseProps) {
   const { copy } = useMenuDesign()
   const { search: locationSearch } = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -51,7 +47,6 @@ export function MenuBrowse({ token, menu, canEdit, freshness }: MenuBrowseProps)
             setSearchParams(next, { replace: true })
           }}
         />
-        {freshness}
       </div>
 
       <div className="categories" aria-label="Categorías">
@@ -77,7 +72,6 @@ export function MenuBrowse({ token, menu, canEdit, freshness }: MenuBrowseProps)
               <ProductCard
                 key={product.id}
                 product={product}
-                disabled={!product.is_available || !canEdit}
                 to={productPath(token, product.id, locationSearch)}
               />
             ))}
@@ -92,30 +86,24 @@ export function MenuBrowse({ token, menu, canEdit, freshness }: MenuBrowseProps)
   )
 }
 
-function ProductCard({
-  product,
-  disabled,
-  to,
-}: {
-  product: Product
-  disabled: boolean
-  to: string
-}) {
-  // La tarjeta es un contenedor, no un enlace: el <Link> y los controles del
-  // carrusel son hermanos. El enlace se estira a toda la tarjeta por CSS
-  // (.product-card-link::after) y las flechas quedan por encima.
+function ProductCard({ product, to }: { product: Product; to: string }) {
+  // La tarjeta es un contenedor, no un enlace: el <Link> del nombre se estira a toda
+  // la tarjeta por CSS (.product-card-link::after), foto incluida, y no hay otro control
+  // adentro con el que pueda chocar. Todo plato se puede abrir, aunque esté agotado o
+  // la mesa no admita pedir: leerlo no cuesta nada, y el detalle dice por qué no se
+  // puede agregar.
   return (
-    <article className={disabled ? 'product-card is-disabled' : 'product-card'}>
+    <article className="product-card">
       <div className="product-card-body">
         <h4>
-          {disabled ? product.name : <Link className="product-card-link" to={to}>{product.name}</Link>}
+          <Link className="product-card-link" to={to}>{product.name}</Link>
         </h4>
         <p>{product.description}</p>
-        {product.dietary_tags.length > 0 && <small>{product.dietary_tags.join(' · ')}</small>}
+        {product.dietary_tags.length > 0 && <small>{dietaryTagsText(product.dietary_tags)}</small>}
         <strong>{formatPrice(product.base_price)}</strong>
         {!product.is_available && <span className="unavailable">Agotado</span>}
       </div>
-      <MediaCarousel media={productMedia(product)} variant="card" alt={product.name} />
+      <MediaThumb media={productMedia(product)} />
     </article>
   )
 }

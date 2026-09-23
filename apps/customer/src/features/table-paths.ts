@@ -1,4 +1,5 @@
-export type TableSection = 'menu' | 'cart' | 'orders'
+/** Patrón de la ruta de una mesa: lo declara el router y lo usa quien pregunta si está en la carta. */
+export const TABLE_ROUTE = '/m/:token'
 
 export function tableRoot(token: string) {
   return `/m/${encodeURIComponent(token)}`
@@ -24,10 +25,6 @@ export function cartPath(token: string) {
   return `${tableRoot(token)}/carrito`
 }
 
-export function cartReviewPath(token: string) {
-  return `${tableRoot(token)}/carrito/revisar`
-}
-
 export function cartItemPath(token: string, itemId: string) {
   return `${tableRoot(token)}/carrito/${encodeURIComponent(itemId)}`
 }
@@ -36,19 +33,13 @@ export function ordersPath(token: string) {
   return `${tableRoot(token)}/pedidos`
 }
 
+export function billPath(token: string) {
+  return `${tableRoot(token)}/cuenta`
+}
+
 export function parseMenuFilters(searchParams: URLSearchParams) {
   return {
     category: searchParams.get('categoria') || 'all',
     search: searchParams.get('q') ?? '',
   }
-}
-
-export function tableSection(pathname: string): TableSection {
-  if (pathname.includes('/carrito')) return 'cart'
-  if (pathname.includes('/pedidos')) return 'orders'
-  return 'menu'
-}
-
-export function isMenuIndex(pathname: string) {
-  return tableSection(pathname) === 'menu' && !pathname.includes('/producto/')
 }

@@ -1,7 +1,29 @@
+import { queryOptions, skipToken } from '@tanstack/react-query'
 import { AppError, fromPostgres } from '@restaurant-platform/shared'
 import { supabase } from '@/lib/supabase'
 import { useCart } from '@/stores/cart'
 import { recoverPendingSession } from '@/features/session-recovery'
+
+/** Respaldo de Realtime: cada lectura de la mesa se repite sola cada 15 segundos. */
+export const SESSION_POLL_MS = 15000
+
+/**
+ * Raíz de todo lo que se lee de una mesa. La sesión cuelga de acá y sus pedidos,
+ * cuenta y pagos debajo, así que invalidar esta key los refresca juntos: react-query
+ * compara por prefijo. Nadie tiene que acordarse de qué consultas toca su cambio.
+ */
+export function sessionKey(sessionId: string | undefined) {
+  return ['session', sessionId] as const
+}
+
+export function sessionQuery(sessionId: string | undefined) {
+  return queryOptions({
+    queryKey: sessionKey(sessionId),
+    // Sin sesión todavía no hay nada que leer: `skipToken` la deja en espera.
+    queryFn: sessionId ? () => loadSession(sessionId) : skipToken,
+    refetchInterval: SESSION_POLL_MS,
+  })
+}
 
 let signingIn: Promise<string> | undefined
 

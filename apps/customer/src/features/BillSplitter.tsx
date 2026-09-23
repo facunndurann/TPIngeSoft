@@ -1,17 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation } from '@tanstack/react-query'
 import { allocationTotal, formatElapsed, formatPrice, MAX_EQUAL_PARTS, MIN_EQUAL_PARTS, remainingPercentage, type SessionSplit, sessionSplitSchema, SPLIT_PERCENTAGE_TOTAL, splitBill, splitEqualAmounts, splitPercentageAmounts, type SplitBill, splitTypeDescriptions, splitTypeLabels, splitTypes } from '@restaurant-platform/shared'
-import { useNow } from '@restaurant-platform/ui'
+import { ErrorText, useNow } from '@restaurant-platform/ui'
 
+import { PartsField } from '@/components/PartsField'
 import { PercentField } from '@/components/PercentField'
-import { toastDuration } from '@/features/announcements'
-import { updateSessionSplit, addGuestParticipant, reassignOrderItems } from '@/features/orders-api'
+import { updateSessionSplit } from '@/features/orders-api'
 import { useTable } from '@/features/table-context'
 import type { loadOrders } from '@/features/orders-api'
-import type { loadSession } from '@/features/session'
 
 type Order = Awaited<ReturnType<typeof loadOrders>>[number]
-type Participant = Awaited<ReturnType<typeof loadSession>>['participants'][number]
 
 type BillSplitterProps = {
   split: SessionSplit
@@ -20,63 +18,56 @@ type BillSplitterProps = {
 }
 
 export function BillSplitter({ split, bill, orders }: BillSplitterProps) {
-  const { session: sessionQuery, userId } = useTable()
+  const { session: sessionQuery, me, refreshTable, announce } = useTable()
   const session = sessionQuery.data
   const participants = session?.participants ?? []
   const updatedBy = session?.split_updated_by ?? null
   const updatedAt = session?.split_updated_at ?? null
+  const author = participants.find((participant) => participant.id === updatedBy)
 
-  const queryClient = useQueryClient()
   const now = useNow()
   const [draft, setDraft] = useState<SessionSplit | null>(null)
-  const [changedBy, setChangedBy] = useState<string | null>(null)
-  const [isAddingGuest, setIsAddingGuest] = useState(false)
-  
-  const lastSaved = useRef<string | null>(updatedAt)
-  const currentParticipantId = participants.find((entry) => entry.user_id === userId)?.id
 
+  const lastSaved = useRef<string | null>(updatedAt)
+  const currentParticipantId = me?.id
+
+  // Si otro comensal guarda una división, la suya manda: el borrador propio se
+  // descarta en vez de pisarla, y el aviso llega como cualquier otro de la mesa.
   useEffect(() => {
     if (updatedAt === lastSaved.current) return
     lastSaved.current = updatedAt
     if (!updatedAt || !currentParticipantId || updatedBy === currentParticipantId) return
-    const author = session?.participants.find((entry) => entry.id === updatedBy)
     setDraft(null)
-    setChangedBy(author?.display_name ?? 'Otro comensal')
-  }, [updatedAt, updatedBy, session, currentParticipantId])
-
-  useEffect(() => {
-    if (!changedBy) return
-    const timer = setTimeout(() => setChangedBy(null), toastDuration(false))
-    return () => clearTimeout(timer)
-  }, [changedBy])
+    announce(`${author?.display_name ?? 'Otro comensal'} cambió los detalles del pago.`)
+  }, [updatedAt, updatedBy, author, currentParticipantId, announce])
 
   const save = useMutation({
     mutationFn: ({ sessionId, next }: { sessionId: string; next: SessionSplit }) =>
       updateSessionSplit(sessionId, next),
-    onSuccess: async (_result, { sessionId }) => {
+    onSuccess: async () => {
       setDraft(null)
-      setChangedBy(null)
-      await queryClient.invalidateQueries({ queryKey: ['session', sessionId] })
+      await refreshTable()
     },
   })
 
   if (!session || participants.length === 0) return null
 
   const active = draft ?? split
-  const shares = splitBill(bill, orders, participants, active)
+  // Cada modo se calcula una sola vez, con su propia base: partes iguales reparten el
+  // pendiente en partes; porcentajes, el total en cuenta (MI-43); «cada uno lo suyo»,
+  // el pendiente según lo que pidió cada uno.
   const equalAmounts = active.type === 'equal' && active.equalParts
     ? splitEqualAmounts(bill, active.equalParts)
     : []
-  
-  const percentageShares = active.type === 'percentages'
-    ? splitPercentageAmounts(bill.total_amount, participants, active.allocations)
-    : []
-    
+  const shares =
+    active.type === 'percentages'
+      ? splitPercentageAmounts(bill.total_amount, participants, active.allocations)
+      : active.type === 'none'
+        ? splitBill(bill, orders, participants, active)
+        : []
   const amountOf = (participantId: string) =>
-    (active.type === 'percentages' ? percentageShares : shares)
-      .find((share) => share.participantId === participantId)?.amount ?? 0
+    shares.find((share) => share.participantId === participantId)?.amount ?? 0
 
-  const author = participants.find((participant) => participant.id === updatedBy)
   const changedByMe = !!updatedBy && updatedBy === currentParticipantId
   const changedAt = updatedAt ? Date.parse(updatedAt) : NaN
   const lastChange =
@@ -105,24 +96,6 @@ export function BillSplitter({ split, bill, orders }: BillSplitterProps) {
     } : {}),
   })
 
-  if (isAddingGuest) {
-    return (
-      <section className="bill-panel">
-        <AddGuestFlow 
-          sessionId={session.id} 
-          orders={orders} 
-          participants={participants}
-          onComplete={async () => {
-            setIsAddingGuest(false)
-            await queryClient.invalidateQueries({ queryKey: ['orders', session.id] })
-            await queryClient.invalidateQueries({ queryKey: ['session', session.id] })
-          }}
-          onCancel={() => setIsAddingGuest(false)}
-        />
-      </section>
-    )
-  }
-
   return (
     <section className="bill-panel" aria-label="División de la cuenta">
       <h3>{draft ? '¿Cómo quieren dividir la cuenta?' : 'División de la cuenta'}</h3>
@@ -147,20 +120,10 @@ export function BillSplitter({ split, bill, orders }: BillSplitterProps) {
       {active.type === 'equal' && (
         <div className="equal-split-summary">
           {draft ? (
-            <label>
-              Cantidad de personas
-              <input
-                type="number"
-                min={MIN_EQUAL_PARTS}
-                max={MAX_EQUAL_PARTS}
-                step={1}
-                value={draft.equalParts ?? ''}
-                onChange={(event) => setDraft((current) => current && ({
-                  ...current,
-                  equalParts: event.target.value === '' ? undefined : Number(event.target.value),
-                }))}
-              />
-            </label>
+            <PartsField
+              value={draft.equalParts ?? null}
+              onChange={(equalParts) => setDraft((current) => current && { ...current, equalParts })}
+            />
           ) : (
             <strong>{active.equalParts} personas</strong>
           )}
@@ -178,7 +141,7 @@ export function BillSplitter({ split, bill, orders }: BillSplitterProps) {
       {active.type !== 'equal' && (
         <ul className="split-list">
           {participants.map((participant) => {
-            const isYou = participant.user_id === userId
+            const isYou = participant.id === currentParticipantId
             const amount = amountOf(participant.id)
             return (
               <li key={participant.id} className="choice">
@@ -225,32 +188,10 @@ export function BillSplitter({ split, bill, orders }: BillSplitterProps) {
       )}
 
       {validation && !validation.success && (
-        <p className="notice">{validation.error.issues[0].message}</p>
+        <p className="error-notice">{validation.error.issues[0].message}</p>
       )}
 
-      {changedBy && (
-        <p className="notice" role="status">
-          {changedBy} cambió los detalles del pago.
-        </p>
-      )}
-
-      {save.isError && (
-        <p className="notice" role="alert">
-          {save.error.message}
-        </p>
-      )}
-
-      {!draft && (
-        <div style={{ textAlign: 'center', marginBottom: '20px', marginTop: '10px' }}>
-          <button 
-            type="button" 
-            className="text-button" 
-            onClick={() => setIsAddingGuest(true)}
-          >
-            Agregar invitado a la cuenta
-          </button>
-        </div>
-      )}
+      <ErrorText variant="menu" error={save.error} />
 
       <div className="cart-actions">
         {draft ? (
@@ -279,104 +220,5 @@ export function BillSplitter({ split, bill, orders }: BillSplitterProps) {
         )}
       </div>
     </section>
-  )
-}
-
-type AddGuestFlowProps = {
-  sessionId: string
-  orders: readonly Order[]
-  participants: readonly Participant[]
-  onComplete: () => void
-  onCancel: () => void
-}
-
-function AddGuestFlow({ sessionId, orders, participants, onComplete, onCancel }: AddGuestFlowProps) {
-  const [name, setName] = useState('')
-  const [selectedItems, setSelectedItems] = useState<string[]>([])
-  const [isSaving, setIsSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  
-  const allItems = orders
-    .filter((o) => o.status !== 'cancelled' && o.status !== 'submitted')
-    .flatMap((o) => o.order_items)
-
-  const handleSave = async () => {
-    if (!name.trim()) return
-    setIsSaving(true)
-    setError(null)
-    try {
-      const guestId = await addGuestParticipant(sessionId, name)
-      if (selectedItems.length > 0) {
-        await reassignOrderItems(selectedItems, guestId)
-      }
-      onComplete()
-    } catch (e) {
-      if (e instanceof Error) {
-        setError(e.message)
-      } else {
-        setError('Ocurrió un error al guardar.')
-      }
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
-  const toggleItem = (id: string) => {
-    setSelectedItems(current => current.includes(id) 
-      ? current.filter(i => i !== id) 
-      : [...current, id]
-    )
-  }
-
-  return (
-    <div className="confirmation">
-      <h3>Agregar invitado a la cuenta</h3>
-      <p className="muted">Agregá a alguien que no escaneó el QR y asignale lo que consumió.</p>
-      
-      <input 
-        placeholder="Nombre" 
-        value={name} 
-        onChange={(e) => setName(e.target.value)} 
-        disabled={isSaving}
-        className="wide"
-        style={{ marginBottom: '16px' }}
-      />
-
-      {allItems.length > 0 && (
-        <fieldset className="payment-items">
-          <legend>¿Qué ítems consumió?</legend>
-          {allItems.map((item) => {
-            const ownerName = participants.find((p) => p.id === item.participant_id)?.display_name || 'Compartido'
-            return (
-              <label key={item.id} className="payment-item">
-                <input
-                  type="checkbox"
-                  checked={selectedItems.includes(item.id)}
-                  onChange={() => toggleItem(item.id)}
-                  disabled={isSaving}
-                />
-                <span>
-                  <strong>{item.quantity} × {item.product_name}</strong>
-                  <small>Pedida por: {ownerName}</small>
-                </span>
-              </label>
-            )
-          })}
-        </fieldset>
-      )}
-
-      {error && (
-        <p className="notice" role="alert" style={{ marginBottom: '16px' }}>
-          {error}
-        </p>
-      )}
-
-      <div className="cart-actions">
-        <button onClick={onCancel} disabled={isSaving}>Cancelar</button>
-        <button className="primary" onClick={handleSave} disabled={isSaving || !name.trim()}>
-          {isSaving ? 'Guardando...' : 'Crear y reasignar ítems'}
-        </button>
-      </div>
-    </div>
   )
 }

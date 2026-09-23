@@ -1,9 +1,9 @@
 import type { Announce } from './announcements'
 import { plateCount } from './cart'
+import type { CartItem } from './cart'
 import { selectionErrors } from './menu'
 import type { Menu, Product } from './menu'
 import { useCart } from '../stores/cart'
-import type { CartItem } from '../stores/cart'
 
 /** Lo que un pedido guarda de cada plato: ids para repetirlo, nombre para nombrarlo. */
 export type OrderedLine = {
@@ -115,10 +115,12 @@ export function useReorder({ cartKey, menu, canEdit, announce }: ReorderOptions)
 
   return (order: { order_items: readonly OrderedLine[] }) => {
     const { items, skipped } = reorderLines(order.order_items, menu)
-    items.forEach((item) => cart.save(cartKey, item))
+    // La ronda entra entera en una sola escritura, y el deshacer la saca igual:
+    // nunca queda a medias en el carrito.
+    cart.save(cartKey, ...items)
     // Sin nada repetido no hay nada que deshacer.
     const undo = items.length
-      ? () => items.forEach((item) => cart.remove(cartKey, item.id))
+      ? () => cart.remove(cartKey, ...items.map((item) => item.id))
       : undefined
     announce(reorderAnnouncement({ items, skipped }), undo)
   }

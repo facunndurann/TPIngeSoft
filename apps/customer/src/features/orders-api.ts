@@ -1,45 +1,72 @@
+import { queryOptions, skipToken } from '@tanstack/react-query'
 import { FunctionsHttpError } from '@supabase/supabase-js'
 import {
   AppError,
+  appErrorBodySchema,
   fromPostgres,
   isAppErrorCode,
-  submitOrderErrorSchema,
   submitOrderResultSchema,
   type SessionRequestKind,
   type SessionSplit,
   type SubmitOrderInput,
   type SubmitOrderResult,
-  mobilePaymentErrorSchema,
   mobilePaymentResultSchema,
   type MobilePaymentRequest,
   type MobilePaymentResult,
 } from '@restaurant-platform/shared'
+import { SESSION_POLL_MS, sessionKey } from '@/features/session'
 import { supabase } from '@/lib/supabase'
 
-export async function submitOrder(input: SubmitOrderInput): Promise<SubmitOrderResult> {
-  const { data, error } = await supabase.functions.invoke<unknown>('submit-order', { body: input })
+/** Lo único que hace falta de un schema de zod para validar una respuesta. */
+type ResponseSchema<T> = {
+  safeParse: (data: unknown) => { success: true; data: T } | { success: false }
+}
+
+/**
+ * Llama a una Edge Function y devuelve su respuesta validada. Hay tres salidas de
+ * error, y solo la primera es un rechazo:
+ * - el servidor respondió con un error: vuelve su código y su mensaje, que el
+ *   servidor ya eligió del catálogo o escribió para ese caso;
+ * - la respuesta no llegó, o llegó un error ilegible: CONNECTION_ERROR;
+ * - llegó una respuesta exitosa que no se puede leer: `unreadable`, que cada
+ *   llamada elige porque de eso depende qué conviene hacer después.
+ */
+async function invokeFunction<T>(
+  name: string,
+  body: object,
+  schema: ResponseSchema<T>,
+  unreadable = new AppError('SERVER_ERROR'),
+): Promise<T> {
+  const { data, error } = await supabase.functions.invoke<unknown>(name, { body })
 
   if (error) {
     if (error instanceof FunctionsHttpError) {
-      // Un cuerpo ilegible no es un rechazo del servidor: se conserva el envío para reintentar.
-      const body = submitOrderErrorSchema.safeParse(await error.context.json().catch(() => null))
-      // El mensaje viene del servidor, que ya lo tomó del mismo catálogo.
-      if (body.success) {
-        const { code, message } = body.data.error
+      const rejection = appErrorBodySchema.safeParse(await error.context.json().catch(() => null))
+      if (rejection.success) {
+        const { code, message } = rejection.data.error
         throw new AppError(isAppErrorCode(code) ? code : 'SERVER_ERROR', message)
       }
     }
     throw new AppError('CONNECTION_ERROR')
   }
 
-  const result = submitOrderResultSchema.safeParse(data)
-  if (!result.success) {
-    throw new AppError(
+  const result = schema.safeParse(data)
+  if (!result.success) throw unreadable
+  return result.data
+}
+
+export function submitOrder(input: SubmitOrderInput): Promise<SubmitOrderResult> {
+  // El pedido pudo haberse creado aunque la respuesta sea ilegible: se conserva el
+  // envío y reintentar con el mismo requestId devuelve su resultado sin duplicarlo.
+  return invokeFunction(
+    'submit-order',
+    input,
+    submitOrderResultSchema,
+    new AppError(
       'CONNECTION_ERROR',
       'No pudimos confirmar la respuesta. Reintentá el mismo envío para consultar su resultado.',
-    )
-  }
-  return result.data
+    ),
+  )
 }
 
 export type AbandonResult =
@@ -75,8 +102,17 @@ export async function loadOrders(sessionId: string) {
     .select('*, order_items(*, order_item_modifiers(*), order_item_removed_ingredients(*))')
     .eq('session_id', sessionId)
     .order('created_at', { ascending: false })
-  if (error) throw fromPostgres(error)
+  if (error) throw fromPostgres(error, 'No pudimos actualizar los pedidos.')
   return data
+}
+
+// Pedidos, cuenta y pagos cuelgan de la sesión: se refrescan con ella (ver sessionKey).
+export function ordersQuery(sessionId: string | undefined) {
+  return queryOptions({
+    queryKey: [...sessionKey(sessionId), 'orders'],
+    queryFn: sessionId ? () => loadOrders(sessionId) : skipToken,
+    refetchInterval: SESSION_POLL_MS,
+  })
 }
 
 export async function loadBill(sessionId: string) {
@@ -85,8 +121,16 @@ export async function loadBill(sessionId: string) {
     .select('*')
     .eq('session_id', sessionId)
     .single()
-  if (error) throw fromPostgres(error)
+  if (error) throw fromPostgres(error, 'No pudimos actualizar la cuenta.')
   return data
+}
+
+export function billQuery(sessionId: string | undefined) {
+  return queryOptions({
+    queryKey: [...sessionKey(sessionId), 'bill'],
+    queryFn: sessionId ? () => loadBill(sessionId) : skipToken,
+    refetchInterval: SESSION_POLL_MS,
+  })
 }
 
 /** Movimientos de la cuenta. El saldo se calcula aparte en session_bills. */
@@ -96,25 +140,20 @@ export async function loadPayments(sessionId: string) {
     .select('id, participant_id, amount, mode, method, status, external_reference, created_at, payment_order_items(order_item_id)')
     .eq('session_id', sessionId)
     .order('created_at', { ascending: false })
-  if (error) throw error
+  if (error) throw fromPostgres(error, 'No pudimos actualizar el historial de pagos.')
   return data
 }
 
-export async function runMobilePayment(input: MobilePaymentRequest): Promise<MobilePaymentResult> {
-  const { data, error } = await supabase.functions.invoke<unknown>('mobile-payment', { body: input })
-  if (error) {
-    if (error instanceof FunctionsHttpError) {
-      const body = mobilePaymentErrorSchema.safeParse(await error.context.json().catch(() => null))
-      if (body.success) {
-        const code = body.data.error.code
-        throw new AppError(isAppErrorCode(code) ? code : 'SERVER_ERROR')
-      }
-    }
-    throw new AppError('CONNECTION_ERROR')
-  }
-  const parsed = mobilePaymentResultSchema.safeParse(data)
-  if (!parsed.success) throw new AppError('SERVER_ERROR')
-  return parsed.data
+export function paymentsQuery(sessionId: string | undefined) {
+  return queryOptions({
+    queryKey: [...sessionKey(sessionId), 'payments'],
+    queryFn: sessionId ? () => loadPayments(sessionId) : skipToken,
+    refetchInterval: SESSION_POLL_MS,
+  })
+}
+
+export function runMobilePayment(input: MobilePaymentRequest): Promise<MobilePaymentResult> {
+  return invokeFunction('mobile-payment', input, mobilePaymentResultSchema)
 }
 
 /**
@@ -139,21 +178,17 @@ export async function updateSessionSplit(sessionId: string, split: SessionSplit)
   if (error) throw fromPostgres(error)
 }
 
-export async function addGuestParticipant(sessionId: string, name: string): Promise<string> {
-  const rpc = supabase.rpc as unknown as (fn: string, args: object) => Promise<{ data: string, error: unknown }>
-  const { data, error } = await rpc('add_guest_participant', {
+/**
+ * Suma a la cuenta a alguien que no escaneó el QR y le pasa los ítems que
+ * consumió, en una sola transacción: si algo falla no queda un invitado a medias,
+ * así que reintentar no lo duplica. Devuelve el id del invitado.
+ */
+export async function addGuestParticipant(sessionId: string, name: string, itemIds: string[]) {
+  const { data, error } = await supabase.rpc('add_guest_participant', {
     p_session_id: sessionId,
     p_display_name: name,
-  })
-  if (error) throw fromPostgres(error as { message: string })
-  return data
-}
-
-export async function reassignOrderItems(itemIds: string[], newParticipantId: string): Promise<void> {
-  const rpc = supabase.rpc as unknown as (fn: string, args: object) => Promise<{ error: unknown }>
-  const { error } = await rpc('reassign_order_items', {
     p_item_ids: itemIds,
-    p_new_participant_id: newParticipantId,
   })
-  if (error) throw fromPostgres(error as { message: string })
+  if (error) throw fromPostgres(error)
+  return data
 }

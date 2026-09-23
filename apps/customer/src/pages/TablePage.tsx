@@ -1,38 +1,34 @@
-import { useCallback, useEffect, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useState } from 'react'
 import {
-  Link,
   Navigate,
   Outlet,
   useLocation,
+  useMatch,
   useNavigate,
   useParams,
 } from 'react-router'
-import { enabledPaymentMethods, formatPrice, MENU_DESIGNS } from '@restaurant-platform/shared'
+import { enabledPaymentMethods, MENU_DESIGNS } from '@restaurant-platform/shared'
 import { ClockProvider, ErrorText } from '@restaurant-platform/ui'
-import { FreshnessNote } from '@/components/FreshnessNote'
 import { Toast } from '@/components/Toast'
-import { type Announce, type Announcement, toastDuration } from '@/features/announcements'
-import { cartKeyFor } from '@/features/cart'
+import type { Announce, Announcement } from '@/features/announcements'
+import { type CartItem, cartKeyFor, cartLock } from '@/features/cart'
 import { CartPanel } from '@/features/CartPanel'
 import { MenuBrowse } from '@/features/MenuBrowse'
-import { cartPrice } from '@/features/menu'
+import { cartPrice, type Product } from '@/features/menu'
 import { ProductEditor } from '@/features/ProductEditor'
+import { SessionBill } from '@/features/SessionBill'
 import { SessionOrders } from '@/features/SessionOrders'
 import { type Failure, SessionPanel } from '@/features/SessionPanel'
 import { useAttentionAnnouncements } from '@/features/service-requests'
 import { TableContext, useTable } from '@/features/table-context'
+import { CartBar, MenuStatus, PendingSubmissionNotice } from '@/features/TableChrome'
 import { TableHeader } from '@/features/TableHeader'
 import { TableNav } from '@/features/TableNav'
-import {
-  cartPath,
-  isMenuIndex,
-  menuPath,
-  ordersPath,
-  tableRoot,
-  tableSection,
-} from '@/features/table-paths'
+import { cartPath, menuPath, ordersPath, TABLE_ROUTE, tableRoot } from '@/features/table-paths'
 import { MenuShell } from '@/features/MenuShell'
 import { MenuDesignContext } from '@/features/menu-design'
+import { useNameGate } from '@/features/name-gate'
+import { NameModal } from '@/features/NameModal'
 import { rememberTable } from '@/features/last-table'
 import { useReorder } from '@/features/reorder'
 import { useTableSession } from '@/hooks/useTableSession'
@@ -65,20 +61,34 @@ export function TableRoute() {
 }
 
 function TableApp({ token }: { token: string }) {
-  const { client, table, menu, joined, session, sessionId, displayName, named, rename } =
-    useTableSession(token)
+  const {
+    table,
+    menu,
+    joined,
+    session,
+    sessionId,
+    refreshTable,
+    sessionOpen,
+    me,
+    nameOf,
+    named,
+    closed,
+    rename,
+  } = useTableSession(token)
   const location = useLocation()
   const navigate = useNavigate()
   const [announcement, setAnnouncement] = useState<Announcement>()
   const cart = useCart()
   const cartKey = cartKeyFor(sessionId, joined.data?.userId)
   const items = cart.carts[cartKey] ?? []
-  const sessionOpen = session.data?.status === 'open' && !session.isError
-  const canEdit = sessionOpen && !cart.submissions[cartKey]
+  const pending = !!cart.submissions[cartKey]
+  const editLock = cartLock({ sessionOpen, closed, pending })
+  const nameGate = useNameGate(named)
   const cartCount = items.reduce((total, item) => total + item.quantity, 0)
-  const section = tableSection(location.pathname)
-  const atMenu = isMenuIndex(location.pathname)
-  const total = menu.data ? cartPrice(menu.data, items) : 0
+  const cartTotal = menu.data ? cartPrice(menu.data, items) : 0
+  // La portada de la carta es la ruta de la mesa sin nada más: lo decide el router,
+  // no una búsqueda en el texto de la URL.
+  const atMenu = useMatch(TABLE_ROUTE) !== null
 
   const announce: Announce = useCallback((message, undo) => {
     setAnnouncement((current) => ({ id: (current?.id ?? 0) + 1, message, undo }))
@@ -90,13 +100,6 @@ function TableApp({ token }: { token: string }) {
   useEffect(() => {
     window.scrollTo(0, 0)
   }, [location.pathname])
-
-  // Cada aviso nuevo reinicia el plazo; uno anterior nunca puede borrar al siguiente.
-  useEffect(() => {
-    if (!announcement) return
-    const timer = setTimeout(() => setAnnouncement(undefined), toastDuration(!!announcement.undo))
-    return () => clearTimeout(timer)
-  }, [announcement])
 
   // Rastro mínimo para poder volver a la mesa desde una URL que no existe.
   useEffect(() => {
@@ -139,17 +142,21 @@ function TableApp({ token }: { token: string }) {
         <TableContext
           value={{
             token,
-            client,
             menu,
             session,
             sessionId,
-            userId: joined.data?.userId,
+            refreshTable,
+            me,
+            nameOf,
+            named,
+            requireName: nameGate.requireName,
+            sessionOpen,
+            closed,
             cartKey,
             items,
+            cartTotal,
             paymentMethods: enabledPaymentMethods(branch),
-            sessionOpen,
-            named,
-            canEdit,
+            editLock,
             announce,
           }}
         >
@@ -163,15 +170,11 @@ function TableApp({ token }: { token: string }) {
               compact={!atMenu}
             />
 
+            {/* Lo que el panel sabe de la mesa lo lee del contexto; acá solo recibe el
+                ingreso, que es de esta pantalla, y lo que puede hacer. */}
             <SessionPanel
               connecting={joined.isPending}
               connection={failureOf(joined)}
-              read={failureOf(session)}
-              session={session.data}
-              displayName={displayName}
-              named={named}
-              hasPendingSubmission={!!cart.submissions[cartKey]}
-              cartCount={cartCount}
               rename={rename}
               onOpenNewSession={() => {
                 setAnnouncement(undefined)
@@ -180,32 +183,25 @@ function TableApp({ token }: { token: string }) {
               }}
             />
 
-            <div {...(session.data?.status === 'open' && !named ? { inert: true } : {})}>
+            {nameGate.asking && (
+              <NameModal
+                rename={rename}
+                // Mientras hay un envío sin resolver el nombre queda como está, igual que en el chip.
+                canSave={rename.canSubmit && !pending}
+                onSaved={nameGate.resolve}
+                onCancel={nameGate.cancel}
+              />
+            )}
+
+            <div {...(nameGate.asking ? { inert: true } : {})}>
               <TableNav token={token} cartCount={cartCount} />
 
+              {/* El aviso se va solo cuando termina su salida: cada aviso nuevo remonta el
+                  suyo, así uno anterior nunca puede cerrar al siguiente. */}
               <Toast announcement={announcement} onDismiss={() => setAnnouncement(undefined)} />
 
-              {section !== 'orders' && menu.isPending && <p role="status">Cargando la carta…</p>}
-              {section !== 'orders' && menu.isError && (
-                <ErrorText variant="menu" error={menu.error} retry={() => { void menu.refetch() }} />
-              )}
-
-              {section !== 'cart' && cart.submissions[cartKey] && (
-                <div className="notice">
-                  <p>Tu último envío todavía necesita confirmación.</p>
-                  <Link className="btn" to={cartPath(token)}>
-                    Consultar o reintentar envío
-                  </Link>
-                </div>
-              )}
-
+              {/* Cada pantalla trae sus avisos y atajos (ver TableChrome). */}
               <Outlet />
-
-              {(atMenu || section === 'orders') && items.length > 0 && (
-                <Link className="primary cart-bar" to={cartPath(token)}>
-                  Ver mi carrito <strong>{formatPrice(total)}</strong>
-                </Link>
-              )}
 
               <footer>{design.copy.footer}</footer>
             </div>
@@ -217,143 +213,173 @@ function TableApp({ token }: { token: string }) {
 }
 
 export function TableMenuPage() {
-  const { token, menu, canEdit } = useTable()
-  if (!menu.data) return null
+  const { token, menu } = useTable()
   return (
-    <MenuBrowse
-      token={token}
-      menu={menu.data}
-      canEdit={canEdit}
-      freshness={
-        <FreshnessNote
-          label="la carta"
-          updatedAt={menu.dataUpdatedAt || undefined}
-          isFetching={menu.isFetching}
-        />
-      }
-    />
+    <>
+      <MenuStatus />
+      <PendingSubmissionNotice />
+      {/* Sin «Actualizado hace…»: la carta se relee sola y a quien la recorre no le
+          cambia nada saber cuándo; eso queda para Pedidos y Cuenta, que sí se mueven. */}
+      {menu.data && <MenuBrowse token={token} menu={menu.data} />}
+      <CartBar />
+    </>
   )
 }
 
-export function TableCartPage({ reviewing = false }: { reviewing?: boolean }) {
-  const { token, client, menu, sessionId, cartKey, items, announce } = useTable()
-  const pending = useCart((state) => state.submissions[cartKey])
+export function TableCartPage() {
+  const { token, menu, refreshTable, cartKey, announce } = useTable()
   const navigate = useNavigate()
 
-  if (reviewing && items.length === 0 && !pending) {
-    return <Navigate to={cartPath(token)} replace />
-  }
-
+  // Sin aviso de envío pendiente: el carrito ya lo muestra con sus acciones.
   return (
-    <CartPanel
-      key={`${cartKey}:${reviewing ? 'review' : 'edit'}`}
-      reviewing={reviewing}
-      refreshMenu={() => menu.refetch({ throwOnError: true })}
-      onSubmitted={() => {
-        announce(
-          'Tu pedido fue enviado. Podés seguir su estado y consultar la cuenta de la mesa.',
-        )
-        navigate(ordersPath(token), { replace: true })
-        void client.invalidateQueries({ queryKey: ['orders', sessionId] })
-        void client.invalidateQueries({ queryKey: ['bill', sessionId] })
-      }}
-    />
+    <>
+      <MenuStatus />
+      <CartPanel
+        // Quien empieza de nuevo en la mesa estrena carrito: el panel arranca sin los
+        // errores ni el refresco de carta que había dejado el envío anterior.
+        key={cartKey}
+        refreshMenu={() => menu.refetch({ throwOnError: true })}
+        onSubmitted={() => {
+          announce(
+            'Tu pedido fue enviado. Podés seguir su estado y consultar la cuenta de la mesa.',
+          )
+          // Reemplaza al carrito recién vaciado: volver atrás desde Pedidos lleva a la carta.
+          navigate(ordersPath(token), { replace: true })
+          void refreshTable()
+        }}
+      />
+    </>
   )
 }
 
 export function TableProductPage() {
-  const { token, menu, canEdit, cartKey, announce } = useTable()
+  // Sin aviso de envío pendiente arriba: si lo hay, lo dice el botón del plato, que
+  // es donde frena. Dos veces el mismo mensaje en una pantalla es ruido.
+  return (
+    <>
+      <MenuStatus />
+      <ProductScreen />
+    </>
+  )
+}
+
+function ProductScreen() {
+  const { token, menu } = useTable()
   const { productId = '' } = useParams()
   const location = useLocation()
   const back = useTableBack(`${menuPath(token)}${location.search}`)
-  const cart = useCart()
   const product = menu.data?.productsById.get(productId)
 
   if (!menu.data) return null
   if (!product) {
     return (
-      <section>
-        <button className="text-button" onClick={back}>
-          ← Volver
-        </button>
+      <BackWithNotice onBack={back}>
         <p className="empty">No encontramos este plato.</p>
-      </section>
+      </BackWithNotice>
     )
   }
 
-  if (!canEdit) {
-    return (
-      <section>
-        <button className="text-button" onClick={back}>
-          ← Volver
-        </button>
-        <p className="notice">
-          Para personalizar y agregar al carrito, la mesa tiene que estar abierta y sin envíos
-          pendientes.
-        </p>
-      </section>
-    )
-  }
-
-  return (
-    <ProductEditor
-      key={product.id}
-      product={product}
-      onClose={back}
-      onSave={(item) => {
-        cart.save(cartKey, item)
-        announce(`${product.name} guardado en tu carrito`)
-        back()
-      }}
-    />
-  )
+  return <CartItemEditor product={product} back={back} />
 }
 
 export function TableCartItemPage() {
-  const { token, menu, canEdit, cartKey, items, announce } = useTable()
+  return (
+    <>
+      <MenuStatus />
+      <CartItemScreen />
+    </>
+  )
+}
+
+function CartItemScreen() {
+  const { token, menu, items } = useTable()
   const { itemId = '' } = useParams()
   const back = useTableBack(cartPath(token))
-  const cart = useCart()
   const item = items.find((entry) => entry.id === itemId)
   const product = item && menu.data?.productsById.get(item.productId)
 
   if (!item) return <Navigate to={cartPath(token)} replace />
   if (!menu.data) return null
-
-  if (!product || !canEdit) {
+  if (!product) {
     return (
-      <section>
-        <button className="text-button" onClick={back}>
-          ← Volver
-        </button>
-        <p className="notice">
-          {product
-            ? 'Para editar este plato, la mesa tiene que estar abierta y sin envíos pendientes.'
-            : 'Este plato ya no está en la carta.'}
-        </p>
-      </section>
+      <BackWithNotice onBack={back}>
+        <p className="notice">Este plato ya no está en la carta.</p>
+      </BackWithNotice>
     )
   }
 
+  return <CartItemEditor product={product} initial={item} back={back} />
+}
+
+/**
+ * Armar un plato para el carrito, nuevo o ya guardado. El plato se muestra siempre:
+ * si la mesa no admite cambios, se apaga solo el botón y dice por qué. Al guardar
+ * se avisa y se vuelve a donde se estaba.
+ */
+function CartItemEditor({
+  product,
+  initial,
+  back,
+}: {
+  product: Product
+  /** La línea que se edita; sin ella, el plato entra como línea nueva. */
+  initial?: CartItem
+  back: () => void
+}) {
+  const { editLock, cartKey, announce, requireName } = useTable()
+  const save = useCart((state) => state.save)
+
   return (
     <ProductEditor
-      key={item.id}
+      key={initial?.id ?? product.id}
       product={product}
-      initial={item}
+      initial={initial}
+      locked={editLock}
       onClose={back}
-      onSave={(next) => {
-        cart.save(cartKey, next)
+      // El primer plato es el que pide el nombre: guardado, el plato entra solo.
+      onSave={(item) => requireName(() => {
+        save(cartKey, item)
         announce(`${product.name} guardado en tu carrito`)
         back()
-      }}
+      })}
     />
   )
 }
 
+/** La pantalla que no puede mostrar lo pedido: la vuelta y el porqué. */
+function BackWithNotice({ onBack, children }: { onBack: () => void; children: ReactNode }) {
+  return (
+    <section>
+      <button className="text-button" onClick={onBack}>
+        ← Volver
+      </button>
+      {children}
+    </section>
+  )
+}
+
 export function TableOrdersPage() {
-  const { menu, canEdit, cartKey, announce } = useTable()
-  const reorder = useReorder({ cartKey, menu: menu.data, canEdit, announce })
-  return <SessionOrders onReorder={reorder} />
+  const { menu, editLock, cartKey, announce, requireName } = useTable()
+  const reorder = useReorder({ cartKey, menu: menu.data, canEdit: !editLock, announce })
+  // Los pedidos no necesitan la carta para mostrarse, así que no esperan su carga.
+  return (
+    <>
+      <PendingSubmissionNotice />
+      <SessionOrders onReorder={reorder && ((order) => requireName(() => reorder(order)))} />
+      <CartBar />
+    </>
+  )
+}
+
+export function TableBillPage() {
+  // Un envío sin resolver todavía puede sumar a la cuenta: se avisa antes de pagar.
+  // Sin barra del carrito: acá se paga lo pedido, no se sigue pidiendo.
+  return (
+    <>
+      <PendingSubmissionNotice />
+      <SessionBill />
+    </>
+  )
 }
 
 export function TableCatchAll() {

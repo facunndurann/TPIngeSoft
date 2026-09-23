@@ -1,5 +1,5 @@
 import { MAX_ITEM_QUANTITY, MIN_ITEM_QUANTITY } from '@restaurant-platform/shared'
-import { useNumericDraft } from '@/hooks/useNumericDraft'
+import { integerIn, useNumericDraft } from '@/hooks/useNumericDraft'
 
 type QuantityFieldProps = {
   value: number
@@ -8,12 +8,7 @@ type QuantityFieldProps = {
 }
 
 /** Un entero dentro del rango se confirma al tipearlo; el resto espera al blur. */
-function parseQuantity(text: string) {
-  const quantity = Number(text)
-  // `Number('')` es 0, así que el campo vacío se descarta antes de mirar el rango.
-  if (text === '' || !Number.isInteger(quantity)) return undefined
-  return quantity >= MIN_ITEM_QUANTITY && quantity <= MAX_ITEM_QUANTITY ? quantity : undefined
-}
+const parseQuantity = integerIn(MIN_ITEM_QUANTITY, MAX_ITEM_QUANTITY)
 
 /**
  * Único control de cantidad del comensal: los botones siempre dejan un valor

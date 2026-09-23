@@ -6,7 +6,7 @@ import {
   mediaKindFromMimeType,
   productMedia,
 } from '@restaurant-platform/shared'
-import { buildMenu, cartPrice, groupSelectionHint, price, productOptions, selectedInGroup, selectionErrors } from '../src/features/menu'
+import { buildMenu, cartPrice, describeSelection, groupRule, price, productOptions, selectedInGroup, selectionErrors, selectionIssues } from '../src/features/menu'
 import type { Menu, MenuRows, ModifierGroup } from '../src/features/menu'
 import { menu, product, productAfter, selection } from './fixtures'
 
@@ -19,22 +19,37 @@ test('required single-choice groups and decimal pricing', () => {
   assert.equal(cartPrice(menu, [{ ...selection, productId: 'p' }, { ...selection, productId: 'p', quantity: 1 }]), 41.2)
 })
 
-test('a modifier group says where you are, not just what it allows', () => {
-  const group = (min: number, max: number, available = true) => ({
-    id: 'g', name: 'Salsa', min_select: min, max_select: max, is_available: available,
-    options: [{ id: 'a' }, { id: 'b' }, { id: 'c' }],
-  } as unknown as ModifierGroup)
+test('a modifier group states its rule, not a running count', () => {
+  const rule = (min: number, max: number, available = true) =>
+    groupRule({ min_select: min, max_select: max, is_available: available })
 
-  assert.equal(groupSelectionHint(group(1, 1), []), 'Obligatorio · elegiste 0 de 1 · mínimo 1')
-  assert.equal(groupSelectionHint(group(1, 1), ['a']), 'Obligatorio · elegiste 1 de 1')
-  assert.equal(groupSelectionHint(group(0, 3), ['a', 'b']), 'Opcional · elegiste 2 de 3')
-  assert.equal(groupSelectionHint(group(2, 3), ['a']), 'Obligatorio · elegiste 1 de 3 · mínimo 2')
-  // Al llegar al techo se explica por qué el resto quedó deshabilitado.
-  assert.equal(groupSelectionHint(group(0, 2), ['a', 'b']), 'Opcional · elegiste 2 de 2 · llegaste al máximo')
-  assert.equal(groupSelectionHint(group(1, 2, false), ['a']), 'Obligatorio · elegiste 1 de 2 · Agotado')
+  assert.equal(rule(1, 1), 'Elegí 1')
+  assert.equal(rule(0, 1), 'Opcional')
+  assert.equal(rule(0, 3), 'Opcional · hasta 3')
+  assert.equal(rule(2, 2), 'Elegí 2')
+  assert.equal(rule(2, 3), 'Elegí entre 2 y 3')
+  assert.equal(rule(1, 2, false), 'Elegí entre 1 y 2 · Agotado')
+
   // Solo cuenta lo elegido en este grupo, no en otro del mismo plato.
-  assert.equal(groupSelectionHint(group(0, 3), ['z']), 'Opcional · elegiste 0 de 3')
-  assert.equal(selectedInGroup(group(0, 3), ['a', 'z']), 1)
+  const group = { options: [{ id: 'a' }, { id: 'b' }] } as unknown as ModifierGroup
+  assert.equal(selectedInGroup(group, ['a', 'z']), 1)
+})
+
+test('selection issues sit where the diner fixes them, and the cart reads them as one list', () => {
+  const missing = { ...selection, optionIds: [] }
+  assert.deepEqual(selectionIssues(product, missing), { product: [], ingredients: [], groups: { g: 'Elegí una opción.' } })
+  // Fuera del grupo, el mismo error lleva el nombre del grupo.
+  assert.deepEqual(selectionErrors(product, missing), ['Salsa: elegí una opción.'])
+
+  // Lo agotado se dice antes que lo que falta, porque elegir no lo arregla.
+  const soldOutGroup = productAfter((changed) => { changed.groups[0].is_available = false })
+  assert.deepEqual(selectionIssues(soldOutGroup, missing).groups, { g: 'No está disponible.' })
+  const soldOutOption = productAfter((changed) => { changed.groups[0].modifier_options[0].is_available = false })
+  assert.deepEqual(selectionIssues(soldOutOption, selection).groups, { g: 'Lo que elegiste se agotó. Elegí otra opción.' })
+
+  const soldOutIngredient = productAfter((changed) => { changed.products[0].product_ingredients[0].is_available = false })
+  assert.deepEqual(selectionIssues(soldOutIngredient, selection).ingredients, ['Hay ingredientes agotados. Quitalos si el plato lo permite.'])
+  assert.deepEqual(selectionIssues({ ...product, is_available: false }, selection).product, ['Este plato no está disponible.'])
 })
 
 test('rejects unknown, duplicated and unavailable modifiers', () => {
@@ -92,4 +107,25 @@ test('productMedia classifies each url and mediaElementSrc only tweaks videos', 
   assert.deepEqual(productMedia({ media_urls: [] }), [])
   assert.equal(mediaKindFromMimeType('video/quicktime'), 'video')
   assert.equal(mediaKindFromMimeType('image/png'), 'image')
+})
+
+test('a selection reads the same in the editable cart line and in its summary', () => {
+  const named = productAfter((rows) => {
+    rows.products[0].product_ingredients[0].name = 'Cebolla'
+    rows.groups[0].modifier_options[0].name = 'Criolla'
+  })
+  const picked = { optionIds: ['o'], removedIds: ['i'] }
+
+  assert.deepEqual(describeSelection(named, picked), {
+    options: [{ id: 'o', name: 'Criolla', priceDelta: 0.2 }],
+    removed: [{ id: 'i', name: 'Cebolla' }],
+  })
+
+  // Lo que la carta ya no tiene, o todavía no cargó, se nombra igual en las dos vistas y sin precio.
+  const pending = { options: [{ id: 'o', name: 'opción por actualizar' }], removed: [{ id: 'i', name: 'ingrediente por actualizar' }] }
+  assert.deepEqual(describeSelection(undefined, picked), pending)
+  assert.deepEqual(describeSelection(named, { optionIds: ['vieja'], removedIds: ['otro'] }), {
+    options: [{ id: 'vieja', name: 'opción por actualizar' }],
+    removed: [{ id: 'otro', name: 'ingrediente por actualizar' }],
+  })
 })

@@ -1,8 +1,11 @@
-import { type Announcement, FADE_MS, toastDuration } from '@/features/announcements'
+import { type Announcement, FADE_MS, TOAST_EXIT_ANIMATION, toastDuration } from '@/features/announcements'
 
 /**
- * Aviso flotante sin estado ni timers: entrada y salida son dos animaciones CSS,
- * la segunda con retraso. Quien muestra el mensaje decide cuándo quitarlo.
+ * Aviso flotante sin estado ni timers: entrada y salida son dos animaciones CSS, la
+ * segunda con retraso, y el aviso se cierra cuando esa salida termina. La animación
+ * es el reloj: mientras el aviso está bajo el puntero o tiene el foco, index.css la
+ * pausa, y con ella el cierre (WCAG 2.2.1). Así «Deshacer» no se escapa mientras se
+ * lo busca.
  */
 export function Toast({
   announcement,
@@ -24,6 +27,10 @@ export function Toast({
           style={{
             animationDuration: `${FADE_MS}ms`,
             animationDelay: `0ms, ${toastDuration(!!announcement.undo) - FADE_MS}ms`,
+          }}
+          // También termina la entrada, y la de un botón de adentro: solo la salida cierra.
+          onAnimationEnd={(event) => {
+            if (event.target === event.currentTarget && event.animationName === TOAST_EXIT_ANIMATION) onDismiss()
           }}
         >
           <span>{announcement.message}</span>

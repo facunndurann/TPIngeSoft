@@ -16,6 +16,30 @@ export function localDateKey(now: Date = new Date(), timeZone = RESTAURANT_TIME_
   }).format(now);
 }
 
+const clock = new Intl.DateTimeFormat('es-AR', {
+  timeZone: RESTAURANT_TIME_ZONE,
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+const dayAndMonth = new Intl.DateTimeFormat('es-AR', {
+  timeZone: RESTAURANT_TIME_ZONE,
+  day: 'numeric',
+  month: 'numeric',
+});
+
+/**
+ * La hora de algo que pasó en la mesa, como la dice un mozo: «22:52». Una sesión casi
+ * siempre empieza y termina el mismo día, así que la fecha aparece solo cuando no es
+ * la de hoy («21/9 23:58»). Reemplaza al «22/9/26, 10:52 p. m.», que en un celular se
+ * cortaba y dejaba «m.» sola en la línea siguiente.
+ */
+export function formatTableTime(at: string, now: number): string {
+  const date = new Date(at);
+  const time = clock.format(date);
+  return localDateKey(date) === localDateKey(new Date(now)) ? time : `${dayAndMonth.format(date)} ${time}`;
+}
+
 /** La hora conserva los minutos solo donde importa cuánto se lleva esperando. */
 export type ElapsedPrecision = 'coarse' | 'exact';
 

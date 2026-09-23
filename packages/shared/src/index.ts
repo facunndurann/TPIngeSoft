@@ -9,6 +9,7 @@ export * from './payments';
 export * from './split';
 export * from './floor';
 export * from './designs';
+export * from './dietary';
 export * from './product-media';
 export * from './errors';
 export * from './supabase-client';
