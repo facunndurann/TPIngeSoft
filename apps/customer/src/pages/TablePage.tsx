@@ -10,7 +10,7 @@ import {
 import { enabledPaymentMethods, MENU_DESIGNS } from '@restaurant-platform/shared'
 import { ClockProvider, ErrorText } from '@restaurant-platform/ui'
 import { Toast } from '@/components/Toast'
-import { type Announce, type Announcement, toastDuration } from '@/features/announcements'
+import type { Announce, Announcement } from '@/features/announcements'
 import { type CartItem, cartKeyFor, cartLock } from '@/features/cart'
 import { CartPanel } from '@/features/CartPanel'
 import { MenuBrowse } from '@/features/MenuBrowse'
@@ -100,13 +100,6 @@ function TableApp({ token }: { token: string }) {
   useEffect(() => {
     window.scrollTo(0, 0)
   }, [location.pathname])
-
-  // Cada aviso nuevo reinicia el plazo; uno anterior nunca puede borrar al siguiente.
-  useEffect(() => {
-    if (!announcement) return
-    const timer = setTimeout(() => setAnnouncement(undefined), toastDuration(!!announcement.undo))
-    return () => clearTimeout(timer)
-  }, [announcement])
 
   // Rastro mínimo para poder volver a la mesa desde una URL que no existe.
   useEffect(() => {
@@ -203,6 +196,8 @@ function TableApp({ token }: { token: string }) {
             <div {...(nameGate.asking ? { inert: true } : {})}>
               <TableNav token={token} cartCount={cartCount} />
 
+              {/* El aviso se va solo cuando termina su salida: cada aviso nuevo remonta el
+                  suyo, así uno anterior nunca puede cerrar al siguiente. */}
               <Toast announcement={announcement} onDismiss={() => setAnnouncement(undefined)} />
 
               {/* Cada pantalla trae sus avisos y atajos (ver TableChrome). */}

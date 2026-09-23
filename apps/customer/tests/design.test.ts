@@ -278,3 +278,22 @@ test('text sizes come from one scale, fields are 16px, and what a finger taps is
   assert.match(declarationsOf('.carousel-dots .dot'), /width: 24px;[\s\S]*height: 24px/)
   assert.match(declarationsOf('.carousel-dots'), /gap: 4px/)
 })
+
+test('motion respects the system setting, and the toast waits while it is being read', () => {
+  // Con «reducir movimiento» nada se desplaza: el aviso y el diálogo se funden, con los
+  // mismos nombres de animación, porque el cierre del aviso espera el final de toastOut.
+  const reduced = customerCss.match(/@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/)?.[1] ?? ''
+  for (const name of ['toastIn', 'toastOut', 'nameModalIn']) {
+    const keyframes = reduced.match(new RegExp(`@keyframes ${name} \\{([^\\n]*)\\}`))?.[1] ?? ''
+    assert.match(keyframes, /opacity/, name)
+    assert.doesNotMatch(keyframes, /transform/, name)
+  }
+  assert.match(reduced, /\.chevron, \.carousel-btn \{ transition: none; \}/)
+
+  // Bajo el puntero o con el foco adentro, la salida del aviso se pausa y con ella el cierre.
+  assert.match(declarationsOf('.toast:focus-within'), /animation-play-state: paused/)
+  assert.match(declarationsOf('.toast'), /animation-name: toastIn, toastOut/)
+  // Abajo, sin tapar el nombre ni su botón de editar.
+  assert.match(declarationsOf('.toast-container'), /bottom: calc\(96px \+ env\(safe-area-inset-bottom\)\)/)
+  assert.doesNotMatch(declarationsOf('.toast-container'), /top:/)
+})

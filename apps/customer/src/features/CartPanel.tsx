@@ -7,7 +7,7 @@ import { QuantityField } from '@/components/QuantityField'
 import { cartPhase, plateCount } from '@/features/cart'
 import type { CartItem } from '@/features/cart'
 import { describeSelection, price, selectionErrors } from '@/features/menu'
-import type { Menu } from '@/features/menu'
+import type { Menu, Product } from '@/features/menu'
 import { abandonSubmission, submitOrder } from '@/features/orders-api'
 import { useTable } from '@/features/table-context'
 import { cartItemPath } from '@/features/table-paths'
@@ -143,7 +143,7 @@ export function CartPanel({ refreshMenu, onSubmitted }: CartPanelProps) {
           {phase.editable && items.length > 1 && (
             <div className="cart-actions">
               <button
-                className="text-button"
+                className="link-button danger"
                 onClick={() => {
                   const discarded = items
                   cart.clear(cartKey)
@@ -255,47 +255,48 @@ function CartLine({
   onRemove: () => void
 }) {
   const product = menu?.productsById.get(item.productId)
-  const { options, removed } = describeSelection(product, item)
   const errors = menu
     ? product
       ? selectionErrors(product, item)
       : ['El producto ya no está en la carta.']
     : []
   const title = product?.name ?? (menu ? 'Producto eliminado' : 'Producto del carrito')
+  const details = selectionDetails(product, item)
 
+  // Tres renglones: qué es y cuánto sale, cómo viene, y lo que se le puede hacer. El
+  // desglose de precios está en el plato, a un toque de «Editar».
   return (
     <article className="cart-item">
-      <h3>
-        {title} {item.isShared && <span className="badge">Para compartir</span>}
-      </h3>
-      <p>Base: {product ? formatPrice(product.base_price) : '—'}</p>
-      {options.map((option) => (
-        <p key={option.id}>
-          + {option.name}
-          {option.priceDelta !== undefined && ` (${formatPrice(option.priceDelta)})`}
-        </p>
-      ))}
-      {removed.map((ingredient) => (
-        <p key={ingredient.id}>Sin {ingredient.name}</p>
-      ))}
-      <div className="choice">
-        <span>Cantidad</span>
-        <QuantityField value={item.quantity} disabled={locked} onChange={onQuantityChange} />
-      </div>
-      <p className="cart-line-price">
+      <div className="cart-line-head">
+        <h3>
+          {title} {item.isShared && <span className="badge">Para compartir</span>}
+        </h3>
         <strong>{product ? formatPrice(price(product, item)) : '—'}</strong>
-      </p>
+      </div>
+      {details && <p className="muted">{details}</p>}
       {errors.length > 0 && <p className="error-notice">{errors.join(' ')}</p>}
-      <div className="cart-actions">
-        <button disabled={!product || locked} onClick={onEdit}>
-          Editar plato
-        </button>
-        <button disabled={locked} onClick={onRemove}>
-          Eliminar
-        </button>
+      <div className="cart-line-controls">
+        <QuantityField value={item.quantity} disabled={locked} onChange={onQuantityChange} />
+        {/* Acciones de la línea como texto: pesan menos que el envío, y quitar va en el
+            tono de peligro aunque el aviso ofrezca deshacerlo. El nombre del plato
+            distingue cada botón para quien los recorre con un lector. */}
+        <div className="cart-line-actions">
+          <button className="link-button" aria-label={`Editar ${title}`} disabled={!product || locked} onClick={onEdit}>
+            Editar
+          </button>
+          <button className="link-button danger" aria-label={`Quitar ${title}`} disabled={locked} onClick={onRemove}>
+            Quitar
+          </button>
+        </div>
       </div>
     </article>
   )
+}
+
+/** Cómo viene un plato, en una frase corta: «Veggie · Papas fritas · sin cebolla». */
+function selectionDetails(product: Product | undefined, item: CartItem): string {
+  const { options, removed } = describeSelection(product, item)
+  return [...options.map((option) => option.name), ...removed.map((ingredient) => `sin ${ingredient.name}`)].join(' · ')
 }
 
 /**
@@ -308,12 +309,8 @@ function CartSummary({ items, menu }: { items: CartItem[]; menu?: Menu }) {
     <ul className="cart-summary">
       {items.map((item) => {
         const product = menu?.productsById.get(item.productId)
-        const { options, removed } = describeSelection(product, item)
         // Personalizaciones en una línea: acá se leen, no se editan.
-        const details = [
-          ...options.map((option) => option.name),
-          ...removed.map((ingredient) => `sin ${ingredient.name}`),
-        ]
+        const details = selectionDetails(product, item)
 
         return (
           <li key={item.id}>
@@ -321,7 +318,7 @@ function CartSummary({ items, menu }: { items: CartItem[]; menu?: Menu }) {
               {item.quantity} × {product?.name ?? 'Plato del carrito'}
               {item.isShared && <span className="badge">Para compartir</span>}
             </div>
-            {details.length > 0 && <small>{details.join(' · ')}</small>}
+            {details && <small>{details}</small>}
           </li>
         )
       })}

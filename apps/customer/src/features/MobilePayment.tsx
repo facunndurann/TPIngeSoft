@@ -86,7 +86,7 @@ export function MobilePayment({ sessionId, ...account }: MobilePaymentProps) {
           </p>
         </fieldset>
       )}
-      <p className="muted">{copy.help}</p>
+      {copy.help && <p className="muted">{copy.help}</p>}
       <PaymentStepView
         step={plan.step}
         payLabel={copy.pay}
@@ -104,27 +104,27 @@ function itemCount(count: number) {
   return `${count} ${count === 1 ? 'ítem' : 'ítems'}`
 }
 
-/** Lo que se dice de la parte a pagar: la ayuda sobre el cálculo y el botón que la inicia. */
-function shareCopy(share: PaymentShare): { help: string; pay: string } {
-  const validated = 'El importe se calcula y valida en el servidor.'
+/**
+ * Lo que se dice de la parte a pagar: de dónde sale el importe, si hace falta
+ * explicarlo, y el botón que la inicia. Que el servidor vuelva a validar el
+ * importe es un detalle nuestro, no algo que el comensal tenga que leer.
+ */
+function shareCopy(share: PaymentShare): { help?: string; pay: string } {
   switch (share.mode) {
     case 'custom':
-      return {
-        help: 'El servidor vuelve a validar los ítems y su subtotal antes de crear el pago.',
-        pay: `Pagar ítems · ${formatPrice(share.amount)}`,
-      }
+      return { pay: `Pagar ítems · ${formatPrice(share.amount)}` }
     case 'equal_split':
       return {
-        help: `Quedan ${share.remainingParts} ${share.remainingParts === 1 ? 'parte' : 'partes'} por pagar. ${validated}`,
+        help: `Quedan ${share.remainingParts} ${share.remainingParts === 1 ? 'parte' : 'partes'} por pagar.`,
         pay: `Pagar mi parte · ${formatPrice(share.amount)}`,
       }
     case 'percentage_split':
       return {
-        help: `Tu parte es el ${share.percentage}% de ${formatPrice(share.accountTotal)}: ${formatPrice(share.shareOfTotal)}. ${validated}`,
+        help: `Tu parte es el ${share.percentage}% de ${formatPrice(share.accountTotal)}: ${formatPrice(share.shareOfTotal)}.`,
         pay: `Pagar mi parte · ${formatPrice(share.amount)}`,
       }
     case 'full':
-      return { help: validated, pay: `Pagar ${formatPrice(share.amount)}` }
+      return { pay: `Pagar ${formatPrice(share.amount)}` }
   }
 }
 

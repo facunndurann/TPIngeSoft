@@ -238,7 +238,7 @@ section { margin-bottom: 28px; }
 .empty { text-align: center; padding: 45px 15px; color: var(--menu-muted); }
 .editor { max-width: 620px; margin: auto; }
 .text-button { margin-bottom: 20px; }
-.cart-actions .text-button { margin-bottom: 0; margin-left: auto; }
+.cart-actions .link-button { flex: none; margin-left: auto; }
 fieldset { border: 1px solid var(--menu-border); padding: 16px; margin: 24px 0; border-radius: var(--menu-radius); }
 legend { padding: 0 8px; font-weight: 700; font-family: var(--menu-font-display); }
 /* Un bloque con problema lo marca el borde y lo dice su texto: el color solo no alcanza. */
@@ -262,11 +262,19 @@ fieldset.is-invalid { border-color: var(--menu-danger); }
 .choice { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px 0; }
 .choice small { display: block; }
 .wide { width: 100%; }
-.cart-item { background: var(--menu-surface); border: 1px solid var(--menu-border); border-radius: calc(var(--menu-radius) + 2px); padding: 20px; margin: 18px 0; }
+.cart-item { background: var(--menu-surface); border: 1px solid var(--menu-border); border-radius: calc(var(--menu-radius) + 2px); padding: 16px; margin: 12px 0; }
 .cart-item p { font-size: var(--text-sm); }
 .cart-actions, .total { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-top: 18px; }
 .cart-actions button { flex: 1; }
-.cart-line-price { text-align: right; margin: 0; }
+/* Una línea del carrito: qué es y cuánto sale, cómo viene, y sus controles. */
+.cart-line-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.cart-line-head h3 { margin: 0; }
+.cart-item > .muted { margin: 6px 0 0; }
+.cart-line-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+.cart-line-actions { display: flex; gap: 4px; margin-left: auto; }
+/* Acción secundaria escrita como texto: pesa menos que un botón y conserva los 44px del dedo. */
+.link-button { border: 0; background: transparent; padding: 10px 8px; color: var(--menu-accent); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.link-button.danger { color: var(--menu-danger); }
 .cart-summary { list-style: none; padding: 0; margin: 12px 0 0; }
 .cart-summary li { padding: 10px 0; border-bottom: 1px solid var(--menu-border); }
 .cart-summary li:last-child { border-bottom: none; }
@@ -318,6 +326,11 @@ footer { text-align: center; color: var(--menu-muted); font-size: var(--text-xs)
 .payment-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--menu-border); }
 .payment-item span { display: grid; gap: 2px; }
 .payment-item small { color: var(--menu-muted); }
+.payment-list { list-style: none; padding: 0; margin: 0 0 12px; }
+.payment-line { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--menu-border); }
+.payment-line:last-child { border-bottom: none; }
+.payment-line p { margin: 4px 0 0; }
+.payment-line time { flex-shrink: 0; }
 .order-card .disclosure { align-items: flex-start; flex-wrap: nowrap; }
 .order-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .order-heading h3, .order-heading h4 { margin-bottom: 0; }
@@ -375,9 +388,11 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; }
 [data-layout="editorial"] .tabs a { border-radius: 0; }
 [data-layout="editorial"] header { border-bottom-width: 0; padding-bottom: 8px; }
 
-@keyframes slideInRight {
-  from { transform: translateX(120%); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
+/* El aviso sube desde abajo y baja al irse. Los nombres los lee Toast.tsx: el final de
+   `toastOut` es lo que lo cierra, así que existen también con «reducir movimiento». */
+@keyframes toastIn {
+  from { transform: translateY(16px); opacity: 0; }
+  to { transform: none; opacity: 1; }
 }
 
 .toast-undo {
@@ -390,18 +405,22 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; }
   color: inherit;
 }
 
-@keyframes slideOutRight {
-  from { transform: translateX(0); opacity: 1; }
-  to { transform: translateX(120%); opacity: 0; }
+@keyframes toastOut {
+  from { transform: none; opacity: 1; }
+  to { transform: translateY(16px); opacity: 0; }
 }
 
+/* Abajo, como un snackbar: arriba tapaba el nombre y su botón de editar. Queda por
+   encima de la barra del carrito y del botón fijo del plato, que viven al pie. */
 .toast-container {
   position: fixed;
-  top: calc(env(safe-area-inset-top, 20px) + 56px);
-  right: 20px;
+  left: 16px;
+  right: 16px;
+  bottom: calc(96px + env(safe-area-inset-bottom));
   z-index: 9999;
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 10px;
   pointer-events: none;
 }
@@ -414,16 +433,19 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; }
   box-shadow: var(--menu-shadow);
   border: 1px solid var(--menu-accent);
   /* Entrada y salida encadenadas: duración y retraso de la salida los fija Toast.tsx. */
-  animation-name: slideInRight, slideOutRight;
+  animation-name: toastIn, toastOut;
   animation-timing-function: cubic-bezier(0.2, 0, 0, 1), ease-in;
   animation-fill-mode: forwards;
   pointer-events: auto;
-  max-width: calc(100vw - 40px);
+  width: min(600px, 100%);
   display: flex;
   align-items: center;
   gap: 14px;
   word-break: break-word;
 }
+/* Mientras se lo lee con el puntero encima o se llega a «Deshacer» con el teclado, el
+   aviso se queda: su animación de salida es su reloj, y pausarla pausa el cierre. */
+.toast:hover, .toast:focus-within { animation-play-state: paused; }
 
 /* Carrusel de fotos/videos. El tamaño y el radio los define SOLO el contenedor
    (una regla por variante y layout); la imagen, el video y su envoltorio lo llenan. */
@@ -501,6 +523,16 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; }
 }
 .carousel-dots .dot.active::before { background: white; }
 
+/* «Reducir movimiento»: nada se desplaza, escala ni gira. Lo que aparece o se va se
+   funde, y los cambios de estado son instantáneos. Las animaciones se redefinen con el
+   mismo nombre en vez de apagarse: el cierre del aviso depende de que `toastOut` termine. */
+@media (prefers-reduced-motion: reduce) {
+  @keyframes toastIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes toastOut { from { opacity: 1; } to { opacity: 0; } }
+  @keyframes nameModalIn { from { opacity: 0; } to { opacity: 1; } }
+  .chevron, .carousel-btn { transition: none; }
+}
+
 /* Único breakpoint del sitio: va al final para pisar las reglas de arriba con igual especificidad. */
 @media (max-width: 640px) {
   .shell { padding-top: 24px; }
@@ -510,7 +542,6 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; }
   .tabs a { padding: 10px 6px; }
   .categories a { padding: 8px 12px; }
   .confirmation, .bill-panel, .order-card { padding: 16px; }
-  .toast-container { right: 16px; }
   .service-request { min-width: 100%; }
   [data-layout="kiosk"] .media-carousel.card { height: 160px; }
   [data-layout="editorial"] .product-card { padding: 20px; }

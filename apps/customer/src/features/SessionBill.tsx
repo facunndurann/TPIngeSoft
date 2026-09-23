@@ -1,12 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
 import {
   formatPrice,
+  formatTableTime,
   parseSessionSplit,
   paymentMethodLabels,
   paymentModeLabels,
   paymentStatusLabels,
 } from '@restaurant-platform/shared'
-import { ErrorText } from '@restaurant-platform/ui'
+import { ErrorText, useNow } from '@restaurant-platform/ui'
 import { FreshnessNote } from '@/components/FreshnessNote'
 import { AddGuest } from '@/features/AddGuest'
 import { BillSplitter } from '@/features/BillSplitter'
@@ -19,14 +20,6 @@ import { WithoutSession } from '@/features/TableChrome'
 
 type Bill = Awaited<ReturnType<typeof loadBill>>
 type Payment = Awaited<ReturnType<typeof loadPayments>>[number]
-
-// Una instancia por formato, como `formatPrice`: se usa fila por fila en cada render.
-const paymentTime = new Intl.DateTimeFormat('es-AR', {
-  day: '2-digit',
-  month: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-})
 
 /**
  * La cuenta de la mesa, en el orden en que se decide: cuánto falta, cómo se
@@ -126,6 +119,7 @@ function PaymentHistory({
   retry: () => void
 }) {
   const { nameOf } = useTable()
+  const now = useNow()
   if (loading) return <p role="status">Actualizando los pagos…</p>
   if (error) return <ErrorText variant="menu" error={error} retry={retry} />
   if (!payments?.length) return null
@@ -133,21 +127,23 @@ function PaymentHistory({
   return (
     <div className="bill-panel" aria-label="Historial de pagos">
       <h3>Pagos registrados</h3>
-      {payments.map((payment) => (
-        <div className="line" key={payment.id}>
-          <div>
-            <strong>{formatPrice(payment.amount)}</strong>{' '}
-            <span>{paymentStatusLabels[payment.status]}</span>
-            <p className="muted">
-              {paymentMethodLabels[payment.method]} · {paymentModeLabels[payment.mode]}
-              {payment.participant_id ? ` · ${nameOf(payment.participant_id)}` : ''}
-            </p>
-          </div>
-          <time dateTime={payment.created_at}>
-            {paymentTime.format(new Date(payment.created_at))}
-          </time>
-        </div>
-      ))}
+      {/* Cada pago en una fila: importe y estado a la izquierda, la hora a la derecha. */}
+      <ul className="payment-list">
+        {payments.map((payment) => (
+          <li className="payment-line" key={payment.id}>
+            <div>
+              <strong>{formatPrice(payment.amount)}</strong> <span>{paymentStatusLabels[payment.status]}</span>
+              <p className="muted">
+                {paymentMethodLabels[payment.method]} · {paymentModeLabels[payment.mode]}
+                {payment.participant_id ? ` · ${nameOf(payment.participant_id)}` : ''}
+              </p>
+            </div>
+            <time className="muted" dateTime={payment.created_at}>
+              {formatTableTime(payment.created_at, now)}
+            </time>
+          </li>
+        ))}
+      </ul>
       <p className="muted">Los pagos pendientes o rechazados se muestran, pero no reducen el saldo.</p>
     </div>
   )

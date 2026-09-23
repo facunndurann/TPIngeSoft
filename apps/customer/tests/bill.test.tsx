@@ -115,6 +115,10 @@ test('the bill tab reads in the order decisions are made, with paying as its onl
   assert.equal(primaries.length, 1)
   assert.match(primaries[0] ?? '', /^Pagar /)
   assert.doesNotMatch(container.textContent ?? '', /debajo/)
+  assert.doesNotMatch(container.textContent ?? '', /servidor/)
+  // El historial de pagos es una lista con la hora de mesa, no la fecha completa.
+  assert.equal(container.querySelectorAll('.payment-list .payment-line').length, 1)
+  assert.match(container.querySelector('.payment-line time')?.textContent ?? '', /^(\d{1,2}\/\d{1,2} )?\d{2}:\d{2}$/)
 })
 
 test('without mobile payment, calling the waiter is the primary action of the bill', async () => {

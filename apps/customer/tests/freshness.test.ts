@@ -26,3 +26,12 @@ test('the freshness note is text to read, not a live region that interrupts ever
   // Sin una lectura previa no hay antigüedad que mostrar.
   assert.equal(renderToStaticMarkup(createElement(FreshnessNote, { label: 'la cuenta', isFetching: true })), '')
 })
+
+test('a table time is the clock time, with the date only when it is not today', async () => {
+  const { formatTableTime } = await import('@restaurant-platform/shared')
+  const now = Date.parse('2026-09-22T23:30:00-03:00')
+  assert.equal(formatTableTime('2026-09-22T22:52:00-03:00', now), '22:52')
+  // El día es el del restaurante: 01:10 UTC del 23 todavía es el 22 en Buenos Aires.
+  assert.equal(formatTableTime('2026-09-23T01:10:00Z', now), '22:10')
+  assert.equal(formatTableTime('2026-09-21T23:58:00-03:00', now), '21/9 23:58')
+})

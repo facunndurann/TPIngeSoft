@@ -7,12 +7,12 @@ export const menuRows = {
   products: [{
     id: 'p', category_id: 'c', name: 'Ñoquis', description: null, is_available: true, base_price: 10.10,
     media_urls: [], dietary_tags: [], food_info: null,
-    product_ingredients: [{ id: 'i', product_id: 'p', is_removable: true, is_available: true }],
+    product_ingredients: [{ id: 'i', product_id: 'p', name: 'Cebolla', is_removable: true, is_available: true }],
     product_modifier_groups: [{ group_id: 'g' }],
   }],
   groups: [{
     id: 'g', name: 'Salsa', min_select: 1, max_select: 1, is_available: true,
-    modifier_options: [{ id: 'o', group_id: 'g', price_delta: .20, is_available: true }, { id: 'o2', group_id: 'g', price_delta: 1, is_available: true }],
+    modifier_options: [{ id: 'o', group_id: 'g', name: 'Criolla', price_delta: .20, is_available: true }, { id: 'o2', group_id: 'g', name: 'Fileto', price_delta: 1, is_available: true }],
   }],
 } as unknown as MenuRows
 

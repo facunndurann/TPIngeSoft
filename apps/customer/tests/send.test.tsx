@@ -87,3 +87,19 @@ test('without a chosen name, sending asks for it first and sends once it is save
   assert.equal(vi.mocked(submitOrder).mock.calls.length, 1)
   assert.equal(pathnameIn(container), ordersPath(token))
 })
+
+test('a cart line reads in three short rows, with edit and remove as named text actions', async () => {
+  useCart.getState().save(cartKey, line)
+  const container = await renderTable(cartPath(token), cartRoutes)
+  const item = container.querySelector('.cart-item')
+  assert.ok(item)
+
+  assert.equal(item.querySelector('.cart-line-head h3')?.textContent?.trim(), 'Ñoquis')
+  assert.equal(item.querySelector('.cart-line-head strong')?.textContent, formatPrice(cartPrice(menu, [line])))
+  assert.equal(item.querySelector('.muted')?.textContent, 'Criolla')
+  assert.doesNotMatch(item.textContent ?? '', /Base:/)
+  // Editar y quitar pesan menos que el envío, y el nombre del plato distingue cada botón.
+  const actions = [...item.querySelectorAll('.cart-line-actions button')]
+  assert.deepEqual(actions.map((button) => button.className), ['link-button', 'link-button danger'])
+  assert.deepEqual(actions.map((button) => button.getAttribute('aria-label')), ['Editar Ñoquis', 'Quitar Ñoquis'])
+})

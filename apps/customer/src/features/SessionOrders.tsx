@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
-import { formatPrice, orderStatusLabels } from '@restaurant-platform/shared'
-import { ErrorText } from '@restaurant-platform/ui'
+import { formatPrice, formatTableTime, orderStatusLabels } from '@restaurant-platform/shared'
+import { ErrorText, useNow } from '@restaurant-platform/ui'
 import { FreshnessNote } from '@/components/FreshnessNote'
 import { plateCount } from '@/features/cart'
 import { oldestUpdate } from '@/features/freshness'
@@ -10,9 +10,6 @@ import { WithoutSession } from '@/features/TableChrome'
 
 type Order = Awaited<ReturnType<typeof loadOrders>>[number]
 type OrderItem = Order['order_items'][number]
-
-// Una instancia por formato, como `formatPrice`: se usa fila por fila en cada render.
-const orderTime = new Intl.DateTimeFormat('es-AR', { dateStyle: 'short', timeStyle: 'short' })
 
 type SessionOrdersProps = {
   /** Repite un pedido en el carrito. Ausente cuando la mesa no admite pedir. */
@@ -64,7 +61,7 @@ function OrderCard({
   onReorder?: (order: Order) => void
 }) {
   const { nameOf } = useTable()
-  const createdAt = orderTime.format(new Date(order.created_at))
+  const createdAt = formatTableTime(order.created_at, useNow())
 
   const plates = order.order_items.reduce((sum, item) => sum + item.quantity, 0)
 
