@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
 import { CurrentLink } from '@/components/CurrentLink'
 import { formatPrice, productMedia } from '@restaurant-platform/shared'
-import { MediaCarousel } from '@/features/MediaCarousel'
+import { MediaThumb } from '@/features/MediaCarousel'
 import { useMenuDesign } from '@/features/menu-design'
 import { matchesSearch } from '@/features/menu'
 import type { Menu, Product } from '@/features/menu'
@@ -91,11 +91,11 @@ export function MenuBrowse({ token, menu, freshness }: MenuBrowseProps) {
 }
 
 function ProductCard({ product, to }: { product: Product; to: string }) {
-  // La tarjeta es un contenedor, no un enlace: el <Link> y los controles del
-  // carrusel son hermanos. El enlace se estira a toda la tarjeta por CSS
-  // (.product-card-link::after) y las flechas quedan por encima. Todo plato se
-  // puede abrir, aunque esté agotado o la mesa no admita pedir: leerlo no cuesta
-  // nada, y el detalle dice por qué no se puede agregar.
+  // La tarjeta es un contenedor, no un enlace: el <Link> del nombre se estira a toda
+  // la tarjeta por CSS (.product-card-link::after), foto incluida, y no hay otro control
+  // adentro con el que pueda chocar. Todo plato se puede abrir, aunque esté agotado o
+  // la mesa no admita pedir: leerlo no cuesta nada, y el detalle dice por qué no se
+  // puede agregar.
   return (
     <article className="product-card">
       <div className="product-card-body">
@@ -107,7 +107,7 @@ function ProductCard({ product, to }: { product: Product; to: string }) {
         <strong>{formatPrice(product.base_price)}</strong>
         {!product.is_available && <span className="unavailable">Agotado</span>}
       </div>
-      <MediaCarousel media={productMedia(product)} variant="card" alt={product.name} />
+      <MediaThumb media={productMedia(product)} />
     </article>
   )
 }

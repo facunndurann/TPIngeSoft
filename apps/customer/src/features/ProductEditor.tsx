@@ -61,7 +61,7 @@ export function ProductEditor({ product, initial, locked, onSave, onClose }: Pro
       <button className="text-button" onClick={onClose}>
         ← Volver
       </button>
-      <MediaCarousel media={productMedia(product)} variant="hero" alt={product.name} />
+      <MediaCarousel media={productMedia(product)} alt={product.name} />
       <p className="eyebrow">{copy.product}</p>
       <h2 className="hero-title" id="product-title">
         {product.name}

@@ -2,15 +2,29 @@
 
 /* Los tokens --menu-* no se declaran acá: los define el catálogo de diseños
    (packages/shared/src/designs.ts) y MenuShell los aplica en .menu-page. */
-:root { font-synthesis: none; }
+/* Escala tipográfica única: todo `font-size` de esta hoja sale de acá, así dos cosas
+   del mismo rango no pueden quedar de tamaños distintos por estar en otro panel. Lo que
+   se toca o se completa va en --text-md: con menos de 16px, Safari de iOS hace zoom al
+   enfocar un campo. */
+:root {
+  font-synthesis: none;
+  --text-xs: 12px;                        /* etiquetas: eyebrow, badge, pie */
+  --text-sm: 14px;                        /* secundario: notas, ayudas, avisos */
+  --text-md: 16px;                        /* cuerpo, botones e inputs */
+  --text-lg: 18px;                        /* títulos de bloque: h3, h4 */
+  --text-xl: 24px;                        /* títulos de pantalla e importes */
+  --text-display: clamp(28px, 5vw, 40px); /* el h1 de la bienvenida */
+}
 
 * { box-sizing: border-box; }
 body { margin: 0; }
-.menu-page { background: var(--menu-bg); color: var(--menu-text); font-family: var(--menu-font); }
+.menu-page { background: var(--menu-bg); color: var(--menu-text); font-family: var(--menu-font); font-size: var(--text-md); }
 button, input, .tabs a, .categories a, .product-card, a.cart-bar, a.btn { font: inherit; }
+/* Lo que se toca lleva el borde de control, que se distingue de lo que tiene al lado;
+   la tarjeta del plato es un contenedor y vuelve al borde tenue en su propia regla. */
 button, .tabs a, .categories a, .product-card, a.cart-bar, a.btn {
   cursor: pointer;
-  border: 1px solid var(--menu-border);
+  border: 1px solid var(--menu-control-border);
   border-radius: var(--menu-radius);
   padding: 10px 15px;
   background: var(--menu-surface);
@@ -25,18 +39,18 @@ button:hover:not(:disabled), .tabs a:hover, .categories a:hover, .product-card:h
 button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid var(--menu-focus); outline-offset: 3px; }
 input {
   min-width: 0;
-  border: 1px solid var(--menu-border);
+  border: 1px solid var(--menu-control-border);
   border-radius: calc(var(--menu-radius) - 2px);
   padding: 10px 12px;
   background: var(--menu-surface);
   color: inherit;
-  font-size: 14px;
+  font-size: var(--text-md);
 }
-input::placeholder { color: var(--menu-muted); font-size: 14px; }
+input::placeholder { color: var(--menu-muted); }
 input[type=checkbox], input[type=radio] { width: 20px; height: 20px; accent-color: var(--menu-accent); }
 input[type=number] { width: 76px; }
 .quantity { display: inline-flex; align-items: center; gap: 6px; }
-.quantity button { min-width: 44px; padding: 10px 12px; font-size: 13px; line-height: 1; }
+.quantity button { min-width: 44px; padding: 10px 12px; line-height: 1; }
 .quantity input[type=number] { width: 58px; text-align: center; appearance: textfield; }
 /* Con − y + al lado, la flechita nativa sobra y descuadra el campo. */
 .quantity input::-webkit-inner-spin-button, .quantity input::-webkit-outer-spin-button { appearance: none; margin: 0; }
@@ -46,9 +60,9 @@ h1, h2, h3, h4 { color: var(--menu-heading); font-family: var(--menu-font-displa
 /* `.hero-title` y `.section-title` son el aspecto de un h1 y un h2 para encabezados
    que, por estructura, van un nivel más abajo (el plato dentro de la pantalla de la
    mesa, la categoría dentro de la carta). */
-h1, .hero-title { font-size: clamp(28px, 5vw, 40px); line-height: 1.15; font-weight: 750; letter-spacing: -.04em; }
-h2, .section-title { font-size: 23px; font-weight: 700; letter-spacing: -.025em; }
-h3, h4 { font-size: 17px; font-weight: 700; }
+h1, .hero-title { font-size: var(--text-display); line-height: 1.15; font-weight: 750; letter-spacing: -.04em; }
+h2, .section-title { font-size: var(--text-xl); font-weight: 700; letter-spacing: -.025em; }
+h3, h4 { font-size: var(--text-lg); font-weight: 700; }
 p { line-height: 1.6; }
 .shell { max-width: 1000px; margin: auto; padding: 32px 20px 110px; background: var(--menu-bg); color: var(--menu-text); min-height: 100dvh; }
 header { border-bottom: 1px solid var(--menu-border); padding-bottom: 16px; }
@@ -61,7 +75,7 @@ header.compact {
 }
 header.compact .compact-copy { min-width: 0; }
 header.compact h1 {
-  font-size: 15px;
+  font-size: var(--text-md);
   font-weight: 700;
   letter-spacing: 0;
   margin: 0;
@@ -71,24 +85,26 @@ header.compact h1 {
 }
 header.compact .muted {
   margin: 2px 0 0;
-  font-size: 12px;
+  font-size: var(--text-xs);
   font-weight: 400;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 header.compact .badge { margin-left: 0; flex-shrink: 0; }
-.eyebrow { color: var(--menu-eyebrow); font-size: 11px; font-weight: 750; letter-spacing: .17em; margin-bottom: 12px; font-family: var(--menu-font-display); }
-.badge { display: inline-block; background: var(--menu-badge-bg); color: var(--menu-badge-text); padding: 4px 10px; border-radius: var(--menu-radius-pill); font-size: 12px; margin-left: 8px; }
+.eyebrow { color: var(--menu-eyebrow); font-size: var(--text-xs); font-weight: 750; letter-spacing: .17em; margin-bottom: 12px; font-family: var(--menu-font-display); }
+.badge { display: inline-block; background: var(--menu-badge-bg); color: var(--menu-badge-text); padding: 4px 10px; border-radius: var(--menu-radius-pill); font-size: var(--text-xs); margin-left: 8px; }
 .session-panel { margin: 12px 0; background: var(--menu-surface-muted); border-radius: var(--menu-radius); padding: 8px 12px; }
 .table-people { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .table-people details { flex-shrink: 0; }
+/* «N en la mesa» abre la lista de nombres: es un control y mide lo que un dedo. */
+.table-people summary { min-height: 44px; }
 /* Abierto, el summary sigue a la derecha y los nombres bajan a todo el ancho. */
 .table-people details[open] { display: contents; }
 .table-people details[open] > p { flex-basis: 100%; margin: 2px 0 0; }
 .table-people p { margin: 6px 0 0; }
 .who { display: flex; align-items: center; gap: 2px; min-width: 0; }
-.who strong { overflow-wrap: anywhere; font-size: 14px; }
+.who strong { overflow-wrap: anywhere; font-size: var(--text-sm); }
 .icon-button {
   display: inline-flex;
   align-items: center;
@@ -96,15 +112,14 @@ header.compact .badge { margin-left: 0; flex-shrink: 0; }
   border: 0;
   background: transparent;
   padding: 6px;
-  min-height: 36px;
-  min-width: 36px;
+  min-height: 44px;
+  min-width: 44px;
   color: var(--menu-muted);
   flex-shrink: 0;
 }
-.icon-button.edit-name { opacity: .7; }
-.icon-button:hover:not(:disabled) { border-color: transparent; color: var(--menu-text); opacity: 1; }
+.icon-button:hover:not(:disabled) { border-color: transparent; color: var(--menu-text); }
 .name-inline { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; width: 100%; }
-.name-inline input { flex: 1; min-width: 0; padding: 6px 8px; }
+.name-inline input { flex: 1; min-width: 0; }
 .name-inline p { flex-basis: 100%; margin: 4px 0 0; }
 /* Un solo aspecto para los bloques que se abren. La flecha la pone el markup y no
    el marcador nativo, que con contenido en bloque queda descolgado en su propia línea. */
@@ -112,7 +127,7 @@ header.compact .badge { margin-left: 0; flex-shrink: 0; }
 .disclosure::-webkit-details-marker { display: none; }
 .chevron { display: inline-block; color: var(--menu-muted); transform: rotate(90deg); transition: transform .2s; }
 [open] > .disclosure .chevron { transform: rotate(-90deg); }
-.muted, small { color: var(--menu-muted); font-size: 13px; }
+.muted, small { color: var(--menu-muted); font-size: var(--text-sm); }
 .name-form { display: flex; gap: 8px; flex-wrap: wrap; }
 .name-form input { flex: 1; }
 @keyframes nameModalFade {
@@ -199,25 +214,25 @@ button[aria-pressed=true], .categories a[aria-current=page] {
 .menu-heading { margin-bottom: 20px; }
 .menu-heading input { width: 100%; margin-top: 8px; }
 .freshness { margin: 12px 0 0; }
-.freshness p { margin: 0; color: var(--menu-muted); font-size: 13px; }
+.freshness p { margin: 0; color: var(--menu-muted); font-size: var(--text-sm); }
 .categories { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0 20px; margin-bottom: 12px; }
 .categories button, .categories a { white-space: nowrap; border-radius: var(--menu-radius-pill); display: inline-flex; align-items: center; }
 section { margin-bottom: 28px; }
 .product-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 /* Tarjeta como contenedor: el enlace del nombre cubre toda la tarjeta con ::after.
    isolation encierra los z-index para que no tapen la barra del carrito ni el toast. */
-.product-card { position: relative; isolation: isolate; display: flex; text-align: left; justify-content: space-between; gap: 16px; padding: 20px; min-height: 155px; }
+.product-card { border-color: var(--menu-border); position: relative; isolation: isolate; display: flex; text-align: left; justify-content: space-between; gap: 16px; padding: 20px; min-height: 155px; }
 .product-card-link { color: inherit; text-decoration: none; }
 .product-card-link::after { content: ''; position: absolute; inset: 0; z-index: 1; }
 .product-card-link:focus-visible { outline: none; }
 .product-card:has(.product-card-link:focus-visible) { outline: 3px solid var(--menu-focus); outline-offset: 3px; }
-.product-card p { font-size: 13px; color: var(--menu-muted); }
+.product-card p { font-size: var(--text-sm); color: var(--menu-muted); }
 .product-card strong, .product-card small { display: block; margin-top: 8px; }
-.unavailable { display: block; color: var(--menu-unavailable); font-size: 13px; margin-top: 6px; }
+.unavailable { display: block; color: var(--menu-unavailable); font-size: var(--text-sm); margin-top: 6px; }
 /* Dos avisos que no se confunden: `.notice` informa (alérgenos, un envío pendiente, por
    qué algo está apagado) y `.error-notice` dice que algo salió mal o hay que corregirlo.
    El error lleva además una marca al costado: su tono no es lo único que lo distingue. */
-.notice, .error-notice { padding: 14px 18px; border-radius: var(--menu-radius); margin: 16px 0; font-size: 14px; }
+.notice, .error-notice { padding: 14px 18px; border-radius: var(--menu-radius); margin: 16px 0; font-size: var(--text-sm); }
 .notice { background: var(--menu-notice-bg); color: var(--menu-notice-text); }
 .error-notice { background: var(--menu-danger-bg); color: var(--menu-danger); border-left: 4px solid var(--menu-danger); }
 .empty { text-align: center; padding: 45px 15px; color: var(--menu-muted); }
@@ -228,7 +243,7 @@ fieldset { border: 1px solid var(--menu-border); padding: 16px; margin: 24px 0; 
 legend { padding: 0 8px; font-weight: 700; font-family: var(--menu-font-display); }
 /* Un bloque con problema lo marca el borde y lo dice su texto: el color solo no alcanza. */
 fieldset.is-invalid { border-color: var(--menu-danger); }
-.field-error { color: var(--menu-danger); font-size: 14px; font-weight: 600; margin: 0 0 8px; }
+.field-error { color: var(--menu-danger); font-size: var(--text-sm); font-weight: 600; margin: 0 0 8px; }
 /* El botón del plato acompaña el scroll: siempre a mano y con el precio a la vista. */
 .editor-submit {
   position: sticky;
@@ -248,14 +263,14 @@ fieldset.is-invalid { border-color: var(--menu-danger); }
 .choice small { display: block; }
 .wide { width: 100%; }
 .cart-item { background: var(--menu-surface); border: 1px solid var(--menu-border); border-radius: calc(var(--menu-radius) + 2px); padding: 20px; margin: 18px 0; }
-.cart-item p { font-size: 14px; }
+.cart-item p { font-size: var(--text-sm); }
 .cart-actions, .total { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-top: 18px; }
-.cart-actions button { font-size: 13px; flex: 1; }
+.cart-actions button { flex: 1; }
 .cart-line-price { text-align: right; margin: 0; }
 .cart-summary { list-style: none; padding: 0; margin: 12px 0 0; }
 .cart-summary li { padding: 10px 0; border-bottom: 1px solid var(--menu-border); }
 .cart-summary li:last-child { border-bottom: none; }
-.total { font-size: 16px; font-weight: 700; padding: 14px 0; }
+.total { font-size: var(--text-md); font-weight: 700; padding: 14px 0; }
 .cart-bar {
   position: fixed;
   bottom: 20px;
@@ -267,7 +282,7 @@ fieldset.is-invalid { border-color: var(--menu-danger); }
   padding: 18px 24px;
   box-shadow: var(--menu-shadow);
 }
-footer { text-align: center; color: var(--menu-muted); font-size: 12px; margin-top: 50px; }
+footer { text-align: center; color: var(--menu-muted); font-size: var(--text-xs); margin-top: 50px; }
 .landing { max-width: 540px; padding-top: 20vh; }
 .landing a { display: inline-flex; margin-top: 8px; }
 /* Una URL larga no puede empujar el ancho de la pantalla. */
@@ -286,14 +301,9 @@ footer { text-align: center; color: var(--menu-muted); font-size: 12px; margin-t
   border-radius: calc(var(--menu-radius) + 4px);
   margin: 24px 0;
 }
-.bill-panel button { font-size: 13px; }
 .bill-due { margin: 0; }
-.bill-due dt { color: var(--menu-bill-muted); font-size: 13px; }
-.bill-due dd { margin: 8px 0 0; font-size: 20px; font-weight: 750; }
-.bill-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; margin: 0 0 22px; }
-.bill-grid dt { color: var(--menu-bill-muted); font-size: 13px; }
-.bill-grid dd { margin: 8px 0 0; font-size: clamp(18px, 4vw, 25px); font-weight: 750; }
-.bill-grid dd small { display: block; margin-top: 6px; font-weight: 400; letter-spacing: 0; color: var(--menu-bill-muted); }
+.bill-due dt { color: var(--menu-bill-muted); font-size: var(--text-sm); }
+.bill-due dd { margin: 8px 0 0; font-size: var(--text-xl); font-weight: 750; }
 .settled { color: var(--menu-success-text); font-weight: 700; }
 .split-modes { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
 .split-list { list-style: none; padding: 0; margin: 0 0 6px; }
@@ -313,8 +323,7 @@ footer { text-align: center; color: var(--menu-muted); font-size: 12px; margin-t
 .order-heading h3, .order-heading h4 { margin-bottom: 0; }
 .order-heading .badge { margin-left: 0; flex-shrink: 0; }
 .order-line { border-bottom: 1px solid var(--menu-border); padding: 18px 0; }
-.order-line p { font-size: 13px; margin-bottom: 6px; }
-.order-card button { font-size: 13px; }
+.order-line p { font-size: var(--text-sm); margin-bottom: 6px; }
 .order-summary { flex: 1; min-width: 0; }
 .order-summary h3 { margin-bottom: 0; white-space: nowrap; }
 .order-summary p { margin: 6px 0 0; line-height: 1.45; }
@@ -373,9 +382,8 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; }
 
 .toast-undo {
   flex-shrink: 0;
-  min-height: 36px;
+  min-height: 44px;
   padding: 6px 12px;
-  font-size: 13px;
   font-weight: 700;
   background: transparent;
   border-color: currentColor;
@@ -437,14 +445,9 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; }
 .media-carousel .video-wrapper { position: relative; }
 .media-carousel .play-icon { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background-color: rgba(0,0,0,0.3); border-radius: inherit; pointer-events: none; }
 
-/* Portada del detalle: controles más grandes. */
-.media-carousel.hero .carousel-btn { width: 36px; height: 36px; font-size: 24px; }
-.media-carousel.hero .carousel-btn.prev { left: 10px; }
-.media-carousel.hero .carousel-btn.next { right: 10px; }
-.media-carousel.hero .carousel-dots { bottom: 12px; }
-.media-carousel.hero .carousel-dots .dot::before { width: 8px; height: 8px; }
-
-/* Por encima del enlace estirado de la tarjeta (z-index: 1). */
+/* Flechas y puntos viven solo en la portada del plato: en la tarjeta de la carta la
+   foto es parte del link y no tiene controles. Las flechas miden 44px y cada punto es
+   un blanco de 24px separado del siguiente (WCAG 2.5.8); el punto visible es su ::before. */
 .carousel-btn {
   position: absolute;
   top: 50%;
@@ -453,47 +456,34 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; }
   color: white;
   border: none;
   border-radius: 50%;
-  width: 24px;
-  height: 24px;
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  font-size: var(--text-xl);
   padding: 0;
-  min-height: auto;
-  z-index: 2;
+  z-index: 1;
   transition: background 0.2s;
 }
-
-.carousel-btn:hover {
-  background: rgba(0, 0, 0, 0.7);
-  border: none;
-}
-
-.carousel-btn.prev {
-  left: 4px;
-}
-
-.carousel-btn.next {
-  right: 4px;
-}
+.carousel-btn:hover { background: rgba(0, 0, 0, 0.7); border: none; }
+.carousel-btn.prev { left: 10px; }
+.carousel-btn.next { right: 10px; }
 
 .carousel-dots {
   position: absolute;
-  bottom: 6px;
+  bottom: 8px;
   left: 0;
   right: 0;
   display: flex;
   justify-content: center;
-  gap: 0;
-  z-index: 2;
+  gap: 4px;
+  z-index: 1;
   pointer-events: none;
 }
-
 .carousel-dots .dot {
-  /* El botón es el área de toque; el punto visible lo dibuja ::before. */
-  width: 14px;
-  height: 14px;
+  width: 24px;
+  height: 24px;
   min-height: auto;
   padding: 0;
   border: none;
@@ -502,25 +492,21 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; }
   place-items: center;
   pointer-events: auto;
 }
-
 .carousel-dots .dot::before {
   content: '';
-  width: 5px;
-  height: 5px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.5);
 }
-
-.carousel-dots .dot.active::before {
-  background: white;
-}
+.carousel-dots .dot.active::before { background: white; }
 
 /* Único breakpoint del sitio: va al final para pisar las reglas de arriba con igual especificidad. */
 @media (max-width: 640px) {
   .shell { padding-top: 24px; }
   .product-grid { grid-template-columns: 1fr; }
   .product-card { padding: 16px; }
-  .name-form button, .tabs a, .categories a { font-size: 13px; }
+  .tabs a, .categories a { font-size: var(--text-sm); }
   .tabs a { padding: 10px 6px; }
   .categories a { padding: 8px 12px; }
   .confirmation, .bill-panel, .order-card { padding: 16px; }
