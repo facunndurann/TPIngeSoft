@@ -1,6 +1,6 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
-import { cartKeyFor, cartPhase } from '../src/features/cart'
+import { cartKeyFor, cartLock, cartPhase } from '../src/features/cart'
 import { recoverPendingSession } from '../src/features/session-recovery'
 import { useCart } from '../src/stores/cart'
 import type { PendingSubmission } from '../src/features/cart'
@@ -89,6 +89,16 @@ test('the cart phase is the single source for what the diner can do', () => {
   const submission: PendingSubmission = { input: { sessionId: 'session', requestId: 'request', expectedTotal: 30.9, items: [] }, snapshot: [item] }
   assert.deepEqual(cartPhase({ ...draft, submission, sending: true, cancelling: true }), { kind: 'pending', submission, activity: 'sending' })
   assert.deepEqual(cartPhase({ ...draft, submission, cancelling: true }), { kind: 'pending', submission, activity: 'cancelling' })
+})
+
+test('the cart lock says why the diner cannot add dishes, and its absence is the permission', () => {
+  const open = { sessionOpen: true, closed: false, pending: false }
+  assert.equal(cartLock(open), undefined)
+  // Un envío sin resolver manda sobre todo lo demás: es lo único que el comensal puede destrabar.
+  assert.match(cartLock({ ...open, pending: true, sessionOpen: false }) ?? '', /^Tu último envío todavía necesita confirmación/)
+  assert.match(cartLock({ sessionOpen: false, closed: true, pending: false }) ?? '', /^La mesa ya cerró su cuenta/)
+  // Abierta pero sin lectura sana de la sesión: conectando o sin red.
+  assert.match(cartLock({ ...open, sessionOpen: false }) ?? '', /conectado con la mesa/)
 })
 
 test('session recovery restores pending orders after closure only for the authenticated participant and QR table', async () => {

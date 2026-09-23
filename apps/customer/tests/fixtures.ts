@@ -5,7 +5,8 @@ import type { MenuRows } from '../src/features/menu'
 export const menuRows = {
   categories: [{ id: 'c' }],
   products: [{
-    id: 'p', category_id: 'c', is_available: true, base_price: 10.10,
+    id: 'p', category_id: 'c', name: 'Ñoquis', description: null, is_available: true, base_price: 10.10,
+    media_urls: [], dietary_tags: [], food_info: null,
     product_ingredients: [{ id: 'i', product_id: 'p', is_removable: true, is_available: true }],
     product_modifier_groups: [{ group_id: 'g' }],
   }],

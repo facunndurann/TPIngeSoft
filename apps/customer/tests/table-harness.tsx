@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client'
 import { MemoryRouter, Outlet, Route, Routes, useLocation } from 'react-router'
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import type { PaymentMethod } from '@restaurant-platform/shared'
-import { cartKeyFor } from '../src/features/cart'
+import { cartKeyFor, cartLock } from '../src/features/cart'
 import { dinerIn } from '../src/features/diner'
 import { cartPrice } from '../src/features/menu'
 import { type loadSession, sessionQuery } from '../src/features/session'
@@ -15,7 +15,7 @@ import { menu } from './fixtures'
 
 /*
  * Una mesa para las pruebas que renderizan pantallas. Publica el mismo contexto
- * que `TableApp`, armado con las mismas funciones (`dinerIn`, `cartPrice`), y sirve
+ * que `TableApp`, armado con las mismas funciones (`dinerIn`, `cartPrice`, `cartLock`), y sirve
  * las consultas desde una caché sembrada: nada sale a la red. Cada archivo que la
  * usa mockea `src/lib/supabase`, y el mock alcanza también a los imports de acá.
  */
@@ -125,6 +125,7 @@ function Table({ paymentMethods }: { paymentMethods: PaymentMethod[] }) {
   const items = useCart((state) => state.carts[cartKey]) ?? []
   const pending = useCart((state) => !!state.submissions[cartKey])
   const sessionOpen = session.data?.status === 'open'
+  const diner = dinerIn(session.data, userId)
   const { pathname } = useLocation()
 
   return (
@@ -135,13 +136,13 @@ function Table({ paymentMethods }: { paymentMethods: PaymentMethod[] }) {
         session,
         sessionId,
         refreshTable: async () => {},
-        ...dinerIn(session.data, userId),
+        ...diner,
         sessionOpen,
         cartKey,
         items,
         cartTotal: cartPrice(menu, items),
         paymentMethods,
-        canEdit: sessionOpen && !pending,
+        editLock: cartLock({ sessionOpen, closed: diner.closed, pending }),
         announce: () => {},
       }}
     >

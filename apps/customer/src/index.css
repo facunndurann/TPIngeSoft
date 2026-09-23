@@ -18,8 +18,8 @@ button, .tabs a, .categories a, .product-card, a.cart-bar, a.btn {
   color: inherit;
   text-decoration: none;
 }
-button:disabled, .product-card.is-disabled { cursor: not-allowed; opacity: .55; }
-button:hover:not(:disabled), .tabs a:hover, .categories a:hover, .product-card:not(.is-disabled):hover, a.cart-bar:hover, a.btn:hover {
+button:disabled { cursor: not-allowed; opacity: .55; }
+button:hover:not(:disabled), .tabs a:hover, .categories a:hover, .product-card:hover, a.cart-bar:hover, a.btn:hover {
   border-color: var(--menu-accent-hover);
 }
 button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid var(--menu-focus); outline-offset: 3px; }

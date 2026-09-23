@@ -12,7 +12,7 @@ import { ClockProvider, ErrorText } from '@restaurant-platform/ui'
 import { FreshnessNote } from '@/components/FreshnessNote'
 import { Toast } from '@/components/Toast'
 import { type Announce, type Announcement, toastDuration } from '@/features/announcements'
-import { type CartItem, cartKeyFor } from '@/features/cart'
+import { type CartItem, cartKeyFor, cartLock } from '@/features/cart'
 import { CartPanel } from '@/features/CartPanel'
 import { MenuBrowse } from '@/features/MenuBrowse'
 import { cartPrice, type Product } from '@/features/menu'
@@ -81,7 +81,7 @@ function TableApp({ token }: { token: string }) {
   const cart = useCart()
   const cartKey = cartKeyFor(sessionId, joined.data?.userId)
   const items = cart.carts[cartKey] ?? []
-  const canEdit = sessionOpen && !cart.submissions[cartKey]
+  const editLock = cartLock({ sessionOpen, closed, pending: !!cart.submissions[cartKey] })
   const cartCount = items.reduce((total, item) => total + item.quantity, 0)
   const cartTotal = menu.data ? cartPrice(menu.data, items) : 0
   // La portada de la carta es la ruta de la mesa sin nada más: lo decide el router,
@@ -161,7 +161,7 @@ function TableApp({ token }: { token: string }) {
             items,
             cartTotal,
             paymentMethods: enabledPaymentMethods(branch),
-            canEdit,
+            editLock,
             announce,
           }}
         >
@@ -206,7 +206,7 @@ function TableApp({ token }: { token: string }) {
 }
 
 export function TableMenuPage() {
-  const { token, menu, canEdit } = useTable()
+  const { token, menu } = useTable()
   return (
     <>
       <MenuStatus />
@@ -215,7 +215,6 @@ export function TableMenuPage() {
         <MenuBrowse
           token={token}
           menu={menu.data}
-          canEdit={canEdit}
           freshness={
             <FreshnessNote
               label="la carta"
@@ -257,10 +256,11 @@ export function TableCartPage() {
 }
 
 export function TableProductPage() {
+  // Sin aviso de envío pendiente arriba: si lo hay, lo dice el botón del plato, que
+  // es donde frena. Dos veces el mismo mensaje en una pantalla es ruido.
   return (
     <>
       <MenuStatus />
-      <PendingSubmissionNotice />
       <ProductScreen />
     </>
   )
@@ -282,13 +282,7 @@ function ProductScreen() {
     )
   }
 
-  return (
-    <CartItemEditor
-      product={product}
-      back={back}
-      locked="Para personalizar y agregar al carrito, la mesa tiene que estar abierta y sin envíos pendientes."
-    />
-  )
+  return <CartItemEditor product={product} back={back} />
 }
 
 export function TableCartItemPage() {
@@ -317,49 +311,33 @@ function CartItemScreen() {
     )
   }
 
-  return (
-    <CartItemEditor
-      product={product}
-      initial={item}
-      back={back}
-      locked="Para editar este plato, la mesa tiene que estar abierta y sin envíos pendientes."
-    />
-  )
+  return <CartItemEditor product={product} initial={item} back={back} />
 }
 
 /**
- * Armar un plato para el carrito, nuevo o ya guardado. Con la mesa sin admitir
- * cambios se explica por qué; al guardar se avisa y se vuelve a donde se estaba.
+ * Armar un plato para el carrito, nuevo o ya guardado. El plato se muestra siempre:
+ * si la mesa no admite cambios, se apaga solo el botón y dice por qué. Al guardar
+ * se avisa y se vuelve a donde se estaba.
  */
 function CartItemEditor({
   product,
   initial,
   back,
-  locked,
 }: {
   product: Product
   /** La línea que se edita; sin ella, el plato entra como línea nueva. */
   initial?: CartItem
   back: () => void
-  /** Por qué no se puede editar ahora, en palabras de esta pantalla. */
-  locked: string
 }) {
-  const { canEdit, cartKey, announce } = useTable()
+  const { editLock, cartKey, announce } = useTable()
   const save = useCart((state) => state.save)
-
-  if (!canEdit) {
-    return (
-      <BackWithNotice onBack={back}>
-        <p className="notice">{locked}</p>
-      </BackWithNotice>
-    )
-  }
 
   return (
     <ProductEditor
       key={initial?.id ?? product.id}
       product={product}
       initial={initial}
+      locked={editLock}
       onClose={back}
       onSave={(item) => {
         save(cartKey, item)
@@ -383,8 +361,8 @@ function BackWithNotice({ onBack, children }: { onBack: () => void; children: Re
 }
 
 export function TableOrdersPage() {
-  const { menu, canEdit, cartKey, announce } = useTable()
-  const reorder = useReorder({ cartKey, menu: menu.data, canEdit, announce })
+  const { menu, editLock, cartKey, announce } = useTable()
+  const reorder = useReorder({ cartKey, menu: menu.data, canEdit: !editLock, announce })
   // Los pedidos no necesitan la carta para mostrarse, así que no esperan su carga.
   return (
     <>

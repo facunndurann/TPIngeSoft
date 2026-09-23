@@ -11,12 +11,11 @@ import { menuPath, parseMenuFilters, productPath } from '@/features/table-paths'
 type MenuBrowseProps = {
   token: string
   menu: Menu
-  canEdit: boolean
   /** Estado del refresco de la carta; lo arma quien tiene la consulta. */
   freshness?: ReactNode
 }
 
-export function MenuBrowse({ token, menu, canEdit, freshness }: MenuBrowseProps) {
+export function MenuBrowse({ token, menu, freshness }: MenuBrowseProps) {
   const { copy } = useMenuDesign()
   const { search: locationSearch } = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -77,7 +76,6 @@ export function MenuBrowse({ token, menu, canEdit, freshness }: MenuBrowseProps)
               <ProductCard
                 key={product.id}
                 product={product}
-                disabled={!product.is_available || !canEdit}
                 to={productPath(token, product.id, locationSearch)}
               />
             ))}
@@ -92,23 +90,17 @@ export function MenuBrowse({ token, menu, canEdit, freshness }: MenuBrowseProps)
   )
 }
 
-function ProductCard({
-  product,
-  disabled,
-  to,
-}: {
-  product: Product
-  disabled: boolean
-  to: string
-}) {
+function ProductCard({ product, to }: { product: Product; to: string }) {
   // La tarjeta es un contenedor, no un enlace: el <Link> y los controles del
   // carrusel son hermanos. El enlace se estira a toda la tarjeta por CSS
-  // (.product-card-link::after) y las flechas quedan por encima.
+  // (.product-card-link::after) y las flechas quedan por encima. Todo plato se
+  // puede abrir, aunque esté agotado o la mesa no admita pedir: leerlo no cuesta
+  // nada, y el detalle dice por qué no se puede agregar.
   return (
-    <article className={disabled ? 'product-card is-disabled' : 'product-card'}>
+    <article className="product-card">
       <div className="product-card-body">
         <h4>
-          {disabled ? product.name : <Link className="product-card-link" to={to}>{product.name}</Link>}
+          <Link className="product-card-link" to={to}>{product.name}</Link>
         </h4>
         <p>{product.description}</p>
         {product.dietary_tags.length > 0 && <small>{product.dietary_tags.join(' · ')}</small>}

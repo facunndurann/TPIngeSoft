@@ -34,8 +34,8 @@ export type TableContextValue = {
   cartTotal: number
   /** Medios de pago habilitados en la sucursal de la mesa (MI-48). */
   paymentMethods: PaymentMethod[]
-  /** El carrito admite cambios: mesa abierta y sin envíos pendientes. */
-  canEdit: boolean
+  /** Por qué el carrito no admite cambios ahora (lo decide `cartLock`); sin valor, los admite. */
+  editLock?: string
   announce: Announce
 }
 

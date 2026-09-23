@@ -19,7 +19,7 @@ export function DesignPreviewPage() {
       <div inert>
         <MenuShell>
           <TableHeader restaurantName="Tu restaurante" branchName="Casa central" tableLabel="Mesa 1" />
-          <MenuBrowse token="vista-previa" menu={sampleMenu} canEdit />
+          <MenuBrowse token="vista-previa" menu={sampleMenu} />
         </MenuShell>
       </div>
     </MenuDesignContext>

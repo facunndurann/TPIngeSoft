@@ -101,17 +101,16 @@ test('product cards keep the link and the carousel controls as siblings', async 
     dietary_tags: [], is_available: true, media_urls: ['https://cdn/a.jpg', 'https://cdn/b.jpg'],
     product_ingredients: [], product_modifier_groups: [], ...overrides,
   })
-  const render = (canEdit: boolean, products: object[]) => renderToStaticMarkup(createElement(
+  const render = (products: object[]) => renderToStaticMarkup(createElement(
     MemoryRouter, null,
     createElement(MenuBrowse, {
       token: 't',
-      canEdit,
       menu: buildMenu({ categories: [{ id: 'c', name: 'Platos' }], products, groups: [] } as unknown as MenuRows),
     }),
   ))
 
-  const html = render(true, [card({ id: 'many' }), card({ id: 'sold-out', is_available: false })])
-  const cards = html.match(/<article class="product-card[^"]*">[\s\S]*?<\/article>/g) ?? []
+  const html = render([card({ id: 'many' }), card({ id: 'sold-out', is_available: false })])
+  const cards = html.match(/<article class="product-card">[\s\S]*?<\/article>/g) ?? []
   assert.equal(cards.length, 2)
 
   const [available, soldOut] = cards
@@ -121,8 +120,10 @@ test('product cards keep the link and the carousel controls as siblings', async 
   assert.match(available, /aria-label="Ver foto anterior"/)
   assert.match(available, /<button type="button" class="dot active"[^>]*aria-pressed="true"/)
   assert.match(available, /aria-label="Ver foto 2 de 2"[^>]*aria-pressed="false"/)
-  assert.match(soldOut, /class="product-card is-disabled"/)
-  assert.doesNotMatch(soldOut, /<a /, 'Unavailable dishes are not links')
+  // Agotado se lee y se abre igual: el detalle dice por qué no se puede agregar.
+  assert.match(soldOut, /<a class="product-card-link" href="\/m\/t\/producto\/sold-out"/)
+  assert.match(soldOut, />Agotado</)
+  assert.doesNotMatch(html, /is-disabled/)
   // Ningún control interactivo anidado dentro de otro.
   assert.doesNotMatch(html, /<a [^>]*>(?:(?!<\/a>)[\s\S])*<button/)
   assert.doesNotMatch(html, /<button[^>]*>(?:(?!<\/button>)[\s\S])*<(?:button|a) /)

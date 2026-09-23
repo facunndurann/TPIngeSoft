@@ -10,33 +10,38 @@ import type { CartItem } from '@/features/cart'
 type ProductEditorProps = {
   product: Product
   initial?: CartItem
+  /** Por qué la mesa no admite sumar ni cambiar platos ahora: el plato se ve, pero no se agrega. */
+  locked?: string
   onSave: (item: CartItem) => void
   onClose: () => void
 }
 
 // Ids de los bloques que pueden tener un problema: al intentar agregar, el foco va al primero.
 const INGREDIENTS_ID = 'product-ingredients'
-const PRODUCT_ISSUES_ID = 'product-issues'
+const UNAVAILABLE_ID = 'product-unavailable'
 const groupBlockId = (group: ModifierGroup) => `group-${group.id}`
 
 /**
  * Armar un plato. Todo usa el mismo modelo: lo marcado va en el plato, sean
- * ingredientes u opciones. El botón está siempre a mano y siempre responde; lo que
- * falta se dice recién al tocarlo, en el grupo donde hay que elegir.
+ * ingredientes u opciones. El botón está siempre a mano y hay dos clases de
+ * problema: lo que se arregla eligiendo acá se dice al tocarlo, en el grupo donde
+ * hay que elegir; lo que ninguna elección arregla (la mesa o el plato) apaga el
+ * botón desde el principio y dice por qué.
  */
-export function ProductEditor({ product, initial, onSave, onClose }: ProductEditorProps) {
+export function ProductEditor({ product, initial, locked, onSave, onClose }: ProductEditorProps) {
   const { copy } = useMenuDesign()
   const [item, setItem] = useState<CartItem>(initial ?? defaultItem(product))
   // Antes del primer intento no hay errores de elección: el comensal todavía no tuvo
   // oportunidad de elegir. Después se actualizan solos mientras corrige.
   const [attempted, setAttempted] = useState(false)
   const issues = selectionIssues(product, item)
+  // Lo que no depende de elegir: la mesa no admite cambios o el plato no se puede pedir.
+  const unavailable = [...(locked ? [locked] : []), ...issues.product]
 
   // Los bloques con problema en el orden de la pantalla, de arriba hacia el botón.
   const blocked = [
     ...(issues.ingredients.length > 0 ? [INGREDIENTS_ID] : []),
     ...product.groups.filter((group) => issues.groups[group.id]).map(groupBlockId),
-    ...(issues.product.length > 0 ? [PRODUCT_ISSUES_ID] : []),
   ]
 
   const save = () => {
@@ -105,13 +110,18 @@ export function ProductEditor({ product, initial, onSave, onClose }: ProductEdit
       </label>
 
       <div className="editor-submit">
-        {/* Lo que es del plato entero no depende de elegir: se dice desde el principio. */}
-        {issues.product.length > 0 && (
-          <p className="notice" id={PRODUCT_ISSUES_ID} tabIndex={-1}>
-            {issues.product.join(' ')}
+        {/* El motivo va pegado al botón apagado, y el botón lo tiene como descripción. */}
+        {unavailable.length > 0 && (
+          <p className="notice" id={UNAVAILABLE_ID}>
+            {unavailable.join(' ')}
           </p>
         )}
-        <button className="primary wide" onClick={save}>
+        <button
+          className="primary wide"
+          disabled={unavailable.length > 0}
+          aria-describedby={unavailable.length > 0 ? UNAVAILABLE_ID : undefined}
+          onClick={save}
+        >
           {initial ? 'Guardar cambios' : 'Agregar al carrito'} · {formatPrice(price(product, item))}
         </button>
       </div>

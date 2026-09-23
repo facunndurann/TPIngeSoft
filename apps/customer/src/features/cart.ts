@@ -39,6 +39,27 @@ function sameIds(a: string[], b: string[]) {
   return [...a].sort().every((id, index) => id === sorted[index])
 }
 
+/**
+ * Por qué el comensal no puede sumar ni cambiar platos ahora, o `undefined` si puede.
+ * Es la razón que muestra el botón apagado del plato, y su ausencia es el permiso
+ * que leen la carta, el plato y «Pedir de nuevo»: el booleano y el motivo no pueden discrepar.
+ */
+export function cartLock({
+  sessionOpen,
+  closed,
+  pending,
+}: {
+  sessionOpen: boolean
+  closed: boolean
+  /** Hay un envío guardado sin resultado: el carrito queda congelado hasta resolverlo. */
+  pending: boolean
+}): string | undefined {
+  if (pending) return 'Tu último envío todavía necesita confirmación. Resolvelo en el carrito para sumar o cambiar platos.'
+  if (closed) return 'La mesa ya cerró su cuenta: no se pueden sumar ni cambiar platos.'
+  if (!sessionOpen) return 'Para sumar o cambiar platos hace falta estar conectado con la mesa.'
+  return undefined
+}
+
 export type CartPhase =
   /** Hay un envío guardado sin resultado: el carrito queda bloqueado hasta reintentar o cancelar. */
   | { kind: 'pending'; submission: PendingSubmission; activity: 'idle' | 'sending' | 'cancelling' }
