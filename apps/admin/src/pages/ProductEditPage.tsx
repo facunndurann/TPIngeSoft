@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
-import { PRODUCT_MEDIA_LIMIT, type Tables } from '@restaurant-platform/shared'
+import { DIETARY_TAGS, PRODUCT_MEDIA_LIMIT, type Tables } from '@restaurant-platform/shared'
 import {
   Button,
   ErrorText,
@@ -26,13 +26,6 @@ import {
   type IngredientDraft,
   type ProductDraft,
 } from '@/features/product-draft'
-
-const DIETARY_TAGS = [
-  { value: 'vegetariano', label: 'Vegetariano' },
-  { value: 'vegano', label: 'Vegano' },
-  { value: 'sin-tacc', label: 'Sin TACC' },
-  { value: 'picante', label: 'Picante' },
-]
 
 /**
  * Resuelve los datos y recién ahí monta el formulario, ya cargado. El `key` es

@@ -2,6 +2,9 @@ import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import {
   DEFAULT_MENU_DESIGN,
+  DIETARY_TAGS,
+  dietaryTagLabel,
+  dietaryTagsText,
   MENU_DESIGN_IDS,
   MENU_DESIGNS,
   menuDesignCssVarName,
@@ -128,6 +131,14 @@ test('a product card is one link with one photo: its carousel lives in the dish 
   assert.doesNotMatch(html, /<a [^>]*>(?:(?!<\/a>)[\s\S])*<button/)
   assert.doesNotMatch(html, /<button[^>]*>(?:(?!<\/button>)[\s\S])*<(?:button|a) /)
 
+  // La carta no dice cuándo se releyó: a quien la recorre no le sirve, y leerlo en voz
+  // alta cada minuto interrumpiría al lector de pantalla.
+  assert.doesNotMatch(html, /Actualiza/)
+
+  // Las etiquetas dietarias se leen con su nombre; una que no está en el catálogo, tal cual.
+  const tagged = render([card({ id: 'tagged', dietary_tags: ['vegano', 'sin-tacc', 'sin-lactosa'] })])
+  assert.match(tagged, /<small>Vegano · Sin TACC · sin-lactosa<\/small>/)
+
   // Cada categoría es una sección de la carta y cada plato una de su categoría: los
   // niveles bajan de a uno y el h1 de la pantalla es del restaurante, no de la carta.
   assert.doesNotMatch(html, /<h1/)
@@ -136,6 +147,13 @@ test('a product card is one link with one photo: its carousel lives in the dish 
   // Un solo valor de aria-current en toda la app, el del estándar.
   assert.match(html, /aria-current="page"[^>]*>Todo</)
   assert.doesNotMatch(html, /aria-current="true"/)
+})
+
+test('dietary tags have one catalog: the values the panel offers are the ones the menu names', () => {
+  assert.deepEqual(DIETARY_TAGS.map((tag) => tag.value), ['vegetariano', 'vegano', 'sin-tacc', 'picante'])
+  for (const tag of DIETARY_TAGS) assert.equal(dietaryTagLabel(tag.value), tag.label)
+  assert.equal(dietaryTagsText(['sin-tacc', 'picante']), 'Sin TACC · Picante')
+  assert.equal(dietaryTagsText([]), '')
 })
 
 test('the dish cover carries the carousel: arrows name what comes and dots lead to each photo', async () => {

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { formatPrice, productMedia } from '@restaurant-platform/shared'
+import { dietaryTagsText, formatPrice, productMedia } from '@restaurant-platform/shared'
 import { QuantityField } from '@/components/QuantityField'
 import { MediaCarousel } from '@/features/MediaCarousel'
 import { groupRule, isSingleChoice, price, selectedInGroup, selectionIssues } from '@/features/menu'
@@ -69,7 +69,7 @@ export function ProductEditor({ product, initial, locked, onSave, onClose }: Pro
       <p>{product.description}</p>
       <strong>{formatPrice(product.base_price)}</strong>
       {product.food_info && <p className="notice">{product.food_info}</p>}
-      {product.dietary_tags.length > 0 && <p>{product.dietary_tags.join(' · ')}</p>}
+      {product.dietary_tags.length > 0 && <p>{dietaryTagsText(product.dietary_tags)}</p>}
 
       {product.ingredients.length > 0 && (
         <IngredientsFieldset

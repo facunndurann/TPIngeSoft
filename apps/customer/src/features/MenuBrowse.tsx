@@ -1,7 +1,6 @@
-import type { ReactNode } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
 import { CurrentLink } from '@/components/CurrentLink'
-import { formatPrice, productMedia } from '@restaurant-platform/shared'
+import { dietaryTagsText, formatPrice, productMedia } from '@restaurant-platform/shared'
 import { MediaThumb } from '@/features/MediaCarousel'
 import { useMenuDesign } from '@/features/menu-design'
 import { matchesSearch } from '@/features/menu'
@@ -11,11 +10,9 @@ import { menuPath, parseMenuFilters, productPath } from '@/features/table-paths'
 type MenuBrowseProps = {
   token: string
   menu: Menu
-  /** Estado del refresco de la carta; lo arma quien tiene la consulta. */
-  freshness?: ReactNode
 }
 
-export function MenuBrowse({ token, menu, freshness }: MenuBrowseProps) {
+export function MenuBrowse({ token, menu }: MenuBrowseProps) {
   const { copy } = useMenuDesign()
   const { search: locationSearch } = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -50,7 +47,6 @@ export function MenuBrowse({ token, menu, freshness }: MenuBrowseProps) {
             setSearchParams(next, { replace: true })
           }}
         />
-        {freshness}
       </div>
 
       <div className="categories" aria-label="Categorías">
@@ -103,7 +99,7 @@ function ProductCard({ product, to }: { product: Product; to: string }) {
           <Link className="product-card-link" to={to}>{product.name}</Link>
         </h4>
         <p>{product.description}</p>
-        {product.dietary_tags.length > 0 && <small>{product.dietary_tags.join(' · ')}</small>}
+        {product.dietary_tags.length > 0 && <small>{dietaryTagsText(product.dietary_tags)}</small>}
         <strong>{formatPrice(product.base_price)}</strong>
         {!product.is_available && <span className="unavailable">Agotado</span>}
       </div>

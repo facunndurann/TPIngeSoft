@@ -9,7 +9,6 @@ import {
 } from 'react-router'
 import { enabledPaymentMethods, MENU_DESIGNS } from '@restaurant-platform/shared'
 import { ClockProvider, ErrorText } from '@restaurant-platform/ui'
-import { FreshnessNote } from '@/components/FreshnessNote'
 import { Toast } from '@/components/Toast'
 import { type Announce, type Announcement, toastDuration } from '@/features/announcements'
 import { type CartItem, cartKeyFor, cartLock } from '@/features/cart'
@@ -224,19 +223,9 @@ export function TableMenuPage() {
     <>
       <MenuStatus />
       <PendingSubmissionNotice />
-      {menu.data && (
-        <MenuBrowse
-          token={token}
-          menu={menu.data}
-          freshness={
-            <FreshnessNote
-              label="la carta"
-              updatedAt={menu.dataUpdatedAt || undefined}
-              isFetching={menu.isFetching}
-            />
-          }
-        />
-      )}
+      {/* Sin «Actualizado hace…»: la carta se relee sola y a quien la recorre no le
+          cambia nada saber cuándo; eso queda para Pedidos y Cuenta, que sí se mueven. */}
+      {menu.data && <MenuBrowse token={token} menu={menu.data} />}
       <CartBar />
     </>
   )
