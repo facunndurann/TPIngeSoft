@@ -121,7 +121,7 @@ test('a named diner sees a compact chip and edits the name in place', async () =
   assert.match(editing, /aria-label="Cancelar"/)
 })
 
-test('the table nav labels the orders tab Pedidos', async () => {
+test('the table nav separates what was ordered from how it is paid', async () => {
   const { createElement } = await import('react')
   const { renderToStaticMarkup } = await import('react-dom/server')
   const { MemoryRouter } = await import('react-router')
@@ -135,7 +135,7 @@ test('the table nav labels the orders tab Pedidos', async () => {
     ),
   )
 
-  assert.match(html, />Pedidos</)
-  assert.doesNotMatch(html, /Pedidos y cuenta/)
-  assert.match(html, /Mi carrito \(1\)/)
+  const tabs = [...html.matchAll(/<a [^>]*>([^<]*)<\/a>/g)].map(([, label]) => label)
+  assert.deepEqual(tabs, ['La carta', 'Mi carrito (1)', 'Pedidos', 'Cuenta'])
+  assert.match(html, /href="\/m\/t\/cuenta"/)
 })

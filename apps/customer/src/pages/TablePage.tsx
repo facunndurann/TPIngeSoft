@@ -17,6 +17,7 @@ import { CartPanel } from '@/features/CartPanel'
 import { MenuBrowse } from '@/features/MenuBrowse'
 import { cartPrice, type Product } from '@/features/menu'
 import { ProductEditor } from '@/features/ProductEditor'
+import { SessionBill } from '@/features/SessionBill'
 import { SessionOrders } from '@/features/SessionOrders'
 import { type Failure, SessionPanel } from '@/features/SessionPanel'
 import { useAttentionAnnouncements } from '@/features/service-requests'
@@ -390,6 +391,17 @@ export function TableOrdersPage() {
       <PendingSubmissionNotice />
       <SessionOrders onReorder={reorder} />
       <CartBar />
+    </>
+  )
+}
+
+export function TableBillPage() {
+  // Un envío sin resolver todavía puede sumar a la cuenta: se avisa antes de pagar.
+  // Sin barra del carrito: acá se paga lo pedido, no se sigue pidiendo.
+  return (
+    <>
+      <PendingSubmissionNotice />
+      <SessionBill />
     </>
   )
 }

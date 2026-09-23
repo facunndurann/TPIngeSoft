@@ -14,6 +14,7 @@ test('customer table URLs encode screens, product pages and menu filters', () =>
   assert.equal(paths.cartPath('t'), '/m/t/carrito')
   assert.equal(paths.cartItemPath('t', 'item-1'), '/m/t/carrito/item-1')
   assert.equal(paths.ordersPath('t'), '/m/t/pedidos')
+  assert.equal(paths.billPath('t'), '/m/t/cuenta')
   assert.deepEqual(paths.parseMenuFilters(new URLSearchParams('categoria=c&q=ala')), { category: 'c', search: 'ala' })
   assert.deepEqual(paths.parseMenuFilters(new URLSearchParams()), { category: 'all', search: '' })
 })

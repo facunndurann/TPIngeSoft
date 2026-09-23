@@ -37,7 +37,14 @@ export function ServiceRequests() {
   return (
     <section className="bill-panel" aria-label="Atención en tu mesa">
       <h3>{paid ? '¡Gracias por tu visita!' : '¿Terminaron?'}</h3>
-      <RequestStatus state={state} asking={ask.isPending} onAsk={() => ask.mutate(session.id)} />
+      <RequestStatus
+        state={state}
+        asking={ask.isPending}
+        // Con pago desde el celular, pagar es la acción principal de la Cuenta y el
+        // mozo, la alternativa: un solo botón primario por pantalla.
+        primary={!paymentMethods.includes('mobile')}
+        onAsk={() => ask.mutate(session.id)}
+      />
       {!paid && paymentMethods.includes('external') && (
         <p className="muted">También podés pagar en caja.</p>
       )}
@@ -50,10 +57,12 @@ export function ServiceRequests() {
 function RequestStatus({
   state,
   asking,
+  primary,
   onAsk,
 }: {
   state: SessionRequestState
   asking: boolean
+  primary: boolean
   onAsk: () => void
 }) {
   const now = useNow()
@@ -63,7 +72,7 @@ function RequestStatus({
       return (
         <>
           <p className="muted">{copy.help}</p>
-          <button className="primary wide" disabled={asking} onClick={onAsk}>
+          <button className={primary ? 'primary wide' : 'wide'} disabled={asking} onClick={onAsk}>
             {asking ? 'Avisando…' : copy.action}
           </button>
         </>

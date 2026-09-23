@@ -159,8 +159,10 @@ header.compact .badge { margin-left: 0; flex-shrink: 0; }
   padding: 0;
   border-bottom: 1px solid var(--menu-border);
 }
+/* Cuatro pestañas en 320px: cada una mide su texto sin partirlo y el resto se reparte. */
 .tabs a {
-  flex: 1;
+  flex: 1 1 auto;
+  white-space: nowrap;
   display: flex;
   align-items: center;
   justify-content: center;

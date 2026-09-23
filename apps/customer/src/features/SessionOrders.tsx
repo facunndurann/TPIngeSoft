@@ -1,42 +1,17 @@
 import { useQuery } from '@tanstack/react-query'
-import {
-  formatPrice,
-  orderStatusLabels,
-  parseSessionSplit,
-  paymentMethodLabels,
-  paymentModeLabels,
-  paymentStatusLabels,
-} from '@restaurant-platform/shared'
+import { formatPrice, orderStatusLabels } from '@restaurant-platform/shared'
 import { ErrorText } from '@restaurant-platform/ui'
 import { FreshnessNote } from '@/components/FreshnessNote'
-import { AddGuest } from '@/features/AddGuest'
-import { BillSplitter } from '@/features/BillSplitter'
 import { plateCount } from '@/features/cart'
 import { oldestUpdate } from '@/features/freshness'
-import { MobilePayment } from '@/features/MobilePayment'
-import {
-  billQuery,
-  type loadBill,
-  type loadOrders,
-  type loadPayments,
-  ordersQuery,
-  paymentsQuery,
-} from '@/features/orders-api'
-import { ServiceRequests } from '@/features/ServiceRequests'
+import { type loadOrders, ordersQuery } from '@/features/orders-api'
 import { useTable } from '@/features/table-context'
+import { WithoutSession } from '@/features/TableChrome'
 
 type Order = Awaited<ReturnType<typeof loadOrders>>[number]
 type OrderItem = Order['order_items'][number]
-type Bill = Awaited<ReturnType<typeof loadBill>>
-type Payment = Awaited<ReturnType<typeof loadPayments>>[number]
 
-// Una instancia por formato, como `formatPrice`: se usan fila por fila en cada render.
-const paymentTime = new Intl.DateTimeFormat('es-AR', {
-  day: '2-digit',
-  month: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-})
+// Una instancia por formato, como `formatPrice`: se usa fila por fila en cada render.
 const orderTime = new Intl.DateTimeFormat('es-AR', { dateStyle: 'short', timeStyle: 'short' })
 
 type SessionOrdersProps = {
@@ -44,70 +19,24 @@ type SessionOrdersProps = {
   onReorder?: (order: Order) => void
 }
 
+/** Lo que pidió la mesa, del más nuevo al más viejo. Cómo se paga es de la Cuenta. */
 export function SessionOrders({ onReorder }: SessionOrdersProps) {
-  const { sessionId, session: sessionQuery, me, closed, paymentMethods } = useTable()
-  const session = sessionQuery.data
-  const participants = session?.participants ?? []
-  // `parseSessionSplit` acepta lo que venga y cae en `none`: sin mesa leída no
-  // hay división, y así el valor nunca es nulo para quien lo muestra.
-  const sessionSplit = parseSessionSplit(
-    session?.split_type,
-    session?.split_allocations,
-    session?.split_equal_parts,
-  )
-
+  const { sessionId } = useTable()
   const orders = useQuery(ordersQuery(sessionId))
-  const bill = useQuery(billQuery(sessionId))
-  const payments = useQuery(paymentsQuery(sessionId))
 
-  if (!sessionId) {
-    return (
-      <section>
-        <h2>Pedidos</h2>
-        <p className="notice">Escaneá el QR de tu mesa para consultar sus pedidos y su cuenta.</p>
-      </section>
-    )
-  }
+  if (!sessionId) return <WithoutSession title="Pedidos" subject="sus pedidos" />
 
   return (
     <section aria-label="Pedidos de la mesa">
       <h2>Pedidos</h2>
-      {closed && (
-        <p className="muted">La mesa ya cerró su cuenta; podés seguir consultando el detalle.</p>
-      )}
-
       <FreshnessNote
-        label="los pedidos y la cuenta"
-        updatedAt={oldestUpdate(orders.dataUpdatedAt, bill.dataUpdatedAt)}
-        isFetching={orders.isFetching || bill.isFetching}
+        label="los pedidos"
+        updatedAt={oldestUpdate(orders.dataUpdatedAt)}
+        isFetching={orders.isFetching}
       />
-
-      {bill.isPending && <p role="status">Actualizando la cuenta…</p>}
-      {/* Cada lectura dice qué falló (lo pone su loader) y el catálogo decide si reintentar. */}
-      <ErrorText variant="menu" error={bill.error} retry={() => { void bill.refetch() }} />
-      {bill.data && <BillSummary bill={bill.data} />}
-      {bill.data && session && me && paymentMethods.includes('mobile') && (
-        <MobilePayment
-          sessionId={session.id}
-          pending={Number(bill.data.pending_amount ?? 0)}
-          accountTotal={Number(bill.data.total_amount ?? 0)}
-          participantId={me.id}
-          participants={participants}
-          payments={payments.data ?? []}
-          closed={closed}
-          split={sessionSplit}
-          orders={orders.data ?? []}
-        />
-      )}
-      <PaymentHistory
-        payments={payments.data}
-        loading={payments.isPending}
-        error={payments.error}
-        retry={() => { void payments.refetch() }}
-      />
-      <ServiceRequests />
 
       {orders.isPending && <p role="status">Cargando los pedidos…</p>}
+      {/* Cada lectura dice qué falló (lo pone su loader) y el catálogo decide si reintentar. */}
       <ErrorText variant="menu" error={orders.error} retry={() => { void orders.refetch() }} />
       {orders.data?.length === 0 && (
         <p className="empty">Todavía no hay pedidos enviados en esta mesa.</p>
@@ -120,63 +49,7 @@ export function SessionOrders({ onReorder }: SessionOrdersProps) {
           onReorder={onReorder}
         />
       ))}
-      {bill.data && (
-        <BillSplitter split={sessionSplit} bill={bill.data} orders={orders.data ?? []} />
-      )}
-      {/* Con la mesa cerrada ya no se suma gente: la RPC lo rechazaría. */}
-      {bill.data && !closed && <AddGuest sessionId={sessionId} orders={orders.data ?? []} />}
     </section>
-  )
-}
-
-function PaymentHistory({
-  payments,
-  loading,
-  error,
-  retry,
-}: {
-  payments?: Payment[]
-  loading: boolean
-  error: Error | null
-  retry: () => void
-}) {
-  const { nameOf } = useTable()
-  if (loading) return <p role="status">Actualizando los pagos…</p>
-  if (error) return <ErrorText variant="menu" error={error} retry={retry} />
-  if (!payments?.length) return null
-
-  return (
-    <div className="bill-panel" aria-label="Historial de pagos">
-      <h3>Pagos registrados</h3>
-      {payments.map((payment) => (
-        <div className="line" key={payment.id}>
-          <div>
-            <strong>{formatPrice(payment.amount)}</strong>{' '}
-            <span>{paymentStatusLabels[payment.status]}</span>
-            <p className="muted">
-              {paymentMethodLabels[payment.method]} · {paymentModeLabels[payment.mode]}
-              {payment.participant_id ? ` · ${nameOf(payment.participant_id)}` : ''}
-            </p>
-          </div>
-          <time dateTime={payment.created_at}>
-            {paymentTime.format(new Date(payment.created_at))}
-          </time>
-        </div>
-      ))}
-      <p className="muted">Los pagos pendientes o rechazados se muestran, pero no reducen el saldo.</p>
-    </div>
-  )
-}
-
-function BillSummary({ bill }: { bill: Bill }) {
-  return (
-    <div className="bill-panel" aria-label="Resumen de cuenta">
-      <dl className="bill-due">
-        <dt>Falta pagar</dt>
-        <dd>{formatPrice(bill.pending_amount ?? 0)}</dd>
-      </dl>
-      {bill.is_settled && (bill.total_amount ?? 0) > 0 && <p className="settled">Cuenta pagada</p>}
-    </div>
   )
 }
 

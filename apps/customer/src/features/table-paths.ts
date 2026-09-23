@@ -33,6 +33,10 @@ export function ordersPath(token: string) {
   return `${tableRoot(token)}/pedidos`
 }
 
+export function billPath(token: string) {
+  return `${tableRoot(token)}/cuenta`
+}
+
 export function parseMenuFilters(searchParams: URLSearchParams) {
   return {
     category: searchParams.get('categoria') || 'all',

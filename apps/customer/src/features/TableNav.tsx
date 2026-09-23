@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router'
-import { cartPath, ordersPath, tableRoot } from '@/features/table-paths'
+import { billPath, cartPath, ordersPath, tableRoot } from '@/features/table-paths'
 
 type TableNavProps = {
   token: string
@@ -9,7 +9,8 @@ type TableNavProps = {
 /**
  * Las pestañas de la mesa. `NavLink` marca `aria-current="page"` según la ruta: la
  * carta con `end`, porque dentro de un plato ya no se está mirando la carta; el
- * carrito cuenta también al editar una línea.
+ * carrito cuenta también al editar una línea. Pedidos es lo que se pidió y Cuenta,
+ * cómo se paga: van separadas porque se consultan en momentos distintos.
  */
 export function TableNav({ token, cartCount }: TableNavProps) {
   const { search } = useLocation()
@@ -24,6 +25,7 @@ export function TableNav({ token, cartCount }: TableNavProps) {
       </NavLink>
       <NavLink to={cartPath(token)}>Mi carrito ({cartCount})</NavLink>
       <NavLink to={ordersPath(token)}>Pedidos</NavLink>
+      <NavLink to={billPath(token)}>Cuenta</NavLink>
     </nav>
   )
 }

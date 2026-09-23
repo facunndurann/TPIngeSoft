@@ -36,6 +36,19 @@ export function PendingSubmissionNotice() {
   )
 }
 
+/**
+ * Pedidos y Cuenta son de la sesión de la mesa: mientras no hay una, la pestaña
+ * dice qué va a mostrar y cómo llegar.
+ */
+export function WithoutSession({ title, subject }: { title: string; subject: string }) {
+  return (
+    <section>
+      <h2>{title}</h2>
+      <p className="notice">Escaneá el QR de tu mesa para consultar {subject}.</p>
+    </section>
+  )
+}
+
 /** Atajo al carrito desde donde se elige qué pedir o se mira lo pedido. */
 export function CartBar() {
   const { token, items, cartTotal } = useTable()

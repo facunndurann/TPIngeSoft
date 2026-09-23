@@ -82,7 +82,7 @@ export function MobilePayment({ sessionId, ...account }: MobilePaymentProps) {
           <p className="muted">
             {plan.share.mode === 'custom'
               ? `${itemCount(plan.share.itemIds.length)} · Subtotal ${formatPrice(plan.share.amount)}`
-              : 'Seleccioná uno o más ítems, o usá la división configurada debajo.'}
+              : 'Seleccioná uno o más ítems, o pagá según la división de la cuenta.'}
           </p>
         </fieldset>
       )}
