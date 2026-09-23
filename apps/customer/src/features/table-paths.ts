@@ -25,10 +25,6 @@ export function cartPath(token: string) {
   return `${tableRoot(token)}/carrito`
 }
 
-export function cartReviewPath(token: string) {
-  return `${tableRoot(token)}/carrito/revisar`
-}
-
 export function cartItemPath(token: string, itemId: string) {
   return `${tableRoot(token)}/carrito/${encodeURIComponent(itemId)}`
 }

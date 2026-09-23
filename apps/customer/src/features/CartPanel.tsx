@@ -2,19 +2,18 @@ import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { AppError, formatPrice, MAX_ORDER_LINES } from '@restaurant-platform/shared'
 import { ErrorText } from '@restaurant-platform/ui'
-import { Navigate, useNavigate } from 'react-router'
+import { useNavigate } from 'react-router'
 import { QuantityField } from '@/components/QuantityField'
 import { cartPhase, plateCount } from '@/features/cart'
-import type { CartItem, Review } from '@/features/cart'
+import type { CartItem } from '@/features/cart'
 import { describeSelection, price, selectionErrors } from '@/features/menu'
 import type { Menu } from '@/features/menu'
 import { abandonSubmission, submitOrder } from '@/features/orders-api'
 import { useTable } from '@/features/table-context'
-import { cartItemPath, cartPath, cartReviewPath } from '@/features/table-paths'
+import { cartItemPath } from '@/features/table-paths'
 import { useCart } from '@/stores/cart'
 
 type CartPanelProps = {
-  reviewing?: boolean
   refreshMenu: () => Promise<unknown>
   onSubmitted: () => void
 }
@@ -24,7 +23,7 @@ type CartPanelProps = {
  * si el comensal ya tiene nombre— salen del contexto; por props llegan solo las
  * acciones que decide la pantalla que lo monta.
  */
-export function CartPanel({ reviewing = false, refreshMenu, onSubmitted }: CartPanelProps) {
+export function CartPanel({ refreshMenu, onSubmitted }: CartPanelProps) {
   const {
     token,
     cartKey,
@@ -41,26 +40,13 @@ export function CartPanel({ reviewing = false, refreshMenu, onSubmitted }: CartP
   const cart = useCart()
   const [needsMenuRefresh, setNeedsMenuRefresh] = useState(false)
 
-  // La revisión se fija una sola vez por montaje, apenas hay precios. El panel se
-  // remonta al entrar o salir de revisar (key en TablePage), así que no hace falta limpiarla.
-  const [review, setReview] = useState<Review>()
-  if (reviewing && menu && !review) setReview({ items, total })
-
-  // Si al llegar a revisar no había nada, se vuelve al carrito. Se decide una sola
-  // vez, al montar: que el carrito se vacíe estando acá es que el pedido salió, y
-  // adónde seguir lo decide `onSubmitted`. Una vuelta que reaccionara al carrito
-  // vacío pisaría esa navegación, porque el store avisa antes de que cambie la ruta.
-  const [nothingToReview] = useState(
-    () => reviewing && items.length === 0 && !cart.submissions[cartKey],
-  )
-
   const refresh = async () => {
     setNeedsMenuRefresh(true)
     try {
       await refreshMenu()
       setNeedsMenuRefresh(false)
     } catch {
-      /* Leave confirmation disabled until current prices are available. */
+      /* El envío sigue apagado hasta tener los precios de ahora. */
     }
   }
 
@@ -76,7 +62,6 @@ export function CartPanel({ reviewing = false, refreshMenu, onSubmitted }: CartP
       // pendiente para repetirlo con el mismo requestId sin duplicar el pedido.
       if (error instanceof AppError && !error.retryable) {
         cart.rejectSubmission(cartKey, input.requestId)
-        if (reviewing) navigate(cartPath(token))
         await refresh()
       }
     },
@@ -94,12 +79,10 @@ export function CartPanel({ reviewing = false, refreshMenu, onSubmitted }: CartP
         send.mutate(submission.input)
         return
       }
+      // Cancelado, el borrador vuelve a ser editable en esta misma pantalla.
       cart.rejectSubmission(cartKey, input.requestId)
-      navigate(cartPath(token))
     },
   })
-
-  if (nothingToReview) return <Navigate to={cartPath(token)} replace />
 
   const phase = cartPhase({
     items,
@@ -108,30 +91,19 @@ export function CartPanel({ reviewing = false, refreshMenu, onSubmitted }: CartP
     sessionId,
     sessionOpen,
     named,
-    reviewing,
-    review,
     submission: cart.submissions[cartKey],
     menuOutdated: needsMenuRefresh,
     sending: send.isPending,
     cancelling: abandon.isPending,
   })
 
-  const confirm = () => {
-    if (phase.kind !== 'reviewing' || !phase.confirmable) return
-    const { sessionId, expectedTotal } = phase.confirmable
+  // Firma el carrito tal como se ve y lo envía: el total esperado es el del botón.
+  const submit = () => {
+    if (phase.kind !== 'editing' || !phase.sendable) return
+    const { sessionId, expectedTotal } = phase.sendable
     const submission = cart.beginSubmission(cartKey, sessionId, expectedTotal)
     if (submission) send.mutate(submission.input)
   }
-
-  // Lo que frena un envío se dice igual al armar el carrito y al revisarlo.
-  const blockers = (
-    <SendBlockers
-      tooManyLines={items.length > MAX_ORDER_LINES}
-      sessionOpen={sessionOpen}
-      needsMenuRefresh={needsMenuRefresh}
-      onRefreshMenu={() => { void refresh() }}
-    />
-  )
 
   // Cada fase dibuja lo suyo en su bloque, y ningún bloque vuelve a preguntar la
   // fase: las líneas van arriba, los errores del envío al medio y el cierre abajo.
@@ -218,47 +190,18 @@ export function CartPanel({ reviewing = false, refreshMenu, onSubmitted }: CartP
             <strong>{menu ? formatPrice(total) : '—'}</strong>
           </div>
           <p className="muted">
-            Productos sin enviar. Al confirmar, el restaurante recibirá el pedido y validará
-            precios y disponibilidad.
+            Productos sin enviar. Al enviarlos, el restaurante recibe el pedido y valida precios y
+            disponibilidad.
           </p>
-          {blockers}
-          <button
-            className="primary wide"
-            disabled={!phase.canReview}
-            onClick={() => {
-              send.reset()
-              navigate(cartReviewPath(token))
-            }}
-          >
-            Revisar pedido
+          <SendBlockers
+            tooManyLines={items.length > MAX_ORDER_LINES}
+            sessionOpen={sessionOpen}
+            needsMenuRefresh={needsMenuRefresh}
+            onRefreshMenu={() => { void refresh() }}
+          />
+          <button className="primary wide" disabled={!phase.sendable} onClick={submit}>
+            {menu ? `Enviar pedido · ${formatPrice(total)}` : 'Enviar pedido'}
           </button>
-        </>
-      )}
-
-      {phase.kind === 'reviewing' && (
-        <>
-          {blockers}
-          <div className="confirmation" aria-label="Confirmación del pedido">
-            <h3>Confirmá tu pedido</h3>
-            <p>Esto es lo que va a recibir el restaurante:</p>
-            {/* La revisión se fijó al entrar: es la que respalda el total que se confirma. */}
-            <CartSummary items={phase.review?.items ?? items} menu={menu} />
-            <div className="total">
-              <span>Total</span>
-              <strong>{formatPrice(phase.review?.total ?? total)}</strong>
-            </div>
-            {phase.outdated && (
-              <p role="alert" className="notice">
-                La carta o el carrito cambiaron. Volvé a revisar el pedido antes de enviarlo.
-              </p>
-            )}
-            <div className="cart-actions">
-              <button onClick={() => navigate(cartPath(token))}>Volver a editar</button>
-              <button className="primary" disabled={!phase.confirmable} onClick={confirm}>
-                Confirmar
-              </button>
-            </div>
-          </div>
         </>
       )}
     </section>
@@ -289,7 +232,7 @@ function SendBlockers({
       )}
       {needsMenuRefresh && (
         <div className="notice">
-          <p>Necesitamos actualizar la carta antes de que vuelvas a confirmar.</p>
+          <p>Necesitamos actualizar la carta antes de que vuelvas a enviar el pedido.</p>
           <button onClick={onRefreshMenu}>Actualizar carta</button>
         </div>
       )}
@@ -357,25 +300,17 @@ function CartLine({
 }
 
 /**
- * Lo que se envía, en firme: el mismo contenido de las líneas del carrito pero sin
- * controles, para que confirmar no obligue a subir a mirar otra cosa.
+ * Lo que se mandó en un envío pendiente, en firme y sin controles. Va sin precios
+ * por línea: el envío se firmó con su propio total, y sus líneas no se revalúan
+ * con la carta de ahora.
  */
-function CartSummary({
-  items,
-  menu,
-  prices = true,
-}: {
-  items: CartItem[]
-  menu?: Menu
-  /** Un envío pendiente se firmó con su propio total: sus líneas no se revalúan con la carta de ahora. */
-  prices?: boolean
-}) {
+function CartSummary({ items, menu }: { items: CartItem[]; menu?: Menu }) {
   return (
     <ul className="cart-summary">
       {items.map((item) => {
         const product = menu?.productsById.get(item.productId)
         const { options, removed } = describeSelection(product, item)
-        // Personalizaciones en una línea: en la confirmación se leen, no se editan.
+        // Personalizaciones en una línea: acá se leen, no se editan.
         const details = [
           ...options.map((option) => option.name),
           ...removed.map((ingredient) => `sin ${ingredient.name}`),
@@ -383,12 +318,9 @@ function CartSummary({
 
         return (
           <li key={item.id}>
-            <div className="cart-summary-line">
-              <span>
-                {item.quantity} × {product?.name ?? 'Plato del carrito'}
-                {item.isShared && <span className="badge">Para compartir</span>}
-              </span>
-              {prices && <strong>{product ? formatPrice(price(product, item)) : '—'}</strong>}
+            <div>
+              {item.quantity} × {product?.name ?? 'Plato del carrito'}
+              {item.isShared && <span className="badge">Para compartir</span>}
             </div>
             {details.length > 0 && <small>{details.join(' · ')}</small>}
           </li>
@@ -417,7 +349,7 @@ function PendingSubmission({
   return (
     <div className="confirmation" aria-live="polite">
       <h3>{status === 'sending' ? 'Enviando tu pedido…' : 'Hay un envío por confirmar'}</h3>
-      <CartSummary items={items} menu={menu} prices={false} />
+      <CartSummary items={items} menu={menu} />
       <div className="total">
         <span>Total enviado</span>
         <strong>{formatPrice(total)}</strong>

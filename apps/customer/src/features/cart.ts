@@ -33,42 +33,28 @@ export function sameCartItem(a: CartItem, b: CartItem) {
   )
 }
 
-export function sameCartItems(a: CartItem[], b: CartItem[]) {
-  return a.length === b.length && a.every((item, index) => sameCartItem(item, b[index]))
-}
-
 function sameIds(a: string[], b: string[]) {
   if (a.length !== b.length) return false
   const sorted = [...b].sort()
   return [...a].sort().every((id, index) => id === sorted[index])
 }
 
-/** Lo que el comensal vio al entrar a revisar: si cambia, tiene que volver a revisarlo. */
-export type Review = { items: CartItem[]; total: number }
-
 export type CartPhase =
   /** Hay un envío guardado sin resultado: el carrito queda bloqueado hasta reintentar o cancelar. */
   | { kind: 'pending'; submission: PendingSubmission; activity: 'idle' | 'sending' | 'cancelling' }
   | { kind: 'empty' }
-  | { kind: 'editing'; editable: boolean; canReview: boolean }
-  /** `confirmable` existe solo si se puede enviar, y trae exactamente lo que se enviaría. */
-  | {
-      kind: 'reviewing'
-      review?: Review
-      outdated: boolean
-      confirmable?: { sessionId: string; expectedTotal: number }
-    }
+  /** `sendable` existe solo si se puede enviar, y trae exactamente lo que se enviaría. */
+  | { kind: 'editing'; editable: boolean; sendable?: { sessionId: string; expectedTotal: number } }
 
 type CartPhaseInput = {
   items: CartItem[]
   menu?: Menu
+  /** Total del carrito con la carta de ahora: el que muestra el botón y el que se firma. */
   total: number
   sessionId?: string
   sessionOpen: boolean
   /** Si el comensal eligió su nombre: sin eso, la cuenta no se puede repartir. */
   named: boolean
-  reviewing: boolean
-  review?: Review
   submission?: PendingSubmission
   menuOutdated: boolean
   sending: boolean
@@ -77,7 +63,7 @@ type CartPhaseInput = {
 
 /** Único lugar que decide qué puede hacer el comensal con su carrito. */
 export function cartPhase(input: CartPhaseInput): CartPhase {
-  const { items, review, sessionId, submission } = input
+  const { items, sessionId, submission } = input
 
   if (submission) {
     const activity = input.sending ? 'sending' : input.cancelling ? 'cancelling' : 'idle'
@@ -90,17 +76,12 @@ export function cartPhase(input: CartPhaseInput): CartPhase {
   const editable = input.sessionOpen && !input.sending
   // El nombre se exige para enviar, no para armar el carrito: se puede elegir
   // platos mientras se piensa, pero el pedido llega a la mesa con un dueño.
-  const sendable =
+  const canSend =
     editable && input.named && !input.menuOutdated && validDraft(input.menu, items)
-  if (!input.reviewing) return { kind: 'editing', editable, canReview: sendable }
-
-  const outdated =
-    !!review && (review.total !== input.total || !sameCartItems(review.items, items))
-  const confirmable =
-    sendable && sessionId && review && !outdated
-      ? { sessionId, expectedTotal: review.total }
-      : undefined
-  return { kind: 'reviewing', review, outdated, confirmable }
+  // Se firma el total que el comensal ve en el botón. Si el servidor ya no llega al
+  // mismo, rechaza el envío y el carrito pide actualizar la carta antes de reintentar.
+  const sendable = canSend && sessionId ? { sessionId, expectedTotal: input.total } : undefined
+  return { kind: 'editing', editable, sendable }
 }
 
 function validDraft(menu: Menu | undefined, items: CartItem[]) {

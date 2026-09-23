@@ -9,7 +9,7 @@ type TableNavProps = {
 /**
  * Las pestañas de la mesa. `NavLink` marca `aria-current="page"` según la ruta: la
  * carta con `end`, porque dentro de un plato ya no se está mirando la carta; el
- * carrito cuenta también al revisarlo o al editar una línea.
+ * carrito cuenta también al editar una línea.
  */
 export function TableNav({ token, cartCount }: TableNavProps) {
   const { search } = useLocation()

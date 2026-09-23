@@ -70,29 +70,25 @@ test('a successful response matches submitted lines by value, not by key or opti
 
 test('the cart phase is the single source for what the diner can do', () => {
   const item = { ...selection, id: 'line', productId: 'p' }
-  const review = { items: [{ ...item }], total: 30.9 }
-  const draft = { items: [item], menu, total: 30.9, sessionId: 'session', sessionOpen: true, named: true, reviewing: false, menuOutdated: false, sending: false, cancelling: false }
-  assert.deepEqual(cartPhase(draft), { kind: 'editing', editable: true, canReview: true })
+  const draft = { items: [item], menu, total: 30.9, sessionId: 'session', sessionOpen: true, named: true, menuOutdated: false, sending: false, cancelling: false }
+  assert.deepEqual(cartPhase(draft), { kind: 'editing', editable: true, sendable: { sessionId: 'session', expectedTotal: 30.9 } })
+  // Se firma el total de ahora, el mismo que muestra el botón: no hay una revisión
+  // anterior con la que tenga que coincidir.
+  assert.deepEqual(cartPhase({ ...draft, total: 31 }), { kind: 'editing', editable: true, sendable: { sessionId: 'session', expectedTotal: 31 } })
   // Sin nombre elegido se puede armar el carrito, pero no enviarlo: la cuenta no
   // sabría de quién es cada plato.
-  assert.deepEqual(cartPhase({ ...draft, named: false }), { kind: 'editing', editable: true, canReview: false })
-  assert.deepEqual(cartPhase({ ...draft, named: false, reviewing: true, review }), { kind: 'reviewing', review, outdated: false, confirmable: undefined })
+  assert.deepEqual(cartPhase({ ...draft, named: false }), { kind: 'editing', editable: true, sendable: undefined })
   assert.deepEqual(cartPhase({ ...draft, items: [] }), { kind: 'empty' })
-  assert.deepEqual(cartPhase({ ...draft, menuOutdated: true }), { kind: 'editing', editable: true, canReview: false })
-  assert.deepEqual(cartPhase({ ...draft, items: [{ ...item, optionIds: [] }] }), { kind: 'editing', editable: true, canReview: false })
-  assert.deepEqual(cartPhase({ ...draft, sessionOpen: false }), { kind: 'editing', editable: false, canReview: false })
-  assert.deepEqual(cartPhase({ ...draft, sending: true }), { kind: 'editing', editable: false, canReview: false }, 'a rejection still refreshing the menu freezes the draft')
+  assert.deepEqual(cartPhase({ ...draft, menuOutdated: true }), { kind: 'editing', editable: true, sendable: undefined })
+  assert.deepEqual(cartPhase({ ...draft, menu: undefined }), { kind: 'editing', editable: true, sendable: undefined })
+  assert.deepEqual(cartPhase({ ...draft, sessionId: undefined }), { kind: 'editing', editable: true, sendable: undefined })
+  assert.deepEqual(cartPhase({ ...draft, items: [{ ...item, optionIds: [] }] }), { kind: 'editing', editable: true, sendable: undefined })
+  assert.deepEqual(cartPhase({ ...draft, sessionOpen: false }), { kind: 'editing', editable: false, sendable: undefined })
+  assert.deepEqual(cartPhase({ ...draft, sending: true }), { kind: 'editing', editable: false, sendable: undefined }, 'a rejection still refreshing the menu freezes the draft')
 
   const submission: PendingSubmission = { input: { sessionId: 'session', requestId: 'request', expectedTotal: 30.9, items: [] }, snapshot: [item] }
   assert.deepEqual(cartPhase({ ...draft, submission, sending: true, cancelling: true }), { kind: 'pending', submission, activity: 'sending' })
   assert.deepEqual(cartPhase({ ...draft, submission, cancelling: true }), { kind: 'pending', submission, activity: 'cancelling' })
-
-  const reviewing = { ...draft, reviewing: true, review }
-  assert.deepEqual(cartPhase(reviewing), { kind: 'reviewing', review, outdated: false, confirmable: { sessionId: 'session', expectedTotal: 30.9 } })
-  assert.deepEqual(cartPhase({ ...reviewing, total: 31 }), { kind: 'reviewing', review, outdated: true, confirmable: undefined })
-  assert.deepEqual(cartPhase({ ...reviewing, items: [{ ...item, quantity: 4 }] }), { kind: 'reviewing', review, outdated: true, confirmable: undefined })
-  assert.deepEqual(cartPhase({ ...reviewing, menuOutdated: true }), { kind: 'reviewing', review, outdated: false, confirmable: undefined })
-  assert.deepEqual(cartPhase({ ...draft, reviewing: true, menu: undefined }), { kind: 'reviewing', review: undefined, outdated: false, confirmable: undefined })
 })
 
 test('session recovery restores pending orders after closure only for the authenticated participant and QR table', async () => {

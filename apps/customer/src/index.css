@@ -221,7 +221,6 @@ legend { padding: 0 8px; font-weight: 700; font-family: var(--menu-font-display)
 .cart-summary { list-style: none; padding: 0; margin: 12px 0 0; }
 .cart-summary li { padding: 10px 0; border-bottom: 1px solid var(--menu-border); }
 .cart-summary li:last-child { border-bottom: none; }
-.cart-summary-line { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .total { font-size: 16px; font-weight: 700; padding: 14px 0; }
 .cart-bar {
   position: fixed;

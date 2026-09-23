@@ -19,7 +19,6 @@ export default function App() {
         <Route index element={<TableMenuPage />} />
         <Route path="producto/:productId" element={<TableProductPage />} />
         <Route path="carrito" element={<TableCartPage />} />
-        <Route path="carrito/revisar" element={<TableCartPage reviewing />} />
         <Route path="carrito/:itemId" element={<TableCartItemPage />} />
         <Route path="pedidos" element={<TableOrdersPage />} />
         <Route path="*" element={<TableCatchAll />} />

@@ -229,23 +229,24 @@ export function TableMenuPage() {
   )
 }
 
-export function TableCartPage({ reviewing = false }: { reviewing?: boolean }) {
+export function TableCartPage() {
   const { token, menu, refreshTable, cartKey, announce } = useTable()
   const navigate = useNavigate()
 
-  // Sin aviso de envío pendiente: el carrito ya lo muestra con sus acciones. Llegar
-  // a revisar sin nada que revisar lo resuelve el panel, que sabe qué había al entrar.
+  // Sin aviso de envío pendiente: el carrito ya lo muestra con sus acciones.
   return (
     <>
       <MenuStatus />
       <CartPanel
-        key={`${cartKey}:${reviewing ? 'review' : 'edit'}`}
-        reviewing={reviewing}
+        // Quien empieza de nuevo en la mesa estrena carrito: el panel arranca sin los
+        // errores ni el refresco de carta que había dejado el envío anterior.
+        key={cartKey}
         refreshMenu={() => menu.refetch({ throwOnError: true })}
         onSubmitted={() => {
           announce(
             'Tu pedido fue enviado. Podés seguir su estado y consultar la cuenta de la mesa.',
           )
+          // Reemplaza al carrito recién vaciado: volver atrás desde Pedidos lleva a la carta.
           navigate(ordersPath(token), { replace: true })
           void refreshTable()
         }}

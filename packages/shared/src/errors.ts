@@ -42,9 +42,9 @@ export const appErrors = {
   PAYMENT_ITEMS_UNAVAILABLE: { status: 409, retryable: false, message: 'Uno de los ítems ya está incluido en otro pago. Actualizamos la cuenta para que elijas nuevamente.' },
   PAYMENT_NOT_FOUND: { status: 404, retryable: false, message: 'No encontramos ese pago.' },
   PAYMENT_PROVIDER_UNAVAILABLE: { status: 503, retryable: true, message: 'El proveedor de pagos no está disponible. Reintentá en unos momentos.' },
-  PRICE_CHANGED: { status: 409, retryable: false, message: 'El precio cambió. Revisá el total actualizado y volvé a confirmar.' },
+  PRICE_CHANGED: { status: 409, retryable: false, message: 'El precio cambió. Revisá el total actualizado y volvé a enviar el pedido.' },
   IDEMPOTENCY_CONFLICT: { status: 409, retryable: false, message: 'Este envío ya se usó para otro contenido. Revisá los pedidos de la mesa antes de continuar.' },
-  REQUEST_ABANDONED: { status: 409, retryable: false, message: 'Cancelaste este envío. Revisá tu carrito y volvé a confirmar.' },
+  REQUEST_ABANDONED: { status: 409, retryable: false, message: 'Cancelaste este envío. Revisá tu carrito y volvé a enviarlo.' },
 
   // Red: la respuesta nunca llegó, así que el envío se conserva para reintentar.
   CONNECTION_ERROR: { status: 503, retryable: true, message: 'No pudimos confirmar el envío. Reintentá: conservamos tu pedido para evitar duplicados.' },
