@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { formatPrice, productMedia } from '@restaurant-platform/shared'
 import { QuantityField } from '@/components/QuantityField'
 import { MediaCarousel } from '@/features/MediaCarousel'
-import { groupSelectionHint, price, selectedInGroup, selectionErrors } from '@/features/menu'
-import type { ModifierGroup, ModifierOption, Product } from '@/features/menu'
+import { groupRule, isSingleChoice, price, selectedInGroup, selectionIssues } from '@/features/menu'
+import type { Ingredient, ModifierGroup, ModifierOption, Product } from '@/features/menu'
 import { useMenuDesign } from '@/features/menu-design'
 import type { CartItem } from '@/features/cart'
 
@@ -14,10 +14,42 @@ type ProductEditorProps = {
   onClose: () => void
 }
 
+// Ids de los bloques que pueden tener un problema: al intentar agregar, el foco va al primero.
+const INGREDIENTS_ID = 'product-ingredients'
+const PRODUCT_ISSUES_ID = 'product-issues'
+const groupBlockId = (group: ModifierGroup) => `group-${group.id}`
+
+/**
+ * Armar un plato. Todo usa el mismo modelo: lo marcado va en el plato, sean
+ * ingredientes u opciones. El botón está siempre a mano y siempre responde; lo que
+ * falta se dice recién al tocarlo, en el grupo donde hay que elegir.
+ */
 export function ProductEditor({ product, initial, onSave, onClose }: ProductEditorProps) {
   const { copy } = useMenuDesign()
   const [item, setItem] = useState<CartItem>(initial ?? defaultItem(product))
-  const errors = selectionErrors(product, item)
+  // Antes del primer intento no hay errores de elección: el comensal todavía no tuvo
+  // oportunidad de elegir. Después se actualizan solos mientras corrige.
+  const [attempted, setAttempted] = useState(false)
+  const issues = selectionIssues(product, item)
+
+  // Los bloques con problema en el orden de la pantalla, de arriba hacia el botón.
+  const blocked = [
+    ...(issues.ingredients.length > 0 ? [INGREDIENTS_ID] : []),
+    ...product.groups.filter((group) => issues.groups[group.id]).map(groupBlockId),
+    ...(issues.product.length > 0 ? [PRODUCT_ISSUES_ID] : []),
+  ]
+
+  const save = () => {
+    if (blocked.length === 0) {
+      onSave(item)
+      return
+    }
+    setAttempted(true)
+    // Al centro, para que no lo tapen ni las pestañas de arriba ni el botón fijo de abajo.
+    const target = document.getElementById(blocked[0])
+    target?.focus({ preventScroll: true })
+    target?.scrollIntoView({ block: 'center' })
+  }
 
   return (
     <section className="editor" aria-labelledby="product-title">
@@ -35,56 +67,25 @@ export function ProductEditor({ product, initial, onSave, onClose }: ProductEdit
       {product.dietary_tags.length > 0 && <p>{product.dietary_tags.join(' · ')}</p>}
 
       {product.ingredients.length > 0 && (
-        <fieldset>
-          <legend>Ingredientes</legend>
-          {product.ingredients.map((ingredient) => (
-            <IngredientChoice
-              key={ingredient.id}
-              name={ingredient.name}
-              available={ingredient.is_available}
-              removable={ingredient.is_removable}
-              removed={item.removedIds.includes(ingredient.id)}
-              onToggle={(checked) => {
-                const removedIds = checked
-                  ? [...item.removedIds, ingredient.id]
-                  : item.removedIds.filter((id) => id !== ingredient.id)
-                setItem({ ...item, removedIds })
-              }}
-            />
-          ))}
-        </fieldset>
+        <IngredientsFieldset
+          ingredients={product.ingredients}
+          removedIds={item.removedIds}
+          error={attempted ? issues.ingredients.join(' ') : undefined}
+          onToggle={(ingredientId, included) => {
+            const removedIds = item.removedIds.filter((id) => id !== ingredientId)
+            setItem({ ...item, removedIds: included ? removedIds : [...removedIds, ingredientId] })
+          }}
+        />
       )}
 
       {product.groups.map((group) => (
-        // La regla del grupo describe al grupo: se la lee al entrar en él.
-        <fieldset key={group.id} aria-describedby={`group-${group.id}-hint`}>
-          <legend>{group.name}</legend>
-          <p className="muted" id={`group-${group.id}-hint`}>
-            {groupSelectionHint(group, item.optionIds)}
-          </p>
-          {group.options.map((option) => (
-            <label className="choice" key={option.id}>
-              <span>
-                {option.name}
-                <small>
-                  {option.is_available
-                    ? option.price_delta === 0
-                      ? 'Sin cargo'
-                      : formatPrice(option.price_delta)
-                    : 'Agotado'}
-                </small>
-              </span>
-              <input
-                type="checkbox"
-                checked={item.optionIds.includes(option.id)}
-                disabled={isOptionDisabled(group, option, item.optionIds)}
-                onChange={(event) => {
-                  setItem(toggleOption(item, group, option.id, event.target.checked))
-                }}
-              />
-            </label>
-          ))}
-        </fieldset>
+        <GroupFieldset
+          key={group.id}
+          group={group}
+          optionIds={item.optionIds}
+          error={attempted ? issues.groups[group.id] : undefined}
+          onChange={(optionIds) => setItem({ ...item, optionIds })}
+        />
       ))}
 
       <div className="choice">
@@ -103,21 +104,17 @@ export function ProductEditor({ product, initial, onSave, onClose }: ProductEdit
         />
       </label>
 
-      {errors.length > 0 && (
-        <ul className="notice">
-          {errors.map((error) => (
-            <li key={error}>{error}</li>
-          ))}
-        </ul>
-      )}
-
-      <button
-        className="primary wide"
-        disabled={errors.length > 0}
-        onClick={() => onSave(item)}
-      >
-        {initial ? 'Guardar cambios' : 'Agregar al carrito'} · {formatPrice(price(product, item))}
-      </button>
+      <div className="editor-submit">
+        {/* Lo que es del plato entero no depende de elegir: se dice desde el principio. */}
+        {issues.product.length > 0 && (
+          <p className="notice" id={PRODUCT_ISSUES_ID} tabIndex={-1}>
+            {issues.product.join(' ')}
+          </p>
+        )}
+        <button className="primary wide" onClick={save}>
+          {initial ? 'Guardar cambios' : 'Agregar al carrito'} · {formatPrice(price(product, item))}
+        </button>
+      </div>
     </section>
   )
 }
@@ -128,6 +125,7 @@ function defaultItem(product: Product): CartItem {
     productId: product.id,
     quantity: 1,
     optionIds: [],
+    // Lo agotado arranca afuera del plato; si no se puede quitar, el plato no se puede pedir.
     removedIds: product.ingredients
       .filter((ingredient) => !ingredient.is_available && ingredient.is_removable)
       .map((ingredient) => ingredient.id),
@@ -135,54 +133,142 @@ function defaultItem(product: Product): CartItem {
   }
 }
 
-function IngredientChoice({
-  name,
-  available,
-  removable,
-  removed,
+/** La regla y, después de un intento, el error: los dos describen al bloque que se enfoca. */
+function describedBy(id: string, rule: boolean, error?: string) {
+  return [rule && `${id}-rule`, error && `${id}-error`].filter(Boolean).join(' ') || undefined
+}
+
+function IngredientsFieldset({
+  ingredients,
+  removedIds,
+  error,
   onToggle,
 }: {
-  name: string
-  available: boolean
-  removable: boolean
-  removed: boolean
-  onToggle: (checked: boolean) => void
+  ingredients: Ingredient[]
+  removedIds: string[]
+  error?: string
+  onToggle: (ingredientId: string, included: boolean) => void
 }) {
+  const choosable = ingredients.some((ingredient) => ingredient.is_removable && ingredient.is_available)
+
   return (
-    <label className="choice">
-      <span>
-        {name} {!available && '· Agotado'} {!removable && '· Incluido'}
-      </span>
-      {removable && (
-        <span>
-          <input
-            type="checkbox"
-            checked={removed}
-            disabled={!available && removed}
-            onChange={(event) => onToggle(event.target.checked)}
-          />{' '}
-          Quitar
-        </span>
+    <fieldset
+      id={INGREDIENTS_ID}
+      tabIndex={-1}
+      className={error ? 'is-invalid' : undefined}
+      aria-describedby={describedBy(INGREDIENTS_ID, choosable, error)}
+    >
+      <legend>Ingredientes</legend>
+      {choosable && (
+        <p className="muted" id={`${INGREDIENTS_ID}-rule`}>
+          Destildá lo que no quieras.
+        </p>
       )}
-    </label>
+      {error && (
+        <p className="field-error" id={`${INGREDIENTS_ID}-error`}>
+          {error}
+        </p>
+      )}
+      {ingredients.map((ingredient) => {
+        const included = !removedIds.includes(ingredient.id)
+        const notes = [!ingredient.is_available && 'Agotado', !ingredient.is_removable && 'No se puede quitar']
+          .filter(Boolean)
+          .join(' · ')
+        return (
+          <label className="choice" key={ingredient.id}>
+            <span>
+              {ingredient.name}
+              {notes && <small>{notes}</small>}
+            </span>
+            <input
+              type="checkbox"
+              checked={included}
+              // Solo se apaga el paso hacia lo inválido: sumar algo agotado o sacar
+              // algo fijo. El camino de vuelta siempre queda abierto.
+              disabled={(included && !ingredient.is_removable) || (!included && !ingredient.is_available)}
+              onChange={(event) => onToggle(ingredient.id, event.target.checked)}
+            />
+          </label>
+        )
+      })}
+    </fieldset>
   )
 }
 
-function isOptionDisabled(group: ModifierGroup, option: ModifierOption, optionIds: string[]) {
-  const selected = optionIds.includes(option.id)
-  const unavailable = !option.is_available || !group.is_available
-  const atMax = group.max_select > 1 && selectedInGroup(group, optionIds) >= group.max_select
+function GroupFieldset({
+  group,
+  optionIds,
+  error,
+  onChange,
+}: {
+  group: ModifierGroup
+  optionIds: string[]
+  error?: string
+  onChange: (optionIds: string[]) => void
+}) {
+  const id = groupBlockId(group)
+  const single = isSingleChoice(group)
+  const atMax = !single && selectedInGroup(group, optionIds) >= group.max_select
+  // Cada grupo reescribe solo lo suyo: lo elegido en los otros grupos queda como está.
+  const others = optionIds.filter((optionId) => !group.options.some((option) => option.id === optionId))
 
-  return (unavailable && !selected) || (!selected && atMax)
+  return (
+    <fieldset
+      id={id}
+      tabIndex={-1}
+      className={error ? 'is-invalid' : undefined}
+      aria-describedby={describedBy(id, true, error)}
+    >
+      <legend>{group.name}</legend>
+      <p className="muted" id={`${id}-rule`}>
+        {groupRule(group)}
+      </p>
+      {error && (
+        <p className="field-error" id={`${id}-error`}>
+          {error}
+        </p>
+      )}
+      {/* Un radio no se destilda: si el grupo es opcional, «Ninguna» es la vuelta atrás. */}
+      {single && group.min_select === 0 && (
+        <label className="choice">
+          <span>Ninguna</span>
+          <input
+            type="radio"
+            name={id}
+            checked={selectedInGroup(group, optionIds) === 0}
+            onChange={() => onChange(others)}
+          />
+        </label>
+      )}
+      {group.options.map((option) => {
+        const selected = optionIds.includes(option.id)
+        return (
+          <label className="choice" key={option.id}>
+            <span>
+              {option.name}
+              <small>{optionNote(option)}</small>
+            </span>
+            <input
+              type={single ? 'radio' : 'checkbox'}
+              name={id}
+              checked={selected}
+              // Lo agotado o lo que pasaría el techo no se puede sumar; lo ya elegido
+              // siempre se puede sacar.
+              disabled={!selected && (!option.is_available || !group.is_available || atMax)}
+              onChange={(event) => {
+                if (single) onChange([...others, option.id])
+                else if (event.target.checked) onChange([...optionIds, option.id])
+                else onChange(optionIds.filter((optionId) => optionId !== option.id))
+              }}
+            />
+          </label>
+        )
+      })}
+    </fieldset>
+  )
 }
 
-function toggleOption(item: CartItem, group: ModifierGroup, optionId: string, checked: boolean): CartItem {
-  // En un grupo de selección única, elegir una opción reemplaza a la anterior del grupo.
-  const others = item.optionIds.filter((id) => {
-    if (id === optionId) return false
-    if (group.max_select !== 1) return true
-    return !group.options.some((option) => option.id === id)
-  })
-
-  return { ...item, optionIds: checked ? [...others, optionId] : others }
+function optionNote(option: ModifierOption) {
+  if (!option.is_available) return 'Agotado'
+  return option.price_delta === 0 ? 'Sin cargo' : formatPrice(option.price_delta)
 }

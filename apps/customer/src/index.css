@@ -33,7 +33,7 @@ input {
   font-size: 14px;
 }
 input::placeholder { color: var(--menu-muted); font-size: 14px; }
-input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--menu-accent); }
+input[type=checkbox], input[type=radio] { width: 20px; height: 20px; accent-color: var(--menu-accent); }
 input[type=number] { width: 76px; }
 .quantity { display: inline-flex; align-items: center; gap: 6px; }
 .quantity button { min-width: 44px; padding: 10px 12px; font-size: 13px; line-height: 1; }
@@ -212,6 +212,24 @@ ul.notice { padding-left: 32px; list-style: disc; }
 .cart-actions .text-button { margin-bottom: 0; margin-left: auto; }
 fieldset { border: 1px solid var(--menu-border); padding: 16px; margin: 24px 0; border-radius: var(--menu-radius); }
 legend { padding: 0 8px; font-weight: 700; font-family: var(--menu-font-display); }
+/* Un bloque con problema lo marca el borde y lo dice su texto: el color solo no alcanza. */
+fieldset.is-invalid { border-color: var(--menu-danger); }
+.field-error { color: var(--menu-danger); font-size: 14px; font-weight: 600; margin: 0 0 8px; }
+/* El botón del plato acompaña el scroll: siempre a mano y con el precio a la vista. */
+.editor-submit {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: grid;
+  gap: 10px;
+  margin: 24px -20px 0;
+  padding: 12px 20px calc(12px + env(safe-area-inset-bottom));
+  background: var(--menu-bg);
+  border-top: 1px solid var(--menu-border);
+}
+.editor-submit .notice { margin: 0; }
+/* Lo que se enfoca con el teclado no queda escondido debajo de esa barra. */
+:root:has(.editor-submit) { scroll-padding-bottom: 96px; }
 .choice { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px 0; }
 .choice small { display: block; }
 .wide { width: 100%; }
