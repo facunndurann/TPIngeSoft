@@ -14,7 +14,7 @@ import {
   type FloorTable,
 } from '@/queries/floor'
 import { useRestaurant } from '@/restaurant/restaurant-context'
-import { Badge, Button, EmptyState, ErrorText, Input, Modal, Select, Spinner, Toggle, useSaveErrors } from '@restaurant-platform/ui'
+import { Badge, Button, EmptyState, ErrorText, IconButton, Input, Modal, Select, Spinner, Toggle, useSaveErrors } from '@restaurant-platform/ui'
 
 function tableUrl(table: FloorTable) {
   return customerAppUrl(`/m/${table.qr_token}`)
@@ -132,17 +132,17 @@ export function TablesPage() {
                 label={`En servicio: ${table.label}`}
                 hideLabel
               />
-              <button
-                className="cursor-pointer p-1 text-faint hover:text-red-600"
+              <IconButton
+                label={`Eliminar ${table.label}`}
+                tone="danger"
                 onClick={() => {
                   if (confirm(`¿Eliminar "${table.label}"? Se pierde su QR.`)) {
                     deleteMutation.mutate(table.id)
                   }
                 }}
-                aria-label="Eliminar"
               >
                 <Trash2 size={15} />
-              </button>
+              </IconButton>
             </li>
           ))}
         </ul>

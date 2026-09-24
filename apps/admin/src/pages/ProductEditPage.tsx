@@ -7,6 +7,8 @@ import {
   Button,
   ChoiceChip,
   ErrorText,
+  IconButton,
+  iconButtonClass,
   Field,
   Input,
   Select,
@@ -71,7 +73,12 @@ export function ProductEditPage() {
 
 function BackLink() {
   return (
-    <Link to="/productos" className="text-faint hover:text-neutral-700" aria-label="Volver">
+    <Link
+      to="/productos"
+      className={iconButtonClass()}
+      aria-label="Volver a productos"
+      title="Volver a productos"
+    >
       <ArrowLeft size={20} />
     </Link>
   )
@@ -235,13 +242,13 @@ function ProductForm({ productId, title, initial, categories, groups }: ProductF
                 onChange={(is_removable) => updateIngredient(index, { is_removable })}
                 label="Removible"
               />
-              <button
-                className="cursor-pointer p-1 text-faint hover:text-red-600"
+              <IconButton
+                label={`Quitar ${ingredient.name.trim() || `ingrediente ${index + 1}`}`}
+                tone="danger"
                 onClick={() => patch({ ingredients: draft.ingredients.filter((_, i) => i !== index) })}
-                aria-label="Quitar ingrediente"
               >
                 <Trash2 size={15} />
-              </button>
+              </IconButton>
             </div>
           ))}
         </div>

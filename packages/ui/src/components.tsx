@@ -104,6 +104,36 @@ export function Toggle({
   )
 }
 
+type IconTone = 'neutral' | 'danger'
+
+/**
+ * Clases de un control de solo ícono: 32×32 px, más que los 24 que pide WCAG 2.2
+ * porque el panel también se usa con el dedo. El ícono va en `faint`, y el fondo
+ * que aparece al pasar el mouse muestra el área que se puede tocar. Se exportan
+ * para el mismo control hecho con un `<Link>`.
+ */
+export function iconButtonClass(tone: IconTone = 'neutral') {
+  return `inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-faint transition-colors hover:bg-neutral-100 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent ${
+    tone === 'danger' ? 'hover:text-red-600' : 'hover:text-neutral-700'
+  }`
+}
+
+/**
+ * Botón de solo ícono. `label` es obligatorio y dice sobre qué actúa («Eliminar
+ * Clásica», no «Eliminar»): es lo único que oye un lector de pantalla, y también
+ * aparece como tooltip.
+ */
+export function IconButton({
+  label,
+  tone,
+  ...props
+}: Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'aria-label' | 'title' | 'type' | 'className'> & {
+  label: string
+  tone?: IconTone
+}) {
+  return <button {...props} type="button" aria-label={label} title={label} className={iconButtonClass(tone)} />
+}
+
 type ChipTone = 'pill' | 'outline'
 
 const chipTones: Record<ChipTone, { base: string; on: string; off: string }> = {
@@ -272,14 +302,9 @@ export function Modal({
       <div className="p-5">
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 id={titleId} className="text-lg font-semibold text-neutral-900">{title}</h2>
-          <button
-            type="button"
-            onClick={requestClose}
-            className="cursor-pointer rounded-lg p-1 text-faint hover:bg-neutral-100 hover:text-neutral-600"
-            aria-label="Cerrar"
-          >
+          <IconButton label="Cerrar" onClick={requestClose}>
             <X size={18} />
-          </button>
+          </IconButton>
         </div>
         {children}
       </div>

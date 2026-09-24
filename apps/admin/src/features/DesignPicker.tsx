@@ -89,12 +89,14 @@ export function DesignPicker({ value, onChange, hint }: DesignPickerProps) {
                   <p className="mt-0.5 text-xs leading-5 text-muted">{design.description}</p>
                 </div>
               </label>
-              {/* Misma posición que antes sobre la muestra: p-2.5 del marco + top-2/right-2 = 18px. */}
+              {/* 32 px como el resto de los controles de ícono, con el ícono en el mismo
+                  lugar que antes (a 31 px de la esquina). No usa IconButton porque
+                  toma el color de cada diseño: `faint` no se leería sobre Brasas. */}
               <button
                 type="button"
                 aria-label={`Vista previa de ${design.name}`}
                 title="Vista previa"
-                className="absolute top-4.5 right-4.5 p-1.5 rounded-md cursor-pointer transition-colors opacity-60 hover:opacity-100 hover:bg-black/5"
+                className="absolute top-3.75 right-3.75 inline-flex h-8 w-8 items-center justify-center rounded-md cursor-pointer transition-colors opacity-60 hover:opacity-100 hover:bg-black/5"
                 style={{ color: 'var(--menu-text)' }}
                 onClick={() => setPreviewDesign(design)}
               >

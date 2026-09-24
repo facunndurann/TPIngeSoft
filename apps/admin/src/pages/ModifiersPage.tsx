@@ -17,7 +17,7 @@ import {
   type ModifierGroupWithOptions,
 } from '@/queries/modifier-groups'
 import { useRestaurant } from '@/restaurant/restaurant-context'
-import { Badge, Button, EmptyState, ErrorText, Field, Input, Modal, Spinner, Toggle, useSaveErrors } from '@restaurant-platform/ui'
+import { Badge, Button, EmptyState, ErrorText, Field, IconButton, Input, Modal, Spinner, Toggle, useSaveErrors } from '@restaurant-platform/ui'
 
 export function ModifiersPage() {
   const restaurant = useRestaurant()
@@ -77,20 +77,12 @@ export function ModifiersPage() {
                   </p>
                 </div>
                 <div className="flex gap-1">
-                  <button
-                    className="cursor-pointer p-1 text-faint hover:text-neutral-700"
-                    onClick={() => setEditing(group)}
-                    aria-label="Editar"
-                  >
+                  <IconButton label={`Editar ${group.name}`} onClick={() => setEditing(group)}>
                     <Pencil size={15} />
-                  </button>
-                  <button
-                    className="cursor-pointer p-1 text-faint hover:text-red-600"
-                    onClick={() => deleteGroup(group)}
-                    aria-label="Eliminar"
-                  >
+                  </IconButton>
+                  <IconButton label={`Eliminar ${group.name}`} tone="danger" onClick={() => deleteGroup(group)}>
                     <Trash2 size={15} />
-                  </button>
+                  </IconButton>
                 </div>
               </div>
               <ul className="space-y-1">
@@ -238,15 +230,15 @@ function GroupEditor({
                     label={`Disponible: ${optionName}`}
                     hideLabel
                   />
-                  <button
-                    className="cursor-pointer p-1 text-faint hover:text-red-600"
+                  <IconButton
+                    label={`Quitar ${optionName}`}
+                    tone="danger"
                     onClick={() =>
                       patch({ options: draft.options.filter((other) => other.key !== option.key) })
                     }
-                    aria-label={`Quitar ${optionName}`}
                   >
                     <Trash2 size={15} />
-                  </button>
+                  </IconButton>
                 </div>
               )
             })}

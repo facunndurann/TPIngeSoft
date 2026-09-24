@@ -5,7 +5,7 @@ import type { Tables } from '@restaurant-platform/shared'
 import { supabase, unwrap } from '@/lib/supabase'
 import { categoriesQuery } from '@/queries/categories'
 import { useRestaurant } from '@/restaurant/restaurant-context'
-import { Badge, Button, EmptyState, ErrorText, Input, Spinner, Toggle, useSaveErrors } from '@restaurant-platform/ui'
+import { Badge, Button, EmptyState, ErrorText, IconButton, Input, Spinner, Toggle, useSaveErrors } from '@restaurant-platform/ui'
 
 type Category = Tables<'menu_categories'>
 
@@ -108,25 +108,24 @@ export function CategoriesPage() {
           {categories.map((category, index) => (
             <li
               key={category.id}
-              className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-4 py-3"
+              className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-white py-2 pr-3 pl-2"
             >
-              <div className="flex flex-col">
-                <button
-                  className="cursor-pointer text-faint hover:text-neutral-700 disabled:opacity-30"
+              {/* Una al lado de la otra y de 32 px: apiladas medían 15 px, pegadas. */}
+              <div className="flex">
+                <IconButton
+                  label={`Subir ${category.name}`}
                   disabled={index === 0 || reorderMutation.isPending}
                   onClick={() => move(index, -1)}
-                  aria-label="Subir"
                 >
-                  <ArrowUp size={15} />
-                </button>
-                <button
-                  className="cursor-pointer text-faint hover:text-neutral-700 disabled:opacity-30"
+                  <ArrowUp size={16} />
+                </IconButton>
+                <IconButton
+                  label={`Bajar ${category.name}`}
                   disabled={index === categories.length - 1 || reorderMutation.isPending}
                   onClick={() => move(index, 1)}
-                  aria-label="Bajar"
                 >
-                  <ArrowDown size={15} />
-                </button>
+                  <ArrowDown size={16} />
+                </IconButton>
               </div>
 
               {editingId === category.id ? (
@@ -138,7 +137,7 @@ export function CategoriesPage() {
                   }}
                 >
                   <Input value={editingName} onChange={(e) => setEditingName(e.target.value)} autoFocus />
-                  <Button type="submit" variant="secondary">
+                  <Button type="submit" variant="secondary" aria-label="Guardar nombre">
                     <Check size={15} />
                   </Button>
                 </form>
@@ -155,27 +154,26 @@ export function CategoriesPage() {
                 label={`Activa: ${category.name}`}
                 hideLabel
               />
-              <button
-                className="cursor-pointer p-1 text-faint hover:text-neutral-700"
+              <IconButton
+                label={`Renombrar ${category.name}`}
                 onClick={() => {
                   setEditingId(category.id)
                   setEditingName(category.name)
                 }}
-                aria-label="Renombrar"
               >
                 <Pencil size={15} />
-              </button>
-              <button
-                className="cursor-pointer p-1 text-faint hover:text-red-600"
+              </IconButton>
+              <IconButton
+                label={`Eliminar ${category.name}`}
+                tone="danger"
                 onClick={() => {
                   if (confirm(`¿Eliminar la categoría "${category.name}"?`)) {
                     deleteMutation.mutate(category.id)
                   }
                 }}
-                aria-label="Eliminar"
               >
                 <Trash2 size={15} />
-              </button>
+              </IconButton>
             </li>
           ))}
         </ul>

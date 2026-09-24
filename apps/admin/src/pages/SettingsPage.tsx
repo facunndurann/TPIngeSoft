@@ -7,7 +7,7 @@ import { myRestaurantKey } from '@/queries/restaurant'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { DesignPicker } from '@/features/DesignPicker'
 import { PaymentMethodsField } from '@/features/PaymentMethods'
-import { Badge, Button, ErrorText, Field, Input, Spinner, Textarea, Toggle, useSaveErrors } from '@restaurant-platform/ui'
+import { Badge, Button, ErrorText, Field, IconButton, Input, Spinner, Textarea, Toggle, useSaveErrors } from '@restaurant-platform/ui'
 import type { Tables } from '@restaurant-platform/shared'
 
 export function SettingsPage() {
@@ -168,15 +168,15 @@ function BranchesSection({ restaurantId }: { restaurantId: string }) {
                   label={`Activa: ${branch.name}`}
                   hideLabel
                 />
-                <button
-                  className="cursor-pointer p-1 text-faint hover:text-red-600"
+                <IconButton
+                  label={`Eliminar ${branch.name}`}
+                  tone="danger"
                   onClick={() => {
                     if (confirm(`¿Eliminar la sucursal "${branch.name}"?`)) deleteMutation.mutate(branch.id)
                   }}
-                  aria-label="Eliminar"
                 >
                   <Trash2 size={15} />
-                </button>
+                </IconButton>
               </div>
               <PaymentMethodsField
                 value={branch.payment_methods}

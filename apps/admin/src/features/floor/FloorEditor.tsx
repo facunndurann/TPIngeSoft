@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Check, LayoutGrid, Pencil, Plus, Trash2, X } from 'lucide-react'
-import { Button, EmptyState, ErrorText, Input, Toggle } from '@restaurant-platform/ui'
+import { Button, EmptyState, ErrorText, IconButton, Input, Toggle } from '@restaurant-platform/ui'
 import type { FloorSection, FloorTable } from '@/queries/floor'
 import { FloorCanvas } from './FloorCanvas'
 import { TableInspector } from './TableInspector'
@@ -153,21 +153,23 @@ function SectionBar({
         </>
       )}
       <Toggle checked={section.is_active} onChange={onActiveChange} label="Sector en uso" />
-      <button
-        className="ml-auto cursor-pointer p-1 text-faint hover:text-red-600"
-        aria-label="Eliminar sector"
-        onClick={() => {
-          if (
-            confirm(
-              `¿Eliminar el sector "${section.name}"? Sus ${tableCount} mesa(s) quedan sin sector, no se borran.`,
-            )
-          ) {
-            onDelete()
-          }
-        }}
-      >
-        <Trash2 size={16} />
-      </button>
+      <div className="ml-auto">
+        <IconButton
+          label={`Eliminar el sector ${section.name}`}
+          tone="danger"
+          onClick={() => {
+            if (
+              confirm(
+                `¿Eliminar el sector "${section.name}"? Sus ${tableCount} mesa(s) quedan sin sector, no se borran.`,
+              )
+            ) {
+              onDelete()
+            }
+          }}
+        >
+          <Trash2 size={16} />
+        </IconButton>
+      </div>
     </div>
   )
 }

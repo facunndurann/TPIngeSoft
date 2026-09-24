@@ -7,7 +7,18 @@ import { MediaThumb } from '@/features/MediaThumb'
 import { supabase, unwrap } from '@/lib/supabase'
 import { productsByCategoryQuery } from '@/queries/products'
 import { useRestaurant } from '@/restaurant/restaurant-context'
-import { Badge, Button, ChoiceChip, EmptyState, ErrorText, Spinner, Toggle, useSaveErrors } from '@restaurant-platform/ui'
+import {
+  Badge,
+  Button,
+  ChoiceChip,
+  EmptyState,
+  ErrorText,
+  IconButton,
+  Spinner,
+  Toggle,
+  iconButtonClass,
+  useSaveErrors,
+} from '@restaurant-platform/ui'
 
 export function ProductsPage() {
   const restaurant = useRestaurant()
@@ -129,18 +140,15 @@ function ProductRow({
       />
       <Link
         to={`/productos/${product.id}`}
-        className="p-1 text-faint hover:text-neutral-700"
-        aria-label="Editar"
+        className={iconButtonClass()}
+        aria-label={`Editar ${product.name}`}
+        title={`Editar ${product.name}`}
       >
         <Pencil size={15} />
       </Link>
-      <button
-        className="cursor-pointer p-1 text-faint hover:text-red-600"
-        onClick={onDelete}
-        aria-label="Eliminar"
-      >
+      <IconButton label={`Eliminar ${product.name}`} tone="danger" onClick={onDelete}>
         <Trash2 size={15} />
-      </button>
+      </IconButton>
     </li>
   )
 }
