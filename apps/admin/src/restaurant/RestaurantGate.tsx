@@ -75,6 +75,7 @@ function CreateRestaurantScreen() {
 
   return (
     <main className="flex min-h-dvh items-center justify-center bg-canvas p-4">
+      <title>Creá tu restaurante · Panel del restaurante</title>
       <div className="w-full max-w-2xl rounded-xl bg-white p-6 shadow-sm">
         <div className="mb-6 flex flex-col items-center gap-2">
           <div className="rounded-xl bg-primary p-3 text-white">

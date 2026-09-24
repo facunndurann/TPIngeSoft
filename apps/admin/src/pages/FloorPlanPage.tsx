@@ -1,6 +1,7 @@
 import { useState, type ComponentType } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Eye, SquarePen } from 'lucide-react'
+import { Page } from '@/features/Page'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { Badge, ChoiceChip, EmptyState, Select, Spinner } from '@restaurant-platform/ui'
 import { FloorEditor } from '@/features/floor/FloorEditor'
@@ -49,13 +50,12 @@ export function FloorPlanPage() {
   if (branches.isLoading) return <Spinner />
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-neutral-900">Salón</h1>
-          <p className="text-sm text-muted">{MODES[mode].description}</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+    <Page
+      title="Salón"
+      description={MODES[mode].description}
+      wide
+      actions={
+        <>
           {(branches.data?.length ?? 0) > 1 && (
             <Select
               className="w-56"
@@ -71,9 +71,9 @@ export function FloorPlanPage() {
             </Select>
           )}
           <ModeSwitch mode={mode} onChange={setMode} />
-        </div>
-      </div>
-
+        </>
+      }
+    >
       {branchId ? (
         // Otra sucursal es otro plano: la key vuelve al primer sector y descarta
         // la selección, sin resetear nada a mano.
@@ -81,7 +81,7 @@ export function FloorPlanPage() {
       ) : (
         <EmptyState message="Todavía no hay sucursales. Creá una en Restaurante." />
       )}
-    </div>
+    </Page>
   )
 }
 
@@ -126,8 +126,10 @@ function ModeSwitch({ mode, onChange }: { mode: Mode; onChange: (mode: Mode) => 
             key={id}
             onClick={() => onChange(id)}
             aria-pressed={mode === id}
+            // Dice en qué modo se está, no es una acción: el color lleno queda para
+            // «Agregar al sector», el único botón principal del Salón.
             className={`flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium ${
-              mode === id ? 'bg-primary text-white' : 'text-muted hover:bg-neutral-100'
+              mode === id ? 'bg-primary-soft text-primary-ink' : 'text-muted hover:bg-neutral-100'
             }`}
           >
             <Icon size={15} />

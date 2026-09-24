@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowDown, ArrowUp, Check, Pencil, Plus, Trash2 } from 'lucide-react'
 import type { Tables } from '@restaurant-platform/shared'
+import { Page } from '@/features/Page'
 import { optimistic, patchRow } from '@/lib/optimistic'
 import { supabase, unwrap } from '@/lib/supabase'
 import { categoriesQuery } from '@/queries/categories'
@@ -78,14 +79,10 @@ export function CategoriesPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-neutral-900">Categorías del menú</h1>
-        <p className="text-sm text-muted">
-          Creá, renombrá y ordená las categorías que ve el cliente.
-        </p>
-      </div>
-
+    <Page
+      title="Categorías del menú"
+      description="Creá, renombrá y ordená las categorías que ve el cliente."
+    >
       <form onSubmit={handleCreate} className="flex gap-2">
         <Input
           value={newName}
@@ -188,6 +185,6 @@ export function CategoriesPage() {
           ))}
         </ul>
       )}
-    </div>
+    </Page>
   )
 }

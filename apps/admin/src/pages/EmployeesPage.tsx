@@ -10,6 +10,7 @@ import {
   type EmployeeRole,
 } from '@restaurant-platform/shared'
 import { Badge, Button, ErrorText, Field, Input, Modal, Select, Spinner } from '@restaurant-platform/ui'
+import { Page } from '@/features/Page'
 import { auditActionLabel, auditActorLabel } from '@/features/employees/audit'
 import { branchesQuery } from '@/queries/branches'
 import {
@@ -34,17 +35,11 @@ export function EmployeesPage() {
   const invalidate = () => queryClient.invalidateQueries({ queryKey: employeesKey(restaurant.id) })
 
   return (
-    <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold">Empleados</h1>
-          <p className="text-sm text-muted">
-            Cuentas personales, permisos y sucursales de trabajo.
-          </p>
-        </div>
-        <Button onClick={() => setEditing('new')}>Agregar empleado</Button>
-      </header>
-
+    <Page
+      title="Empleados"
+      description="Cuentas personales, permisos y sucursales de trabajo."
+      actions={<Button onClick={() => setEditing('new')}>Agregar empleado</Button>}
+    >
       {employees.isError && <ErrorText error="No pudimos cargar los empleados." />}
       {employees.isPending ? (
         <Spinner />
@@ -109,7 +104,7 @@ export function EmployeesPage() {
           }}
         />
       )}
-    </div>
+    </Page>
   )
 }
 

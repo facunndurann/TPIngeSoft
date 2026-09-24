@@ -342,10 +342,15 @@ export function Modal({
   )
 }
 
+/** Carga en curso. Se anuncia como estado, así quien no ve el giro sabe que espera. */
 export function Spinner() {
   return (
-    <div className="flex justify-center p-10">
-      <div className="h-7 w-7 animate-spin rounded-full border-2 border-neutral-300 border-t-primary" />
+    <div role="status" className="flex justify-center p-10">
+      <div
+        aria-hidden="true"
+        className="h-7 w-7 animate-spin rounded-full border-2 border-neutral-300 border-t-primary motion-reduce:animate-none"
+      />
+      <span className="sr-only">Cargando…</span>
     </div>
   )
 }

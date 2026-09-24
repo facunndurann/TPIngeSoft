@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { QRCodeSVG } from 'qrcode.react'
 import { Copy, Plus, Printer, QrCode, Trash2 } from 'lucide-react'
 import { Link } from 'react-router'
+import { Page } from '@/features/Page'
 import { customerAppUrl } from '@/lib/customer-app'
 import { optimistic, patchRow } from '@/lib/optimistic'
 import { branchesQuery } from '@/queries/branches'
@@ -72,19 +73,19 @@ export function TablesPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-neutral-900">Mesas y códigos QR</h1>
-        <p className="text-sm text-muted">
+    <Page
+      title="Mesas y códigos QR"
+      description={
+        <>
           Cada mesa tiene un QR único que identifica al restaurante, la sucursal y la mesa. El sector
           y la ubicación se editan en{' '}
           <Link to="/salon" className="text-primary hover:underline">
             Salón
           </Link>
           .
-        </p>
-      </div>
-
+        </>
+      }
+    >
       {branches && branches.length > 1 && (
         <Select
           value={branchId ?? ''}
@@ -160,7 +161,7 @@ export function TablesPage() {
       )}
 
       {qrTable && <QrModal table={qrTable} restaurantName={restaurant.name} onClose={() => setQrTable(null)} />}
-    </div>
+    </Page>
   )
 }
 

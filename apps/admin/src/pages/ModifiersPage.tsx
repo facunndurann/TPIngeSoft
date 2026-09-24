@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
+import { Page } from '@/features/Page'
 import { supabase, unwrap } from '@/lib/supabase'
 import { formatPrice } from '@restaurant-platform/shared'
 import {
@@ -43,19 +44,15 @@ export function ModifiersPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-bold text-neutral-900">Grupos de modificadores</h1>
-          <p className="text-sm text-muted">
-            Reglas de personalización reutilizables entre productos (ej: Extras, Guarnición, Salsa).
-          </p>
-        </div>
+    <Page
+      title="Grupos de modificadores"
+      description="Reglas de personalización reutilizables entre productos (ej: Extras, Guarnición, Salsa)."
+      actions={
         <Button onClick={() => setEditing('new')}>
           <Plus size={16} /> Nuevo grupo
         </Button>
-      </div>
-
+      }
+    >
       <ErrorText error={errors.message} />
 
       {isLoading ? (
@@ -124,7 +121,7 @@ export function ModifiersPage() {
           }}
         />
       )}
-    </div>
+    </Page>
   )
 }
 

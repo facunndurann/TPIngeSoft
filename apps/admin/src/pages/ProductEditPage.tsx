@@ -2,14 +2,13 @@ import { useId, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { Link, useNavigate, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 import { DIETARY_TAGS, PRODUCT_MEDIA_LIMIT, type Tables } from '@restaurant-platform/shared'
 import {
   Button,
   ChoiceChip,
   ErrorText,
   IconButton,
-  iconButtonClass,
   Field,
   Input,
   Select,
@@ -23,6 +22,7 @@ import { modifierGroupsQuery, type ModifierGroupWithOptions } from '@/queries/mo
 import { productQuery, productsByCategoryQuery, saveProduct } from '@/queries/products'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { MediaUploader } from '@/features/MediaUploader'
+import { Page } from '@/features/Page'
 import {
   draftErrors,
   draftFrom,
@@ -54,10 +54,9 @@ export function ProductEditPage() {
   }
   if (!categories.data || !groups.data || (productId && !product.data)) {
     return (
-      <div className="mx-auto max-w-2xl space-y-4">
-        <BackLink />
+      <Page title="Producto" back={{ to: '/productos', label: 'Volver a productos' }}>
         <ErrorText error="No pudimos cargar los datos del producto. Volvé a la lista e intentá de nuevo." />
-      </div>
+      </Page>
     )
   }
 
@@ -70,19 +69,6 @@ export function ProductEditPage() {
       categories={categories.data}
       groups={groups.data}
     />
-  )
-}
-
-function BackLink() {
-  return (
-    <Link
-      to="/productos"
-      className={iconButtonClass()}
-      aria-label="Volver a productos"
-      title="Volver a productos"
-    >
-      <ArrowLeft size={20} />
-    </Link>
   )
 }
 
@@ -151,12 +137,7 @@ function ProductForm({ productId, title, initial, categories, groups }: ProductF
     })
 
   return (
-    <div className="mx-auto max-w-2xl space-y-5">
-      <div className="flex items-center gap-3">
-        <BackLink />
-        <h1 className="text-xl font-bold text-neutral-900">{title}</h1>
-      </div>
-
+    <Page title={title} back={{ to: '/productos', label: 'Volver a productos' }}>
       <section className="space-y-4 rounded-xl border border-neutral-200 bg-white p-5">
         <h2 className="font-semibold text-neutral-900">Información básica</h2>
         <Field label="Nombre" error={errorFor('name')}>
@@ -351,6 +332,6 @@ function ProductForm({ productId, title, initial, categories, groups }: ProductF
           {save.isPending ? 'Guardando…' : productId ? 'Guardar cambios' : 'Crear producto'}
         </Button>
       </div>
-    </div>
+    </Page>
   )
 }

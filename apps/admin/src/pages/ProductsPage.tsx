@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { formatPrice, productMedia, type Tables } from '@restaurant-platform/shared'
+import { Page } from '@/features/Page'
 import { MediaThumb } from '@/features/MediaThumb'
 import { optimistic } from '@/lib/optimistic'
 import { supabase, unwrap } from '@/lib/supabase'
@@ -60,21 +61,17 @@ export function ProductsPage() {
   )
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-bold text-neutral-900">Productos</h1>
-          <p className="text-sm text-muted">
-            El menú que ven tus clientes: precios, fotos, ingredientes y personalización.
-          </p>
-        </div>
+    <Page
+      title="Productos"
+      description="El menú que ven tus clientes: precios, fotos, ingredientes y personalización."
+      actions={
         <Link to="/productos/nuevo">
           <Button>
             <Plus size={16} /> Nuevo producto
           </Button>
         </Link>
-      </div>
-
+      }
+    >
       <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filtrar por categoría">
         <ChoiceChip pressed={categoryFilter === 'all'} onClick={() => setCategoryFilter('all')}>
           Todos
@@ -125,7 +122,7 @@ export function ProductsPage() {
           ))}
         </div>
       )}
-    </div>
+    </Page>
   )
 }
 

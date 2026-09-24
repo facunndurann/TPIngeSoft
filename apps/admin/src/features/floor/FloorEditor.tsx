@@ -21,7 +21,9 @@ export function FloorEditor({ branchId, floor, section }: FloorEditorProps) {
   return (
     <>
       <ErrorText error={editor.errors.message} />
+      {/* Secundario: crear un sector es lo menos frecuente del editor. */}
       <AddForm
+        variant="secondary"
         label="Agregar sector"
         placeholder="Nuevo sector"
         ariaLabel="Nombre del nuevo sector"
@@ -70,6 +72,7 @@ function SectionEditor({
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="min-w-0 space-y-3">
           <AddForm
+            variant="primary"
             label="Agregar al sector"
             placeholder="Nueva mesa (ej: Mesa 5)"
             ariaLabel="Identificador de la nueva mesa"
@@ -215,12 +218,15 @@ function RenameSectionForm({
 
 /** Un campo y un botón para crear algo por nombre. Se vacía solo si se guardó. */
 function AddForm({
+  variant,
   label,
   placeholder,
   ariaLabel,
   pending,
   onAdd,
 }: {
+  /** Un solo botón principal por pantalla: el resto, secundario. */
+  variant: 'primary' | 'secondary'
   label: string
   placeholder: string
   ariaLabel: string
@@ -245,7 +251,7 @@ function AddForm({
         placeholder={placeholder}
         aria-label={ariaLabel}
       />
-      <Button type="submit" disabled={pending}>
+      <Button type="submit" variant={variant} disabled={pending}>
         <Plus size={16} />
         {label}
       </Button>

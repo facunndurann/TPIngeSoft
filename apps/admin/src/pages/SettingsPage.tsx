@@ -7,6 +7,7 @@ import { branchesQuery } from '@/queries/branches'
 import { myRestaurantKey } from '@/queries/restaurant'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { DesignPicker } from '@/features/DesignPicker'
+import { Page } from '@/features/Page'
 import { PaymentMethodsField } from '@/features/PaymentMethods'
 import { Badge, Button, ErrorText, Field, IconButton, Input, Spinner, Textarea, Toggle, useSaveErrors } from '@restaurant-platform/ui'
 import type { Tables } from '@restaurant-platform/shared'
@@ -17,37 +18,43 @@ export function SettingsPage() {
   const [name, setName] = useState(restaurant.name)
   const [description, setDescription] = useState(restaurant.description ?? '')
   const [menuDesign, setMenuDesign] = useState(restaurant.menu_design)
-  const [savedMessage, setSavedMessage] = useState(false)
   const errors = useSaveErrors()
+
+  // Lo que se guardaría contra lo que está guardado: el estado del botón y del
+  // aviso sale de acá, sin un flag «guardado» ni un timer que lo apague.
+  const changes = {
+    name: name.trim(),
+    description: description.trim() || null,
+    menu_design: menuDesign,
+  }
+  const dirty =
+    changes.name !== restaurant.name ||
+    changes.description !== restaurant.description ||
+    changes.menu_design !== restaurant.menu_design
 
   const saveMutation = useMutation(errors.saving('No pudimos guardar los datos del restaurante.', {
     mutationFn: async () =>
-      unwrap(
-        await supabase
-          .from('restaurants')
-          .update({
-            name: name.trim(),
-            description: description.trim() || null,
-            menu_design: menuDesign,
-          })
-          .eq('id', restaurant.id),
-      ),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: myRestaurantKey })
-      setSavedMessage(true)
-      setTimeout(() => setSavedMessage(false), 2000)
-    },
+      unwrap(await supabase.from('restaurants').update(changes).eq('id', restaurant.id)),
+    // Se espera a releer el restaurante: si no, por un momento lo guardado todavía
+    // sería lo viejo y el aviso diría «cambios sin guardar» justo después de guardar.
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: myRestaurantKey }),
   }))
 
-  return (
-    <div className="mx-auto max-w-2xl space-y-5">
-      <div>
-        <h1 className="text-xl font-bold text-neutral-900">Restaurante</h1>
-        <p className="text-sm text-muted">Información general, sucursales y medios de pago.</p>
-      </div>
+  const status = saveMutation.isPending
+    ? 'Guardando…'
+    : dirty
+      ? 'Hay cambios sin guardar.'
+      : saveMutation.isSuccess
+        ? 'Guardado.'
+        : ''
 
+  return (
+    <Page title="Restaurante" description="Información general, sucursales y medios de pago.">
       <section className="space-y-4 rounded-xl border border-neutral-200 bg-white p-5">
-        <h2 className="font-semibold text-neutral-900">Información general</h2>
+        <div>
+          <h2 className="font-semibold text-neutral-900">Información general</h2>
+          <p className="text-sm text-muted">Se guarda con el botón de abajo.</p>
+        </div>
         <Field label="Nombre">
           <Input value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
@@ -64,15 +71,18 @@ export function SettingsPage() {
         />
         <ErrorText error={errors.message} />
         <div className="flex items-center gap-3">
-          <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
-            {saveMutation.isPending ? 'Guardando…' : 'Guardar'}
+          <Button onClick={() => saveMutation.mutate()} disabled={!dirty || saveMutation.isPending}>
+            Guardar
           </Button>
-          {savedMessage && <span className="text-sm text-green-700">Guardado ✓</span>}
+          {/* Siempre en el DOM: un lector de pantalla anuncia cuando cambia el texto. */}
+          <p role="status" className={`text-sm ${status === 'Guardado.' ? 'text-green-700' : 'text-muted'}`}>
+            {status}
+          </p>
         </div>
       </section>
 
       <BranchesSection restaurantId={restaurant.id} />
-    </div>
+    </Page>
   )
 }
 
@@ -133,7 +143,7 @@ function BranchesSection({ restaurantId }: { restaurantId: string }) {
         <h2 className="font-semibold text-neutral-900">Sucursales</h2>
         <p className="text-sm text-muted">
           Cada sucursal decide con qué se le puede pagar: el comensal solo ve los medios
-          habilitados en la suya.
+          habilitados en la suya. Estos cambios se guardan al tocarlos.
         </p>
       </div>
 

@@ -30,6 +30,7 @@ export function LoginPage() {
 
   return (
     <main className="flex min-h-dvh items-center justify-center bg-canvas p-4">
+      <title>{mode === 'login' ? 'Ingresar · Panel del restaurante' : 'Crear cuenta · Panel del restaurante'}</title>
       <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-sm">
         <div className="mb-6 flex flex-col items-center gap-2">
           <div className="rounded-xl bg-primary p-3 text-white">
@@ -44,6 +45,9 @@ export function LoginPage() {
           <Field label="Email">
             <Input
               type="email"
+              // `username` y no `email`: es lo que los gestores de contraseñas
+              // asocian con la contraseña de al lado para guardarla y completarla.
+              autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="admin@turestaurante.com"
@@ -53,6 +57,8 @@ export function LoginPage() {
           <Field label="Contraseña">
             <Input
               type="password"
+              // Al registrarse, `new-password` hace que el gestor ofrezca generar una.
+              autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
