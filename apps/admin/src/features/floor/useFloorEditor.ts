@@ -20,6 +20,7 @@ import {
   type SectionPatch,
   type TablePatch,
 } from '@/queries/floor'
+import { optimistic, patchRow } from '@/lib/optimistic'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import type { TableIntent } from './TableInspector'
 import type { Floor } from './useFloor'
@@ -89,18 +90,9 @@ export function useFloorEditor(branchId: string, floor: Floor) {
     mutationFn: ({ id, patch }: { id: string; patch: TablePatch }) => updateTable(id, patch),
     // Optimista: al soltar una mesa tiene que quedar donde la soltaste, no
     // saltar a la posición vieja hasta que vuelva el refetch.
-    onMutate: async ({ id, patch }) => {
-      await queryClient.cancelQueries({ queryKey: tablesKey })
-      const previous = queryClient.getQueryData(tablesKey)
-      queryClient.setQueryData(tablesKey, (current) =>
-        current?.map((table) => (table.id === id ? { ...table, ...patch } : table)),
-      )
-      return { previous }
-    },
-    onError: (_err, _variables, context) => {
-      if (context?.previous) queryClient.setQueryData(tablesKey, context.previous)
-    },
-    onSettled: refresh,
+    ...optimistic(queryClient, tablesKey, (tables, { id, patch }: { id: string; patch: TablePatch }) =>
+      patchRow(tables, { id, ...patch }),
+    ),
   }))
 
   const patch = (id: string, changes: TablePatch) => patchTable.mutate({ id, patch: changes })

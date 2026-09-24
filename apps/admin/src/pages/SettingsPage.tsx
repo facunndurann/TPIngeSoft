@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Trash2 } from 'lucide-react'
+import { optimistic, patchRow } from '@/lib/optimistic'
 import { supabase, unwrap } from '@/lib/supabase'
 import { branchesQuery } from '@/queries/branches'
 import { myRestaurantKey } from '@/queries/restaurant'
@@ -108,7 +109,8 @@ function BranchesSection({ restaurantId }: { restaurantId: string }) {
       ...changes
     }: { id: string } & Partial<Pick<Tables<'branches'>, 'is_active' | 'payment_methods'>>) =>
       unwrap(await supabase.from('branches').update(changes).eq('id', id)),
-    onSuccess: invalidate,
+    // Activar la sucursal o cambiar sus medios de pago se ve al instante.
+    ...optimistic(queryClient, branchesQuery(restaurantId).queryKey, patchRow<Tables<'branches'>>),
   }, ({ id }) => id))
 
   const deleteMutation = useMutation(errors.saving('No pudimos eliminar la sucursal.', {
@@ -121,6 +123,9 @@ function BranchesSection({ restaurantId }: { restaurantId: string }) {
     e.preventDefault()
     if (newName.trim()) createMutation.mutate()
   }
+
+  // La sucursal que está guardando: su switch y sus medios de pago esperan a que termine.
+  const savingBranch = updateMutation.isPending ? updateMutation.variables?.id : null
 
   return (
     <section className="space-y-4 rounded-xl border border-neutral-200 bg-white p-5">
@@ -173,6 +178,7 @@ function BranchesSection({ restaurantId }: { restaurantId: string }) {
                   onChange={(value) => updateMutation.mutate({ id: branch.id, is_active: value })}
                   label={`Activa: ${branch.name}`}
                   hideLabel
+                  busy={savingBranch === branch.id}
                 />
                 <IconButton
                   label={`Eliminar ${branch.name}`}
@@ -186,7 +192,7 @@ function BranchesSection({ restaurantId }: { restaurantId: string }) {
               </div>
               <PaymentMethodsField
                 value={branch.payment_methods}
-                disabled={updateMutation.isPending}
+                busy={savingBranch === branch.id}
                 onChange={(payment_methods) =>
                   updateMutation.mutate({ id: branch.id, payment_methods })
                 }

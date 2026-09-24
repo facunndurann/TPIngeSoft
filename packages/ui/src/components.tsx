@@ -86,6 +86,7 @@ export function Toggle({
   onChange,
   label,
   hideLabel = false,
+  busy = false,
 }: {
   checked: boolean
   onChange: (value: boolean) => void
@@ -100,14 +101,24 @@ export function Toggle({
    * nombrarlo: «Disponible: Clásica».
    */
   hideLabel?: boolean
+  /**
+   * Guardando el cambio anterior: el switch ya muestra el valor nuevo y no acepta
+   * otro toque hasta que termine, así un doble toque no manda dos escrituras que
+   * pueden llegar en cualquier orden. Es `aria-disabled` y no `disabled`, que le
+   * sacaría el foco a quien lo está usando con el teclado.
+   */
+  busy?: boolean
 }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
-      onClick={() => onChange(!checked)}
-      className="inline-flex cursor-pointer items-center gap-2"
+      aria-disabled={busy || undefined}
+      onClick={() => {
+        if (!busy) onChange(!checked)
+      }}
+      className={`inline-flex items-center gap-2 ${busy ? 'cursor-wait' : 'cursor-pointer'}`}
     >
       <span
         className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors ${checked ? 'bg-primary' : 'bg-neutral-300'}`}

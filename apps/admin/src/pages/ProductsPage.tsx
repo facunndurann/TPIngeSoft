@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { formatPrice, productMedia, type Tables } from '@restaurant-platform/shared'
 import { MediaThumb } from '@/features/MediaThumb'
+import { optimistic } from '@/lib/optimistic'
 import { supabase, unwrap } from '@/lib/supabase'
 import { productsByCategoryQuery } from '@/queries/products'
 import { useRestaurant } from '@/restaurant/restaurant-context'
@@ -31,10 +32,21 @@ export function ProductsPage() {
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: productsByCategoryQuery(restaurant.id).queryKey })
 
+  // Se ve al tocar: el producto cambia en la carta cargada y se relee al terminar.
   const availabilityMutation = useMutation(errors.saving('No pudimos cambiar la disponibilidad.', {
     mutationFn: async ({ id, is_available }: { id: string; is_available: boolean }) =>
       unwrap(await supabase.from('products').update({ is_available }).eq('id', id)),
-    onSuccess: invalidate,
+    ...optimistic(
+      queryClient,
+      productsByCategoryQuery(restaurant.id).queryKey,
+      (categories, { id, is_available }: { id: string; is_available: boolean }) =>
+        categories.map((category) => ({
+          ...category,
+          products: category.products.map((product) =>
+            product.id === id ? { ...product, is_available } : product,
+          ),
+        })),
+    ),
   }, ({ id }) => id))
 
   const deleteMutation = useMutation(errors.saving('No pudimos eliminar el producto.', {
@@ -97,6 +109,9 @@ export function ProductsPage() {
                     key={product.id}
                     product={product}
                     error={errors.messageFor(product.id)}
+                    saving={
+                      availabilityMutation.isPending && availabilityMutation.variables?.id === product.id
+                    }
                     onAvailabilityChange={(value) =>
                       availabilityMutation.mutate({ id: product.id, is_available: value })
                     }
@@ -117,12 +132,15 @@ export function ProductsPage() {
 function ProductRow({
   product,
   error,
+  saving,
   onAvailabilityChange,
   onDelete,
 }: {
   product: Tables<'products'>
   /** Error de la última escritura sobre este producto: se muestra acá y no arriba de la lista. */
   error: string | null
+  /** Guardando su disponibilidad: el switch no acepta otro toque hasta que termine. */
+  saving: boolean
   onAvailabilityChange: (value: boolean) => void
   onDelete: () => void
 }) {
@@ -142,6 +160,7 @@ function ProductRow({
           onChange={onAvailabilityChange}
           label={`Disponible: ${product.name}`}
           hideLabel
+          busy={saving}
         />
         <Link
           to={`/productos/${product.id}`}

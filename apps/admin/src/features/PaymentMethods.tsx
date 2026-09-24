@@ -14,21 +14,28 @@ import { ChoiceChip } from '@restaurant-platform/ui'
  */
 export function PaymentMethodsField({
   value,
-  disabled = false,
+  busy = false,
   onChange,
 }: {
   value: PaymentMethod[] | null
-  disabled?: boolean
+  /**
+   * Guardando el cambio anterior: los chips ya muestran lo nuevo y no aceptan otro
+   * toque hasta que termine, como el switch de la sucursal. No se deshabilitan,
+   * para no sacarle el foco a quien usa el teclado.
+   */
+  busy?: boolean
   onChange: (methods: PaymentMethod[]) => void
 }) {
   const enabled = enabledPaymentMethods({ payment_methods: value })
 
-  const toggle = (method: PaymentMethod) =>
+  const toggle = (method: PaymentMethod) => {
+    if (busy) return
     onChange(
       enabled.includes(method)
         ? enabled.filter((current) => current !== method)
         : [...enabled, method],
     )
+  }
 
   return (
     <div className="space-y-2">
@@ -38,7 +45,7 @@ export function PaymentMethodsField({
             key={method}
             tone="outline"
             pressed={enabled.includes(method)}
-            disabled={disabled}
+            aria-disabled={busy || undefined}
             title={paymentMethodDescriptions[method]}
             onClick={() => toggle(method)}
           >

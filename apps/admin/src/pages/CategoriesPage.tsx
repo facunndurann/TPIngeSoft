@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowDown, ArrowUp, Check, Pencil, Plus, Trash2 } from 'lucide-react'
 import type { Tables } from '@restaurant-platform/shared'
+import { optimistic, patchRow } from '@/lib/optimistic'
 import { supabase, unwrap } from '@/lib/supabase'
 import { categoriesQuery } from '@/queries/categories'
 import { useRestaurant } from '@/restaurant/restaurant-context'
@@ -39,10 +40,9 @@ export function CategoriesPage() {
   const updateMutation = useMutation(errors.saving('No pudimos guardar la categoría.', {
     mutationFn: async ({ id, ...rest }: Partial<Category> & { id: string }) =>
       unwrap(await supabase.from('menu_categories').update(rest).eq('id', id)),
-    onSuccess: () => {
-      setEditingId(null)
-      invalidate()
-    },
+    // Activar o renombrar se ve al instante; si falla, vuelve lo anterior.
+    ...optimistic(queryClient, categoriesQuery(restaurant.id).queryKey, patchRow<Category>),
+    onSuccess: () => setEditingId(null),
   }, ({ id }) => id))
 
   const deleteMutation = useMutation(errors.saving('No pudimos eliminar la categoría.', {
@@ -160,6 +160,7 @@ export function CategoriesPage() {
                   onChange={(value) => updateMutation.mutate({ id: category.id, is_active: value })}
                   label={`Activa: ${category.name}`}
                   hideLabel
+                  busy={updateMutation.isPending && updateMutation.variables?.id === category.id}
                 />
                 <IconButton
                   label={`Renombrar ${category.name}`}

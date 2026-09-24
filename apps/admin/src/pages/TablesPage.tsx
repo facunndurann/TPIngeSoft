@@ -4,6 +4,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import { Copy, Plus, Printer, QrCode, Trash2 } from 'lucide-react'
 import { Link } from 'react-router'
 import { customerAppUrl } from '@/lib/customer-app'
+import { optimistic, patchRow } from '@/lib/optimistic'
 import { branchesQuery } from '@/queries/branches'
 import {
   createTable,
@@ -56,7 +57,8 @@ export function TablesPage() {
   const updateMutation = useMutation(errors.saving('No pudimos guardar la mesa.', {
     mutationFn: ({ id, is_active }: { id: string; is_active: boolean }) =>
       updateTable(id, { is_active }),
-    onSuccess: invalidate,
+    // La misma caché que Salón: el cambio también se ve ahí.
+    ...optimistic(queryClient, branchTables.queryKey, patchRow<FloorTable>),
   }, ({ id }) => id))
 
   const deleteMutation = useMutation(errors.saving('No pudimos eliminar la mesa.', {
@@ -137,6 +139,7 @@ export function TablesPage() {
                   onChange={(value) => updateMutation.mutate({ id: table.id, is_active: value })}
                   label={`En servicio: ${table.label}`}
                   hideLabel
+                  busy={updateMutation.isPending && updateMutation.variables?.id === table.id}
                 />
                 <IconButton
                   label={`Eliminar ${table.label}`}
