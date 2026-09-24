@@ -27,3 +27,17 @@
   --color-primary-soft: var(--color-indigo-50);
   --color-primary-ink: var(--color-indigo-700);
 }
+
+/*
+ * Lo que los componentes de ui traen por defecto y quien los usa puede cambiar
+ * con `className`. Va en la capa de componentes y no como utilidad: dos
+ * utilidades del mismo tipo no se pisan por el orden en que se escriben sino por
+ * el del CSS, y `w-full` le ganaba a cualquier `w-56`. Una utilidad siempre le
+ * gana a esta capa, así que el ancho que se pase se aplica.
+ */
+@layer components {
+  /* Input, Select y Textarea ocupan su contenedor salvo que se les dé otro ancho. */
+  .field-control {
+    width: 100%;
+  }
+}

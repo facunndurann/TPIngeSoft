@@ -57,8 +57,12 @@ export function DesignPicker({ value, onChange, hint }: DesignPickerProps) {
                   className="sr-only"
                 />
                 <div className="p-2.5">
+                  {/* El botón de vista previa va encima de la muestra, a la derecha
+                      (de 15 a 47 px del borde de la tarjeta): la muestra le deja ese
+                      lugar entero (10 del marco + 40 = 50 px), así ningún texto,
+                      del largo que sea, pasa por debajo. */}
                   <div
-                    className="rounded-lg p-3"
+                    className="rounded-lg p-3 pr-10"
                     style={{
                       background: 'var(--menu-bg)',
                       color: 'var(--menu-text)',
@@ -72,7 +76,7 @@ export function DesignPicker({ value, onChange, hint }: DesignPickerProps) {
                       {design.copy.welcome}
                     </p>
                     <p
-                      className="mt-1 text-sm font-semibold pr-6"
+                      className="mt-1 text-sm font-semibold"
                       style={{ fontFamily: 'var(--menu-font-display)', color: 'var(--menu-heading)' }}
                     >
                       {design.name}

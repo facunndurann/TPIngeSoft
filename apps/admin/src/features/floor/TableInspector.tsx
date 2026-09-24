@@ -112,7 +112,6 @@ function NumberField({
         <Button
           type="button"
           variant="secondary"
-          className="px-2.5"
           aria-label={`${label}: restar uno`}
           disabled={value <= min}
           onClick={() => onCommit(value - 1)}
@@ -123,7 +122,6 @@ function NumberField({
         <Button
           type="button"
           variant="secondary"
-          className="px-2.5"
           aria-label={`${label}: sumar uno`}
           disabled={value >= max}
           onClick={() => onCommit(value + 1)}

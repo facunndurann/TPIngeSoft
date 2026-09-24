@@ -28,10 +28,12 @@ export function Button({
 
 /**
  * Lo común a los campos de texto y de selección. Con error (`aria-invalid`) el
- * borde pasa a rojo además del mensaje, así el color no es la única señal.
+ * borde pasa a rojo además del mensaje, así el color no es la única señal. El
+ * ancho completo sale de `field-control` (theme.css) y no de `w-full`, para que
+ * un `className="w-56"` se aplique.
  */
 const controlClass =
-  'w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-faint focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary aria-invalid:border-red-600 aria-invalid:ring-1 aria-invalid:ring-red-600'
+  'field-control rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-faint focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary aria-invalid:border-red-600 aria-invalid:ring-1 aria-invalid:ring-red-600'
 
 /** Lo que un Field le avisa a su control: tiene un error, y este es el id del mensaje. */
 const FieldContext = createContext<{ errorId: string } | null>(null)
