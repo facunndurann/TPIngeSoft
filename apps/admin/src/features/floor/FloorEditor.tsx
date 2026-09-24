@@ -99,6 +99,8 @@ function SectionEditor({
 
         {selected ? (
           <TableInspector
+            // Otra mesa, otro inspector: un borrador a medio escribir no pasa de una a otra.
+            key={selected.id}
             table={selected}
             sections={floor.sections}
             busy={editor.removeTable.isPending}

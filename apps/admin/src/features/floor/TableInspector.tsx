@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useId, useState, type ChangeEvent, type KeyboardEvent } from 'react'
 import { Trash2 } from 'lucide-react'
 import { TABLE_SPAN, tableShapeLabels, tableShapes } from '@restaurant-platform/shared'
 import { Button, Field, Input, Select, Toggle } from '@restaurant-platform/ui'
@@ -23,122 +23,124 @@ type TableInspectorProps = {
   busy: boolean
 }
 
-/**
- * React `onChange` es el evento `input`. Las flechas nativas (botones o teclado)
- * suelen mandar `increment`/`decrement`, reemplazar el número entero, o no
- * declarar `inputType`. Escribir "12" llega como insert/delete y espera al blur.
- */
-export function isStepperChange(nativeEvent: Event, previous: string, next: string) {
-  const inputType = 'inputType' in nativeEvent ? String(nativeEvent.inputType) : ''
-  if (inputType.startsWith('insert') && inputType !== 'insertReplacementText') return false
-  if (inputType.startsWith('delete') || inputType.startsWith('history')) return false
-  if (
-    !inputType ||
-    inputType === 'increment' ||
-    inputType === 'decrement' ||
-    inputType === 'insertReplacementText'
-  ) {
-    return true
-  }
-  const from = Number(previous)
-  const to = Number(next)
-  return Number.isInteger(from) && Number.isInteger(to) && Math.abs(to - from) === 1
-}
+const SEATS = { min: 1, max: 40 } as const
 
 /**
- * Campo que se guarda al salir, no en cada tecla: escribir "12" no puede dejar
- * la mesa en 1 ni disparar dos escrituras. El stepper sí guarda al toque.
+ * Borrador de un campo del inspector. Se guarda al salir del campo o con Enter,
+ * nunca por tecla: escribir "12" no puede dejar la mesa en 1 ni disparar dos
+ * escrituras. Un texto que `parse` rechaza, o que no cambia nada, vuelve a lo
+ * guardado.
  */
-function useCommittedField(value: string, commit: (draft: string) => void) {
-  const [draft, setDraft] = useState(value)
-  const draftRef = useRef(value)
-  const commitRef = useRef(commit)
-  const nodeCleanup = useRef<(() => void) | null>(null)
-  commitRef.current = commit
+function useDraftField<T extends string | number>(
+  value: T,
+  parse: (text: string) => T | null,
+  onCommit: (next: T) => void,
+) {
+  // Lo tipeado y sobre qué valor guardado se tipeó. Sin borrador, el campo
+  // muestra el valor guardado: no hay que copiar props al estado.
+  const [draft, setDraft] = useState<{ text: string; over: T } | null>(null)
 
-  useEffect(() => {
-    setDraft(value)
-    draftRef.current = value
-  }, [value])
+  // Un borrador vale mientras siga el valor sobre el que se escribió. Cuando
+  // llega otro (el update optimista de lo que se acaba de guardar, un rollback
+  // o un cambio desde el plano), se descarta en este mismo render, sin efecto.
+  if (draft && draft.over !== value) setDraft(null)
 
-  function take(next: string) {
-    setDraft(next)
-    draftRef.current = next
+  const text = draft?.text ?? String(value)
+
+  function finish() {
+    const next = parse(text)
+    // Si se guarda, el borrador queda a la vista hasta que llega el valor nuevo:
+    // el update optimista llega un momento después, y soltarlo ahora mostraría
+    // por un instante el valor viejo.
+    if (next !== null && next !== value) onCommit(next)
+    else setDraft(null)
   }
-
-  function flush(next = draftRef.current) {
-    take(next)
-    commitRef.current(next)
-  }
-
-  const bindNode = useCallback((node: HTMLInputElement | null) => {
-    nodeCleanup.current?.()
-    nodeCleanup.current = null
-    if (!node || node.type !== 'number') return
-    const onNativeChange = () => {
-      const next = node.value
-      setDraft(next)
-      draftRef.current = next
-      commitRef.current(next)
-    }
-    node.addEventListener('change', onNativeChange)
-    nodeCleanup.current = () => node.removeEventListener('change', onNativeChange)
-  }, [])
 
   return {
-    value: draft,
-    // El `change` nativo (no el onChange de React) es el que disparan las flechas
-    // del input number en Safari/Chrome sin soltar el foco.
-    ref: bindNode,
-    onChange: (event: React.ChangeEvent<HTMLInputElement>) => {
-      const previous = draftRef.current
-      const next = event.target.value
-      take(next)
-      if (event.currentTarget.type === 'number' && isStepperChange(event.nativeEvent, previous, next)) {
-        commitRef.current(next)
-      }
-    },
-    onBlur: () => commitRef.current(draftRef.current),
-    onKeyDown: (event: React.KeyboardEvent<HTMLInputElement>) => {
+    value: text,
+    onChange: (event: ChangeEvent<HTMLInputElement>) =>
+      setDraft({ text: event.target.value, over: value }),
+    onBlur: finish,
+    onKeyDown: (event: KeyboardEvent<HTMLInputElement>) => {
       if (event.key === 'Enter') event.currentTarget.blur()
-      if (event.key === 'Escape') take(value)
-      if (event.currentTarget.type === 'number' && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
-        const node = event.currentTarget
-        requestAnimationFrame(() => flush(node.value))
-      }
+      if (event.key === 'Escape') setDraft(null)
     },
   }
 }
 
-function wholeNumberIn(draft: string, min: number, max: number) {
-  const parsed = Number(draft)
-  return Number.isInteger(parsed) && parsed >= min && parsed <= max ? parsed : null
+function wholeNumberIn(text: string, min: number, max: number) {
+  const parsed = Number(text)
+  return text.trim() !== '' && Number.isInteger(parsed) && parsed >= min && parsed <= max
+    ? parsed
+    : null
 }
 
-/** Propiedades de la mesa seleccionada en el plano. */
+/**
+ * Entero con botones − / +. Hay dos formas de cambiarlo y cada una guarda por un
+ * solo camino: los botones guardan al toque, y lo tipeado, al salir o con Enter.
+ * Es un campo de texto numérico y no un `type="number"`, así que no existen
+ * flechas nativas que guarden por su cuenta.
+ */
+function NumberField({
+  label,
+  value,
+  min,
+  max,
+  onCommit,
+}: {
+  label: string
+  value: number
+  min: number
+  max: number
+  onCommit: (next: number) => void
+}) {
+  const id = useId()
+  const field = useDraftField(value, (text) => wholeNumberIn(text, min, max), onCommit)
+
+  // No usa `Field`: ese `<label>` envuelve a sus hijos, y con botones adentro
+  // el primero (−) se llevaría el nombre del campo en vez del input.
+  return (
+    <div>
+      <label htmlFor={id} className="mb-1 block text-sm font-medium text-neutral-700">
+        {label}
+      </label>
+      <div className="flex items-center gap-1">
+        <Button
+          type="button"
+          variant="secondary"
+          className="px-2.5"
+          aria-label={`${label}: restar uno`}
+          disabled={value <= min}
+          onClick={() => onCommit(value - 1)}
+        >
+          −
+        </Button>
+        <Input id={id} inputMode="numeric" className="min-w-0 text-center" {...field} />
+        <Button
+          type="button"
+          variant="secondary"
+          className="px-2.5"
+          aria-label={`${label}: sumar uno`}
+          disabled={value >= max}
+          onClick={() => onCommit(value + 1)}
+        >
+          +
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Propiedades de la mesa seleccionada en el plano. El editor lo monta con
+ * `key={table.id}`, así que un borrador nunca pasa de una mesa a otra.
+ */
 export function TableInspector({ table, sections, onIntent, onDelete, busy }: TableInspectorProps) {
-  const label = useCommittedField(table.label, (draft) => {
-    const next = draft.trim()
-    if (next && next !== table.label) onIntent({ kind: 'edit', patch: { label: next } })
-  })
-  const seats = useCommittedField(String(table.seats), (draft) => {
-    const next = wholeNumberIn(draft, 1, 40)
-    if (next !== null && next !== table.seats) onIntent({ kind: 'edit', patch: { seats: next } })
-  })
-  // Un lado nuevo siempre viaja con el otro: el plano necesita la huella entera
-  // para reubicar la mesa si el cambio la saca de la grilla.
-  const width = useCommittedField(String(table.width), (draft) => {
-    const next = wholeNumberIn(draft, TABLE_SPAN.min, TABLE_SPAN.max)
-    if (next !== null && next !== table.width) {
-      onIntent({ kind: 'resize', width: next, height: table.height })
-    }
-  })
-  const height = useCommittedField(String(table.height), (draft) => {
-    const next = wholeNumberIn(draft, TABLE_SPAN.min, TABLE_SPAN.max)
-    if (next !== null && next !== table.height) {
-      onIntent({ kind: 'resize', width: table.width, height: next })
-    }
-  })
+  const label = useDraftField(
+    table.label,
+    (text) => text.trim() || null,
+    (next) => onIntent({ kind: 'edit', patch: { label: next } }),
+  )
 
   return (
     <aside className="space-y-4 rounded-xl border border-neutral-200 bg-white p-4">
@@ -169,9 +171,13 @@ export function TableInspector({ table, sections, onIntent, onDelete, busy }: Ta
       </Field>
 
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Capacidad">
-          <Input type="number" min={1} max={40} {...seats} />
-        </Field>
+        <NumberField
+          label="Capacidad"
+          value={table.seats}
+          min={SEATS.min}
+          max={SEATS.max}
+          onCommit={(seats) => onIntent({ kind: 'edit', patch: { seats } })}
+        />
         <Field label="Forma">
           <Select value={table.shape} onChange={(event) => onIntent({ kind: 'edit', patch: { shape: event.target.value } })}>
             {tableShapes.map((shape) => (
@@ -184,13 +190,23 @@ export function TableInspector({ table, sections, onIntent, onDelete, busy }: Ta
       </div>
 
       <div>
+        {/* Un lado nuevo siempre viaja con el otro: el plano necesita la huella
+            entera para reubicar la mesa si el cambio la saca de la grilla. */}
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Ancho (celdas)">
-            <Input type="number" min={TABLE_SPAN.min} max={TABLE_SPAN.max} {...width} />
-          </Field>
-          <Field label="Alto (celdas)">
-            <Input type="number" min={TABLE_SPAN.min} max={TABLE_SPAN.max} {...height} />
-          </Field>
+          <NumberField
+            label="Ancho (celdas)"
+            value={table.width}
+            min={TABLE_SPAN.min}
+            max={TABLE_SPAN.max}
+            onCommit={(width) => onIntent({ kind: 'resize', width, height: table.height })}
+          />
+          <NumberField
+            label="Alto (celdas)"
+            value={table.height}
+            min={TABLE_SPAN.min}
+            max={TABLE_SPAN.max}
+            onCommit={(height) => onIntent({ kind: 'resize', width: table.width, height })}
+          />
         </div>
         <p className="mt-1 text-xs text-neutral-500">
           Cada celda del plano equivale a un lugar de paso. Ancho distinto de alto da una mesa

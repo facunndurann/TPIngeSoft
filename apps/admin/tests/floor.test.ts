@@ -7,7 +7,6 @@ import {
   resizePlacement,
   tablePlacement,
 } from '@restaurant-platform/shared'
-import { isStepperChange } from '../src/features/floor/TableInspector'
 
 const lastColumn = FLOOR_GRID.cols - 3
 
@@ -35,20 +34,4 @@ test('resizePlacement solo manda columnas de la fila, aunque el intent traiga ki
   assert.equal(patch.width, 5)
   assert.equal(patch.height, 2)
   assert.equal('kind' in patch, false)
-})
-
-function inputEvent(inputType?: string) {
-  const event = new Event('input')
-  if (inputType) Object.assign(event, { inputType })
-  return event
-}
-
-test('isStepperChange reconoce flechas nativas y no cada tecla', () => {
-  assert.equal(isStepperChange(inputEvent(), '4', '5'), true)
-  assert.equal(isStepperChange(inputEvent('increment'), '4', '5'), true)
-  assert.equal(isStepperChange(inputEvent('decrement'), '4', '3'), true)
-  assert.equal(isStepperChange(inputEvent('insertReplacementText'), '4', '5'), true)
-  assert.equal(isStepperChange(inputEvent('insertText'), '4', '1'), false)
-  assert.equal(isStepperChange(inputEvent('insertText'), '1', '12'), false)
-  assert.equal(isStepperChange(inputEvent('deleteContentBackward'), '12', '1'), false)
 })
