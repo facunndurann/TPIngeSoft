@@ -209,40 +209,47 @@ function GroupEditor({
         <div>
           <p className="mb-2 text-sm font-medium text-neutral-700">Opciones</p>
           <div className="space-y-2">
-            {draft.options.map((option) => (
-              <div key={option.key} className="flex items-center gap-2">
-                <Input
-                  value={option.name}
-                  onChange={(e) => updateOption(option.key, { name: e.target.value })}
-                  placeholder="Nombre"
-                  className="flex-1"
-                />
-                <div className="flex w-32 items-center gap-1">
-                  <span className="text-sm text-neutral-500">+$</span>
+            {draft.options.map((option, index) => {
+              // Los controles de la fila se nombran por su opción; una recién
+              // agregada todavía no tiene nombre, así que va por su número.
+              const optionName = option.name.trim() || `opción ${index + 1}`
+              return (
+                <div key={option.key} className="flex items-center gap-2">
                   <Input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={option.price}
-                    onChange={(e) => updateOption(option.key, { price: e.target.value })}
-                    aria-label={`Precio de ${option.name || 'la opción'}`}
+                    value={option.name}
+                    onChange={(e) => updateOption(option.key, { name: e.target.value })}
+                    placeholder="Nombre"
+                    className="flex-1"
                   />
+                  <div className="flex w-32 items-center gap-1">
+                    <span className="text-sm text-neutral-500">+$</span>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={option.price}
+                      onChange={(e) => updateOption(option.key, { price: e.target.value })}
+                      aria-label={`Precio de ${optionName}`}
+                    />
+                  </div>
+                  <Toggle
+                    checked={option.isAvailable}
+                    onChange={(isAvailable) => updateOption(option.key, { isAvailable })}
+                    label={`Disponible: ${optionName}`}
+                    hideLabel
+                  />
+                  <button
+                    className="cursor-pointer p-1 text-neutral-400 hover:text-red-600"
+                    onClick={() =>
+                      patch({ options: draft.options.filter((other) => other.key !== option.key) })
+                    }
+                    aria-label={`Quitar ${optionName}`}
+                  >
+                    <Trash2 size={15} />
+                  </button>
                 </div>
-                <Toggle
-                  checked={option.isAvailable}
-                  onChange={(isAvailable) => updateOption(option.key, { isAvailable })}
-                />
-                <button
-                  className="cursor-pointer p-1 text-neutral-400 hover:text-red-600"
-                  onClick={() =>
-                    patch({ options: draft.options.filter((other) => other.key !== option.key) })
-                  }
-                  aria-label="Quitar opción"
-                >
-                  <Trash2 size={15} />
-                </button>
-              </div>
-            ))}
+              )
+            })}
           </div>
           <Button
             variant="secondary"

@@ -68,10 +68,21 @@ export function Toggle({
   checked,
   onChange,
   label,
+  hideLabel = false,
 }: {
   checked: boolean
   onChange: (value: boolean) => void
-  label?: string
+  /**
+   * Qué prende o apaga. Es obligatorio: sin nombre, un lector de pantalla
+   * anuncia «interruptor, activado» y no dice de qué.
+   */
+  label: string
+  /**
+   * Oculta el texto a la vista y lo deja para lectores de pantalla. Es para las
+   * filas de una lista, donde el contexto se ve pero el switch igual tiene que
+   * nombrarlo: «Disponible: Clásica».
+   */
+  hideLabel?: boolean
 }) {
   return (
     <button
@@ -88,7 +99,7 @@ export function Toggle({
           className={`h-4 w-4 rounded-full bg-white transition-transform ${checked ? 'translate-x-4' : 'translate-x-0'}`}
         />
       </span>
-      {label && <span className="text-sm text-neutral-700">{label}</span>}
+      <span className={hideLabel ? 'sr-only' : 'text-sm text-neutral-700'}>{label}</span>
     </button>
   )
 }

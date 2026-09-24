@@ -152,6 +152,8 @@ export function CategoriesPage() {
               <Toggle
                 checked={category.is_active}
                 onChange={(value) => updateMutation.mutate({ id: category.id, is_active: value })}
+                label={`Activa: ${category.name}`}
+                hideLabel
               />
               <button
                 className="cursor-pointer p-1 text-neutral-400 hover:text-neutral-700"

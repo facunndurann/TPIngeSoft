@@ -121,7 +121,12 @@ function ProductRow({
         </div>
         <p className="text-xs text-neutral-500">{formatPrice(product.base_price)}</p>
       </div>
-      <Toggle checked={product.is_available} onChange={onAvailabilityChange} />
+      <Toggle
+        checked={product.is_available}
+        onChange={onAvailabilityChange}
+        label={`Disponible: ${product.name}`}
+        hideLabel
+      />
       <Link
         to={`/productos/${product.id}`}
         className="p-1 text-neutral-400 hover:text-neutral-700"

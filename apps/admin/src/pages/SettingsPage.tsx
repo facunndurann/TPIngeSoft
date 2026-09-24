@@ -144,7 +144,7 @@ function BranchesSection({ restaurantId }: { restaurantId: string }) {
           placeholder="Dirección (opcional)"
         />
         <Button type="submit" disabled={createMutation.isPending}>
-          <Plus size={16} />
+          <Plus size={16} /> Agregar
         </Button>
       </form>
 
@@ -165,6 +165,8 @@ function BranchesSection({ restaurantId }: { restaurantId: string }) {
                 <Toggle
                   checked={branch.is_active}
                   onChange={(value) => updateMutation.mutate({ id: branch.id, is_active: value })}
+                  label={`Activa: ${branch.name}`}
+                  hideLabel
                 />
                 <button
                   className="cursor-pointer p-1 text-neutral-400 hover:text-red-600"

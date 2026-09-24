@@ -129,6 +129,8 @@ export function TablesPage() {
               <Toggle
                 checked={table.is_active}
                 onChange={(value) => updateMutation.mutate({ id: table.id, is_active: value })}
+                label={`En servicio: ${table.label}`}
+                hideLabel
               />
               <button
                 className="cursor-pointer p-1 text-neutral-400 hover:text-red-600"
