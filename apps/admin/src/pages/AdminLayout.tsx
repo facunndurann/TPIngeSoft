@@ -4,13 +4,13 @@ import { supabase } from '@/lib/supabase'
 import { useMembership } from '@/restaurant/restaurant-context'
 
 const navigation = [
-  { to: '/productos', label: 'Productos', icon: UtensilsCrossed, adminOnly: true },
-  { to: '/categorias', label: 'Categorías', icon: ListTree, adminOnly: true },
-  { to: '/modificadores', label: 'Modificadores', icon: SlidersHorizontal, adminOnly: true },
-  { to: '/salon', label: 'Salón', icon: Map, adminOnly: true },
-  { to: '/mesas', label: 'Mesas y QR', icon: QrCode, adminOnly: true },
-  { to: '/empleados', label: 'Empleados', icon: Users, adminOnly: true },
-  { to: '/restaurante', label: 'Restaurante', icon: Settings, adminOnly: true },
+  { to: '/productos', label: 'Productos', icon: UtensilsCrossed },
+  { to: '/categorias', label: 'Categorías', icon: ListTree },
+  { to: '/modificadores', label: 'Modificadores', icon: SlidersHorizontal },
+  { to: '/salon', label: 'Salón', icon: Map },
+  { to: '/mesas', label: 'Mesas y QR', icon: QrCode },
+  { to: '/empleados', label: 'Empleados', icon: Users },
+  { to: '/restaurante', label: 'Restaurante', icon: Settings },
 ]
 
 export function AdminLayout() {

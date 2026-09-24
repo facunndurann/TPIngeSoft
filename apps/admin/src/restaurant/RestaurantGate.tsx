@@ -2,25 +2,21 @@ import { useState, type FormEvent, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Store } from 'lucide-react'
 import { DEFAULT_MENU_DESIGN } from '@restaurant-platform/shared'
-import { myRestaurantQuery } from '@/queries/restaurant'
+import { myRestaurantKey, myRestaurantQuery } from '@/queries/restaurant'
 import { supabase, unwrap } from '@/lib/supabase'
-import { Button, ErrorText, Field, Input, Spinner, Textarea, useAuth } from '@restaurant-platform/ui'
+import { Button, ErrorText, Field, Input, Spinner, Textarea } from '@restaurant-platform/ui'
 import { DesignPicker } from '@/features/DesignPicker'
 import { RestaurantContext } from './restaurant-context'
 
 /**
- * Carga el restaurante del usuario autenticado y su rol. Solo owner/manager
- * administran. Un empleado con profile y sin rol admin se echa. Si todavía no
- * tiene restaurante, muestra el onboarding.
+ * Único control de acceso del panel. La consulta solo trae una membresía
+ * owner/manager activa, así que todo lo que se monta adentro ya es
+ * administración: ninguna ruta vuelve a preguntar el rol, y la RLS verifica los
+ * permisos en cada consulta. Un empleado con profile y sin rol admin se echa; si
+ * todavía no tiene restaurante, se muestra el onboarding.
  */
-export function RestaurantGate({ children }: { children: ReactNode }) {
-  const { session } = useAuth()
-  const userId = session?.user.id ?? ''
-  const { data, isLoading, isError } = useQuery({
-    ...myRestaurantQuery,
-    queryKey: ['my-restaurant', userId],
-    enabled: Boolean(userId),
-  })
+export function RestaurantGate({ userId, children }: { userId: string; children: ReactNode }) {
+  const { data, isLoading, isError } = useQuery(myRestaurantQuery(userId))
 
   if (isLoading) return <Spinner />
   if (isError) {
@@ -69,7 +65,7 @@ function CreateRestaurantScreen() {
           p_branch_name: branchName,
         }),
       )
-      await queryClient.invalidateQueries({ queryKey: ['my-restaurant'] })
+      await queryClient.invalidateQueries({ queryKey: myRestaurantKey })
     } catch (err) {
       setError(err)
     } finally {

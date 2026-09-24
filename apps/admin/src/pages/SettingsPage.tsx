@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Trash2 } from 'lucide-react'
 import { supabase, unwrap } from '@/lib/supabase'
 import { branchesQuery } from '@/queries/branches'
-import { myRestaurantQuery } from '@/queries/restaurant'
+import { myRestaurantKey } from '@/queries/restaurant'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { DesignPicker } from '@/features/DesignPicker'
 import { PaymentMethodsField } from '@/features/PaymentMethods'
@@ -32,7 +32,7 @@ export function SettingsPage() {
           .eq('id', restaurant.id),
       ),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: myRestaurantQuery.queryKey })
+      queryClient.invalidateQueries({ queryKey: myRestaurantKey })
       setSavedMessage(true)
       setTimeout(() => setSavedMessage(false), 2000)
     },
