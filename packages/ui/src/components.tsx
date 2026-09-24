@@ -1,3 +1,4 @@
+import { useId, useLayoutEffect, useRef } from 'react'
 import type { ButtonHTMLAttributes, ComponentProps, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react'
 import { X } from 'lucide-react'
 
@@ -115,29 +116,99 @@ export function Badge({
   )
 }
 
+/** Primer campo de un formulario: donde conviene arrancar a escribir al abrir. */
+const FIRST_FIELD =
+  'input:not([type="hidden"]):not(:disabled), select:not(:disabled), textarea:not(:disabled)'
+
+const DISCARD_CHANGES = 'Hay cambios sin guardar. ¿Querés descartarlos?'
+
+/**
+ * Diálogo modal sobre un `<dialog>` nativo abierto con `showModal()`: el
+ * navegador pone el rol de diálogo, deja inerte la página de atrás (el Tab no se
+ * escapa) y lo dibuja en la capa superior. Está abierto mientras está montado;
+ * cerrarlo es decisión de quien lo monta, así que el fondo, Escape y la × no lo
+ * cierran por su cuenta: piden `onClose`.
+ */
 export function Modal({
   title,
   onClose,
   children,
   wide = false,
+  hasUnsavedChanges = false,
 }: {
   title: string
   onClose: () => void
   children: ReactNode
   wide?: boolean
+  /**
+   * Cerrarlo sin pasar por el formulario (fondo, Escape o ×) pide confirmación.
+   * El «Cancelar» de cada formulario sigue cerrando directo: ahí la intención ya
+   * es descartar.
+   */
+  hasUnsavedChanges?: boolean
 }) {
+  const dialogRef = useRef<HTMLDialogElement>(null)
+  const titleId = useId()
+
+  function requestClose() {
+    if (hasUnsavedChanges && !window.confirm(DISCARD_CHANGES)) return
+    onClose()
+  }
+
+  // Layout y no un efecto común: se abre antes de pintar, sin un cuadro de
+  // diálogo cerrado visible por un instante.
+  useLayoutEffect(() => {
+    const dialog = dialogRef.current
+    if (!dialog) return
+    // Quien lo abrió recupera el foco al cerrar. Se guarda a mano porque el
+    // diálogo sale del DOM al desmontarse, y ahí el navegador ya no lo devuelve.
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    dialog.showModal()
+    // Sin campos (un QR, una vista previa), queda el foco que eligió el navegador.
+    dialog.querySelector<HTMLElement>(FIRST_FIELD)?.focus()
+    return () => {
+      if (dialog.open) dialog.close()
+      if (opener?.isConnected) opener.focus()
+    }
+  }, [])
+
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-8"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose()
+    <dialog
+      ref={dialogRef}
+      aria-labelledby={titleId}
+      className={`mx-auto mt-4 mb-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] overflow-y-auto rounded-xl bg-white p-0 shadow-xl backdrop:bg-black/40 sm:mt-8 sm:max-h-[calc(100dvh-4rem)] ${wide ? 'max-w-2xl' : 'max-w-md'}`}
+      // Escape: se cancela el cierre nativo y decide `requestClose`.
+      onCancel={(event) => {
+        event.preventDefault()
+        requestClose()
+      }}
+      // Chrome cierra sin `cancel` ante un segundo Escape seguido. Si pasa con el
+      // diálogo montado, se pregunta igual; si se sigue editando, se reabre.
+      // El evento llega en otra tarea, así que también llega el de los `close()`
+      // propios: al desmontarse (el ref ya es null) y en el doble montaje de
+      // StrictMode (el diálogo ya se reabrió). Solo cuenta si sigue cerrado.
+      onClose={() => {
+        const dialog = dialogRef.current
+        if (!dialog || dialog.open) return
+        if (hasUnsavedChanges && !window.confirm(DISCARD_CHANGES)) dialog.showModal()
+        else onClose()
+      }}
+      // El fondo es el propio <dialog>: se mira si el clic cayó fuera de su caja,
+      // así arrastrar su barra de scroll o seleccionar texto no lo cierra.
+      onMouseDown={(event) => {
+        const box = event.currentTarget.getBoundingClientRect()
+        const outside =
+          event.clientX < box.left || event.clientX > box.right ||
+          event.clientY < box.top || event.clientY > box.bottom
+        if (event.target === event.currentTarget && outside) requestClose()
       }}
     >
-      <div className={`w-full ${wide ? 'max-w-2xl' : 'max-w-md'} rounded-xl bg-white p-5 shadow-xl`}>
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-neutral-900">{title}</h2>
+      <div className="p-5">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h2 id={titleId} className="text-lg font-semibold text-neutral-900">{title}</h2>
           <button
-            onClick={onClose}
+            type="button"
+            onClick={requestClose}
             className="cursor-pointer rounded-lg p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600"
             aria-label="Cerrar"
           >
@@ -146,7 +217,7 @@ export function Modal({
         </div>
         {children}
       </div>
-    </div>
+    </dialog>
   )
 }
 

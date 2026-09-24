@@ -145,7 +145,9 @@ function GroupEditor({
   const errors = useSaveErrors()
 
   // Un solo estado, inicializado con lo que ya llegó: el editor se monta con su grupo.
-  const [draft, setDraft] = useState(() => (group ? groupDraftFrom(group) : emptyGroupDraft()))
+  // Cada cambio crea un borrador nuevo, así que distinto del inicial es «editado».
+  const [initial] = useState(() => (group ? groupDraftFrom(group) : emptyGroupDraft()))
+  const [draft, setDraft] = useState(initial)
   const patch = (changes: Partial<ModifierGroupDraft>) =>
     setDraft((current) => ({ ...current, ...changes }))
 
@@ -164,7 +166,12 @@ function GroupEditor({
   }))
 
   return (
-    <Modal title={group ? `Editar "${group.name}"` : 'Nuevo grupo de modificadores'} onClose={onClose} wide>
+    <Modal
+      title={group ? `Editar "${group.name}"` : 'Nuevo grupo de modificadores'}
+      onClose={onClose}
+      hasUnsavedChanges={draft !== initial}
+      wide
+    >
       <div className="space-y-4">
         <Field label="Nombre del grupo">
           <Input

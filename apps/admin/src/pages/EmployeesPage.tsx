@@ -163,6 +163,9 @@ function EmployeeForm({
   const [active, setActive] = useState(employee?.is_active ?? true)
   const [legacyId, setLegacyId] = useState('')
   const [existingId, setExistingId] = useState('')
+  // Cualquier campo que el usuario toque dispara `change` y sube hasta el <form>:
+  // con eso alcanza para saber si cerrar descartaría algo, sin comparar ocho estados.
+  const [edited, setEdited] = useState(false)
 
   // La misma consulta de sucursales que el resto del panel; acá solo se ofrecen las activas.
   const branches = useQuery({
@@ -192,9 +195,14 @@ function EmployeeForm({
   const loadFailed = branches.isError || legacy.isError || accounts.isError
 
   return (
-    <Modal title={employee ? 'Editar empleado' : 'Agregar empleado'} onClose={onClose}>
+    <Modal
+      title={employee ? 'Editar empleado' : 'Agregar empleado'}
+      onClose={onClose}
+      hasUnsavedChanges={edited}
+    >
       <form
         className="space-y-4"
+        onChange={() => setEdited(true)}
         onSubmit={(event) => {
           event.preventDefault()
           save.mutate()
@@ -333,7 +341,11 @@ function ResetPasswordModal({
   })
 
   return (
-    <Modal title={`Restablecer contraseña de ${employee.full_name}`} onClose={onClose}>
+    <Modal
+      title={`Restablecer contraseña de ${employee.full_name}`}
+      onClose={onClose}
+      hasUnsavedChanges={password !== ''}
+    >
       <form
         className="space-y-4"
         onSubmit={(event) => {
