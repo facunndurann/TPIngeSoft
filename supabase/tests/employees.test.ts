@@ -1,7 +1,8 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
-import { normalizeUsername, employeeEmail, transitionPermission } from '../../packages/shared/src/employees.ts'
-import { createEmployeeHandler, parseEmployeeRequest, type EmployeeGateway } from '../functions/employee-accounts/handler.ts'
+import { normalizeUsername, employeeEmail, employeeRequestSchema, toggleRole, transitionPermission } from '../../packages/shared/src/employees.ts'
+import { appErrorBodySchema, appErrors } from '../../packages/shared/src/errors.ts'
+import { createEmployeeHandler, type EmployeeGateway } from '../functions/employee-accounts/handler.ts'
 
 const restaurantId = '00000000-0000-4000-8000-000000000001'
 const userId = '00000000-0000-4000-8000-000000000002'
@@ -25,19 +26,44 @@ function fixture(fail?: 'authorize' | 'save' | 'cleanup') {
 test('username is globally normalized; display names are not login identifiers', () => {
   assert.equal(normalizeUsername(' Ana.Perez '), 'ana.perez')
   assert.equal(employeeEmail('ANA.PEREZ', 'employees.example.com'), 'ana.perez@employees.example.com')
-  for (const value of ['ab', 'ana@other.com', 'éloise', 'a b', '.ana', 'ana.', 'a'.repeat(33)]) assert.throws(() => normalizeUsername(value))
-  assert.equal(parseEmployeeRequest(input).fullName, parseEmployeeRequest({ ...input, username: 'other.user' }).fullName)
+  for (const value of ['ab', 'ana@other.com', 'éloise', 'a b', '.ana', 'ana.', 'a'.repeat(33)]) {
+    assert.throws(() => normalizeUsername(value))
+    assert.equal(employeeRequestSchema.safeParse({ ...input, username: value }).success, false)
+  }
+  // El schema normaliza igual que normalizeUsername: es lo que se guarda.
+  const parsed = employeeRequestSchema.parse(input)
+  assert.ok(parsed.action === 'create')
+  assert.equal(parsed.username, 'ana.perez')
 })
 test('request rejects identity spoofing, ownership, invalid branches and weak passwords', () => {
   for (const extra of [{ actor: userId }, { employeeId: userId }, { userId }, { roles: ['owner'] },
     { roles: ['manager','waiter'] }, { branchIds: [] }, { password: '1234' }, { active: 'true' }]) {
-    assert.throws(() => parseEmployeeRequest({ ...input, ...extra }))
+    assert.equal(employeeRequestSchema.safeParse({ ...input, ...extra }).success, false)
   }
+  // Cada acción lleva solo lo suyo: restablecer no cambia roles ni actualizar cambia la contraseña.
+  assert.equal(employeeRequestSchema.safeParse({ action: 'reset-password', restaurantId, userId, password: input.password, roles: ['waiter'] }).success, false)
+  const { username: _username, ...update } = input
+  assert.equal(employeeRequestSchema.safeParse({ ...update, action: 'update', userId }).success, false)
 })
-test('authorization runs before any Auth mutation', async () => {
+test('manager is exclusive when toggling roles, matching what the request accepts', () => {
+  assert.deepEqual(toggleRole(['waiter', 'cashier'], 'manager', true), ['manager'])
+  assert.deepEqual(toggleRole(['manager'], 'waiter', true), ['waiter'])
+  assert.deepEqual(toggleRole(['waiter'], 'cashier', true), ['waiter', 'cashier'])
+  assert.deepEqual(toggleRole(['waiter', 'cashier'], 'waiter', false), ['cashier'])
+  assert.deepEqual(toggleRole(['waiter'], 'waiter', true), ['waiter'])
+})
+test('authorization runs before any Auth mutation and answers with the catalog body', async () => {
   const f = fixture('authorize')
-  assert.equal((await f.request()).status, 403)
+  const response = await f.request()
+  assert.equal(response.status, appErrors.FORBIDDEN.status)
   assert.deepEqual(f.calls, ['authorize'])
+  const body = appErrorBodySchema.parse(await response.json())
+  assert.equal(body.error.code, 'FORBIDDEN')
+})
+test('a taken username keeps its own catalog code', async () => {
+  const f = fixture('save')
+  const body = appErrorBodySchema.parse(await (await f.request()).json())
+  assert.deepEqual(body.error, { code: 'USERNAME_TAKEN', message: appErrors.USERNAME_TAKEN.message })
 })
 test('creation uses normalized internal email and then atomic membership save', async () => {
   const f = fixture()

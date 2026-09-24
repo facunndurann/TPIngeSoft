@@ -50,14 +50,28 @@ test('draftPrice solo acepta un precio real', () => {
   assert.equal(draftPrice({ ...base, basePrice: '-5' }), null)
 })
 
-test('draftErrors nombra el primer problema que impide guardar', () => {
+test('draftErrors dice qué campo impide guardar y por qué', () => {
   const valid = { ...emptyDraft(), name: 'Papas', categoryId: 'c1', basePrice: '500' }
-  assert.equal(draftErrors(valid), null)
-  assert.match(draftErrors({ ...valid, name: '  ' })!, /nombre/)
-  assert.match(draftErrors({ ...valid, categoryId: '' })!, /categoría/)
-  assert.match(draftErrors({ ...valid, basePrice: 'x' })!, /precio/)
-  assert.match(
-    draftErrors({ ...valid, ingredients: [{ name: '', is_removable: true, is_available: true }] })!,
-    /ingredientes/,
-  )
+  const only = (draft: typeof valid) => draftErrors(draft).map((error) => error.field)
+  assert.deepEqual(draftErrors(valid), [])
+  assert.deepEqual(only({ ...valid, name: '  ' }), ['name'])
+  assert.deepEqual(only({ ...valid, categoryId: '' }), ['categoryId'])
+  assert.deepEqual(only({ ...valid, basePrice: 'x' }), ['basePrice'])
+  assert.match(draftErrors({ ...valid, basePrice: '' })[0].message, /precio/)
+})
+
+test('draftErrors junta todos los problemas en el orden del formulario', () => {
+  const ingredient = (name: string) => ({ name, is_removable: true, is_available: true })
+  const errors = draftErrors({
+    ...emptyDraft(),
+    ingredients: [ingredient('Pan'), ingredient(' '), ingredient('')],
+  })
+  // Cada ingrediente vacío es su propio campo: el error va debajo de esa fila.
+  assert.deepEqual(errors.map((error) => error.field), [
+    'name',
+    'categoryId',
+    'basePrice',
+    'ingredient-1',
+    'ingredient-2',
+  ])
 })

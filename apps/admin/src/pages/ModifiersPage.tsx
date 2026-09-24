@@ -1,53 +1,59 @@
 import { useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
-import { formatPrice, fromPostgres } from '@restaurant-platform/shared'
-import { modifierGroupsQuery, type ModifierGroupWithOptions } from '@/queries/modifier-groups'
+import { Page } from '@/features/Page'
+import { supabase, unwrap } from '@/lib/supabase'
+import { formatPrice } from '@restaurant-platform/shared'
+import {
+  emptyGroupDraft,
+  groupDraftErrors,
+  groupDraftFrom,
+  newOptionDraft,
+  type ModifierGroupDraft,
+  type OptionDraft,
+} from '@/features/modifier-group-draft'
+import {
+  modifierGroupsQuery,
+  saveModifierGroup,
+  type ModifierGroupWithOptions,
+} from '@/queries/modifier-groups'
 import { useRestaurant } from '@/restaurant/restaurant-context'
-import { Badge, Button, EmptyState, ErrorText, Field, Input, Modal, Spinner, Toggle } from '@restaurant-platform/ui'
-
-/** Opción tal como se envía a save_modifier_group; sin `id` es una opción nueva. */
-type OptionDraft = {
-  id?: string
-  name: string
-  price_delta: number
-  is_available: boolean
-}
+import { Badge, Button, EmptyState, ErrorText, Field, IconButton, Input, Modal, Spinner, Toggle, useSaveErrors } from '@restaurant-platform/ui'
 
 export function ModifiersPage() {
   const restaurant = useRestaurant()
   const queryClient = useQueryClient()
   const [editing, setEditing] = useState<ModifierGroupWithOptions | 'new' | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const errors = useSaveErrors()
 
   const { data: groups, isLoading } = useQuery(modifierGroupsQuery(restaurant.id))
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: modifierGroupsQuery(restaurant.id).queryKey })
 
-  async function deleteGroup(group: ModifierGroupWithOptions) {
-    if (!confirm(`¿Eliminar el grupo "${group.name}" y todas sus opciones?`)) return
-    const { error: dErr } = await supabase.from('modifier_groups').delete().eq('id', group.id)
-    if (dErr) setError(dErr.message)
-    else invalidate()
+  const deleteMutation = useMutation(errors.saving('No pudimos eliminar el grupo.', {
+    mutationFn: async (id: string) =>
+      unwrap(await supabase.from('modifier_groups').delete().eq('id', id)),
+    onSuccess: invalidate,
+  }, (id) => id))
+
+  function deleteGroup(group: ModifierGroupWithOptions) {
+    if (confirm(`¿Eliminar el grupo "${group.name}" y todas sus opciones?`)) {
+      deleteMutation.mutate(group.id)
+    }
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-bold text-neutral-900">Grupos de modificadores</h1>
-          <p className="text-sm text-neutral-500">
-            Reglas de personalización reutilizables entre productos (ej: Extras, Guarnición, Salsa).
-          </p>
-        </div>
+    <Page
+      title="Grupos de modificadores"
+      description="Reglas de personalización reutilizables entre productos (ej: Extras, Guarnición, Salsa)."
+      actions={
         <Button onClick={() => setEditing('new')}>
           <Plus size={16} /> Nuevo grupo
         </Button>
-      </div>
-
-      <ErrorText error={error} fallback="No pudimos eliminar el grupo." />
+      }
+    >
+      <ErrorText error={errors.message} />
 
       {isLoading ? (
         <Spinner />
@@ -60,7 +66,7 @@ export function ModifiersPage() {
               <div className="mb-2 flex items-start justify-between gap-2">
                 <div>
                   <h2 className="font-semibold text-neutral-900">{group.name}</h2>
-                  <p className="text-xs text-neutral-500">
+                  <p className="text-xs text-muted">
                     {group.min_select > 0 ? 'Obligatorio' : 'Opcional'} · elegir{' '}
                     {group.min_select === group.max_select
                       ? group.min_select
@@ -68,29 +74,21 @@ export function ModifiersPage() {
                   </p>
                 </div>
                 <div className="flex gap-1">
-                  <button
-                    className="cursor-pointer p-1 text-neutral-400 hover:text-neutral-700"
-                    onClick={() => setEditing(group)}
-                    aria-label="Editar"
-                  >
+                  <IconButton label={`Editar ${group.name}`} onClick={() => setEditing(group)}>
                     <Pencil size={15} />
-                  </button>
-                  <button
-                    className="cursor-pointer p-1 text-neutral-400 hover:text-red-600"
-                    onClick={() => deleteGroup(group)}
-                    aria-label="Eliminar"
-                  >
+                  </IconButton>
+                  <IconButton label={`Eliminar ${group.name}`} tone="danger" onClick={() => deleteGroup(group)}>
                     <Trash2 size={15} />
-                  </button>
+                  </IconButton>
                 </div>
               </div>
               <ul className="space-y-1">
                 {group.modifier_options.map((option) => (
                   <li key={option.id} className="flex items-center justify-between text-sm">
-                    <span className={option.is_available ? 'text-neutral-700' : 'text-neutral-400 line-through'}>
+                    <span className={option.is_available ? 'text-neutral-700' : 'text-faint line-through'}>
                       {option.name}
                     </span>
-                    <span className="text-neutral-500">
+                    <span className="text-muted">
                       {option.price_delta > 0 ? `+${formatPrice(option.price_delta)}` : 'Gratis'}
                     </span>
                   </li>
@@ -101,6 +99,11 @@ export function ModifiersPage() {
                   <Badge color="red">No disponible</Badge>
                 </div>
               )}
+              {errors.messageFor(group.id) && (
+                <div className="mt-2">
+                  <ErrorText error={errors.messageFor(group.id)} />
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -108,6 +111,7 @@ export function ModifiersPage() {
 
       {editing && (
         <GroupEditor
+          key={editing === 'new' ? 'new' : editing.id}
           group={editing === 'new' ? null : editing}
           restaurantId={restaurant.id}
           onClose={() => setEditing(null)}
@@ -117,7 +121,7 @@ export function ModifiersPage() {
           }}
         />
       )}
-    </div>
+    </Page>
   )
 }
 
@@ -132,64 +136,43 @@ function GroupEditor({
   onClose: () => void
   onSaved: () => void
 }) {
-  const [name, setName] = useState(group?.name ?? '')
-  const [minSelect, setMinSelect] = useState(group?.min_select ?? 0)
-  const [maxSelect, setMaxSelect] = useState(group?.max_select ?? 1)
-  const [isAvailable, setIsAvailable] = useState(group?.is_available ?? true)
-  const [options, setOptions] = useState<OptionDraft[]>(
-    group?.modifier_options.map((o) => ({
-      id: o.id,
-      name: o.name,
-      price_delta: o.price_delta,
-      is_available: o.is_available,
-    })) ?? [],
-  )
-  const [error, setError] = useState<unknown>(null)
-  const [saving, setSaving] = useState(false)
+  const errors = useSaveErrors()
 
-  function updateOption(index: number, patch: Partial<OptionDraft>) {
-    setOptions((prev) => prev.map((option, i) => (i === index ? { ...option, ...patch } : option)))
-  }
+  // Un solo estado, inicializado con lo que ya llegó: el editor se monta con su grupo.
+  // Cada cambio crea un borrador nuevo, así que distinto del inicial es «editado».
+  const [initial] = useState(() => (group ? groupDraftFrom(group) : emptyGroupDraft()))
+  const [draft, setDraft] = useState(initial)
+  const patch = (changes: Partial<ModifierGroupDraft>) =>
+    setDraft((current) => ({ ...current, ...changes }))
 
-  function removeOption(index: number) {
-    setOptions((prev) => prev.filter((_, i) => i !== index))
-  }
+  const updateOption = (key: string, changes: Partial<OptionDraft>) =>
+    patch({
+      options: draft.options.map((option) => (option.key === key ? { ...option, ...changes } : option)),
+    })
 
-  async function handleSave() {
-    setError(null)
-    if (!name.trim()) return setError('El grupo necesita un nombre')
-    if (options.some((o) => !o.name.trim())) return setError('Todas las opciones necesitan nombre')
-    if (minSelect > maxSelect) return setError('El mínimo no puede superar al máximo')
-    if (options.length === 0) return setError('Agregá al menos una opción')
-
-    setSaving(true)
-    try {
-      // El grupo y su lista completa de opciones (en este orden) se guardan en una
-      // transacción: las opciones que ya no están en la lista se eliminan.
-      const { error: rpcErr } = await supabase.rpc('save_modifier_group', {
-        p_restaurant_id: restaurantId,
-        p_group_id: group?.id,
-        p_name: name,
-        p_min_select: minSelect,
-        p_max_select: maxSelect,
-        p_is_available: isAvailable,
-        p_options: options,
-      })
-      if (rpcErr) throw fromPostgres(rpcErr)
-
-      onSaved()
-    } catch (err) {
-      setError(err)
-    } finally {
-      setSaving(false)
-    }
-  }
+  const save = useMutation(errors.saving('No pudimos guardar el grupo.', {
+    mutationFn: async () => {
+      const invalid = groupDraftErrors(draft)
+      if (invalid) throw new Error(invalid)
+      await saveModifierGroup({ restaurantId, groupId: group?.id, draft })
+    },
+    onSuccess: onSaved,
+  }))
 
   return (
-    <Modal title={group ? `Editar "${group.name}"` : 'Nuevo grupo de modificadores'} onClose={onClose} wide>
+    <Modal
+      title={group ? `Editar "${group.name}"` : 'Nuevo grupo de modificadores'}
+      onClose={onClose}
+      hasUnsavedChanges={draft !== initial}
+      wide
+    >
       <div className="space-y-4">
         <Field label="Nombre del grupo">
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej: Extras" />
+          <Input
+            value={draft.name}
+            onChange={(e) => patch({ name: e.target.value })}
+            placeholder="Ej: Extras"
+          />
         </Field>
 
         <div className="grid grid-cols-2 gap-3">
@@ -197,74 +180,89 @@ function GroupEditor({
             <Input
               type="number"
               min={0}
-              value={minSelect}
-              onChange={(e) => setMinSelect(Number(e.target.value))}
+              value={draft.minSelect}
+              onChange={(e) => patch({ minSelect: e.target.value })}
             />
           </Field>
           <Field label="Máximo de opciones (1 = selección única)">
             <Input
               type="number"
               min={1}
-              value={maxSelect}
-              onChange={(e) => setMaxSelect(Number(e.target.value))}
+              value={draft.maxSelect}
+              onChange={(e) => patch({ maxSelect: e.target.value })}
             />
           </Field>
         </div>
 
-        <Toggle checked={isAvailable} onChange={setIsAvailable} label="Grupo disponible" />
+        <Toggle
+          checked={draft.isAvailable}
+          onChange={(isAvailable) => patch({ isAvailable })}
+          label="Grupo disponible"
+        />
 
         <div>
           <p className="mb-2 text-sm font-medium text-neutral-700">Opciones</p>
           <div className="space-y-2">
-            {options.map((option, index) => (
-              <div key={option.id ?? `new-${index}`} className="flex items-center gap-2">
-                <Input
-                  value={option.name}
-                  onChange={(e) => updateOption(index, { name: e.target.value })}
-                  placeholder="Nombre"
-                  className="flex-1"
-                />
-                <div className="flex w-32 items-center gap-1">
-                  <span className="text-sm text-neutral-500">+$</span>
+            {draft.options.map((option, index) => {
+              // Los controles de la fila se nombran por su opción; una recién
+              // agregada todavía no tiene nombre, así que va por su número.
+              const optionName = option.name.trim() || `opción ${index + 1}`
+              return (
+                <div key={option.key} className="flex items-center gap-2">
                   <Input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={option.price_delta}
-                    onChange={(e) => updateOption(index, { price_delta: Number(e.target.value) })}
+                    value={option.name}
+                    onChange={(e) => updateOption(option.key, { name: e.target.value })}
+                    placeholder="Nombre"
+                    aria-label={`Nombre de la opción ${index + 1}`}
+                    className="flex-1"
                   />
+                  <div className="flex w-32 items-center gap-1">
+                    <span className="text-sm text-muted">+$</span>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={option.price}
+                      onChange={(e) => updateOption(option.key, { price: e.target.value })}
+                      aria-label={`Precio de ${optionName}`}
+                    />
+                  </div>
+                  <Toggle
+                    checked={option.isAvailable}
+                    onChange={(isAvailable) => updateOption(option.key, { isAvailable })}
+                    label={`Disponible: ${optionName}`}
+                    hideLabel
+                  />
+                  <IconButton
+                    label={`Quitar ${optionName}`}
+                    tone="danger"
+                    onClick={() =>
+                      patch({ options: draft.options.filter((other) => other.key !== option.key) })
+                    }
+                  >
+                    <Trash2 size={15} />
+                  </IconButton>
                 </div>
-                <Toggle
-                  checked={option.is_available}
-                  onChange={(value) => updateOption(index, { is_available: value })}
-                />
-                <button
-                  className="cursor-pointer p-1 text-neutral-400 hover:text-red-600"
-                  onClick={() => removeOption(index)}
-                  aria-label="Quitar opción"
-                >
-                  <Trash2 size={15} />
-                </button>
-              </div>
-            ))}
+              )
+            })}
           </div>
           <Button
             variant="secondary"
             className="mt-2"
-            onClick={() => setOptions((prev) => [...prev, { name: '', price_delta: 0, is_available: true }])}
+            onClick={() => patch({ options: [...draft.options, newOptionDraft()] })}
           >
             <Plus size={15} /> Agregar opción
           </Button>
         </div>
 
-        <ErrorText error={error} fallback="Error guardando el grupo" />
+        <ErrorText error={errors.message} />
 
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>
             Cancelar
           </Button>
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? 'Guardando…' : 'Guardar grupo'}
+          <Button onClick={() => save.mutate()} disabled={save.isPending}>
+            {save.isPending ? 'Guardando…' : 'Guardar grupo'}
           </Button>
         </div>
       </div>

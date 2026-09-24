@@ -1,6 +1,7 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
-import { groupOrdersByColumn, localDateKey, posColumnFor } from '@restaurant-platform/shared'
+import { groupOrdersByColumn, posColumnFor } from '../src/pos.ts'
+import { localDateKey } from '../src/time.ts'
 
 test('POS board groups kitchen columns, FIFO in prep/ready, and newest first otherwise', () => {
   const orders = [

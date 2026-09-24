@@ -15,6 +15,12 @@ type MediaUploaderProps = {
   onError: (message: string | null) => void
 }
 
+/** Cómo se nombra cada archivo de la lista: «foto 1», «video 2». */
+function mediaName(draft: MediaDraft, index: number) {
+  const kind = draft.type === 'saved' ? draft.media.kind : mediaKindFromMimeType(draft.file.type)
+  return `${kind === 'video' ? 'video' : 'foto'} ${index + 1}`
+}
+
 /** Editor de fotos/videos de un producto: agrega, quita y previsualiza, sin subir nada. */
 export function MediaUploader({ value, onChange, onError }: MediaUploaderProps) {
   function addFiles(files: File[]) {
@@ -30,33 +36,44 @@ export function MediaUploader({ value, onChange, onError }: MediaUploaderProps) 
 
   return (
     <div className="flex flex-wrap items-center gap-4">
-      {value.map((draft, index) => (
-        <div key={draft.key} className="relative group">
-          {draft.type === 'saved' ? (
-            <MediaThumb media={draft.media} alt={`Vista previa ${index + 1}`} className="h-24 w-24" />
-          ) : (
-            <FilePreview file={draft.file} alt={`Vista previa ${index + 1}`} />
-          )}
-          <button
-            type="button"
-            onClick={() => onChange(value.filter((other) => other.key !== draft.key))}
-            className="absolute -top-2 -right-2 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full bg-red-500 text-white shadow-sm hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
-            aria-label="Quitar archivo"
-          >
-            <Trash2 size={12} />
-          </button>
-        </div>
-      ))}
+      {value.map((draft, index) => {
+        const name = mediaName(draft, index)
+        return (
+          <div key={draft.key} className="relative">
+            {draft.type === 'saved' ? (
+              <MediaThumb media={draft.media} alt={`Vista previa de la ${name}`} className="h-24 w-24" />
+            ) : (
+              <FilePreview file={draft.file} alt={`Vista previa de la ${name}`} />
+            )}
+            {/* Siempre visible: con teclado o en una tablet no hay hover que lo
+                muestre. El botón mide 32 px para tocarlo; el círculo de adentro,
+                24, para no tapar más foto que antes. */}
+            <button
+              type="button"
+              onClick={() => onChange(value.filter((other) => other.key !== draft.key))}
+              className="group absolute -top-3 -right-3 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+              aria-label={`Quitar ${name}`}
+              title={`Quitar ${name}`}
+            >
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-red-600 text-white shadow-sm ring-2 ring-white transition-colors group-hover:bg-red-700">
+                <Trash2 size={12} aria-hidden="true" />
+              </span>
+            </button>
+          </div>
+        )
+      })}
 
       {value.length < PRODUCT_MEDIA_LIMIT && (
-        <label className="flex h-24 w-24 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-neutral-300 bg-neutral-50 text-neutral-500 hover:bg-neutral-100">
-          <Upload size={20} />
+        // El input queda enfocable (sr-only, no `hidden`): con `display: none` no
+        // había forma de agregar una foto con el teclado. El recuadro muestra su foco.
+        <label className="flex h-24 w-24 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-neutral-300 bg-neutral-50 text-muted hover:bg-neutral-100 has-[input:focus-visible]:ring-2 has-[input:focus-visible]:ring-primary">
+          <Upload size={20} aria-hidden="true" />
           <span className="text-xs font-medium">Subir</span>
           <input
             type="file"
             accept="image/*,video/*"
             multiple
-            className="hidden"
+            className="sr-only"
             onChange={(e) => {
               addFiles(Array.from(e.target.files ?? []))
               // Permite volver a elegir el mismo archivo después de quitarlo.

@@ -4,11 +4,13 @@ import {
   clampSpan,
   clampToGrid,
   collidesWithAny,
-  tableFootprint,
-  type Footprint,
+  occupiedBy,
+  tablePlacement,
+  type TableSpan,
 } from '@restaurant-platform/shared'
 import { FloorGrid } from '@restaurant-platform/ui'
-import type { FloorTable } from './floor-api'
+import type { FloorTable } from '@/queries/floor'
+import { OVERLAP_MESSAGE, overlapsAt } from './placement'
 
 type Gesture =
   | {
@@ -35,7 +37,7 @@ type FloorCanvasProps = {
   onSelect: (tableId: string) => void
   /** Ausente en modo visualizar: el plano queda de solo lectura. */
   onMove?: (tableId: string, x: number, y: number) => void
-  onResize?: (tableId: string, width: number, height: number) => void
+  onResize?: (table: FloorTable, span: TableSpan) => void
   onReject?: (message: string) => void
 }
 
@@ -45,8 +47,6 @@ const ARROW_STEPS: Record<string, { dx: number; dy: number }> = {
   ArrowUp: { dx: 0, dy: -1 },
   ArrowDown: { dx: 0, dy: 1 },
 }
-
-const OVERLAP_MESSAGE = 'Ahí se superpone con otra mesa. Buscá un lugar libre.'
 
 /**
  * Plano del sector. Las mesas se arrastran y se estiran sobre una grilla: se
@@ -68,14 +68,6 @@ export function FloorCanvas({
   const [gesture, setGesture] = useState<Gesture | null>(null)
   const editable = !!onMove
 
-  const layoutOf = (table: FloorTable) => {
-    const footprint = tableFootprint(table)
-    return { footprint, ...clampToGrid(table.position_x, table.position_y, footprint) }
-  }
-
-  const obstaclesFor = (tableId: string) =>
-    tables.filter((other) => other.id !== tableId).map(layoutOf)
-
   const cellFromPointer = (event: { clientX: number; clientY: number }) => {
     const grid = surface.current?.firstElementChild?.getBoundingClientRect()
     if (!grid) return { x: 0, y: 0 }
@@ -86,7 +78,7 @@ export function FloorCanvas({
   /** Caja del gesto en curso; sin gesto, FloorGrid dibuja la posición guardada. */
   const previewOf = (table: FloorTable) => {
     if (gesture?.tableId !== table.id) return null
-    const saved = layoutOf(table)
+    const saved = tablePlacement(table)
     return gesture.kind === 'move'
       ? { footprint: saved.footprint, x: gesture.x, y: gesture.y }
       : { footprint: { w: gesture.width, h: gesture.height }, x: saved.x, y: saved.y }
@@ -95,7 +87,7 @@ export function FloorCanvas({
   function startMove(event: ReactPointerEvent<HTMLElement>, table: FloorTable) {
     onSelect(table.id)
     if (!editable) return
-    const origin = layoutOf(table)
+    const origin = tablePlacement(table)
     const pointer = cellFromPointer(event)
     event.currentTarget.setPointerCapture(event.pointerId)
     setGesture({
@@ -112,18 +104,18 @@ export function FloorCanvas({
   function moveTo(event: ReactPointerEvent<HTMLElement>, table: FloorTable) {
     if (gesture?.kind !== 'move' || gesture.tableId !== table.id) return
     const pointer = cellFromPointer(event)
-    const footprint: Footprint = tableFootprint(table)
+    const { footprint } = tablePlacement(table)
     const next = clampToGrid(pointer.x - gesture.offsetX, pointer.y - gesture.offsetY, footprint)
     setGesture({
       ...gesture,
       ...next,
-      valid: !collidesWithAny({ ...next, footprint }, obstaclesFor(table.id)),
+      valid: !overlapsAt(table, next.x, next.y, tables),
     })
   }
 
   function startResize(event: ReactPointerEvent<HTMLElement>, table: FloorTable) {
     event.stopPropagation()
-    const { footprint } = layoutOf(table)
+    const { footprint } = tablePlacement(table)
     event.currentTarget.setPointerCapture(event.pointerId)
     setGesture({
       kind: 'resize',
@@ -138,7 +130,7 @@ export function FloorCanvas({
     if (gesture?.kind !== 'resize' || gesture.tableId !== table.id) return
     event.stopPropagation()
     const pointer = cellFromPointer(event)
-    const origin = layoutOf(table)
+    const origin = tablePlacement(table)
     // La esquina superior izquierda no se mueve: el lado es la distancia hasta
     // el puntero, recortada a lo que queda de grilla.
     const width = clampSpan(pointer.x - origin.x, FLOOR_GRID.cols - origin.x)
@@ -149,14 +141,14 @@ export function FloorCanvas({
       height,
       valid: !collidesWithAny(
         { x: origin.x, y: origin.y, footprint: { w: width, h: height } },
-        obstaclesFor(table.id),
+        occupiedBy(tables, table.id),
       ),
     })
   }
 
   function endGesture(table: FloorTable) {
     if (gesture?.tableId !== table.id) return
-    const origin = layoutOf(table)
+    const origin = tablePlacement(table)
 
     if (gesture.kind === 'move') {
       const moved = gesture.x !== origin.x || gesture.y !== origin.y
@@ -164,22 +156,22 @@ export function FloorCanvas({
       if (moved && !gesture.valid) onReject?.(OVERLAP_MESSAGE)
     } else {
       const resized = gesture.width !== origin.footprint.w || gesture.height !== origin.footprint.h
-      if (resized && gesture.valid) onResize?.(table.id, gesture.width, gesture.height)
+      if (resized && gesture.valid) onResize?.(table, { width: gesture.width, height: gesture.height })
       if (resized && !gesture.valid) onReject?.(OVERLAP_MESSAGE)
     }
     setGesture(null)
   }
 
-  /** Mover con flechas: precisión fina y la única vía sin mouse. */
+  /** Mover con flechas: precisión fina sin salir del plano. La otra vía sin arrastrar son los campos del inspector. */
   function handleKeyDown(event: KeyboardEvent<HTMLElement>, table: FloorTable) {
     if (!editable) return
     const step = ARROW_STEPS[event.key]
     if (!step) return
     event.preventDefault()
-    const origin = layoutOf(table)
+    const origin = tablePlacement(table)
     const next = clampToGrid(origin.x + step.dx, origin.y + step.dy, origin.footprint)
     if (next.x === origin.x && next.y === origin.y) return
-    if (collidesWithAny({ ...next, footprint: origin.footprint }, obstaclesFor(table.id))) {
+    if (overlapsAt(table, next.x, next.y, tables)) {
       onReject?.(OVERLAP_MESSAGE)
       return
     }
@@ -208,16 +200,16 @@ export function FloorCanvas({
                 onPointerUp={() => endGesture(table)}
                 onPointerCancel={() => setGesture(null)}
                 onKeyDown={(event) => handleKeyDown(event, table)}
-                className={`absolute flex flex-col items-center justify-center overflow-hidden border-2 text-center transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none ${
+                className={`absolute flex flex-col items-center justify-center overflow-hidden border-2 text-center transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
                   editable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
                 } ${tile.shapeClass} ${
                   invalid
                     ? 'border-red-500 bg-red-50 text-red-700'
                     : selected
-                      ? 'border-indigo-600 bg-indigo-50 text-indigo-900'
+                      ? 'border-primary bg-primary-soft text-primary-ink'
                       : muted
-                        ? 'border-dashed border-neutral-300 bg-neutral-50 text-neutral-400'
-                        : 'border-neutral-300 bg-white text-neutral-700 hover:border-indigo-400'
+                        ? 'border-dashed border-neutral-300 bg-neutral-50 text-faint'
+                        : 'border-neutral-300 bg-white text-neutral-700 hover:border-primary/70'
                 }`}
                 style={{ ...tile.box, zIndex: active ? 10 : 1 }}
                 aria-label={`${table.label}, ${table.seats} lugares${muted ? ', no operable' : ''}${
@@ -228,19 +220,17 @@ export function FloorCanvas({
                 <span className="text-[10px] leading-tight opacity-70">{table.seats} lug.</span>
               </button>
 
-              {/* Manija de tamaño: solo sobre la mesa elegida, para no ensuciar el plano. */}
+              {/* Manija de tamaño: solo sobre la mesa elegida, para no ensuciar el plano.
+                  Es un atajo para el mouse y el dedo, sin rol ni foco: el tamaño con
+                  teclado o con un solo toque se cambia en el inspector (Ancho y Alto). */}
               {editable && selected && (
                 <span
-                  role="slider"
-                  aria-label={`Tamaño de ${table.label}: ${tile.footprint.w} por ${tile.footprint.h} celdas`}
-                  aria-valuetext={`${tile.footprint.w} por ${tile.footprint.h} celdas`}
-                  aria-valuenow={tile.footprint.w}
-                  tabIndex={-1}
+                  aria-hidden="true"
                   onPointerDown={(event) => startResize(event, table)}
                   onPointerMove={(event) => resizeTo(event, table)}
                   onPointerUp={() => endGesture(table)}
                   onPointerCancel={() => setGesture(null)}
-                  className="absolute h-3.5 w-3.5 cursor-se-resize rounded-sm border-2 border-white bg-indigo-600 shadow"
+                  className="absolute h-3.5 w-3.5 cursor-se-resize rounded-sm border-2 border-white bg-primary shadow"
                   style={{
                     left: tile.box.left + tile.box.width - 4,
                     top: tile.box.top + tile.box.height - 4,

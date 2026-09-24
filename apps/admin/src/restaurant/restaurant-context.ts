@@ -22,8 +22,3 @@ export function useMembership(): Membership {
 export function useRestaurant(): Restaurant {
   return useMembership().restaurant
 }
-
-/** Roles con admin.manage; la base vuelve a verificar membresía activa y permisos. */
-export function useIsAdmin(): boolean {
-  return ['owner', 'manager'].includes(useMembership().role)
-}

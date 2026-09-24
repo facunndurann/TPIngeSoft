@@ -1,26 +1,22 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Store } from 'lucide-react'
-import { DEFAULT_MENU_DESIGN, fromPostgres } from '@restaurant-platform/shared'
-import { myRestaurantQuery } from '@/queries/restaurant'
-import { supabase } from '@/lib/supabase'
-import { Button, ErrorText, Field, Input, Spinner, Textarea, useAuth } from '@restaurant-platform/ui'
+import { DEFAULT_MENU_DESIGN } from '@restaurant-platform/shared'
+import { myRestaurantKey, myRestaurantQuery } from '@/queries/restaurant'
+import { supabase, unwrap } from '@/lib/supabase'
+import { Button, ErrorText, Field, Input, Spinner, Textarea } from '@restaurant-platform/ui'
 import { DesignPicker } from '@/features/DesignPicker'
 import { RestaurantContext } from './restaurant-context'
 
 /**
- * Carga el restaurante del usuario autenticado y su rol. Solo owner/manager
- * administran. Un empleado con profile y sin rol admin se echa. Si todavía no
- * tiene restaurante, muestra el onboarding.
+ * Único control de acceso del panel. La consulta solo trae una membresía
+ * owner/manager activa, así que todo lo que se monta adentro ya es
+ * administración: ninguna ruta vuelve a preguntar el rol, y la RLS verifica los
+ * permisos en cada consulta. Un empleado con profile y sin rol admin se echa; si
+ * todavía no tiene restaurante, se muestra el onboarding.
  */
-export function RestaurantGate({ children }: { children: ReactNode }) {
-  const { session } = useAuth()
-  const userId = session?.user.id ?? ''
-  const { data, isLoading, isError } = useQuery({
-    ...myRestaurantQuery,
-    queryKey: ['my-restaurant', userId],
-    enabled: Boolean(userId),
-  })
+export function RestaurantGate({ userId, children }: { userId: string; children: ReactNode }) {
+  const { data, isLoading, isError } = useQuery(myRestaurantQuery(userId))
 
   if (isLoading) return <Spinner />
   if (isError) {
@@ -60,16 +56,16 @@ function CreateRestaurantScreen() {
     setError(null)
     setSubmitting(true)
     try {
-      const { error: rpcErr } = await supabase.rpc('create_restaurant', {
-        p_name: name,
-        p_slug: slugify(name),
-        p_description: description,
-        p_menu_design: menuDesign,
-        p_branch_name: branchName,
-      })
-      if (rpcErr) throw fromPostgres(rpcErr)
-
-      await queryClient.invalidateQueries({ queryKey: ['my-restaurant'] })
+      unwrap(
+        await supabase.rpc('create_restaurant', {
+          p_name: name,
+          p_slug: slugify(name),
+          p_description: description,
+          p_menu_design: menuDesign,
+          p_branch_name: branchName,
+        }),
+      )
+      await queryClient.invalidateQueries({ queryKey: myRestaurantKey })
     } catch (err) {
       setError(err)
     } finally {
@@ -78,14 +74,15 @@ function CreateRestaurantScreen() {
   }
 
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-neutral-100 p-4">
+    <main className="flex min-h-dvh items-center justify-center bg-canvas p-4">
+      <title>Creá tu restaurante · Panel del restaurante</title>
       <div className="w-full max-w-2xl rounded-xl bg-white p-6 shadow-sm">
         <div className="mb-6 flex flex-col items-center gap-2">
-          <div className="rounded-xl bg-indigo-600 p-3 text-white">
+          <div className="rounded-xl bg-primary p-3 text-white">
             <Store size={22} />
           </div>
           <h1 className="text-xl font-bold text-neutral-900">Creá tu restaurante</h1>
-          <p className="text-center text-sm text-neutral-500">
+          <p className="text-center text-sm text-muted">
             Tu cuenta todavía no administra ningún restaurante.
           </p>
         </div>
@@ -115,7 +112,7 @@ function CreateRestaurantScreen() {
           </Button>
         </form>
         <button
-          className="mt-4 w-full cursor-pointer text-center text-sm text-neutral-500 hover:underline"
+          className="mt-4 w-full cursor-pointer text-center text-sm text-muted hover:underline"
           onClick={() => supabase.auth.signOut()}
         >
           Cerrar sesión

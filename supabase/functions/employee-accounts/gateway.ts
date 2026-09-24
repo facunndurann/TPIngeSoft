@@ -12,8 +12,10 @@ export async function authenticateEmployees(url: string, anonKey: string, servic
   return {
     async authorize(input) {
       const { error } = await admin.rpc('authorize_employee_change', {
-        p_actor: actor, p_restaurant: input.restaurantId, p_user: input.userId,
-        p_roles: input.roles ?? [], p_global: input.action === 'reset-password',
+        p_actor: actor, p_restaurant: input.restaurantId,
+        p_user: input.action === 'create' ? undefined : input.userId,
+        p_roles: input.action === 'reset-password' ? [] : input.roles,
+        p_global: input.action === 'reset-password',
       })
       check(error)
     },
@@ -33,15 +35,16 @@ export async function authenticateEmployees(url: string, anonKey: string, servic
     async save(input, userId) {
       const { error } = await admin.rpc('save_employee_account', {
         p_actor: actor, p_restaurant: input.restaurantId, p_user: userId,
-        p_full_name: input.fullName!, p_roles: input.roles!, p_branches: input.branchIds!,
-        p_active: input.active!, p_username: input.username, p_legacy: input.legacyId,
+        p_full_name: input.fullName, p_roles: input.roles, p_branches: input.branchIds,
+        p_active: input.active, p_username: input.action === 'create' ? input.username : undefined,
+        p_legacy: input.legacyId,
       })
       check(error)
     },
     async resetPassword(id, password) { const { error } = await admin.auth.admin.updateUserById(id, { password }); check(error) },
     async auditReset(input, completed) {
       const { error } = await admin.rpc('audit_employee_password_reset', {
-        p_actor: actor, p_restaurant: input.restaurantId, p_user: input.userId!, p_completed: completed,
+        p_actor: actor, p_restaurant: input.restaurantId, p_user: input.userId, p_completed: completed,
       })
       check(error)
     },
