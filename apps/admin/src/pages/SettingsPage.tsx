@@ -132,17 +132,23 @@ function BranchesSection({ restaurantId }: { restaurantId: string }) {
         </p>
       </div>
 
-      <form onSubmit={handleCreate} className="flex gap-2">
-        <Input
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-          placeholder="Nombre (ej: Sucursal Centro)"
-        />
-        <Input
-          value={newAddress}
-          onChange={(e) => setNewAddress(e.target.value)}
-          placeholder="Dirección (opcional)"
-        />
+      {/* Dos campos: con el texto ya escrito, el placeholder no dice cuál es cuál,
+          así que llevan rótulo visible. En pantallas chicas se apilan. */}
+      <form onSubmit={handleCreate} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+        <Field label="Nombre de la sucursal">
+          <Input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="Ej: Sucursal Centro"
+          />
+        </Field>
+        <Field label="Dirección (opcional)">
+          <Input
+            value={newAddress}
+            onChange={(e) => setNewAddress(e.target.value)}
+            placeholder="Ej: Av. Corrientes 1234"
+          />
+        </Field>
         <Button type="submit" disabled={createMutation.isPending}>
           <Plus size={16} /> Agregar
         </Button>

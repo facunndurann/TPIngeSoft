@@ -84,7 +84,11 @@ export function TablesPage() {
       </div>
 
       {branches && branches.length > 1 && (
-        <Select value={branchId ?? ''} onChange={(e) => setSelectedBranchId(e.target.value)}>
+        <Select
+          value={branchId ?? ''}
+          onChange={(e) => setSelectedBranchId(e.target.value)}
+          aria-label="Sucursal"
+        >
           {branches.map((branch) => (
             <option key={branch.id} value={branch.id}>
               {branch.name}
@@ -98,6 +102,7 @@ export function TablesPage() {
           value={newLabel}
           onChange={(e) => setNewLabel(e.target.value)}
           placeholder="Nueva mesa (ej: Mesa 5)"
+          aria-label="Identificador de la nueva mesa"
         />
         <Button type="submit" disabled={createMutation.isPending || !branchId}>
           <Plus size={16} /> Agregar

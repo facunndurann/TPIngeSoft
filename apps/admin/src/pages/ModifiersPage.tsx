@@ -211,6 +211,7 @@ function GroupEditor({
                     value={option.name}
                     onChange={(e) => updateOption(option.key, { name: e.target.value })}
                     placeholder="Nombre"
+                    aria-label={`Nombre de la opción ${index + 1}`}
                     className="flex-1"
                   />
                   <div className="flex w-32 items-center gap-1">

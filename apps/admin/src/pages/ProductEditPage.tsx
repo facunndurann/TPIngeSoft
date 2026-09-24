@@ -235,6 +235,7 @@ function ProductForm({ productId, title, initial, categories, groups }: ProductF
                 value={ingredient.name}
                 onChange={(e) => updateIngredient(index, { name: e.target.value })}
                 placeholder="Ej: Cebolla"
+                aria-label={`Ingrediente ${index + 1}`}
                 className="flex-1"
               />
               <Toggle

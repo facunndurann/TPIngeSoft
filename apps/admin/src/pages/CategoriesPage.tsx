@@ -91,6 +91,7 @@ export function CategoriesPage() {
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
           placeholder="Nueva categoría (ej: Postres)"
+          aria-label="Nombre de la nueva categoría"
         />
         <Button type="submit" disabled={createMutation.isPending}>
           <Plus size={16} /> Agregar
@@ -136,7 +137,12 @@ export function CategoriesPage() {
                     updateMutation.mutate({ id: category.id, name: editingName })
                   }}
                 >
-                  <Input value={editingName} onChange={(e) => setEditingName(e.target.value)} autoFocus />
+                  <Input
+                    value={editingName}
+                    onChange={(e) => setEditingName(e.target.value)}
+                    aria-label={`Nuevo nombre de ${category.name}`}
+                    autoFocus
+                  />
                   <Button type="submit" variant="secondary" aria-label="Guardar nombre">
                     <Check size={15} />
                   </Button>

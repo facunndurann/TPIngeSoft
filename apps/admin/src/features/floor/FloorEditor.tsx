@@ -194,7 +194,13 @@ function RenameSectionForm({
         if (next) onSave(next)
       }}
     >
-      <Input className="w-48" value={name} onChange={(event) => setName(event.target.value)} autoFocus />
+      <Input
+        className="w-48"
+        value={name}
+        onChange={(event) => setName(event.target.value)}
+        aria-label={`Nuevo nombre de ${section.name}`}
+        autoFocus
+      />
       <Button type="submit" variant="secondary" aria-label="Guardar nombre">
         <Check size={15} />
       </Button>
