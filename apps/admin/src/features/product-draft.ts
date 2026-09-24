@@ -1,4 +1,5 @@
 import type { Tables } from '@restaurant-platform/shared'
+import { parsePrice } from '@/features/price'
 import { savedMediaDrafts, type MediaDraft } from '@/features/product-media'
 
 /** Ingrediente tal como se envía a save_product; sin `id` es un ingrediente nuevo. */
@@ -70,8 +71,7 @@ export function draftFrom(product: SavedProduct): ProductDraft {
 
 /** Precio válido del borrador, o `null` si el texto todavía no lo es. */
 export function draftPrice(draft: ProductDraft): number | null {
-  const price = Number(draft.basePrice)
-  return draft.basePrice.trim() !== '' && Number.isFinite(price) && price >= 0 ? price : null
+  return parsePrice(draft.basePrice)
 }
 
 /** Primer problema que impide guardar, o `null`. La base revalida igual. */
