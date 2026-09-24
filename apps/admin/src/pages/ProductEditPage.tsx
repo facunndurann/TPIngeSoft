@@ -70,7 +70,7 @@ export function ProductEditPage() {
 
 function BackLink() {
   return (
-    <Link to="/productos" className="text-neutral-400 hover:text-neutral-700" aria-label="Volver">
+    <Link to="/productos" className="text-faint hover:text-neutral-700" aria-label="Volver">
       <ArrowLeft size={20} />
     </Link>
   )
@@ -185,8 +185,8 @@ function ProductForm({ productId, title, initial, categories, groups }: ProductF
                 onClick={() => patch({ dietaryTags: toggle(draft.dietaryTags, tag.value) })}
                 className={`cursor-pointer rounded-full px-3 py-1 text-sm font-medium transition-colors ${
                   draft.dietaryTags.includes(tag.value)
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                    ? 'bg-primary text-white'
+                    : 'bg-neutral-100 text-muted hover:bg-neutral-200'
                 }`}
               >
                 {tag.label}
@@ -217,7 +217,7 @@ function ProductForm({ productId, title, initial, categories, groups }: ProductF
       <section className="space-y-3 rounded-xl border border-neutral-200 bg-white p-5">
         <div>
           <h2 className="font-semibold text-neutral-900">Ingredientes</h2>
-          <p className="text-sm text-neutral-500">
+          <p className="text-sm text-muted">
             Declarar la composición permite que el cliente quite lo que no quiere (solo lo marcado como
             removible).
           </p>
@@ -237,7 +237,7 @@ function ProductForm({ productId, title, initial, categories, groups }: ProductF
                 label="Removible"
               />
               <button
-                className="cursor-pointer p-1 text-neutral-400 hover:text-red-600"
+                className="cursor-pointer p-1 text-faint hover:text-red-600"
                 onClick={() => patch({ ingredients: draft.ingredients.filter((_, i) => i !== index) })}
                 aria-label="Quitar ingrediente"
               >
@@ -261,14 +261,14 @@ function ProductForm({ productId, title, initial, categories, groups }: ProductF
       <section className="space-y-3 rounded-xl border border-neutral-200 bg-white p-5">
         <div>
           <h2 className="font-semibold text-neutral-900">Personalización</h2>
-          <p className="text-sm text-neutral-500">
+          <p className="text-sm text-muted">
             Grupos de modificadores que aplican a este producto (se crean en la sección Modificadores).
           </p>
         </div>
         {groups.length === 0 ? (
-          <p className="text-sm text-neutral-500">
+          <p className="text-sm text-muted">
             Todavía no hay grupos.{' '}
-            <Link to="/modificadores" className="text-indigo-600 hover:underline">
+            <Link to="/modificadores" className="text-primary hover:underline">
               Crear el primero
             </Link>
           </p>
@@ -280,10 +280,10 @@ function ProductForm({ productId, title, initial, categories, groups }: ProductF
                   type="checkbox"
                   checked={draft.groupIds.includes(group.id)}
                   onChange={() => patch({ groupIds: toggle(draft.groupIds, group.id) })}
-                  className="h-4 w-4 accent-indigo-600"
+                  className="h-4 w-4 accent-primary"
                 />
                 <span className="font-medium text-neutral-800">{group.name}</span>
-                <span className="text-xs text-neutral-500">
+                <span className="text-xs text-muted">
                   ({group.min_select > 0 ? 'obligatorio' : 'opcional'}, máx {group.max_select})
                 </span>
               </label>

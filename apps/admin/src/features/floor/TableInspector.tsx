@@ -146,7 +146,7 @@ export function TableInspector({ table, sections, onIntent, onDelete, busy }: Ta
     <aside className="space-y-4 rounded-xl border border-neutral-200 bg-white p-4">
       <div>
         <h2 className="text-sm font-semibold text-neutral-900">Mesa seleccionada</h2>
-        <p className="text-xs text-neutral-500">
+        <p className="text-xs text-muted">
           Posición {table.position_x}, {table.position_y} · arrastrala para moverla o tirá de la
           esquina para cambiarle el tamaño.
         </p>
@@ -208,7 +208,7 @@ export function TableInspector({ table, sections, onIntent, onDelete, busy }: Ta
             onCommit={(height) => onIntent({ kind: 'resize', width: table.width, height })}
           />
         </div>
-        <p className="mt-1 text-xs text-neutral-500">
+        <p className="mt-1 text-xs text-muted">
           Cada celda del plano equivale a un lugar de paso. Ancho distinto de alto da una mesa
           alargada.
         </p>

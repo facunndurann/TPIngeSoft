@@ -89,7 +89,7 @@ export function FloorGrid<T extends FloorGridTable>({
       {tables.map((table) => renderTable(table, tileOf(table, preview?.(table))))}
 
       {tables.length === 0 && (
-        <p className="absolute inset-0 flex items-center justify-center text-sm text-neutral-400">
+        <p className="absolute inset-0 flex items-center justify-center text-sm text-muted">
           {emptyMessage}
         </p>
       )}

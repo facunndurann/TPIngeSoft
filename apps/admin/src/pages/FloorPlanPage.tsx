@@ -53,7 +53,7 @@ export function FloorPlanPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-neutral-900">Salón</h1>
-          <p className="text-sm text-neutral-500">{MODES[mode].description}</p>
+          <p className="text-sm text-muted">{MODES[mode].description}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {(branches.data?.length ?? 0) > 1 && (
@@ -127,7 +127,7 @@ function ModeSwitch({ mode, onChange }: { mode: Mode; onChange: (mode: Mode) => 
             onClick={() => onChange(id)}
             aria-pressed={mode === id}
             className={`flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium ${
-              mode === id ? 'bg-indigo-600 text-white' : 'text-neutral-600 hover:bg-neutral-100'
+              mode === id ? 'bg-primary text-white' : 'text-muted hover:bg-neutral-100'
             }`}
           >
             <Icon size={15} />
@@ -162,8 +162,8 @@ function SectionTabs({
             onClick={() => onChoose(entry.id)}
             className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium ${
               entry.id === activeId
-                ? 'border-indigo-600 bg-indigo-50 text-indigo-700'
-                : 'border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50'
+                ? 'border-primary bg-primary-soft text-primary-ink'
+                : 'border-neutral-200 bg-white text-muted hover:bg-neutral-50'
             }`}
           >
             {entry.name}

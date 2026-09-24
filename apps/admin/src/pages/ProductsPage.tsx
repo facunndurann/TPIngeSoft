@@ -41,7 +41,7 @@ export function ProductsPage() {
       <div className="flex items-end justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-neutral-900">Productos</h1>
-          <p className="text-sm text-neutral-500">
+          <p className="text-sm text-muted">
             El menú que ven tus clientes: precios, fotos, ingredientes y personalización.
           </p>
         </div>
@@ -77,7 +77,7 @@ export function ProductsPage() {
         <div className="space-y-8">
           {groups.map((group) => (
             <div key={group.id}>
-              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-neutral-400">
+              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted">
                 {group.name}
               </h2>
               <ul className="space-y-2">
@@ -119,7 +119,7 @@ function ProductRow({
           <p className="truncate text-sm font-medium text-neutral-900">{product.name}</p>
           {!product.is_available && <Badge color="red">Sin stock</Badge>}
         </div>
-        <p className="text-xs text-neutral-500">{formatPrice(product.base_price)}</p>
+        <p className="text-xs text-muted">{formatPrice(product.base_price)}</p>
       </div>
       <Toggle
         checked={product.is_available}
@@ -129,13 +129,13 @@ function ProductRow({
       />
       <Link
         to={`/productos/${product.id}`}
-        className="p-1 text-neutral-400 hover:text-neutral-700"
+        className="p-1 text-faint hover:text-neutral-700"
         aria-label="Editar"
       >
         <Pencil size={15} />
       </Link>
       <button
-        className="cursor-pointer p-1 text-neutral-400 hover:text-red-600"
+        className="cursor-pointer p-1 text-faint hover:text-red-600"
         onClick={onDelete}
         aria-label="Eliminar"
       >
@@ -158,7 +158,7 @@ function FilterChip({
     <button
       onClick={onClick}
       className={`cursor-pointer rounded-full px-3 py-1 text-sm font-medium transition-colors ${
-        active ? 'bg-indigo-600 text-white' : 'bg-white text-neutral-600 hover:bg-neutral-200'
+        active ? 'bg-primary text-white' : 'bg-white text-muted hover:bg-neutral-200'
       }`}
     >
       {children}

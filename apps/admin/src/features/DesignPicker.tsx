@@ -25,7 +25,7 @@ export function DesignPicker({ value, onChange, hint }: DesignPickerProps) {
   return (
     <div>
       <p id={labelId} className="mb-2 text-sm font-medium text-neutral-700">Diseño de la carta</p>
-      <p id={hintId} className="mb-3 text-xs text-neutral-500">{hint}</p>
+      <p id={hintId} className="mb-3 text-xs text-muted">{hint}</p>
       <div
         className="grid gap-3 md:grid-cols-3"
         role="radiogroup"
@@ -41,9 +41,9 @@ export function DesignPicker({ value, onChange, hint }: DesignPickerProps) {
             <div
               key={design.id}
               style={menuDesignCssVars(design.tokens)}
-              className={`relative overflow-hidden rounded-xl border transition has-[input:focus-visible]:ring-2 has-[input:focus-visible]:ring-indigo-400 ${
+              className={`relative overflow-hidden rounded-xl border transition has-[input:focus-visible]:ring-2 has-[input:focus-visible]:ring-primary/70 ${
                 selected
-                  ? 'border-indigo-600 ring-2 ring-indigo-200'
+                  ? 'border-primary ring-2 ring-primary/25'
                   : 'border-neutral-200 hover:border-neutral-300'
               }`}
             >
@@ -86,7 +86,7 @@ export function DesignPicker({ value, onChange, hint }: DesignPickerProps) {
                 </div>
                 <div className="px-3 pb-3">
                   <p className="text-sm font-medium text-neutral-900">{design.name}</p>
-                  <p className="mt-0.5 text-xs leading-5 text-neutral-500">{design.description}</p>
+                  <p className="mt-0.5 text-xs leading-5 text-muted">{design.description}</p>
                 </div>
               </label>
               {/* Misma posición que antes sobre la muestra: p-2.5 del marco + top-2/right-2 = 18px. */}
@@ -114,7 +114,7 @@ export function DesignPicker({ value, onChange, hint }: DesignPickerProps) {
             title={`Carta de ejemplo con el diseño ${previewDesign.name}`}
             className="mx-auto block h-[70vh] max-h-[720px] w-[390px] max-w-full rounded-xl border border-neutral-200"
           />
-          <p className="mt-2 text-center text-xs text-neutral-500">
+          <p className="mt-2 text-center text-xs text-muted">
             Así ven la carta los comensales en el celular.
           </p>
         </Modal>

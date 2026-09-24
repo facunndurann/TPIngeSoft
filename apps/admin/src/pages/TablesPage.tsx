@@ -73,10 +73,10 @@ export function TablesPage() {
     <div className="mx-auto max-w-2xl space-y-4">
       <div>
         <h1 className="text-xl font-bold text-neutral-900">Mesas y códigos QR</h1>
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-muted">
           Cada mesa tiene un QR único que identifica al restaurante, la sucursal y la mesa. El sector
           y la ubicación se editan en{' '}
-          <Link to="/salon" className="text-indigo-600 hover:underline">
+          <Link to="/salon" className="text-primary hover:underline">
             Salón
           </Link>
           .
@@ -133,7 +133,7 @@ export function TablesPage() {
                 hideLabel
               />
               <button
-                className="cursor-pointer p-1 text-neutral-400 hover:text-red-600"
+                className="cursor-pointer p-1 text-faint hover:text-red-600"
                 onClick={() => {
                   if (confirm(`¿Eliminar "${table.label}"? Se pierde su QR.`)) {
                     deleteMutation.mutate(table.id)
@@ -171,8 +171,8 @@ function QrModal({
         <p className="hidden text-lg font-bold print:block">{restaurantName}</p>
         <QRCodeSVG value={url} size={220} marginSize={2} />
         <p className="text-base font-semibold text-neutral-900">{table.label}</p>
-        <p className="hidden text-sm text-neutral-500 print:block">Escaneá para ver el menú y pedir</p>
-        <code className="break-all rounded bg-neutral-100 px-2 py-1 text-xs text-neutral-600 print:hidden">
+        <p className="hidden text-sm text-muted print:block">Escaneá para ver el menú y pedir</p>
+        <code className="break-all rounded bg-neutral-100 px-2 py-1 text-xs text-muted print:hidden">
           {url}
         </code>
       </div>

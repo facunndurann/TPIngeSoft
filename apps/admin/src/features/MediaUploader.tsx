@@ -49,7 +49,7 @@ export function MediaUploader({ value, onChange, onError }: MediaUploaderProps) 
       ))}
 
       {value.length < PRODUCT_MEDIA_LIMIT && (
-        <label className="flex h-24 w-24 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-neutral-300 bg-neutral-50 text-neutral-500 hover:bg-neutral-100">
+        <label className="flex h-24 w-24 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-neutral-300 bg-neutral-50 text-muted hover:bg-neutral-100">
           <Upload size={20} />
           <span className="text-xs font-medium">Subir</span>
           <input

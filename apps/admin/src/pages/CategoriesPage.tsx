@@ -81,7 +81,7 @@ export function CategoriesPage() {
     <div className="mx-auto max-w-2xl space-y-4">
       <div>
         <h1 className="text-xl font-bold text-neutral-900">Categorías del menú</h1>
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-muted">
           Creá, renombrá y ordená las categorías que ve el cliente.
         </p>
       </div>
@@ -112,7 +112,7 @@ export function CategoriesPage() {
             >
               <div className="flex flex-col">
                 <button
-                  className="cursor-pointer text-neutral-400 hover:text-neutral-700 disabled:opacity-30"
+                  className="cursor-pointer text-faint hover:text-neutral-700 disabled:opacity-30"
                   disabled={index === 0 || reorderMutation.isPending}
                   onClick={() => move(index, -1)}
                   aria-label="Subir"
@@ -120,7 +120,7 @@ export function CategoriesPage() {
                   <ArrowUp size={15} />
                 </button>
                 <button
-                  className="cursor-pointer text-neutral-400 hover:text-neutral-700 disabled:opacity-30"
+                  className="cursor-pointer text-faint hover:text-neutral-700 disabled:opacity-30"
                   disabled={index === categories.length - 1 || reorderMutation.isPending}
                   onClick={() => move(index, 1)}
                   aria-label="Bajar"
@@ -156,7 +156,7 @@ export function CategoriesPage() {
                 hideLabel
               />
               <button
-                className="cursor-pointer p-1 text-neutral-400 hover:text-neutral-700"
+                className="cursor-pointer p-1 text-faint hover:text-neutral-700"
                 onClick={() => {
                   setEditingId(category.id)
                   setEditingName(category.name)
@@ -166,7 +166,7 @@ export function CategoriesPage() {
                 <Pencil size={15} />
               </button>
               <button
-                className="cursor-pointer p-1 text-neutral-400 hover:text-red-600"
+                className="cursor-pointer p-1 text-faint hover:text-red-600"
                 onClick={() => {
                   if (confirm(`¿Eliminar la categoría "${category.name}"?`)) {
                     deleteMutation.mutate(category.id)

@@ -42,7 +42,7 @@ export function SettingsPage() {
     <div className="mx-auto max-w-2xl space-y-5">
       <div>
         <h1 className="text-xl font-bold text-neutral-900">Restaurante</h1>
-        <p className="text-sm text-neutral-500">Información general, sucursales y medios de pago.</p>
+        <p className="text-sm text-muted">Información general, sucursales y medios de pago.</p>
       </div>
 
       <section className="space-y-4 rounded-xl border border-neutral-200 bg-white p-5">
@@ -53,7 +53,7 @@ export function SettingsPage() {
         <Field label="Descripción">
           <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
         </Field>
-        <p className="text-xs text-neutral-500">
+        <p className="text-xs text-muted">
           Identificador público: <code className="rounded bg-neutral-100 px-1">{restaurant.slug}</code>
         </p>
         <DesignPicker
@@ -126,7 +126,7 @@ function BranchesSection({ restaurantId }: { restaurantId: string }) {
     <section className="space-y-4 rounded-xl border border-neutral-200 bg-white p-5">
       <div>
         <h2 className="font-semibold text-neutral-900">Sucursales</h2>
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-muted">
           Cada sucursal decide con qué se le puede pagar: el comensal solo ve los medios
           habilitados en la suya.
         </p>
@@ -159,7 +159,7 @@ function BranchesSection({ restaurantId }: { restaurantId: string }) {
               <div className="flex items-center gap-3">
                 <div className="flex-1">
                   <p className="text-sm font-medium text-neutral-900">{branch.name}</p>
-                  {branch.address && <p className="text-xs text-neutral-500">{branch.address}</p>}
+                  {branch.address && <p className="text-xs text-muted">{branch.address}</p>}
                 </div>
                 {!branch.is_active && <Badge color="red">Inactiva</Badge>}
                 <Toggle
@@ -169,7 +169,7 @@ function BranchesSection({ restaurantId }: { restaurantId: string }) {
                   hideLabel
                 />
                 <button
-                  className="cursor-pointer p-1 text-neutral-400 hover:text-red-600"
+                  className="cursor-pointer p-1 text-faint hover:text-red-600"
                   onClick={() => {
                     if (confirm(`¿Eliminar la sucursal "${branch.name}"?`)) deleteMutation.mutate(branch.id)
                   }}

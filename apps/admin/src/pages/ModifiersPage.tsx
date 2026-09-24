@@ -47,7 +47,7 @@ export function ModifiersPage() {
       <div className="flex items-end justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-neutral-900">Grupos de modificadores</h1>
-          <p className="text-sm text-neutral-500">
+          <p className="text-sm text-muted">
             Reglas de personalización reutilizables entre productos (ej: Extras, Guarnición, Salsa).
           </p>
         </div>
@@ -69,7 +69,7 @@ export function ModifiersPage() {
               <div className="mb-2 flex items-start justify-between gap-2">
                 <div>
                   <h2 className="font-semibold text-neutral-900">{group.name}</h2>
-                  <p className="text-xs text-neutral-500">
+                  <p className="text-xs text-muted">
                     {group.min_select > 0 ? 'Obligatorio' : 'Opcional'} · elegir{' '}
                     {group.min_select === group.max_select
                       ? group.min_select
@@ -78,14 +78,14 @@ export function ModifiersPage() {
                 </div>
                 <div className="flex gap-1">
                   <button
-                    className="cursor-pointer p-1 text-neutral-400 hover:text-neutral-700"
+                    className="cursor-pointer p-1 text-faint hover:text-neutral-700"
                     onClick={() => setEditing(group)}
                     aria-label="Editar"
                   >
                     <Pencil size={15} />
                   </button>
                   <button
-                    className="cursor-pointer p-1 text-neutral-400 hover:text-red-600"
+                    className="cursor-pointer p-1 text-faint hover:text-red-600"
                     onClick={() => deleteGroup(group)}
                     aria-label="Eliminar"
                   >
@@ -96,10 +96,10 @@ export function ModifiersPage() {
               <ul className="space-y-1">
                 {group.modifier_options.map((option) => (
                   <li key={option.id} className="flex items-center justify-between text-sm">
-                    <span className={option.is_available ? 'text-neutral-700' : 'text-neutral-400 line-through'}>
+                    <span className={option.is_available ? 'text-neutral-700' : 'text-faint line-through'}>
                       {option.name}
                     </span>
-                    <span className="text-neutral-500">
+                    <span className="text-muted">
                       {option.price_delta > 0 ? `+${formatPrice(option.price_delta)}` : 'Gratis'}
                     </span>
                   </li>
@@ -222,7 +222,7 @@ function GroupEditor({
                     className="flex-1"
                   />
                   <div className="flex w-32 items-center gap-1">
-                    <span className="text-sm text-neutral-500">+$</span>
+                    <span className="text-sm text-muted">+$</span>
                     <Input
                       type="number"
                       min={0}
@@ -239,7 +239,7 @@ function GroupEditor({
                     hideLabel
                   />
                   <button
-                    className="cursor-pointer p-1 text-neutral-400 hover:text-red-600"
+                    className="cursor-pointer p-1 text-faint hover:text-red-600"
                     onClick={() =>
                       patch({ options: draft.options.filter((other) => other.key !== option.key) })
                     }

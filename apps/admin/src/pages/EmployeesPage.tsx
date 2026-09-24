@@ -38,7 +38,7 @@ export function EmployeesPage() {
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold">Empleados</h1>
-          <p className="text-sm text-neutral-500">
+          <p className="text-sm text-muted">
             Cuentas personales, permisos y sucursales de trabajo.
           </p>
         </div>
@@ -58,9 +58,9 @@ export function EmployeesPage() {
               <div>
                 <p className="font-medium">
                   {employee.full_name}{' '}
-                  <span className="text-neutral-500">@{employee.username}</span>
+                  <span className="text-muted">@{employee.username}</span>
                 </p>
-                <p className="text-sm text-neutral-500">
+                <p className="text-sm text-muted">
                   {employee.roles.map((memberRole) => memberRoleLabels[memberRole]).join(' · ')}
                 </p>
               </div>
@@ -78,7 +78,7 @@ export function EmployeesPage() {
             </li>
           ))}
           {!employees.data?.length && (
-            <li className="p-4 text-neutral-500">Todavía no hay cuentas de empleados.</li>
+            <li className="p-4 text-muted">Todavía no hay cuentas de empleados.</li>
           )}
         </ul>
       )}
@@ -129,7 +129,7 @@ function AuditLog({ restaurantId, employees }: { restaurantId: string; employees
                 {auditActorLabel(entry, employees)} · {entry.action}
                 {subject ? ` · ${subject}` : ''}
               </p>
-              <p className="text-xs text-neutral-500">
+              <p className="text-xs text-muted">
                 {new Date(entry.created_at).toLocaleString('es-AR')}
                 {entry.branch_id ? ` · Sucursal ${entry.branch_id.slice(0, 8)}` : ''}
               </p>
@@ -308,7 +308,7 @@ function EmployeeForm({
           <input type="checkbox" checked={active} onChange={(event) => setActive(event.target.checked)} />
           Acceso habilitado en este restaurante
         </label>
-        <p className="text-xs text-neutral-500">
+        <p className="text-xs text-muted">
           Desactivar conserva la cuenta y su historial. El nombre es compartido por todos sus
           restaurantes.
         </p>
@@ -364,7 +364,7 @@ function ResetPasswordModal({
             required
           />
         </Field>
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-muted">
           La contraseña cambia para todos los restaurantes de esta cuenta.
         </p>
         <ErrorText error={reset.error} fallback="No pudimos restablecer la contraseña." />

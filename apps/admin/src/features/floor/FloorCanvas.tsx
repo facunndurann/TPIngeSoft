@@ -201,16 +201,16 @@ export function FloorCanvas({
                 onPointerUp={() => endGesture(table)}
                 onPointerCancel={() => setGesture(null)}
                 onKeyDown={(event) => handleKeyDown(event, table)}
-                className={`absolute flex flex-col items-center justify-center overflow-hidden border-2 text-center transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none ${
+                className={`absolute flex flex-col items-center justify-center overflow-hidden border-2 text-center transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
                   editable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
                 } ${tile.shapeClass} ${
                   invalid
                     ? 'border-red-500 bg-red-50 text-red-700'
                     : selected
-                      ? 'border-indigo-600 bg-indigo-50 text-indigo-900'
+                      ? 'border-primary bg-primary-soft text-primary-ink'
                       : muted
-                        ? 'border-dashed border-neutral-300 bg-neutral-50 text-neutral-400'
-                        : 'border-neutral-300 bg-white text-neutral-700 hover:border-indigo-400'
+                        ? 'border-dashed border-neutral-300 bg-neutral-50 text-faint'
+                        : 'border-neutral-300 bg-white text-neutral-700 hover:border-primary/70'
                 }`}
                 style={{ ...tile.box, zIndex: active ? 10 : 1 }}
                 aria-label={`${table.label}, ${table.seats} lugares${muted ? ', no operable' : ''}${
@@ -233,7 +233,7 @@ export function FloorCanvas({
                   onPointerMove={(event) => resizeTo(event, table)}
                   onPointerUp={() => endGesture(table)}
                   onPointerCancel={() => setGesture(null)}
-                  className="absolute h-3.5 w-3.5 cursor-se-resize rounded-sm border-2 border-white bg-indigo-600 shadow"
+                  className="absolute h-3.5 w-3.5 cursor-se-resize rounded-sm border-2 border-white bg-primary shadow"
                   style={{
                     left: tile.box.left + tile.box.width - 4,
                     top: tile.box.top + tile.box.height - 4,

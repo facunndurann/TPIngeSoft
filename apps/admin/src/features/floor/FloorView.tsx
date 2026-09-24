@@ -27,7 +27,7 @@ export function FloorView({ floor, section }: FloorViewProps) {
       <SectionSummary tables={tables} section={section} />
       <FloorCanvas tables={tables} selectedId={selectedId} onSelect={setSelectedId} />
       {unassigned > 0 && (
-        <p className="text-xs text-neutral-500">
+        <p className="text-xs text-muted">
           {unassigned} mesa(s) sin sector no aparecen en ningún plano. Pasá a editar para
           ubicarlas.
         </p>
@@ -45,17 +45,17 @@ function SectionSummary({ tables, section }: { tables: FloorTable[]; section: Fl
   return (
     <dl className="flex flex-wrap gap-x-8 gap-y-2 rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm">
       <div>
-        <dt className="text-xs text-neutral-500">Mesas operables</dt>
+        <dt className="text-xs text-muted">Mesas operables</dt>
         <dd className="font-semibold text-neutral-900">{operable.length}</dd>
       </div>
       <div>
-        <dt className="text-xs text-neutral-500">Lugares</dt>
+        <dt className="text-xs text-muted">Lugares</dt>
         <dd className="font-semibold text-neutral-900">{seats}</dd>
       </div>
       {hidden > 0 && (
         <div>
-          <dt className="text-xs text-neutral-500">Fuera de operación</dt>
-          <dd className="font-semibold text-neutral-500">{hidden}</dd>
+          <dt className="text-xs text-muted">Fuera de operación</dt>
+          <dd className="font-semibold text-muted">{hidden}</dd>
         </div>
       )}
       {!section.is_active && (

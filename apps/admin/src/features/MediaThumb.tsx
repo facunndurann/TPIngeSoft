@@ -16,7 +16,7 @@ export function MediaThumb({
 
   if (!media) {
     return (
-      <div className={`${base} flex items-center justify-center bg-neutral-100 text-neutral-400`}>
+      <div className={`${base} flex items-center justify-center bg-neutral-100 text-faint`}>
         <ImageOff size={18} />
       </div>
     )

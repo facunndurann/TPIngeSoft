@@ -6,11 +6,11 @@ type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost'
 
 const buttonStyles: Record<ButtonVariant, string> = {
   primary:
-    'bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-indigo-300',
+    'bg-primary text-white hover:bg-primary-hover disabled:bg-primary/40',
   secondary:
     'border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50 disabled:text-neutral-400',
   danger: 'bg-red-600 text-white hover:bg-red-700 disabled:bg-red-300',
-  ghost: 'text-neutral-600 hover:bg-neutral-100 disabled:text-neutral-300',
+  ghost: 'text-muted hover:bg-neutral-100 disabled:text-neutral-300',
 }
 
 export function Button({
@@ -30,7 +30,7 @@ export function Input({ className = '', ref, ...props }: ComponentProps<'input'>
   return (
     <input
       ref={ref}
-      className={`w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 ${className}`}
+      className={`w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-faint focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary ${className}`}
       {...props}
     />
   )
@@ -39,7 +39,7 @@ export function Input({ className = '', ref, ...props }: ComponentProps<'input'>
 export function Textarea({ className = '', ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return (
     <textarea
-      className={`w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 ${className}`}
+      className={`w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-faint focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary ${className}`}
       {...props}
     />
   )
@@ -48,7 +48,7 @@ export function Textarea({ className = '', ...props }: TextareaHTMLAttributes<HT
 export function Select({ className = '', ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select
-      className={`w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 ${className}`}
+      className={`w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary ${className}`}
       {...props}
     />
   )
@@ -93,7 +93,7 @@ export function Toggle({
       className="inline-flex cursor-pointer items-center gap-2"
     >
       <span
-        className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors ${checked ? 'bg-indigo-600' : 'bg-neutral-300'}`}
+        className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors ${checked ? 'bg-primary' : 'bg-neutral-300'}`}
       >
         <span
           className={`h-4 w-4 rounded-full bg-white transition-transform ${checked ? 'translate-x-4' : 'translate-x-0'}`}
@@ -220,7 +220,7 @@ export function Modal({
           <button
             type="button"
             onClick={requestClose}
-            className="cursor-pointer rounded-lg p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600"
+            className="cursor-pointer rounded-lg p-1 text-faint hover:bg-neutral-100 hover:text-neutral-600"
             aria-label="Cerrar"
           >
             <X size={18} />
@@ -235,14 +235,14 @@ export function Modal({
 export function Spinner() {
   return (
     <div className="flex justify-center p-10">
-      <div className="h-7 w-7 animate-spin rounded-full border-2 border-neutral-300 border-t-indigo-600" />
+      <div className="h-7 w-7 animate-spin rounded-full border-2 border-neutral-300 border-t-primary" />
     </div>
   )
 }
 
 export function EmptyState({ message }: { message: string }) {
   return (
-    <div className="rounded-xl border border-dashed border-neutral-300 bg-white p-10 text-center text-sm text-neutral-500">
+    <div className="rounded-xl border border-dashed border-neutral-300 bg-white p-10 text-center text-sm text-muted">
       {message}
     </div>
   )

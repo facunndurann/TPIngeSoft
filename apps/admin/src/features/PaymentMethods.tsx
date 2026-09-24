@@ -45,8 +45,8 @@ export function PaymentMethodsField({
               onClick={() => toggle(method)}
               className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors disabled:cursor-default disabled:opacity-50 ${
                 on
-                  ? 'border-indigo-600 bg-indigo-50 text-indigo-800'
-                  : 'border-neutral-200 bg-white text-neutral-500 hover:bg-neutral-50'
+                  ? 'border-primary bg-primary-soft text-primary-ink'
+                  : 'border-neutral-200 bg-white text-muted hover:bg-neutral-50'
               }`}
             >
               {on && <Check size={13} aria-hidden="true" />}
@@ -55,7 +55,7 @@ export function PaymentMethodsField({
           )
         })}
       </div>
-      <p className="text-xs text-neutral-500">
+      <p className="text-xs text-muted">
         {enabled.length === 0
           ? 'Sin medios habilitados el comensal solo puede pedir la cuenta.'
           : enabled.map((method) => paymentMethodDescriptions[method]).join(' ')}

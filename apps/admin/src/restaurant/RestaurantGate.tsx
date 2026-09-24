@@ -74,14 +74,14 @@ function CreateRestaurantScreen() {
   }
 
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-neutral-100 p-4">
+    <main className="flex min-h-dvh items-center justify-center bg-canvas p-4">
       <div className="w-full max-w-2xl rounded-xl bg-white p-6 shadow-sm">
         <div className="mb-6 flex flex-col items-center gap-2">
-          <div className="rounded-xl bg-indigo-600 p-3 text-white">
+          <div className="rounded-xl bg-primary p-3 text-white">
             <Store size={22} />
           </div>
           <h1 className="text-xl font-bold text-neutral-900">Creá tu restaurante</h1>
-          <p className="text-center text-sm text-neutral-500">
+          <p className="text-center text-sm text-muted">
             Tu cuenta todavía no administra ningún restaurante.
           </p>
         </div>
@@ -111,7 +111,7 @@ function CreateRestaurantScreen() {
           </Button>
         </form>
         <button
-          className="mt-4 w-full cursor-pointer text-center text-sm text-neutral-500 hover:underline"
+          className="mt-4 w-full cursor-pointer text-center text-sm text-muted hover:underline"
           onClick={() => supabase.auth.signOut()}
         >
           Cerrar sesión

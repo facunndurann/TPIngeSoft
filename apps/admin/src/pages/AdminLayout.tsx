@@ -33,7 +33,7 @@ const navigation = [
  */
 export function AdminLayout() {
   return (
-    <div className="min-h-dvh bg-neutral-100">
+    <div className="min-h-dvh bg-canvas">
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-60 flex-col border-r border-neutral-200 bg-white lg:flex">
         <div className="border-b border-neutral-200 px-4 py-4">
           <Brand />
@@ -118,12 +118,12 @@ function Brand() {
 
   return (
     <div className="flex min-w-0 items-center gap-2.5">
-      <div className="rounded-lg bg-indigo-600 p-2 text-white">
+      <div className="rounded-lg bg-primary p-2 text-white">
         <LayoutGrid size={16} aria-hidden="true" />
       </div>
       <div className="min-w-0">
         <p className="truncate text-sm font-semibold text-neutral-900">{restaurant.name}</p>
-        <p className="text-xs text-neutral-500">Panel de administración</p>
+        <p className="text-xs text-muted">Panel de administración</p>
       </div>
     </div>
   )
@@ -137,7 +137,7 @@ function NavItems({ onNavigate }: { onNavigate?: () => void }) {
       onClick={onNavigate}
       className={({ isActive }) =>
         `flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-          isActive ? 'bg-indigo-50 text-indigo-700' : 'text-neutral-600 hover:bg-neutral-100'
+          isActive ? 'bg-primary-soft text-primary-ink' : 'text-muted hover:bg-neutral-100'
         }`
       }
     >
@@ -152,7 +152,7 @@ function SignOutButton() {
     <button
       type="button"
       onClick={() => supabase.auth.signOut()}
-      className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium text-neutral-600 hover:bg-neutral-100"
+      className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium text-muted hover:bg-neutral-100"
     >
       <LogOut size={17} aria-hidden="true" />
       Cerrar sesión

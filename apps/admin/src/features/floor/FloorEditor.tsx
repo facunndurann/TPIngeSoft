@@ -110,7 +110,7 @@ function SectionEditor({
             }
           />
         ) : (
-          <aside className="rounded-xl border border-dashed border-neutral-300 bg-white p-4 text-sm text-neutral-500">
+          <aside className="rounded-xl border border-dashed border-neutral-300 bg-white p-4 text-sm text-muted">
             Tocá una mesa del plano para editar su identificador, capacidad, tamaño y visibilidad.
           </aside>
         )}
@@ -154,7 +154,7 @@ function SectionBar({
       )}
       <Toggle checked={section.is_active} onChange={onActiveChange} label="Sector en uso" />
       <button
-        className="ml-auto cursor-pointer p-1 text-neutral-400 hover:text-red-600"
+        className="ml-auto cursor-pointer p-1 text-faint hover:text-red-600"
         aria-label="Eliminar sector"
         onClick={() => {
           if (
@@ -255,7 +255,7 @@ function UnassignedTables({
   return (
     <div className="rounded-xl border border-dashed border-neutral-300 bg-white p-4">
       <h2 className="text-sm font-semibold text-neutral-700">Mesas sin sector</h2>
-      <p className="mb-2 text-xs text-neutral-500">
+      <p className="mb-2 text-xs text-muted">
         Existen y tienen QR, pero no aparecen en ningún plano.
       </p>
       <ul className="flex flex-wrap gap-2">
