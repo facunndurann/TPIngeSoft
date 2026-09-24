@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* Colores con rol compartidos por los paneles: ver packages/ui/src/theme.css. */
+@import "../../../packages/ui/src/theme.css";
 
 /* Tailwind v4 solo escanea la raíz del proyecto: sin esto, las clases que solo
    viven en el paquete de UI (Spinner, SummaryItem) no llegan al CSS. */

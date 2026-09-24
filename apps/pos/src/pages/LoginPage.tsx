@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 export function LoginPage() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<unknown>(null)
   const [busy, setBusy] = useState(false)
 
   async function submit(event: FormEvent) {
@@ -25,7 +25,7 @@ export function LoginPage() {
         )
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos iniciar sesión.')
+      setError(err)
     } finally {
       setBusy(false)
       setPassword('')
@@ -61,7 +61,7 @@ export function LoginPage() {
           />
         </Field>
 
-        <ErrorText message={error} />
+        <ErrorText error={error} fallback="No pudimos iniciar sesión." />
 
         <Button className="w-full" disabled={busy}>
           {busy ? 'Ingresando…' : 'Ingresar'}

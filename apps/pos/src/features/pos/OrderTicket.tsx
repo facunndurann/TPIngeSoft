@@ -1,6 +1,6 @@
 import { Undo2 } from 'lucide-react'
 import { formatElapsed, formatPrice, type OrderStatus, orderStatusLabels, posActions, transitionPermission } from '@restaurant-platform/shared'
-import { Badge, Button } from '@restaurant-platform/ui'
+import { Badge, Button, errorMessage } from '@restaurant-platform/ui'
 import type { PosOrder, PosOrderItem } from './api'
 import { useCan } from '@/context/pos-context'
 
@@ -19,7 +19,7 @@ export function OrderTicket({
   order: PosOrder
   now: number
   busy: boolean
-  error: string | null
+  error: unknown
   onTransition: (to: OrderStatus) => void
 }) {
   const can = useCan()
@@ -40,7 +40,7 @@ export function OrderTicket({
           <p className="text-sm font-semibold text-neutral-900 break-words">{table.label}</p>
           <p className="text-xs text-neutral-500 break-words">
             {branch ? `${branch} · ` : ''}
-            {submitter} · {formatElapsed(order.created_at, now)}
+            {submitter} · {formatElapsed(order.created_at, now, 'exact')}
           </p>
         </div>
         <Badge color={order.status === 'submitted' ? 'amber' : 'indigo'} className="max-w-[85px] shrink-0">
@@ -72,7 +72,13 @@ export function OrderTicket({
         <strong className="text-neutral-900">{formatPrice(order.total_amount)}</strong>
       </div>
 
-      {error && <p className="mt-2 text-xs text-red-700">{error}</p>}
+      {/* El aviso del ticket es una línea, no un panel: el texto sale del mismo
+          helper que usa ErrorText, así el catálogo manda igual acá. */}
+      {!!error && (
+        <p className="mt-2 text-xs text-red-700">
+          {errorMessage(error, 'No pudimos actualizar el pedido.')}
+        </p>
+      )}
 
       <div className="mt-auto pt-3 flex flex-col gap-2">
         <div className="flex gap-2 w-full">

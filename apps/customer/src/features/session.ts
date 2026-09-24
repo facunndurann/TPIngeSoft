@@ -1,16 +1,41 @@
+import { queryOptions, skipToken } from '@tanstack/react-query'
+import { AppError, fromPostgres } from '@restaurant-platform/shared'
 import { supabase } from '@/lib/supabase'
 import { useCart } from '@/stores/cart'
 import { recoverPendingSession } from '@/features/session-recovery'
 
+/** Respaldo de Realtime: cada lectura de la mesa se repite sola cada 15 segundos. */
+export const SESSION_POLL_MS = 15000
+
+/**
+ * Raíz de todo lo que se lee de una mesa. La sesión cuelga de acá y sus pedidos,
+ * cuenta y pagos debajo, así que invalidar esta key los refresca juntos: react-query
+ * compara por prefijo. Nadie tiene que acordarse de qué consultas toca su cambio.
+ */
+export function sessionKey(sessionId: string | undefined) {
+  return ['session', sessionId] as const
+}
+
+export function sessionQuery(sessionId: string | undefined) {
+  return queryOptions({
+    queryKey: sessionKey(sessionId),
+    // Sin sesión todavía no hay nada que leer: `skipToken` la deja en espera.
+    queryFn: sessionId ? () => loadSession(sessionId) : skipToken,
+    refetchInterval: SESSION_POLL_MS,
+  })
+}
+
 let signingIn: Promise<string> | undefined
+
+const CONNECT_FAILED = 'No pudimos conectarte con la mesa. Revisá tu conexión y reintentá.'
 
 async function authenticate() {
   const { data, error } = await supabase.auth.getSession()
-  if (error) throw error
+  if (error) throw new AppError('CONNECTION_ERROR', CONNECT_FAILED, error.message)
   if (data.session) return data.session.user.id
 
   const result = await supabase.auth.signInAnonymously()
-  if (result.error) throw result.error
+  if (result.error) throw new AppError('CONNECTION_ERROR', CONNECT_FAILED, result.error.message)
   return result.data.user!.id
 }
 
@@ -31,7 +56,7 @@ export async function connectSession(token: string, tableId: string) {
       .eq('table_id', tableId)
       .eq('session_participants.user_id', userId)
       .order('opened_at', { ascending: false })
-    if (error) throw error
+    if (error) throw fromPostgres(error)
     return data
   })
 
@@ -45,7 +70,7 @@ export async function joinSession(token: string, name?: string) {
     qr: token,
     ...(name ? { participant_name: name } : {}),
   })
-  if (error) throw error
+  if (error) throw fromPostgres(error)
   return { id, userId }
 }
 
@@ -54,7 +79,7 @@ export async function loadSession(id: string) {
     supabase.from('table_sessions').select('*').eq('id', id).single(),
     supabase.from('session_participants').select('*').eq('session_id', id).order('joined_at'),
   ])
-  if (session.error) throw session.error
-  if (participants.error) throw participants.error
+  if (session.error) throw fromPostgres(session.error)
+  if (participants.error) throw fromPostgres(participants.error)
   return { ...session.data, participants: participants.data }
 }

@@ -7,9 +7,16 @@ const selectionIds = z.array(uuid).max(100).refine(
   'No se puede elegir la misma opción o ingrediente más de una vez',
 );
 
+/** Unidades por línea: el mismo rango que ofrece el control de cantidad del comensal. */
+export const MIN_ITEM_QUANTITY = 1;
+export const MAX_ITEM_QUANTITY = 99;
+
+/** Líneas distintas por pedido: el tope que valida el servidor y que el carrito avisa antes de enviar. */
+export const MAX_ORDER_LINES = 50;
+
 export const orderItemSchema = z.object({
   productId: uuid,
-  quantity: z.number().int().min(1).max(99),
+  quantity: z.number().int().min(MIN_ITEM_QUANTITY).max(MAX_ITEM_QUANTITY),
   optionIds: selectionIds,
   removedIds: selectionIds,
   isShared: z.boolean(),
@@ -19,7 +26,7 @@ export const orderItemSchema = z.object({
 export const submitOrderSchema = z.object({
   sessionId: uuid,
   requestId: uuid,
-  items: z.array(orderItemSchema).min(1).max(50),
+  items: z.array(orderItemSchema).min(1).max(MAX_ORDER_LINES),
   expectedTotal: z.number().finite().min(0).max(99999999.99).refine(
     amount => Math.abs(amount * 100 - Math.round(amount * 100)) < 0.000001,
     'El importe debe tener como máximo dos decimales',
@@ -46,11 +53,6 @@ export const submitOrderResultSchema = z.object({
 });
 export type SubmitOrderResult = z.infer<typeof submitOrderResultSchema>;
 
-/** Respuesta de error de submit-order. `code` es un código de `appErrors` (errors.ts). */
-export const submitOrderErrorSchema = z.object({
-  error: z.object({ code: z.string(), message: z.string() }),
-});
-export type SubmitOrderError = z.infer<typeof submitOrderErrorSchema>;
 
 /**
  * Estados que forman parte de la cuenta. Es el espejo exacto del

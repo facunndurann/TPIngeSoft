@@ -1,20 +1,10 @@
 import { useEffect, useRef } from 'react'
 import {
-  type PaymentMethod,
   type SessionRequestKind,
   sessionRequestKinds,
   type SessionRequestSource,
   sessionRequestState,
 } from '@restaurant-platform/shared'
-
-/**
- * Qué medio de pago necesita cada aviso (MI-48). Pedir la cuenta no necesita
- * ninguno: querer ver lo que se debe no es elegir cómo pagarlo.
- */
-export const serviceRequestMethod: Record<SessionRequestKind, PaymentMethod | null> = {
-  bill: null,
-  in_person_payment: 'in_person',
-}
 
 /**
  * Al comensal se le habla de lo suyo; el mismo pedido, en el salón, es «Cuenta
@@ -32,10 +22,10 @@ export const serviceRequestCopy: Record<
     help: 'El restaurante la prepara y te la acerca a la mesa.',
   },
   in_person_payment: {
-    action: 'Que venga un mozo a cobrar',
+    action: 'Llamar mozo',
     waiting: 'Pediste cobrar en la mesa',
     attended: '¡Listo! Tu pago fue procesado. Ya podés retirarte.',
-    help: 'Un mozo se acerca para cobrarte ahí mismo.',
+    help: 'Un mozo se acerca a cobrar.',
   },
 }
 

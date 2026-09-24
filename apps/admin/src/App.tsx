@@ -2,7 +2,6 @@ import { Navigate, Route, Routes } from 'react-router'
 import { Spinner, useAuth } from '@restaurant-platform/ui'
 import { LoginPage } from '@/pages/LoginPage'
 import { RestaurantGate } from '@/restaurant/RestaurantGate'
-import { RequireAdmin } from '@/restaurant/RequireAdmin'
 import { AdminLayout } from '@/pages/AdminLayout'
 import { ProductsPage } from '@/pages/ProductsPage'
 import { ProductEditPage } from '@/pages/ProductEditPage'
@@ -25,10 +24,9 @@ function App() {
         path="/"
         element={
           session ? (
-            <RestaurantGate>
-              <RequireAdmin>
-                <AdminLayout />
-              </RequireAdmin>
+            // El gate es el único control de acceso: adentro solo hay owner/manager.
+            <RestaurantGate userId={session.user.id}>
+              <AdminLayout />
             </RestaurantGate>
           ) : (
             <Navigate to="/login" replace />
@@ -36,16 +34,15 @@ function App() {
         }
       >
         <Route index element={<Navigate to="/productos" replace />} />
-        {/* Administración: owner/manager; la RLS aplica los permisos de la cuenta. */}
-        <Route path="productos" element={<RequireAdmin><ProductsPage /></RequireAdmin>} />
-        <Route path="productos/nuevo" element={<RequireAdmin><ProductEditPage /></RequireAdmin>} />
-        <Route path="productos/:productId" element={<RequireAdmin><ProductEditPage /></RequireAdmin>} />
-        <Route path="categorias" element={<RequireAdmin><CategoriesPage /></RequireAdmin>} />
-        <Route path="modificadores" element={<RequireAdmin><ModifiersPage /></RequireAdmin>} />
-        <Route path="salon" element={<RequireAdmin><FloorPlanPage /></RequireAdmin>} />
-        <Route path="mesas" element={<RequireAdmin><TablesPage /></RequireAdmin>} />
-        <Route path="empleados" element={<RequireAdmin><EmployeesPage /></RequireAdmin>} />
-        <Route path="restaurante" element={<RequireAdmin><SettingsPage /></RequireAdmin>} />
+        <Route path="productos" element={<ProductsPage />} />
+        <Route path="productos/nuevo" element={<ProductEditPage />} />
+        <Route path="productos/:productId" element={<ProductEditPage />} />
+        <Route path="categorias" element={<CategoriesPage />} />
+        <Route path="modificadores" element={<ModifiersPage />} />
+        <Route path="salon" element={<FloorPlanPage />} />
+        <Route path="mesas" element={<TablesPage />} />
+        <Route path="empleados" element={<EmployeesPage />} />
+        <Route path="restaurante" element={<SettingsPage />} />
       </Route>
     </Routes>
   )

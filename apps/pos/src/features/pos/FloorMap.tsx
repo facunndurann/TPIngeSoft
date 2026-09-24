@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { formatElapsed, formatPrice, getPosTableState, type PosTableState, posTableStateLabels } from '@restaurant-platform/shared'
 import { ClipboardList, Clock3, Move, UserRound, Users } from 'lucide-react'
-import { Button, EmptyState, ErrorText, FloorGrid, Select, Spinner, SummaryItem } from '@restaurant-platform/ui'
+import { Button, EmptyState, ErrorText, FloorGrid, Select, Spinner, SummaryItem, useNow } from '@restaurant-platform/ui'
 import { useCan, useRestaurant } from '@/context/pos-context'
 import {
   loadOpenSessions,
@@ -13,7 +13,6 @@ import {
 } from './api'
 import { MoveTableSession } from './MoveTableSession'
 import { AttendRequestButtons, SessionRequestBadges } from './ServiceRequests'
-import { useNow } from './useNow'
 import type { PosBill, PosDiningTable, PosOpenSession } from './types'
 
 /**
@@ -107,6 +106,7 @@ export function FloorMap() {
     (sessions.isSuccess && bills.isLoading)
   ) return <Spinner />
   const queryFailed = sections.isError || tables.isError || sessions.isError || bills.isError
+  const queryError = sections.error ?? tables.error ?? sessions.error ?? bills.error
 
   return (
     <div className="min-w-0 space-y-4">
@@ -139,7 +139,7 @@ export function FloorMap() {
       </div>
 
       {queryFailed ? (
-        <ErrorText message="No pudimos cargar el plano del salón." />
+        <ErrorText error={queryError} fallback="No pudimos cargar el plano del salón." />
       ) : branches.length === 0 ? (
         <EmptyState message="Todavía no hay sectores activos configurados para operar." />
       ) : (
@@ -315,7 +315,7 @@ function FloorSurface({
             const selectedTable = selectedId === table.id
             const operator = session?.assigned_employee?.full_name ?? 'Sin asignar'
             const summary = session
-              ? `${formatElapsed(session.opened_at, now)}, ${formatPrice(bill?.total_amount)}, ${operator}`
+              ? `${formatElapsed(session.opened_at, now, 'exact')}, ${formatPrice(bill?.total_amount)}, ${operator}`
               : `${table.seats} lugares`
 
             return (
@@ -338,7 +338,7 @@ function FloorSurface({
                 {session ? (
                   <>
                     <span className="mt-1 max-w-[90%] truncate text-[10px] font-medium leading-none">
-                      {formatElapsed(session.opened_at, now)}
+                      {formatElapsed(session.opened_at, now, 'exact')}
                     </span>
                     <span className="mt-1 max-w-[90%] truncate text-[10px] font-semibold leading-none">
                       {formatPrice(bill?.total_amount)}
@@ -390,7 +390,7 @@ function TableSummary({
       </div>
       {session ? (
         <>
-          <SummaryItem icon={Clock3} label="Abierta" value={formatElapsed(session.opened_at, now)} />
+          <SummaryItem icon={Clock3} label="Abierta" value={formatElapsed(session.opened_at, now, 'exact')} />
           <SummaryItem label="Total acumulado" value={bill ? formatPrice(bill.total_amount) : '—'} />
           <SummaryItem label="Pedidos activos" value={String(activeOrders)} />
           <SummaryItem

@@ -158,7 +158,7 @@ La migración `20260905180000_customer_sessions.sql` incorpora `join_table_sessi
 
 Recorrido de aceptación:
 
-1. Abrir `http://localhost:5173/m/demo-burger-mesa-1`. Debe aparecer La Esquina Burger, Casa Central, Mesa 1 y su carta sin pedir login. Guardar un nombre.
+1. Abrir `http://localhost:5173/m/demo-burger-mesa-1`. Debe aparecer La Esquina Burger, Casa Central, Mesa 1 y su carta sin pedir login ni nombre. Agregar un plato: recién ahí se pide el nombre, y al guardarlo el plato entra al carrito.
 2. Abrir el mismo enlace en otro navegador o ventana privada. Ambos deben mostrar la misma sesión y los nombres actualizados. Dos pestañas del mismo navegador comparten identidad; para simular personas usar perfiles separados.
 3. Elegir Clásica: verificar que exige carne y guarnición; quitar cebolla y agregar bacon. Con vacuna, papas fritas y dos unidades, el total del seed es $19.600.
 4. Agregar al carrito, marcar para compartir, editar opciones/cantidad, recargar y eliminar. El carrito de la otra persona debe permanecer independiente.
@@ -176,7 +176,7 @@ pnpm lint
 pnpm build
 ```
 
-La autenticación del comensal usa una clave de almacenamiento independiente de la del admin. Los carritos contienen borradores locales hasta confirmar el envío (Fase 4, abajo). Los nombres son opcionales al entrar (se usa «Comensal») y admiten hasta 40 caracteres.
+La autenticación del comensal usa una clave de almacenamiento independiente de la del admin. Los carritos contienen borradores locales hasta confirmar el envío (Fase 4, abajo). El nombre no se pide al entrar (hasta elegirlo se usa «Comensal»): lo pide la primera acción que deja algo a nombre del comensal, y admite hasta 40 caracteres.
 
 **Verificación:** el ingreso concurrente por QR, el aislamiento RLS y Realtime se probaron contra Supabase local durante la implementación de la Fase 4. El recorrido visual anterior sigue disponible para aceptación manual.
 
@@ -200,14 +200,22 @@ pnpm dev:admin
 
 Recorrido de aceptación:
 
-1. Abrir el QR de una mesa en dos navegadores/perfiles distintos y guardar nombres diferentes. Personalizar un plato y agregarlo al carrito, incluyendo un producto para compartir.
-2. En **Mi carrito**, elegir **Revisar pedido** y **Confirmar y enviar**. El carrito se vacía al confirmar el resultado y **Pedidos y cuenta** muestra el pedido recibido. El otro comensal debe verlo sin recargar.
+1. Abrir el QR de una mesa en dos navegadores/perfiles distintos. Personalizar un plato y agregarlo al carrito, incluyendo un producto para compartir; el primer **Agregar** de cada comensal pide su nombre (usar nombres diferentes).
+2. En **Mi carrito**, elegir **Enviar pedido**, que lleva el total en el botón. El carrito se vacía al confirmar el resultado y **Pedidos** muestra el pedido recibido. El otro comensal debe verlo sin recargar.
 3. Enviar una segunda ronda desde cualquiera de los participantes. Debe acumularse en la misma cuenta con atribución de cada consumo y detalle de modificaciones.
-4. Cambiar un precio desde admin después de revisar el carrito y antes de confirmar. El servidor debe rechazar el total anterior, actualizar la carta y exigir una nueva revisión. No debe quedar un pedido parcial.
-5. Simular pérdida de conexión al enviar. El carrito conserva el intento y bloquea ediciones; **Reintentar el mismo envío** recupera el resultado sin duplicar el pedido, incluso tras recargar.
+4. Cambiar un precio desde admin con el carrito abierto y, sin recargar, enviar el pedido. El servidor debe rechazar el total anterior y el carrito debe pedir **Actualizar carta** antes de volver a enviar. No debe quedar un pedido parcial.
+5. Simular pérdida de conexión al enviar. El carrito conserva el intento y bloquea ediciones; **Reintentar el mismo envío** recupera el resultado sin duplicar el pedido, incluso tras recargar. Mientras tanto la carta se sigue recorriendo: cada plato, agotado incluido, abre su detalle, y ahí solo el botón queda apagado con el motivo al lado.
 6. Cambiar el nombre, precio u opciones de un producto después de pedirlo. El pedido ya enviado conserva sus snapshots.
 7. Avanzar el pedido desde el **POS independiente** (`http://localhost:5175`): **Preparar**, **Marcar listo** y **Entregar**. Deben actualizarse ambos comensales. Solo miembros del restaurante pueden hacerlo. La secuencia es `submitted → accepted → in_preparation → ready → delivered`; `cancelled` se permite antes de entregar y elimina ese importe de la cuenta. Repetir un estado no duplica sus registros.
-8. Consultar **Pedidos y cuenta**: **Enviado, por confirmar** corresponde a pedidos todavía sin recepción del POS; **En cuenta** incluye los aceptados y posteriores; **Pagado** suma solo pagos aprobados; **Pendiente de pago** es la diferencia, con mínimo cero. La cuenta saldada requiere consumo positivo, saldo cero y ningún pedido esperando recepción. El cierre de sesión se hace desde el POS (Fase 5, abajo).
+8. Consultar **Pedidos** y **Cuenta**: **Esperando al restaurante** corresponde a pedidos todavía sin recepción del POS; **Ya en la cuenta** incluye los aceptados y posteriores; **Pagado** suma solo pagos aprobados; **Falta pagar** es la diferencia, con mínimo cero. Cada cifra lleva su aclaración al lado. Los pedidos se identifican por su número dentro de la mesa (**Pedido 2 de la mesa**), no por el uuid. La cuenta saldada requiere consumo positivo, saldo cero y ningún pedido esperando recepción. El cierre de la mesa se hace desde el POS (Fase 5, abajo).
+9. Verificar que el comensal vea el refresco automático: **Pedidos** y **Cuenta** muestran **Actualizado hace …** y **Actualizando …** mientras hay una lectura en curso, como texto que no se anuncia en cada lectura; la carta no lo muestra. Las etiquetas dietarias se leen con su nombre (**Vegano · Sin TACC**), las mismas que ofrece el panel. Quitar un plato del carrito avisa igual que agregarlo. Al cambiar la división desde un navegador, el otro debe ver el aviso con el nombre de quien la cambió y, en el panel, quién la cambió y cuándo.
+10. Probar las salidas del comensal: **Quitar** un plato del carrito ofrece **Deshacer** en el aviso de abajo y lo devuelve a su posición; mientras el aviso está bajo el puntero o con el foco en **Deshacer**, no se cierra. Con «reducir movimiento» activado en el sistema, el aviso y el diálogo del nombre aparecen y se van sin desplazarse. Con platos sin enviar, **Empezar de nuevo en esta mesa** pide confirmación antes de descartarlos. Desde **¿Necesitás algo?** mandar **Llamar al mozo** y **Pedir la cuenta**: la mesa debe encenderse en el plano del POS como **Llama al mozo** y **Cuenta solicitada**, y **Cancelar aviso** debe apagarla. Abrir una URL inventada (`/no-existe`) muestra que el enlace no lleva a ninguna mesa y ofrece volver a la última mesa visitada.
+11. Revisar la consistencia de los controles: la cantidad se cambia con **−** y **+** (o tipeando) igual en el detalle del plato y en el carrito, y en los extremos del rango el botón que se pasaría queda apagado; en la carta cada tarjeta muestra solo su primera foto, sin controles, y toda la tarjeta abre el plato; las fotos se recorren en la portada del plato, donde las flechas (44px) nombran lo que van a mostrar y los puntos llevan a cada foto o video. Los campos miden 16px, así Safari de iOS no hace zoom al enfocarlos.
+12. Verificar la prevención de errores: al entrar no hay ningún diálogo y la carta se recorre entera. El nombre lo pide la primera acción que lo necesita (**Agregar al carrito**, **Pedir de nuevo** o **Enviar pedido**), explica para qué y, al guardarlo, esa acción se completa sola; **Ahora no**, Escape o tocar el fondo cierran el diálogo sin agregar nada y el foco vuelve al botón. Una vez guardado, el formulario se colapsa en **Cambiar mi nombre** y reabrirlo trae el nombre cargado. En **Porcentajes**, el campo de cada comensal no acepta más de lo que queda sin asignar y el panel dice cuánto falta repartir.
+13. Revisar que nada haya que recordar: el carrito lista los platos, sus personalizaciones y el total, y el botón **Enviar pedido** repite el total que se va a enviar; un envío pendiente detalla qué se mandó. Las pestañas quedan fijas arriba al scrollear **Pedidos**, que además muestra la barra del carrito si quedaron platos sin enviar. **Cuenta** sigue el orden en que se decide: **Falta pagar**, la división, los invitados, el pago, los pagos registrados y, al final, llamar al mozo; con pago desde el celular, pagar es el único botón principal. En un plato, todo lo marcado va en el plato: los ingredientes arrancan marcados y se destildan para sacarlos, los grupos de una opción son radios con la regla **Elegí 1**, y el botón queda fijo abajo. Tocarlo sin elegir un grupo obligatorio no agrega nada: lleva al grupo y el error aparece ahí, no antes.
+14. Probar los atajos del habitué: con dos o más platos, **Vaciar carrito** los quita todos y el aviso ofrece **Deshacer**, que los devuelve en el mismo orden. En **Pedidos**, **Pedir de nuevo** sobre un pedido copia sus platos al carrito con sus personalizaciones; el aviso dice cuántos agregó, nombra los que ya no se pueden repetir igual (producto u opción dada de baja) y también se puede deshacer. El botón no aparece si la mesa está cerrada o hay un envío sin resolver.
+15. Mirar el pliegue en un viewport móvil: en la carta el encabezado da la bienvenida y el panel de la mesa es una línea (**Ana · 3 en la mesa**, con los nombres a un toque y **Cambiar mi nombre** al lado); en el resto de las pantallas el encabezado se reduce a **Restaurante · Sucursal · Mesa**. En **Pedidos** cada pedido llega cerrado, mostrando quién lo pidió, cuántos platos, el total, la hora y su estado; el detalle plato por plato se abre al tocarlo y **Pedir de nuevo** queda visible sin abrirlo.
+16. Probar los errores: abrir `/m/token-inventado` muestra **Este QR no corresponde a una mesa activa** con **Ir al inicio**, no **Reintentar**, porque repetir no lo arregla. Cortar la red y recargar la carta muestra **No pudimos completar la operación. Revisá tu conexión y reintentá** con **Reintentar**. En ningún caso aparece texto de la base ni en inglés: lo crudo queda en el detalle del error.
 
 Pruebas reproducibles:
 
@@ -223,7 +231,7 @@ pnpm build
 ## 7. Probar pago electrónico sandbox (Fase 10)
 
 La sucursal debe tener habilitado **Pago desde el celular**. Levantá `pnpm dev:functions`
-y `pnpm dev:customer`, abrí una mesa con consumo aceptado y entrá a **Pedidos y cuenta**.
+y `pnpm dev:customer`, abrí una mesa con consumo aceptado y entrá a **Cuenta**.
 El botón calcula el saldo en PostgreSQL, crea un pago pendiente y muestra dos respuestas del
 simulador: aprobación o rechazo. Sólo la aprobación reduce el saldo. Un rechazo permite iniciar
 otro intento; una sesión cerrada o un importe ya cubierto se rechazan en el servidor.

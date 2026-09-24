@@ -36,6 +36,12 @@ export type Footprint = { w: number; h: number }
 
 export type TableSpan = { width: number; height: number }
 
+/** Lo mínimo para ubicar una mesa guardada en la grilla. */
+export type GridTable = TableSpan & { position_x: number; position_y: number }
+
+/** Lugar que ocupa una mesa en el plano, en celdas. */
+export type Placed = { x: number; y: number; footprint: Footprint }
+
 /** Recorta un lado a algo dibujable dentro de la grilla. */
 export function clampSpan(value: number, axisLimit: number) {
   const max = Math.min(TABLE_SPAN.max, axisLimit)
@@ -61,7 +67,41 @@ export function clampToGrid(x: number, y: number, footprint: Footprint) {
   }
 }
 
-type Placed = { x: number; y: number; footprint: Footprint }
+/**
+ * Dónde está una mesa tal como se dibuja: huella y posición recortadas a la
+ * grilla. Es la única lectura de la posición guardada, así que el plano que se
+ * ve, las colisiones y los huecos libres usan la misma: si la grilla se
+ * achicara, una mesa vieja choca donde se la ve, no donde dice el número.
+ */
+export function tablePlacement(table: GridTable): Placed {
+  const footprint = tableFootprint(table)
+  return { footprint, ...clampToGrid(table.position_x, table.position_y, footprint) }
+}
+
+/**
+ * Lo que ocupan las mesas de un sector, sin contar `exceptId`: la que se está
+ * moviendo no puede chocar consigo misma.
+ */
+export function occupiedBy(tables: readonly (GridTable & { id: string })[], exceptId?: string) {
+  return tables.filter((table) => table.id !== exceptId).map(tablePlacement)
+}
+
+/**
+ * Huella nueva + posición recortada. Solo esas cuatro columnas: un intent de
+ * resize trae `kind` y eso no puede ir al UPDATE.
+ */
+export function resizePlacement(
+  table: { position_x: number; position_y: number },
+  span: TableSpan,
+) {
+  const position = clampToGrid(table.position_x, table.position_y, tableFootprint(span))
+  return {
+    width: span.width,
+    height: span.height,
+    position_x: position.x,
+    position_y: position.y,
+  }
+}
 
 function overlaps(a: Placed, b: Placed) {
   return (

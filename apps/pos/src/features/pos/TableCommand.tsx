@@ -3,7 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { asAmount, enabledPaymentMethods, formatElapsed, formatPrice, getPosTableState, isKitchenTicket, type OrderStatus, paymentMethodLabels, posTableStateLabels, sessionRequestsOf } from '@restaurant-platform/shared'
 import { ArrowLeft, Clock3, PlayCircle, UserRound, Users } from 'lucide-react'
-import { Badge, Button, EmptyState, ErrorText, Modal, Spinner, SummaryItem, useSaveErrors } from '@restaurant-platform/ui'
+import { Badge, Button, EmptyState, ErrorText, Modal, Spinner, SummaryItem, useNow, useSaveErrors } from '@restaurant-platform/ui'
 import { useCan, useRestaurant } from '@/context/pos-context'
 import {
   closePosSession,
@@ -17,7 +17,6 @@ import {
 import { OrderTicket } from './OrderTicket'
 import { PaymentPanel } from './PaymentPanel'
 import { AttendRequestButtons, ChargedBadge, SessionRequestBadges } from './ServiceRequests'
-import { useNow } from './useNow'
 
 /**
  * Comanda de una mesa abierta desde el plano (MI-64). La misma pantalla sirve
@@ -92,7 +91,7 @@ export function TableCommand() {
     return (
       <div className="space-y-3">
         <BackLink to={backToMap} />
-        <ErrorText message="No pudimos cargar la comanda de la mesa." />
+        <ErrorText error={tables.error ?? session.error} fallback="No pudimos cargar la comanda de la mesa." />
       </div>
     )
   }
@@ -134,7 +133,7 @@ export function TableCommand() {
         <Badge color={open ? 'indigo' : 'green'}>{posTableStateLabels[state]}</Badge>
       </div>
 
-      <ErrorText message={errors.message} />
+      <ErrorText error={errors.message} />
 
       {!open ? (
         <div className="space-y-3 rounded-xl border border-neutral-200 bg-white p-6 text-center">
@@ -158,7 +157,7 @@ export function TableCommand() {
       ) : (
         <>
           <dl className="flex flex-wrap gap-x-8 gap-y-3 rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm">
-            <SummaryItem as="dl-pair" icon={Clock3} label="Abierta" value={formatElapsed(open.opened_at, now)} />
+            <SummaryItem as="dl-pair" icon={Clock3} label="Abierta" value={formatElapsed(open.opened_at, now, 'exact')} />
             {can('payments.read') && <>
               <SummaryItem as="dl-pair" label="En cuenta" value={formatPrice(bill?.total_amount)} />
               <SummaryItem as="dl-pair" label="Pagado" value={formatPrice(bill?.paid_amount)} />
@@ -254,7 +253,7 @@ export function TableCommand() {
                 seguir visibles en el tablero.
               </p>
             )}
-            <ErrorText message={errors.message} />
+            <ErrorText error={errors.message} />
             <div className="flex gap-2">
               <Button variant="secondary" className="flex-1" onClick={() => setClosing(false)}>
                 Seguir abierta

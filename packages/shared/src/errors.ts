@@ -1,3 +1,5 @@
+import { z } from 'zod'
+
 /**
  * Catálogo único de errores de negocio. Las RPCs de Postgres levantan el código
  * (`raise exception 'PRICE_CHANGED'`), la función submit-order responde con su
@@ -19,10 +21,11 @@ export const appErrors = {
 
   // Envío de pedidos (submit_order, abandon_order_request)
   INVALID_ITEMS: { status: 400, retryable: false, message: 'Revisá los productos y cantidades del carrito.' },
-  SESSION_NOT_FOUND: { status: 404, retryable: false, message: 'No encontramos esa sesión de mesa.' },
-  SESSION_CLOSED: { status: 409, retryable: false, message: 'Esta sesión de mesa ya está cerrada.' },
+  SESSION_NOT_FOUND: { status: 404, retryable: false, message: 'No encontramos la cuenta de esa mesa.' },
+  SESSION_CLOSED: { status: 409, retryable: false, message: 'La mesa ya cerró su cuenta.' },
   NOT_PARTICIPANT: { status: 403, retryable: false, message: 'Ingresá desde el QR de esta mesa para realizar pedidos.' },
-  TABLE_UNAVAILABLE: { status: 409, retryable: false, message: 'La mesa o sucursal no está disponible para recibir pedidos.' },
+  INVALID_NAME: { status: 400, retryable: false, message: 'Usá un nombre de 1 a 40 caracteres.' },
+  TABLE_UNAVAILABLE: { status: 409, retryable: false, message: 'Esta mesa no está recibiendo pedidos. Consultá con el personal del restaurante.' },
   PRODUCT_UNAVAILABLE: { status: 409, retryable: false, message: 'Un producto ya no está disponible. Actualizamos la carta para que revises tu carrito.' },
   INVALID_MODIFIERS: { status: 409, retryable: false, message: 'Cambiaron las opciones disponibles de un plato. Revisá su personalización.' },
   INVALID_INGREDIENTS: { status: 409, retryable: false, message: 'Revisá los ingredientes: hay cambios en su disponibilidad o en cuáles se pueden quitar.' },
@@ -39,9 +42,9 @@ export const appErrors = {
   PAYMENT_ITEMS_UNAVAILABLE: { status: 409, retryable: false, message: 'Uno de los ítems ya está incluido en otro pago. Actualizamos la cuenta para que elijas nuevamente.' },
   PAYMENT_NOT_FOUND: { status: 404, retryable: false, message: 'No encontramos ese pago.' },
   PAYMENT_PROVIDER_UNAVAILABLE: { status: 503, retryable: true, message: 'El proveedor de pagos no está disponible. Reintentá en unos momentos.' },
-  PRICE_CHANGED: { status: 409, retryable: false, message: 'El precio cambió. Revisá el total actualizado y volvé a confirmar.' },
+  PRICE_CHANGED: { status: 409, retryable: false, message: 'El precio cambió. Revisá el total actualizado y volvé a enviar el pedido.' },
   IDEMPOTENCY_CONFLICT: { status: 409, retryable: false, message: 'Este envío ya se usó para otro contenido. Revisá los pedidos de la mesa antes de continuar.' },
-  REQUEST_ABANDONED: { status: 409, retryable: false, message: 'Cancelaste este envío. Revisá tu carrito y volvé a confirmar.' },
+  REQUEST_ABANDONED: { status: 409, retryable: false, message: 'Cancelaste este envío. Revisá tu carrito y volvé a enviarlo.' },
 
   // Red: la respuesta nunca llegó, así que el envío se conserva para reintentar.
   CONNECTION_ERROR: { status: 503, retryable: true, message: 'No pudimos confirmar el envío. Reintentá: conservamos tu pedido para evitar duplicados.' },
@@ -68,8 +71,14 @@ export const appErrors = {
   CATEGORY_IN_USE: { status: 409, retryable: false, message: 'No se puede eliminar: la categoría tiene productos. Movelos o eliminalos primero.' },
   BRANCH_IN_USE: { status: 409, retryable: false, message: 'No se puede eliminar: la sucursal tiene mesas asociadas.' },
 
-  // Falla inesperada: el detalle interno nunca se expone
-  SERVER_ERROR: { status: 503, retryable: true, message: 'No pudimos confirmar el resultado. Reintentá el mismo envío para evitar duplicados.' },
+  // Cuentas de empleados (employee-accounts)
+  USERNAME_TAKEN: { status: 409, retryable: false, message: 'Ese nombre de usuario ya existe. Elegí otro.' },
+  PROVISIONING_CLEANUP_REQUIRED: { status: 500, retryable: false, message: 'El alta quedó pendiente de revisión. Contactá al soporte antes de reintentar.' },
+
+  // Falla inesperada: el detalle interno nunca se expone. El mensaje sirve a
+  // cualquier operación de las tres apps, lecturas incluidas; quien necesite
+  // decir algo más preciso lo pasa al constructor de AppError.
+  SERVER_ERROR: { status: 503, retryable: true, message: 'No pudimos completar la operación. Revisá tu conexión y reintentá.' },
 } satisfies Record<string, AppErrorDefinition>
 
 export type AppErrorCode = keyof typeof appErrors
@@ -119,13 +128,24 @@ export class AppError extends Error {
 }
 
 /**
+ * Cuerpo de error de las Edge Functions: el código del catálogo y el mensaje que
+ * ya eligió el servidor. Lo arman los handlers desde un AppError y el cliente lo
+ * vuelve a convertir en uno, así que es el mismo para todas las funciones.
+ */
+export const appErrorBodySchema = z.object({
+  error: z.object({ code: z.string(), message: z.string() }),
+})
+export type AppErrorBody = z.infer<typeof appErrorBodySchema>
+
+/**
  * Traductor único de errores crudos de Postgres. Cubre las tres formas en que
  * llega un error: el código pelado (`raise exception 'PRICE_CHANGED'`), el
  * código prefijado por Postgres (`P0001: PRICE_CHANGED`) y la violación de un
- * constraint, que trae el nombre del índice. Lo desconocido es SERVER_ERROR con
- * el mensaje del catálogo: el detalle interno no se expone.
+ * constraint, que trae el nombre del índice. Lo desconocido es SERVER_ERROR:
+ * con `fallback` si quien llama puede decir qué operación falló, y si no con el
+ * mensaje del catálogo. El detalle interno nunca se expone.
  */
-export function fromPostgres(raw: string | { message: string }): AppError {
+export function fromPostgres(raw: string | { message: string }, fallback?: string): AppError {
   const message = typeof raw === 'string' ? raw : raw.message
   if (isAppErrorCode(message)) return new AppError(message)
 
@@ -139,5 +159,5 @@ export function fromPostgres(raw: string | { message: string }): AppError {
     if (message.includes(constraint)) return new AppError(code, undefined, message)
   }
 
-  return new AppError('SERVER_ERROR', undefined, message)
+  return new AppError('SERVER_ERROR', fallback, message)
 }

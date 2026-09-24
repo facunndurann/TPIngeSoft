@@ -27,7 +27,7 @@ Phones / browsers
 
 | Piece | Who hosts it | Why |
 |-------|----------------|-----|
-| Database, Auth, Realtime, Storage, `submit-order` | **Supabase** (free plan is enough for a demo) | This is the backend. The plan chose Supabase over Firebase. |
+| Database, Auth, Realtime, Storage, Edge Functions | **Supabase** (free plan is enough for a demo) | This is the backend. The plan chose Supabase over Firebase. Functions: `submit-order`, `employee-accounts`, `mobile-payment`. |
 | App del comensal (`apps/customer`) | **Vercel** (static Vite build) | Supabase does not host React apps. QR codes must point at a public HTTPS URL. |
 | Panel (`apps/admin`) | **Vercel** (second project) | Administrative accounts only. |
 | POS (`apps/pos`) | **Vercel** (third project, same repo) | Employee login, independent deployment and Auth storage. |
@@ -60,8 +60,10 @@ Keep a notes file. You will copy:
 - Database password (private — you choose it when creating the project)
 - Customer site URL (after Vercel)
 - Admin site URL (after Vercel)
+- POS site URL (after Vercel)
+- `EMPLOYEE_EMAIL_DOMAIN` (must match `VITE_EMPLOYEE_EMAIL_DOMAIN` on the POS project)
 
-Never put the **service_role** key in a frontend `.env`, in Vercel, or in git. RLS is what protects the data; the anon key is meant to be public.
+Never put the **service_role** key in a frontend `.env`, in Vercel, or in git. RLS is what protects the data; the anon key is meant to be public. Supabase injects `SUPABASE_SERVICE_ROLE_KEY` only into Edge Functions.
 
 ---
 
@@ -94,7 +96,7 @@ Never put the **service_role** key in a frontend `.env`, in Vercel, or in git. R
 
    Do **not** paste the Data API / REST URL (`https://<ref>.supabase.co/rest/v1`) into `VITE_SUPABASE_URL`. The JS client appends `/auth/v1` and `/rest/v1` itself. A REST base sends login to PostgREST (`PGRST125`: *Invalid path specified in request URL*).
 
-   Ignore **service_role** for this whole guide.
+   Do **not** copy **service_role** anywhere. The Edge runtime injects it into `employee-accounts` and `mobile-payment`; you never paste it into Vercel or a frontend `.env`.
 
 Free-plan notes: 2 projects max, ~500 MB database, the project **pauses after 7 days of inactivity**. Unpause from the dashboard if a demo goes stale.
 
@@ -146,21 +148,44 @@ Do **not** run `pnpm supabase db reset` against the cloud (that wipes data). Do 
 
 ---
 
-## Part 4 — Deploy the Edge Function `submit-order`
+## Part 4 — Deploy the Edge Functions
 
-Orders are **not** written straight from the browser. The customer app calls the function `submit-order`, which validates the JWT and runs `submit_order` / POS dispatch on the server.
+The three functions live under `supabase/functions/`. Browsers never write orders, create Auth employees, or confirm payments directly: each app calls the matching function with the user's JWT.
+
+| Function | Called by | What it does |
+|----------|-----------|----------------|
+| `submit-order` | Customer (`apps/customer`) | Validates the diner JWT and runs `submit_order` (menu snapshot, persistence, internal POS accept) in one transaction. |
+| `employee-accounts` | Admin (`apps/admin`) | Creates / updates employee Auth users and memberships. Uses the Auth Admin API (`service_role`) **after** authorizing the caller. |
+| `mobile-payment` | Customer (`apps/customer`) | Creates a pending mobile payment as the diner. With the sandbox flag on, also resolves approve/reject for the demo. |
+
+Set secrets **before** the first deploy of the functions that read them:
+
+```bash
+pnpm supabase secrets set EMPLOYEE_EMAIL_DOMAIN=employees.your-controlled-domain.com
+pnpm supabase secrets set PAYMENT_SANDBOX_ENABLED=true
+```
+
+Use a **controlled subdomain you own**, with no real mailboxes. The POS env var `VITE_EMPLOYEE_EMAIL_DOMAIN` must be **exactly** the same string. `PAYMENT_SANDBOX_ENABLED=true` is for the academic demo only; turn it off before wiring a real provider (create still works; confirm then returns `PAYMENT_PROVIDER_UNAVAILABLE` until a webhook replaces the simulator).
+
+Then deploy all three:
 
 ```bash
 pnpm supabase functions deploy submit-order
-pnpm supabase secrets set EMPLOYEE_EMAIL_DOMAIN=employees.your-controlled-domain.com
 pnpm supabase functions deploy employee-accounts
-pnpm supabase secrets set PAYMENT_SANDBOX_ENABLED=true
 pnpm supabase functions deploy mobile-payment
 ```
 
-`SUPABASE_URL`, `SUPABASE_ANON_KEY` y `SUPABASE_SERVICE_ROLE_KEY` son inyectadas por Supabase; no las copies a Vercel ni al frontend. Para la demo sólo se configura la bandera del sandbox indicada arriba.
+`SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are injected by the Edge runtime. Do **not** copy them to Vercel or any frontend `.env`. Only `employee-accounts` and `mobile-payment` use `service_role` (Auth Admin and sandbox payment resolve). `submit-order` talks to Postgres with the diner JWT.
 
-Confirm: dashboard → **Edge Functions** → `submit-order` and `mobile-payment` are listed. In `supabase/config.toml`, `verify_jwt = true`, so unauthenticated calls are rejected (same as local). `PAYMENT_SANDBOX_ENABLED=true` es sólo para la demo; deshabilitalo antes de integrar un proveedor real.
+JWT at the gateway (`supabase/config.toml`):
+
+| Function | `verify_jwt` | Why |
+|----------|--------------|-----|
+| `submit-order` | `true` | Gateway rejects calls without a valid JWT before the handler. |
+| `mobile-payment` | `true` | Same; the handler then requires an **anonymous** diner. |
+| `employee-accounts` | `false` | The handler calls `Auth.getUser` itself (needed for signing-key projects). Unauthenticated calls still get `401`. |
+
+Confirm: dashboard → **Edge Functions** → all three names listed. Dashboard → **Edge Functions → Secrets** (or `pnpm supabase secrets list`) → `EMPLOYEE_EMAIL_DOMAIN` and `PAYMENT_SANDBOX_ENABLED`.
 
 ---
 
@@ -281,7 +306,7 @@ Open it: you should see the landing (“Escaneá el QR…”). There is no resta
 6. Add something to the cart → **Confirmar y enviar**.
 7. On admin → **POS**: the ticket should appear in Realtime. Advance **Preparar → Listo → Entregar**. Close the session from **Mesas activas** if you want.
 
-If signup “does nothing”, Confirm email is still on (Part 5.2). If the diner page errors on join, anonymous sign-ins are still off (Part 5.1). If submit fails with a functions error, Part 4 was skipped.
+If signup “does nothing”, Confirm email is still on (Part 5.2). If the diner page errors on join, anonymous sign-ins are still off (Part 5.1). If submit, employee create/reset, or mobile pay fails with a functions error, Part 4 was skipped or that function was not deployed.
 
 ---
 
@@ -322,22 +347,28 @@ If you changed a `VITE_*` value in the Vercel dashboard, click **Redeploy** on t
 
 Never edit tables only in the cloud dashboard if you also use migrations — the next `db push` can disagree with Studio clicks. Change schema in SQL files.
 
-### C. Edge Function (`supabase/functions/submit-order` or `_shared`)
+### C. Edge Functions (`supabase/functions/<name>` or `_shared`)
+
+Redeploy **each function whose code changed**. Vercel does not host these. A frontend-only `git push` will not update them.
 
 ```bash
 pnpm supabase functions deploy submit-order
-git add ... && git commit && git push   # keep GitHub in sync; Vercel does not host this function
+pnpm supabase functions deploy employee-accounts
+pnpm supabase functions deploy mobile-payment
+git add ... && git commit && git push   # keep GitHub in sync
 ```
 
-Redeploy the function whenever handler/shared logic changes. A frontend-only push will **not** update `submit-order`.
+- Changing `_shared/` (used by `submit-order`) → redeploy `submit-order`.
+- Changing `packages/shared` schemas imported by a function → redeploy that function.
+- Changing `EMPLOYEE_EMAIL_DOMAIN` or `PAYMENT_SANDBOX_ENABLED` → `pnpm supabase secrets set …` and **redeploy** the function that reads the secret (`employee-accounts` / `mobile-payment`).
 
 ### Typical “I shipped a feature” checklist
 
 1. Works on local Docker (`pnpm supabase start`, `pnpm dev:admin`, `pnpm dev:customer`, `pnpm dev:functions`).
 2. Commit + `git push` → Vercel.
 3. If migrations changed → `pnpm supabase db push`.
-4. If functions changed → `pnpm supabase functions deploy submit-order`.
-5. Smoke-test the **production** admin URL and a real QR on the **production** customer URL.
+4. If functions changed → deploy every changed name from Part 4 (`submit-order`, `employee-accounts`, `mobile-payment`).
+5. Smoke-test the **production** admin URL (including Empleados if that function changed), a real QR on the **production** customer URL, and POS login if `EMPLOYEE_EMAIL_DOMAIN` changed.
 
 ---
 
@@ -346,13 +377,13 @@ Redeploy the function whenever handler/shared logic changes. A frontend-only pus
 | | Local | Cloud |
 |--|--------|--------|
 | Backend | Docker via `pnpm supabase start` | This Supabase project |
-| Apps | `localhost:5173` / `5174` | Two Vercel URLs |
+| Apps | `localhost:5173` / `5174` / `5175` | Three Vercel URLs |
 | `.env` | `apps/*/.env` (gitignored) | Vercel Environment Variables |
 | Demo users | `admin@esquina.demo` / `demo1234` from `seed.sql` | Register yourself |
 | Demo QR | `/m/demo-burger-mesa-1` | Tokens you create under **Mesas** |
 | Anonymous auth | On (`config.toml`) | You enable it in the dashboard |
 | Email confirm | Off | You turn it off for the demo |
-| `submit-order` | `pnpm dev:functions` | `functions deploy` |
+| Edge Functions | `pnpm dev:functions` (all three, via `.env.example`) | `functions deploy` per name (Part 4) |
 
 You can point **local** Vite apps at the **cloud** project by putting the cloud URL/anon key in `apps/admin/.env` and `apps/customer/.env`. Restart Vite after editing. Keep `VITE_CUSTOMER_APP_URL=http://localhost:5173` while testing QRs on your machine.
 
@@ -369,6 +400,9 @@ You can point **local** Vite apps at the **cloud** project by putting the cloud 
 | Direct QR URL is 404, home page works | `vercel.json` rewrite missing or not on the branch Vercel built. |
 | QR opens localhost | Admin was built with `VITE_CUSTOMER_APP_URL=http://localhost:5173`. Set the customer Vercel URL and redeploy **admin**. |
 | Order confirm fails, menu works | `submit-order` not deployed, or JWT verification failed (anon auth). |
+| Admin: create / update / reset employee fails | `employee-accounts` not deployed, or `EMPLOYEE_EMAIL_DOMAIN` missing. Check Edge Function logs. |
+| POS login works locally but not in cloud with the same username | `VITE_EMPLOYEE_EMAIL_DOMAIN` on the POS Vercel project does not match `EMPLOYEE_EMAIL_DOMAIN`. |
+| Customer: pay from phone create works, approve/reject fails | `mobile-payment` not deployed, or `PAYMENT_SANDBOX_ENABLED` is not `true`. |
 | Photos do not upload | Migration not pushed (bucket `product-images` missing). Check **Storage** in the dashboard. |
 | POS does not update live | Realtime publication missing (migration 1). Dashboard → **Database → Publications** / **Realtime**. |
 | `db push` asks for password | Use the database password from project creation. Reset it under **Project Settings → Database** if lost. |
@@ -382,7 +416,7 @@ You can point **local** Vite apps at the **cloud** project by putting the cloud 
 ## What we are not deploying yet
 
 - **Phase 6** `recommend` (LLM) — not in the repo.
-- **Phase 7** Mercado Pago functions and webhooks — not in the repo.
+- A **real** Mercado Pago (or other) provider and webhooks — not in the repo. The demo uses `mobile-payment` with `PAYMENT_SANDBOX_ENABLED=true`.
 - Custom domains — optional later in Vercel (Domains) and then update `VITE_CUSTOMER_APP_URL` + Auth Site URL + redeploy admin.
 - Running `seed.sql` in production — do not.
 

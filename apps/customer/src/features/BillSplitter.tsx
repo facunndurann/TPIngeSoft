@@ -1,107 +1,92 @@
 import { useEffect, useRef, useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { allocationTotal, formatPrice, MAX_EQUAL_PARTS, MIN_EQUAL_PARTS, type SessionSplit, sessionSplitSchema, SPLIT_PERCENTAGE_TOTAL, splitBill, splitEqualAmounts, splitPercentageAmounts, type SplitBill, type SplitOrder, type SplitParticipant, splitTypeDescriptions, splitTypeLabels, splitTypes } from '@restaurant-platform/shared'
+import { useMutation } from '@tanstack/react-query'
+import { allocationTotal, formatElapsed, formatPrice, MAX_EQUAL_PARTS, MIN_EQUAL_PARTS, remainingPercentage, type SessionSplit, sessionSplitSchema, SPLIT_PERCENTAGE_TOTAL, splitBill, splitEqualAmounts, splitPercentageAmounts, type SplitBill, splitTypeDescriptions, splitTypeLabels, splitTypes } from '@restaurant-platform/shared'
+import { ErrorText, useNow } from '@restaurant-platform/ui'
 
-import { TOAST_DURATION_MS } from '@/components/Toast'
+import { PartsField } from '@/components/PartsField'
+import { PercentField } from '@/components/PercentField'
 import { updateSessionSplit } from '@/features/orders-api'
+import { useTable } from '@/features/table-context'
+import type { loadOrders } from '@/features/orders-api'
+
+type Order = Awaited<ReturnType<typeof loadOrders>>[number]
 
 type BillSplitterProps = {
-  sessionId: string
-  /** Lo guardado en la sesión, ya validado por parseSessionSplit. */
   split: SessionSplit
   bill: SplitBill
-  orders: readonly SplitOrder[]
-  participants: readonly (SplitParticipant & { display_name: string; user_id: string })[]
-  userId?: string
-  /** Quién guardó la división vigente y cuándo; con eso se avisa el cambio ajeno. */
-  updatedBy: string | null
-  updatedAt: string | null
+  orders: readonly Order[]
 }
 
-/**
- * Cómo se reparte lo que falta pagar. El componente solo dibuja: los importes
- * salen de `splitBill` y la validez del borrador la decide `sessionSplitSchema`,
- * el mismo schema que revalida la RPC. Acá no se repite ninguna regla.
- */
-export function BillSplitter({
-  sessionId,
-  split,
-  bill,
-  orders,
-  participants,
-  userId,
-  updatedBy,
-  updatedAt,
-}: BillSplitterProps) {
-  const queryClient = useQueryClient()
-  // `null` es la vista de lectura; un borrador abre el editor.
-  const [draft, setDraft] = useState<SessionSplit | null>(null)
-  const [changedBy, setChangedBy] = useState<string | null>(null)
-  const lastSaved = useRef<string | null>(updatedAt)
-  const currentParticipantId = participants.find((entry) => entry.user_id === userId)?.id
+export function BillSplitter({ split, bill, orders }: BillSplitterProps) {
+  const { session: sessionQuery, me, refreshTable, announce } = useTable()
+  const session = sessionQuery.data
+  const participants = session?.participants ?? []
+  const updatedBy = session?.split_updated_by ?? null
+  const updatedAt = session?.split_updated_at ?? null
+  const author = participants.find((participant) => participant.id === updatedBy)
 
-  // La división es de la mesa: cuando otro comensal guarda, gana lo guardado.
-  // El borrador propio se descarta —seguir editando algo viejo termina en que
-  // uno le pisa la división al otro sin enterarse— y la pantalla vuelve a la
-  // vista de lectura con un aviso de quién lo cambió.
+  const now = useNow()
+  const [draft, setDraft] = useState<SessionSplit | null>(null)
+
+  const lastSaved = useRef<string | null>(updatedAt)
+  const currentParticipantId = me?.id
+
+  // Si otro comensal guarda una división, la suya manda: el borrador propio se
+  // descarta en vez de pisarla, y el aviso llega como cualquier otro de la mesa.
   useEffect(() => {
-    // Al montar no hay nada que avisar: lo guardado ya está en pantalla.
     if (updatedAt === lastSaved.current) return
     lastSaved.current = updatedAt
-    // Sin saber quién soy no se puede distinguir mi guardado del ajeno.
     if (!updatedAt || !currentParticipantId || updatedBy === currentParticipantId) return
-    const author = participants.find((entry) => entry.id === updatedBy)
     setDraft(null)
-    setChangedBy(author?.display_name ?? 'Otro comensal')
-  }, [updatedAt, updatedBy, participants, currentParticipantId])
-
-  // El aviso dura lo mismo que un toast; cada cambio nuevo reinicia el plazo.
-  useEffect(() => {
-    if (!changedBy) return
-    const timer = setTimeout(() => setChangedBy(null), TOAST_DURATION_MS)
-    return () => clearTimeout(timer)
-  }, [changedBy])
+    announce(`${author?.display_name ?? 'Otro comensal'} cambió los detalles del pago.`)
+  }, [updatedAt, updatedBy, author, currentParticipantId, announce])
 
   const save = useMutation({
-    mutationFn: (next: SessionSplit) => updateSessionSplit(sessionId, next),
+    mutationFn: ({ sessionId, next }: { sessionId: string; next: SessionSplit }) =>
+      updateSessionSplit(sessionId, next),
     onSuccess: async () => {
       setDraft(null)
-      setChangedBy(null)
-      await queryClient.invalidateQueries({ queryKey: ['session', sessionId] })
+      await refreshTable()
     },
   })
 
+  if (!session || participants.length === 0) return null
+
   const active = draft ?? split
-  const shares = splitBill(bill, orders, participants, active)
+  // Cada modo se calcula una sola vez, con su propia base: partes iguales reparten el
+  // pendiente en partes; porcentajes, el total en cuenta (MI-43); «cada uno lo suyo»,
+  // el pendiente según lo que pidió cada uno.
   const equalAmounts = active.type === 'equal' && active.equalParts
     ? splitEqualAmounts(bill, active.equalParts)
     : []
-  // MI-43: el porcentaje se lee sobre el total de la cuenta, no sobre el
-  // pendiente, que encoge cuando otro paga. Es el mismo importe que después
-  // cobra la RPC.
-  const percentageShares = active.type === 'percentages'
-    ? splitPercentageAmounts(bill.total_amount, participants, active.allocations)
-    : []
+  const shares =
+    active.type === 'percentages'
+      ? splitPercentageAmounts(bill.total_amount, participants, active.allocations)
+      : active.type === 'none'
+        ? splitBill(bill, orders, participants, active)
+        : []
   const amountOf = (participantId: string) =>
-    (active.type === 'percentages' ? percentageShares : shares)
-      .find((share) => share.participantId === participantId)?.amount ?? 0
+    shares.find((share) => share.participantId === participantId)?.amount ?? 0
+
+  const changedByMe = !!updatedBy && updatedBy === currentParticipantId
+  const changedAt = updatedAt ? Date.parse(updatedAt) : NaN
+  const lastChange =
+    author && Number.isFinite(changedAt)
+      ? `${changedByMe ? 'La cambiaste vos' : `La cambió ${author.display_name}`} ${formatElapsed(changedAt, now)}.`
+      : undefined
 
   const validation = draft ? sessionSplitSchema.safeParse(draft) : null
   const assigned = draft ? allocationTotal(draft.allocations) : 0
 
-  const setAllocation = (participantId: string, value: string) =>
+  const setAllocation = (participantId: string, value: number | null) =>
     setDraft((current) => {
       if (!current) return current
       const allocations = { ...current.allocations }
-      // Vacío no es 0 guardado: la clave se saca para no dejar asignaciones
-      // muertas de comensales que no participan del reparto.
-      if (value === '') delete allocations[participantId]
-      else allocations[participantId] = Number(value)
+      if (value === null) delete allocations[participantId]
+      else allocations[participantId] = value
       return { ...current, allocations }
     })
 
-  // Cambiar de modo descarta las asignaciones: el schema solo las admite en
-  // `percentages`, y guardarlas de más es lo que dejaba porcentajes zombis.
   const chooseType = (type: SessionSplit['type']) => setDraft({
     type,
     allocations: type === 'percentages' ? (draft?.allocations ?? {}) : {},
@@ -115,6 +100,7 @@ export function BillSplitter({
     <section className="bill-panel" aria-label="División de la cuenta">
       <h3>{draft ? '¿Cómo quieren dividir la cuenta?' : 'División de la cuenta'}</h3>
       <p className="muted">{splitTypeDescriptions[active.type]}</p>
+      {!draft && lastChange && <p className="muted">{lastChange}</p>}
 
       {draft && (
         <div className="split-modes" role="group" aria-label="Forma de dividir">
@@ -134,20 +120,10 @@ export function BillSplitter({
       {active.type === 'equal' && (
         <div className="equal-split-summary">
           {draft ? (
-            <label>
-              Cantidad de personas
-              <input
-                type="number"
-                min={MIN_EQUAL_PARTS}
-                max={MAX_EQUAL_PARTS}
-                step={1}
-                value={draft.equalParts ?? ''}
-                onChange={(event) => setDraft((current) => current && ({
-                  ...current,
-                  equalParts: event.target.value === '' ? undefined : Number(event.target.value),
-                }))}
-              />
-            </label>
+            <PartsField
+              value={draft.equalParts ?? null}
+              onChange={(equalParts) => setDraft((current) => current && { ...current, equalParts })}
+            />
           ) : (
             <strong>{active.equalParts} personas</strong>
           )}
@@ -162,47 +138,45 @@ export function BillSplitter({
         </div>
       )}
 
-      {active.type !== 'equal' && <ul className="split-list">
-        {participants.map((participant) => {
-          const isYou = participant.user_id === userId
-          const amount = amountOf(participant.id)
-          return (
-            <li key={participant.id} className="choice">
-              <span>
-                {participant.display_name}
-                {isYou && <span className="badge">vos</span>}
-              </span>
-              {draft?.type === 'percentages' ? (
-                <span className="split-percent">
-                  <input
-                    type="number"
-                    min={0}
-                    max={SPLIT_PERCENTAGE_TOTAL}
-                    step="0.01"
-                    aria-label={`Porcentaje de ${participant.display_name}`}
-                    value={draft.allocations[participant.id] ?? ''}
-                    onChange={(event) => setAllocation(participant.id, event.target.value)}
-                  />
-                  <small>%</small>
-                </span>
-              ) : amount === 0 ? (
-                <small>No debe nada</small>
-              ) : active.type === 'percentages' ? (
+      {active.type !== 'equal' && (
+        <ul className="split-list">
+          {participants.map((participant) => {
+            const isYou = participant.id === currentParticipantId
+            const amount = amountOf(participant.id)
+            return (
+              <li key={participant.id} className="choice">
                 <span>
-                  <small>{active.allocations[participant.id] ?? 0}% · </small>
-                  <strong>{formatPrice(amount)}</strong>
+                  {participant.display_name}
+                  {isYou && <span className="badge">vos</span>}
                 </span>
-              ) : (
-                <strong>{formatPrice(amount)}</strong>
-              )}
-            </li>
-          )
-        })}
-      </ul>}
+                {draft?.type === 'percentages' ? (
+                  <PercentField
+                    value={draft.allocations[participant.id] ?? null}
+                    max={remainingPercentage(draft.allocations, participant.id)}
+                    label={`Porcentaje de ${participant.display_name}`}
+                    onChange={(value) => setAllocation(participant.id, value)}
+                  />
+                ) : amount === 0 ? (
+                  <small>No debe nada</small>
+                ) : active.type === 'percentages' ? (
+                  <span>
+                    <small>{active.allocations[participant.id] ?? 0}% · </small>
+                    <strong>{formatPrice(amount)}</strong>
+                  </span>
+                ) : (
+                  <strong>{formatPrice(amount)}</strong>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      )}
 
       {draft?.type === 'percentages' && (
-        <p className="muted">
-          Asignado: {assigned}% de {SPLIT_PERCENTAGE_TOTAL}%.
+        <p className="muted" role="status">
+          {assigned === SPLIT_PERCENTAGE_TOTAL
+            ? `Repartido el ${SPLIT_PERCENTAGE_TOTAL}%.`
+            : `Asignado ${assigned}% de ${SPLIT_PERCENTAGE_TOTAL}%: falta repartir ${SPLIT_PERCENTAGE_TOTAL - assigned}%.`}
         </p>
       )}
 
@@ -214,20 +188,10 @@ export function BillSplitter({
       )}
 
       {validation && !validation.success && (
-        <p className="notice">{validation.error.issues[0].message}</p>
+        <p className="error-notice">{validation.error.issues[0].message}</p>
       )}
 
-      {changedBy && (
-        <p className="notice" role="status">
-          {changedBy} cambió los detalles del pago.
-        </p>
-      )}
-
-      {save.isError && (
-        <p className="notice" role="alert">
-          {save.error.message}
-        </p>
-      )}
+      <ErrorText variant="menu" error={save.error} />
 
       <div className="cart-actions">
         {draft ? (
@@ -238,7 +202,7 @@ export function BillSplitter({
             <button
               className="primary"
               disabled={!validation?.success || save.isPending}
-              onClick={() => validation?.success && save.mutate(validation.data)}
+              onClick={() => validation?.success && save.mutate({ sessionId: session.id, next: validation.data })}
             >
               {save.isPending ? 'Guardando…' : 'Guardar división'}
             </button>

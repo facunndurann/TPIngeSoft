@@ -1,49 +1,31 @@
-import { Link, useLocation } from 'react-router'
-import { cartPath, isMenuIndex, ordersPath, tableRoot, tableSection } from '@/features/table-paths'
+import { NavLink, useLocation } from 'react-router'
+import { billPath, cartPath, ordersPath, tableRoot } from '@/features/table-paths'
 
 type TableNavProps = {
   token: string
   cartCount: number
 }
 
+/**
+ * Las pestañas de la mesa. `NavLink` marca `aria-current="page"` según la ruta: la
+ * carta con `end`, porque dentro de un plato ya no se está mirando la carta; el
+ * carrito cuenta también al editar una línea. Pedidos es lo que se pidió y Cuenta,
+ * cómo se paga: van separadas porque se consultan en momentos distintos.
+ */
 export function TableNav({ token, cartCount }: TableNavProps) {
-  const location = useLocation()
-  const section = tableSection(location.pathname)
-  const menuHref = `${tableRoot(token)}${section === 'menu' || location.pathname.includes('/producto/') ? location.search : ''}`
-  const cartHref = cartPath(token)
-  const ordersHref = ordersPath(token)
+  const { search } = useLocation()
+  // La query solo la usan la carta y sus platos (categoría y búsqueda): llevarla es
+  // volver a la carta con los filtros con que se la estaba recorriendo.
+  const menuHref = `${tableRoot(token)}${search}`
 
   return (
     <nav className="tabs" aria-label="Navegación">
-      <Link
-        to={menuHref}
-        aria-current={section === 'menu' ? 'page' : undefined}
-        onClick={(event) => {
-          if (isMenuIndex(location.pathname) && `${location.pathname}${location.search}` === menuHref) {
-            event.preventDefault()
-          }
-        }}
-      >
+      <NavLink to={menuHref} end>
         La carta
-      </Link>
-      <Link
-        to={cartHref}
-        aria-current={section === 'cart' ? 'page' : undefined}
-        onClick={(event) => {
-          if (location.pathname === cartHref) event.preventDefault()
-        }}
-      >
-        Mi carrito ({cartCount})
-      </Link>
-      <Link
-        to={ordersHref}
-        aria-current={section === 'orders' ? 'page' : undefined}
-        onClick={(event) => {
-          if (location.pathname === ordersHref) event.preventDefault()
-        }}
-      >
-        Pedidos y cuenta
-      </Link>
+      </NavLink>
+      <NavLink to={cartPath(token)}>Mi carrito ({cartCount})</NavLink>
+      <NavLink to={ordersPath(token)}>Pedidos</NavLink>
+      <NavLink to={billPath(token)}>Cuenta</NavLink>
     </nav>
   )
 }

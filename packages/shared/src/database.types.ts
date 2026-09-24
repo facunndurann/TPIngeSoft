@@ -1187,22 +1187,25 @@ export type Database = {
           display_name: string
           id: string
           joined_at: string
+          named_at: string | null
           session_id: string
-          user_id: string
+          user_id: string | null
         }
         Insert: {
           display_name: string
           id?: string
           joined_at?: string
+          named_at?: string | null
           session_id: string
-          user_id: string
+          user_id?: string | null
         }
         Update: {
           display_name?: string
           id?: string
           joined_at?: string
+          named_at?: string | null
           session_id?: string
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -1456,6 +1459,14 @@ export type Database = {
     Functions: {
       abandon_order_request: {
         Args: { p_request_id: string; p_session_id: string }
+        Returns: string
+      }
+      add_guest_participant: {
+        Args: {
+          p_display_name: string
+          p_item_ids?: string[]
+          p_session_id: string
+        }
         Returns: string
       }
       audit_employee_password_reset: {

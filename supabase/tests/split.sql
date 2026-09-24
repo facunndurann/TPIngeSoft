@@ -98,7 +98,8 @@ begin
   perform pg_temp.expect_split_error(sid, 'percentages', '[]'::jsonb, 'INVALID_SPLIT');
 
   select * into saved from public.table_sessions where id = sid;
-  if saved.split_type <> 'none' or saved.split_allocations <> '{}'::jsonb then
+  if saved.split_type <> 'none' or saved.split_allocations <> '{}'::jsonb
+     or saved.split_updated_by is not null or saved.split_updated_at is not null then
     raise exception 'Rejected splits should leave the session untouched'; end if;
 
   -- ---------- Guardados válidos ----------
@@ -120,6 +121,9 @@ begin
   select * into saved from public.table_sessions where id = sid;
   if saved.split_type <> 'none' or saved.split_allocations <> '{}'::jsonb then
     raise exception 'Switching away from percentages should clear allocations'; end if;
+  -- La firma es del último que cambió, no del primero, y es su participación.
+  if saved.split_updated_by <> beto_participant then
+    raise exception 'The author should be the diner who changed the split last'; end if;
 
   perform public.update_session_split(sid, 'equal', '{}'::jsonb, 4);
   if not exists(select 1 from public.table_sessions where id = sid

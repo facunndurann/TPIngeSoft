@@ -2,11 +2,12 @@ import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowDown, ArrowUp, Check, Pencil, Plus, Trash2 } from 'lucide-react'
 import type { Tables } from '@restaurant-platform/shared'
-import { supabase } from '@/lib/supabase'
+import { Page } from '@/features/Page'
+import { optimistic, patchRow } from '@/lib/optimistic'
+import { supabase, unwrap } from '@/lib/supabase'
 import { categoriesQuery } from '@/queries/categories'
 import { useRestaurant } from '@/restaurant/restaurant-context'
-import { Badge, Button, EmptyState, ErrorText, Input, Spinner, Toggle, useSaveErrors } from '@restaurant-platform/ui'
-import { fromPostgres } from '@restaurant-platform/shared'
+import { Badge, Button, EmptyState, ErrorText, IconButton, Input, Spinner, Toggle, useSaveErrors } from '@restaurant-platform/ui'
 
 type Category = Tables<'menu_categories'>
 
@@ -23,14 +24,14 @@ export function CategoriesPage() {
   const invalidate = () => queryClient.invalidateQueries({ queryKey: categoriesQuery(restaurant.id).queryKey })
 
   const createMutation = useMutation(errors.saving('No pudimos crear la categoría.', {
-    mutationFn: async (name: string) => {
-      const { error: mErr } = await supabase.from('menu_categories').insert({
-        restaurant_id: restaurant.id,
-        name,
-        sort_order: categories?.length ?? 0,
-      })
-      if (mErr) throw mErr
-    },
+    mutationFn: async (name: string) =>
+      unwrap(
+        await supabase.from('menu_categories').insert({
+          restaurant_id: restaurant.id,
+          name,
+          sort_order: categories?.length ?? 0,
+        }),
+      ),
     onSuccess: () => {
       setNewName('')
       invalidate()
@@ -38,36 +39,29 @@ export function CategoriesPage() {
   }))
 
   const updateMutation = useMutation(errors.saving('No pudimos guardar la categoría.', {
-    mutationFn: async (patch: Partial<Category> & { id: string }) => {
-      const { id, ...rest } = patch
-      const { error: mErr } = await supabase.from('menu_categories').update(rest).eq('id', id)
-      if (mErr) throw mErr
-    },
-    onSuccess: () => {
-      setEditingId(null)
-      invalidate()
-    },
-  }))
+    mutationFn: async ({ id, ...rest }: Partial<Category> & { id: string }) =>
+      unwrap(await supabase.from('menu_categories').update(rest).eq('id', id)),
+    // Activar o renombrar se ve al instante; si falla, vuelve lo anterior.
+    ...optimistic(queryClient, categoriesQuery(restaurant.id).queryKey, patchRow<Category>),
+    onSuccess: () => setEditingId(null),
+  }, ({ id }) => id))
 
   const deleteMutation = useMutation(errors.saving('No pudimos eliminar la categoría.', {
-    mutationFn: async (id: string) => {
-      const { error: mErr } = await supabase.from('menu_categories').delete().eq('id', id)
-      // products_category_id_fkey ya tiene su mensaje en el catálogo.
-      if (mErr) throw fromPostgres(mErr)
-    },
+    mutationFn: async (id: string) =>
+      unwrap(await supabase.from('menu_categories').delete().eq('id', id)),
     onSuccess: invalidate,
-  }))
+  }, (id) => id))
 
   // Se envía la lista completa en el orden nuevo: la base la aplica de una vez y
   // rechaza la operación si la lista quedó desactualizada.
   const reorderMutation = useMutation(errors.saving('No pudimos reordenar las categorías.', {
-    mutationFn: async (categoryIds: string[]) => {
-      const { error: mErr } = await supabase.rpc('reorder_categories', {
-        p_restaurant_id: restaurant.id,
-        p_category_ids: categoryIds,
-      })
-      if (mErr) throw fromPostgres(mErr)
-    },
+    mutationFn: async (categoryIds: string[]) =>
+      unwrap(
+        await supabase.rpc('reorder_categories', {
+          p_restaurant_id: restaurant.id,
+          p_category_ids: categoryIds,
+        }),
+      ),
     onSettled: invalidate,
   }))
 
@@ -85,26 +79,23 @@ export function CategoriesPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-neutral-900">Categorías del menú</h1>
-        <p className="text-sm text-neutral-500">
-          Creá, renombrá y ordená las categorías que ve el cliente.
-        </p>
-      </div>
-
+    <Page
+      title="Categorías del menú"
+      description="Creá, renombrá y ordená las categorías que ve el cliente."
+    >
       <form onSubmit={handleCreate} className="flex gap-2">
         <Input
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
           placeholder="Nueva categoría (ej: Postres)"
+          aria-label="Nombre de la nueva categoría"
         />
         <Button type="submit" disabled={createMutation.isPending}>
           <Plus size={16} /> Agregar
         </Button>
       </form>
 
-      <ErrorText message={errors.message} />
+      <ErrorText error={errors.message} />
 
       {isLoading ? (
         <Spinner />
@@ -115,76 +106,85 @@ export function CategoriesPage() {
           {categories.map((category, index) => (
             <li
               key={category.id}
-              className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-4 py-3"
+              className="space-y-2 rounded-xl border border-neutral-200 bg-white py-2 pr-3 pl-2"
             >
-              <div className="flex flex-col">
-                <button
-                  className="cursor-pointer text-neutral-400 hover:text-neutral-700 disabled:opacity-30"
-                  disabled={index === 0 || reorderMutation.isPending}
-                  onClick={() => move(index, -1)}
-                  aria-label="Subir"
-                >
-                  <ArrowUp size={15} />
-                </button>
-                <button
-                  className="cursor-pointer text-neutral-400 hover:text-neutral-700 disabled:opacity-30"
-                  disabled={index === categories.length - 1 || reorderMutation.isPending}
-                  onClick={() => move(index, 1)}
-                  aria-label="Bajar"
-                >
-                  <ArrowDown size={15} />
-                </button>
-              </div>
+              <div className="flex items-center gap-2">
+                {/* Una al lado de la otra y de 32 px: apiladas medían 15 px, pegadas. */}
+                <div className="flex">
+                  <IconButton
+                    label={`Subir ${category.name}`}
+                    disabled={index === 0 || reorderMutation.isPending}
+                    onClick={() => move(index, -1)}
+                  >
+                    <ArrowUp size={16} />
+                  </IconButton>
+                  <IconButton
+                    label={`Bajar ${category.name}`}
+                    disabled={index === categories.length - 1 || reorderMutation.isPending}
+                    onClick={() => move(index, 1)}
+                  >
+                    <ArrowDown size={16} />
+                  </IconButton>
+                </div>
 
-              {editingId === category.id ? (
-                <form
-                  className="flex flex-1 items-center gap-2"
-                  onSubmit={(e) => {
-                    e.preventDefault()
-                    updateMutation.mutate({ id: category.id, name: editingName })
+                {editingId === category.id ? (
+                  <form
+                    className="flex flex-1 items-center gap-2"
+                    onSubmit={(e) => {
+                      e.preventDefault()
+                      updateMutation.mutate({ id: category.id, name: editingName })
+                    }}
+                  >
+                    <Input
+                      value={editingName}
+                      onChange={(e) => setEditingName(e.target.value)}
+                      aria-label={`Nuevo nombre de ${category.name}`}
+                      autoFocus
+                    />
+                    <Button type="submit" variant="secondary" aria-label="Guardar nombre">
+                      <Check size={15} />
+                    </Button>
+                  </form>
+                ) : (
+                  <>
+                    <span className="flex-1 text-sm font-medium text-neutral-900">{category.name}</span>
+                    {!category.is_active && <Badge color="red">Inactiva</Badge>}
+                  </>
+                )}
+
+                <Toggle
+                  checked={category.is_active}
+                  onChange={(value) => updateMutation.mutate({ id: category.id, is_active: value })}
+                  label={`Activa: ${category.name}`}
+                  hideLabel
+                  busy={updateMutation.isPending && updateMutation.variables?.id === category.id}
+                />
+                <IconButton
+                  label={`Renombrar ${category.name}`}
+                  onClick={() => {
+                    setEditingId(category.id)
+                    setEditingName(category.name)
                   }}
                 >
-                  <Input value={editingName} onChange={(e) => setEditingName(e.target.value)} autoFocus />
-                  <Button type="submit" variant="secondary">
-                    <Check size={15} />
-                  </Button>
-                </form>
-              ) : (
-                <>
-                  <span className="flex-1 text-sm font-medium text-neutral-900">{category.name}</span>
-                  {!category.is_active && <Badge color="red">Inactiva</Badge>}
-                </>
-              )}
-
-              <Toggle
-                checked={category.is_active}
-                onChange={(value) => updateMutation.mutate({ id: category.id, is_active: value })}
-              />
-              <button
-                className="cursor-pointer p-1 text-neutral-400 hover:text-neutral-700"
-                onClick={() => {
-                  setEditingId(category.id)
-                  setEditingName(category.name)
-                }}
-                aria-label="Renombrar"
-              >
-                <Pencil size={15} />
-              </button>
-              <button
-                className="cursor-pointer p-1 text-neutral-400 hover:text-red-600"
-                onClick={() => {
-                  if (confirm(`¿Eliminar la categoría "${category.name}"?`)) {
-                    deleteMutation.mutate(category.id)
-                  }
-                }}
-                aria-label="Eliminar"
-              >
-                <Trash2 size={15} />
-              </button>
+                  <Pencil size={15} />
+                </IconButton>
+                <IconButton
+                  label={`Eliminar ${category.name}`}
+                  tone="danger"
+                  onClick={() => {
+                    if (confirm(`¿Eliminar la categoría "${category.name}"?`)) {
+                      deleteMutation.mutate(category.id)
+                    }
+                  }}
+                >
+                  <Trash2 size={15} />
+                </IconButton>
+              </div>
+              <ErrorText error={errors.messageFor(category.id)} />
             </li>
           ))}
         </ul>
       )}
-    </div>
+    </Page>
   )
 }

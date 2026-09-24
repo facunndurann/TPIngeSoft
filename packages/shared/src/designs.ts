@@ -21,7 +21,13 @@ export type MenuDesignTokens = {
   muted: string
   surface: string
   surfaceMuted: string
+  /** Separadores y tarjetas: decorativo, puede ser tenue. */
   border: string
+  /**
+   * Borde de lo que se toca o se completa (inputs, botones secundarios, chips). WCAG 1.4.11
+   * pide 3:1 contra lo que tiene al lado: fondo, superficie y superficie apagada.
+   */
+  controlBorder: string
   heading: string
   eyebrow: string
   badgeBg: string
@@ -80,6 +86,7 @@ const oliva: MenuDesign<'oliva'> = {
     surface: '#ffffff',
     surfaceMuted: '#f0f1e9',
     border: '#dcded4',
+    controlBorder: '#868980',
     heading: '#292c26',
     eyebrow: '#597151',
     badgeBg: '#e9eddf',
@@ -125,6 +132,7 @@ const brasas: MenuDesign<'brasas'> = {
     surface: '#1f1a16',
     surfaceMuted: '#2a231c',
     border: '#3d342c',
+    controlBorder: '#786f67',
     heading: '#f7efe6',
     eyebrow: '#e08a2b',
     badgeBg: '#3d2a14',
@@ -166,10 +174,11 @@ const linterna: MenuDesign<'linterna'> = {
     accent: '#7a2e32',
     accentHover: '#5e2226',
     accentText: '#f8f3ea',
-    muted: '#7a6a60',
+    muted: '#736359',
     surface: '#fffaf3',
     surfaceMuted: '#efe6d8',
     border: '#e0d4c4',
+    controlBorder: '#8d7f74',
     heading: '#3a221c',
     eyebrow: '#7a2e32',
     badgeBg: '#efe0d4',

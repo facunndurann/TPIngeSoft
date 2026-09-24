@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react'
 import {
   FLOOR_GRID,
-  clampToGrid,
-  tableFootprint,
+  tablePlacement,
   type Footprint,
+  type Placed,
 } from '@restaurant-platform/shared'
 
 /** Lo mínimo para dibujar una mesa: el resto lo pone quien la renderiza. */
@@ -35,26 +35,25 @@ type FloorGridProps<T extends FloorGridTable> = {
    * Caja a dibujar en lugar de la guardada, mientras dura un gesto de arrastre
    * o de redimensionado. Devolver `null` usa la posición guardada.
    */
-  preview?: (table: T) => { footprint: Footprint; x: number; y: number } | null
+  preview?: (table: T) => Placed | null
   renderTable: (table: T, tile: FloorTile) => ReactNode
 }
 
 /** Separación entre mesas vecinas, repartida a cada lado de la celda. */
 const GAP = 6
 
-function tileOf(table: FloorGridTable, override?: { footprint: Footprint; x: number; y: number } | null): FloorTile {
-  // El recorte se aplica al dibujar y no solo al editar: si la grilla se
+function tileOf(table: FloorGridTable, override?: Placed | null): FloorTile {
+  // Recortada a la grilla al dibujar, no solo al editar: si la grilla se
   // achicara, una mesa vieja sigue visible en lugar de quedar fuera de la vista.
-  const footprint = override?.footprint ?? tableFootprint(table)
-  const position = override ?? clampToGrid(table.position_x, table.position_y, footprint)
+  const { footprint, x, y } = override ?? tablePlacement(table)
 
   return {
     footprint,
-    x: position.x,
-    y: position.y,
+    x,
+    y,
     box: {
-      left: position.x * FLOOR_GRID.cell + GAP / 2,
-      top: position.y * FLOOR_GRID.cell + GAP / 2,
+      left: x * FLOOR_GRID.cell + GAP / 2,
+      top: y * FLOOR_GRID.cell + GAP / 2,
       width: footprint.w * FLOOR_GRID.cell - GAP,
       height: footprint.h * FLOOR_GRID.cell - GAP,
     },
@@ -90,7 +89,7 @@ export function FloorGrid<T extends FloorGridTable>({
       {tables.map((table) => renderTable(table, tileOf(table, preview?.(table))))}
 
       {tables.length === 0 && (
-        <p className="absolute inset-0 flex items-center justify-center text-sm text-neutral-400">
+        <p className="absolute inset-0 flex items-center justify-center text-sm text-muted">
           {emptyMessage}
         </p>
       )}

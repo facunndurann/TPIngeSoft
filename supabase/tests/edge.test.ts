@@ -1,16 +1,18 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
-import { type OrderStatus, submitOrderErrorSchema, submitOrderResultSchema, submitOrderSchema } from '../../packages/shared/src/orders.ts'
-import { AppError, appErrorMessage, appErrors, fromPostgres, isRetryableError } from '../../packages/shared/src/errors.ts'
+import { type OrderStatus, submitOrderResultSchema, submitOrderSchema } from '../../packages/shared/src/orders.ts'
+import { AppError, appErrorBodySchema, appErrorMessage, appErrors, fromPostgres, isRetryableError } from '../../packages/shared/src/errors.ts'
+import { formatElapsed } from '../../packages/shared/src/time.ts'
 import {
-  formatElapsed,
-  getPosTableState,
-  isKitchenTicket,
-  posActions,
   sessionRequestKinds,
   sessionRequestLabels,
   sessionRequestsOf,
   sessionRequestState,
+} from '../../packages/shared/src/session-requests.ts'
+import {
+  getPosTableState,
+  isKitchenTicket,
+  posActions,
 } from '../../packages/shared/src/pos.ts'
 import { splitPercentageAmounts } from '../../packages/shared/src/split.ts'
 import {
@@ -106,7 +108,7 @@ test('database errors answer with the status, code and message of the shared cat
     gateway.submit = async () => { throw fromPostgres({ message: code }) }
     const response = await handler(request())
     assert.equal(response.status, appErrors[code].status)
-    const body = submitOrderErrorSchema.parse(await response.json())
+    const body = appErrorBodySchema.parse(await response.json())
     assert.deepEqual(body.error, { code, message: appErrors[code].message })
   }
 })
@@ -126,7 +128,10 @@ test('unexpected failures never leak backend details', async () => {
   assert.equal(failed.status, 503)
   const body = await failed.text()
   assert.doesNotMatch(body, /private backend detail/)
-  assert.equal(JSON.parse(body).error.code, 'SERVER_ERROR')
+  const { code, message } = JSON.parse(body).error
+  assert.equal(code, 'SERVER_ERROR')
+  // El envío pide reintentar el mismo requestId: el catálogo ya no lo dice por él.
+  assert.equal(message, 'No pudimos confirmar el resultado. Reintentá el mismo envío para evitar duplicados.')
 })
 
 test('mobile payment endpoint creates and confirms only validated requests', async () => {
@@ -182,8 +187,22 @@ test('POS actions advance and cancel until delivery, and nothing leaves cancelle
 })
 
 test('elapsed time reads naturally and POS errors stay coded', () => {
-  assert.equal(formatElapsed('2026-09-05T12:00:00.000Z', Date.parse('2026-09-05T12:00:30.000Z')), 'Ahora')
-  assert.equal(formatElapsed('2026-09-05T12:00:00.000Z', Date.parse('2026-09-05T13:05:00.000Z')), 'Hace 1 h 5 min')
+  // Un solo vocabulario para las dos apps: fragmento en minúscula, sin sujeto,
+  // que entra igual en «Actualizado …» que en «Pediste la cuenta · …».
+  const opened = '2026-09-05T12:00:00.000Z'
+  const after = (ms: number) => Date.parse(opened) + ms
+  assert.equal(formatElapsed(opened, after(30_000)), 'hace instantes')
+  assert.equal(formatElapsed(opened, after(60_000)), 'hace 1 min')
+  assert.equal(formatElapsed(opened, after(59 * 60_000)), 'hace 59 min')
+  assert.equal(formatElapsed(opened, after(150 * 60_000)), 'hace 2 h')
+  // Al salón le importan los minutos de la hora; al comensal, no.
+  assert.equal(formatElapsed(opened, after(65 * 60_000), 'exact'), 'hace 1 h 5 min')
+  assert.equal(formatElapsed(opened, after(65 * 60_000)), 'hace 1 h')
+  assert.equal(formatElapsed(opened, after(120 * 60_000), 'exact'), 'hace 2 h')
+  // Los milisegundos de react-query y el ISO de la base dan lo mismo.
+  assert.equal(formatElapsed(Date.parse(opened), after(60_000)), 'hace 1 min')
+  // Un reloj atrasado no puede producir un «hace -3 min».
+  assert.equal(formatElapsed(opened, after(-5 * 60_000)), 'hace instantes')
   // Un solo traductor para las tres formas en que llega un error de Postgres.
   assert.equal(fromPostgres('FORBIDDEN').code, 'FORBIDDEN')
   assert.equal(fromPostgres({ message: 'P0001: INVALID_TRANSITION' }).code, 'INVALID_TRANSITION')
@@ -198,6 +217,12 @@ test('elapsed time reads naturally and POS errors stay coded', () => {
   assert.equal(unknown.detail, 'relation "x" does not exist')
   assert.equal(unknown.status, 503)
   assert.equal(unknown.retryable, true)
+  // Quien sabe qué operación falló lo dice; un código conocido conserva su mensaje.
+  const read = fromPostgres('fetch failed', 'No pudimos actualizar la cuenta.')
+  assert.equal(read.code, 'SERVER_ERROR')
+  assert.equal(read.message, 'No pudimos actualizar la cuenta.')
+  assert.equal(read.detail, 'fetch failed')
+  assert.equal(fromPostgres('FORBIDDEN', 'No pudimos actualizar la cuenta.').message, appErrors.FORBIDDEN.message)
 })
 
 test('reverting steps back exactly one stage, never to submitted nor from cancelled', () => {

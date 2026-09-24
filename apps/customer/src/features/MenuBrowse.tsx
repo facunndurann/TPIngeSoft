@@ -1,6 +1,7 @@
 import { Link, useLocation, useSearchParams } from 'react-router'
-import { formatPrice, productMedia } from '@restaurant-platform/shared'
-import { MediaCarousel } from '@/features/MediaCarousel'
+import { CurrentLink } from '@/components/CurrentLink'
+import { dietaryTagsText, formatPrice, productMedia } from '@restaurant-platform/shared'
+import { MediaThumb } from '@/features/MediaCarousel'
 import { useMenuDesign } from '@/features/menu-design'
 import { matchesSearch } from '@/features/menu'
 import type { Menu, Product } from '@/features/menu'
@@ -9,10 +10,9 @@ import { menuPath, parseMenuFilters, productPath } from '@/features/table-paths'
 type MenuBrowseProps = {
   token: string
   menu: Menu
-  canEdit: boolean
 }
 
-export function MenuBrowse({ token, menu, canEdit }: MenuBrowseProps) {
+export function MenuBrowse({ token, menu }: MenuBrowseProps) {
   const { copy } = useMenuDesign()
   const { search: locationSearch } = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -37,7 +37,7 @@ export function MenuBrowse({ token, menu, canEdit }: MenuBrowseProps) {
         <input
           id="search"
           type="search"
-          placeholder="Buscar en la carta…"
+          placeholder="Buscar…"
           value={search}
           onChange={(event) => {
             const query = event.target.value
@@ -50,29 +50,28 @@ export function MenuBrowse({ token, menu, canEdit }: MenuBrowseProps) {
       </div>
 
       <div className="categories" aria-label="Categorías">
-        <FilterLink to={menuPath(token, 'all', search)} active={category === 'all'}>
+        <CurrentLink to={menuPath(token, 'all', search)} current={category === 'all'}>
           Todo
-        </FilterLink>
+        </CurrentLink>
         {menu.categories.map((entry) => (
-          <FilterLink
+          <CurrentLink
             key={entry.id}
             to={menuPath(token, entry.id, search)}
-            active={category === entry.id}
+            current={category === entry.id}
           >
             {entry.name}
-          </FilterLink>
+          </CurrentLink>
         ))}
       </div>
 
       {sections.map((entry) => (
         <section key={entry.id}>
-          <h2>{entry.name}</h2>
+          <h3 className="section-title">{entry.name}</h3>
           <div className="product-grid">
             {entry.products.map((product) => (
               <ProductCard
                 key={product.id}
                 product={product}
-                disabled={!product.is_available || !canEdit}
                 to={productPath(token, product.id, locationSearch)}
               />
             ))}
@@ -87,47 +86,24 @@ export function MenuBrowse({ token, menu, canEdit }: MenuBrowseProps) {
   )
 }
 
-function FilterLink({ to, active, children }: { to: string; active: boolean; children: string }) {
-  const location = useLocation()
-  const current = `${location.pathname}${location.search}`
-
+function ProductCard({ product, to }: { product: Product; to: string }) {
+  // La tarjeta es un contenedor, no un enlace: el <Link> del nombre se estira a toda
+  // la tarjeta por CSS (.product-card-link::after), foto incluida, y no hay otro control
+  // adentro con el que pueda chocar. Todo plato se puede abrir, aunque esté agotado o
+  // la mesa no admita pedir: leerlo no cuesta nada, y el detalle dice por qué no se
+  // puede agregar.
   return (
-    <Link
-      to={to}
-      aria-current={active ? 'true' : undefined}
-      onClick={(event) => {
-        if (current === to) event.preventDefault()
-      }}
-    >
-      {children}
-    </Link>
-  )
-}
-
-function ProductCard({
-  product,
-  disabled,
-  to,
-}: {
-  product: Product
-  disabled: boolean
-  to: string
-}) {
-  // La tarjeta es un contenedor, no un enlace: el <Link> y los controles del
-  // carrusel son hermanos. El enlace se estira a toda la tarjeta por CSS
-  // (.product-card-link::after) y las flechas quedan por encima.
-  return (
-    <article className={disabled ? 'product-card is-disabled' : 'product-card'}>
+    <article className="product-card">
       <div className="product-card-body">
-        <h3>
-          {disabled ? product.name : <Link className="product-card-link" to={to}>{product.name}</Link>}
-        </h3>
+        <h4>
+          <Link className="product-card-link" to={to}>{product.name}</Link>
+        </h4>
         <p>{product.description}</p>
-        {product.dietary_tags.length > 0 && <small>{product.dietary_tags.join(' · ')}</small>}
+        {product.dietary_tags.length > 0 && <small>{dietaryTagsText(product.dietary_tags)}</small>}
         <strong>{formatPrice(product.base_price)}</strong>
         {!product.is_available && <span className="unavailable">Agotado</span>}
       </div>
-      <MediaCarousel media={productMedia(product)} variant="card" alt={product.name} />
+      <MediaThumb media={productMedia(product)} />
     </article>
   )
 }

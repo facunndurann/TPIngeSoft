@@ -15,7 +15,7 @@
 
 import { z } from 'zod';
 import { isBilledStatus, type OrderStatus } from './orders.ts';
-import { asAmount } from './pos.ts';
+import { asAmount } from './money.ts';
 
 export const splitTypes = ['none', 'equal', 'percentages'] as const;
 export type SplitType = (typeof splitTypes)[number];
@@ -111,6 +111,27 @@ export const defaultSessionSplit: SessionSplit = { type: 'none', allocations: {}
 /** Suma de los porcentajes asignados; el editor la muestra para saber cuánto falta. */
 export function allocationTotal(allocations: SplitAllocations): number {
   return Object.values(allocations).reduce((total, value) => total + value, 0);
+}
+
+/**
+ * Cuánto puede asignarse todavía a un comensal: los 100 menos lo que ya tienen
+ * los demás. Es el techo real de su campo, así nadie puede pasar del total.
+ * Se suma en centésimas y se divide al final para no arrastrar ruido del float.
+ */
+export function remainingPercentage(
+  allocations: SplitAllocations,
+  participantId: string,
+): number {
+  const others = Object.entries(allocations).reduce(
+    (total, [id, value]) => (id === participantId ? total : total + Math.round(value * HUNDREDTHS)),
+    0,
+  );
+  return Math.max(SPLIT_PERCENTAGE_TOTAL * HUNDREDTHS - others, 0) / HUNDREDTHS;
+}
+
+/** Compara porcentajes con la precisión del schema: dos decimales, sin sorpresas del float. */
+export function percentageFits(value: number, limit: number): boolean {
+  return Math.round(value * HUNDREDTHS) <= Math.round(limit * HUNDREDTHS);
 }
 
 /**

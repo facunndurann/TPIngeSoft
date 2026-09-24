@@ -186,6 +186,50 @@ COMMENT ON FUNCTION "public"."abandon_order_request"("p_session_id" "uuid", "p_r
 
 
 
+CREATE OR REPLACE FUNCTION "public"."add_guest_participant"("p_session_id" "uuid", "p_display_name" "text", "p_item_ids" "uuid"[] DEFAULT '{}'::"uuid"[]) RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  target public.table_sessions;
+  guest uuid;
+begin
+  if auth.uid() is null then raise exception 'AUTH_REQUIRED'; end if;
+
+  -- Mismo límite que customer_join_table_session y participantNameSchema.
+  if p_display_name is null
+     or length(trim(p_display_name)) < 1 or length(trim(p_display_name)) > 40 then
+    raise exception 'INVALID_NAME';
+  end if;
+
+  -- Se bloquea la sesión, como en update_session_split: no se suma gente a una
+  -- mesa que otro está cerrando en ese mismo momento.
+  select * into target from public.table_sessions where id = p_session_id for update;
+  if not found then raise exception 'SESSION_NOT_FOUND'; end if;
+  if target.status <> 'open' then raise exception 'SESSION_CLOSED'; end if;
+  if not exists (
+    select 1 from public.session_participants
+    where session_id = p_session_id and user_id = auth.uid()
+  ) then raise exception 'NOT_PARTICIPANT'; end if;
+
+  -- Sin user_id: el invitado no tiene cuenta propia, lo agrega alguien de la mesa.
+  insert into public.session_participants(session_id, display_name)
+    values (p_session_id, trim(p_display_name))
+    returning id into guest;
+
+  -- Solo se reasignan ítems de pedidos de esta sesión; un id ajeno no mueve nada.
+  update public.order_items set participant_id = guest
+    where id = any(coalesce(p_item_ids, '{}'))
+      and order_id in (select id from public.orders where session_id = p_session_id);
+
+  return guest;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."add_guest_participant"("p_session_id" "uuid", "p_display_name" "text", "p_item_ids" "uuid"[]) OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."audit_employee_password_reset"("p_actor" "uuid", "p_restaurant" "uuid", "p_user" "uuid", "p_completed" boolean DEFAULT false) RETURNS "void"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -524,23 +568,35 @@ CREATE OR REPLACE FUNCTION "public"."customer_join_table_session"("qr" "text", "
 declare
   target public.tables;
   sid uuid;
+  -- Null cuando el comensal entra sin nombre: no se puede dar por elegido el default.
+  named timestamptz := case when participant_name is not null then now() end;
 begin
-  if auth.uid() is null then raise exception 'Authentication required'; end if;
-  if participant_name is not null and (length(trim(participant_name)) < 1 or length(trim(participant_name)) > 40) then
-    raise exception 'Name must contain 1 to 40 characters';
+  if auth.uid() is null then raise exception 'AUTH_REQUIRED'; end if;
+
+  if participant_name is not null
+     and (length(trim(participant_name)) < 1 or length(trim(participant_name)) > 40) then
+    raise exception 'INVALID_NAME';
   end if;
+
   select t.* into target from public.tables t
     join public.branches b on b.id = t.branch_id
     where t.qr_token = qr and t.is_active and b.is_active for update of t;
-  if not found then raise exception 'Table unavailable'; end if;
-  select id into sid from public.table_sessions where table_id = target.id and status = 'open' for update;
+  if not found then raise exception 'TABLE_UNAVAILABLE'; end if;
+
+  select id into sid from public.table_sessions
+    where table_id = target.id and status = 'open' for update;
   if sid is null then
-    insert into public.table_sessions(restaurant_id, table_id) values(target.restaurant_id, target.id) returning id into sid;
+    insert into public.table_sessions(restaurant_id, table_id)
+      values(target.restaurant_id, target.id) returning id into sid;
   end if;
-  insert into public.session_participants(session_id, user_id, display_name)
-    values(sid, auth.uid(), coalesce(trim(participant_name), 'Comensal'))
+
+  insert into public.session_participants(session_id, user_id, display_name, named_at)
+    values(sid, auth.uid(), coalesce(trim(participant_name), 'Comensal'), named)
     on conflict (session_id, user_id) do update
-      set display_name = coalesce(trim(participant_name), session_participants.display_name);
+      set display_name = coalesce(trim(participant_name), session_participants.display_name),
+          -- Volver a entrar sin nombre no borra el que ya se eligió.
+          named_at = coalesce(named, session_participants.named_at);
+
   return sid;
 end;
 $$;
@@ -2274,7 +2330,7 @@ COMMENT ON COLUMN "public"."table_sessions"."split_equal_parts" IS 'Cantidad de 
 
 
 
-COMMENT ON COLUMN "public"."table_sessions"."split_updated_by" IS 'Comensal que guardó la división vigente. Null si la guardó alguien que ya no está en la mesa.';
+COMMENT ON COLUMN "public"."table_sessions"."split_updated_by" IS 'Comensal (session_participants.id) que guardó la división vigente. Sin FK a propósito: ver la migración.';
 
 
 
@@ -2308,13 +2364,18 @@ ALTER VIEW "public"."session_bills" OWNER TO "postgres";
 CREATE TABLE IF NOT EXISTS "public"."session_participants" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "session_id" "uuid" NOT NULL,
-    "user_id" "uuid" NOT NULL,
+    "user_id" "uuid",
     "display_name" "text" NOT NULL,
-    "joined_at" timestamp with time zone DEFAULT "now"() NOT NULL
+    "joined_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "named_at" timestamp with time zone
 );
 
 
 ALTER TABLE "public"."session_participants" OWNER TO "postgres";
+
+
+COMMENT ON COLUMN "public"."session_participants"."named_at" IS 'Momento en que el comensal eligió su nombre. Null mientras usa el que puso el sistema.';
+
 
 
 CREATE TABLE IF NOT EXISTS "public"."tables" (
@@ -3484,6 +3545,12 @@ GRANT USAGE ON SCHEMA "public" TO "service_role";
 REVOKE ALL ON FUNCTION "public"."abandon_order_request"("p_session_id" "uuid", "p_request_id" "uuid") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."abandon_order_request"("p_session_id" "uuid", "p_request_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."abandon_order_request"("p_session_id" "uuid", "p_request_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."add_guest_participant"("p_session_id" "uuid", "p_display_name" "text", "p_item_ids" "uuid"[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."add_guest_participant"("p_session_id" "uuid", "p_display_name" "text", "p_item_ids" "uuid"[]) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."add_guest_participant"("p_session_id" "uuid", "p_display_name" "text", "p_item_ids" "uuid"[]) TO "service_role";
 
 
 

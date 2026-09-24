@@ -1,87 +1,149 @@
-import type { UseQueryResult } from '@tanstack/react-query'
-import type { FormEvent } from 'react'
-import { ErrorMessage } from '@/components/ErrorMessage'
-import type { loadSession } from '@/features/session'
+import { type FormEvent, useState } from 'react'
+import { ErrorText } from '@restaurant-platform/ui'
+import { plateCount } from '@/features/cart'
+import { NameInput } from '@/features/NameInput'
+import { useTable } from '@/features/table-context'
+import type { RenameField } from '@/hooks/useTableSession'
+import { useCart } from '@/stores/cart'
 
-type Session = Awaited<ReturnType<typeof loadSession>>
-type JoinResult = { id: string; userId: string }
+/** Una falla a mostrar, con su reintento ya resuelto por quien hizo la consulta. */
+export type Failure = { error: unknown; retry: () => void }
 
+/**
+ * Lo que sabe de la mesa (sesión, quién es este comensal, su carrito) lo lee del
+ * contexto. Por props llega solo el ingreso, que es de la pantalla que lo monta,
+ * el campo del nombre y lo que se puede hacer.
+ */
 type SessionPanelProps = {
-  joined: UseQueryResult<JoinResult>
-  session: UseQueryResult<Session>
-  userId?: string
-  hasPendingSubmission: boolean
-  name: string
-  onNameChange: (value: string) => void
-  rename: { mutate: () => void; isPending: boolean; isError: boolean }
+  /** Todavía conectando con la mesa. */
+  connecting: boolean
+  /** No se pudo entrar a la mesa. */
+  connection?: Failure
+  rename: RenameField
   onOpenNewSession: () => void
 }
 
-export function SessionPanel({
-  joined,
-  session,
-  userId,
-  hasPendingSubmission,
-  name,
-  onNameChange,
-  rename,
-  onOpenNewSession,
-}: SessionPanelProps) {
-  const currentParticipant = session.data?.participants.find((p) => p.user_id === userId)
-  const displayName = currentParticipant?.display_name ?? 'Comensal'
-  const names = session.data?.participants.map((p) => p.display_name).join(' · ') ?? ''
+function PencilIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
 
-  function handleSubmit(event: FormEvent) {
+function CheckIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M20 6 9 17l-5-5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function CloseIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function SessionPanel({ connecting, connection, rename, onOpenNewSession }: SessionPanelProps) {
+  const { session, me, named, closed, cartKey, items } = useTable()
+  const hasPendingSubmission = useCart((state) => !!state.submissions[cartKey])
+  const cartCount = items.reduce((total, item) => total + item.quantity, 0)
+  const participants = session.data?.participants ?? []
+  const names = participants.map((participant) => participant.display_name).join(' · ')
+  const showPanel = connecting || !!connection || session.isError || (!!me && named) || closed
+  const canRename = named && !closed
+  // Mientras hay un envío sin resolver el nombre queda como está (el diálogo de la mesa sigue la misma regla).
+  const canSaveName = rename.canSubmit && !hasPendingSubmission
+
+  function handleRename(event: FormEvent) {
     event.preventDefault()
-    rename.mutate()
+    rename.submit()
   }
+
+  if (!showPanel) return null
 
   return (
     <section className="session-panel" aria-label="Tu mesa">
-      {joined.isPending && <p role="status">Conectando con tu mesa…</p>}
-      {joined.isError && (
-        <ErrorMessage error={joined.error} retry={() => { void joined.refetch() }} />
-      )}
+      {connecting && <p role="status">Conectando con tu mesa…</p>}
+      {connection && <ErrorText {...connection} variant="menu" />}
       {session.isError && (
-        <ErrorMessage error={session.error} retry={() => { void session.refetch() }} />
+        <ErrorText
+          variant="menu"
+          error={session.error}
+          retry={() => { void session.refetch() }}
+        />
       )}
 
-      {session.data && (
-        <>
-          <p>
-            <strong>{displayName}</strong> · {session.data.participants.length} en la mesa
-          </p>
-          <p className="muted">{names}</p>
-
-          {session.data.status === 'closed' ? (
-            <ClosedSessionNotice
-              hasPendingSubmission={hasPendingSubmission}
-              onOpenNewSession={onOpenNewSession}
-            />
-          ) : (
-            <form className="name-form" onSubmit={handleSubmit}>
-              <label className="sr-only" htmlFor="name">
-                Tu nombre
-              </label>
-              <input
-                id="name"
-                placeholder="Tu nombre para la mesa"
-                value={name}
-                maxLength={40}
-                required
-                onChange={(event) => onNameChange(event.target.value)}
-              />
-              <button disabled={rename.isPending || !name.trim() || hasPendingSubmission}>
-                Guardar nombre
+      {me && named && (
+        <div className="table-people">
+          {rename.editing ? (
+            <form
+              className="name-inline"
+              onSubmit={handleRename}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  event.preventDefault()
+                  rename.setEditing(false)
+                }
+              }}
+            >
+              <NameInput rename={rename} />
+              <button className="icon-button" aria-label="Guardar nombre" disabled={!canSaveName}>
+                <CheckIcon />
               </button>
-              {rename.isError && (
-                <p role="alert">
-                  No pudimos guardar el nombre. Usá entre 1 y 40 caracteres e intentá nuevamente.
-                </p>
-              )}
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="Cancelar"
+                disabled={rename.isPending}
+                onClick={() => rename.setEditing(false)}
+              >
+                <CloseIcon />
+              </button>
+              {rename.message && <p className="field-error" role="alert">{rename.message}</p>}
             </form>
+          ) : (
+            <>
+              <span className="who">
+                <strong>{me.display_name}</strong>
+                {canRename && (
+                  <button
+                    type="button"
+                    className="icon-button edit-name"
+                    aria-label="Editar nombre"
+                    onClick={() => rename.setEditing(true)}
+                  >
+                    <PencilIcon />
+                  </button>
+                )}
+              </span>
+              <details>
+                <summary className="disclosure">
+                  <span className="muted">{participants.length} en la mesa</span>
+                  <span className="chevron" aria-hidden="true">›</span>
+                </summary>
+                <p className="muted">{names}</p>
+              </details>
+            </>
           )}
-        </>
+        </div>
+      )}
+
+      {closed && (
+        <ClosedSessionNotice
+          hasPendingSubmission={hasPendingSubmission}
+          cartCount={cartCount}
+          onOpenNewSession={onOpenNewSession}
+        />
       )}
     </section>
   )
@@ -89,20 +151,49 @@ export function SessionPanel({
 
 function ClosedSessionNotice({
   hasPendingSubmission,
+  cartCount,
   onOpenNewSession,
 }: {
   hasPendingSubmission: boolean
+  cartCount: number
   onOpenNewSession: () => void
 }) {
+  const [confirming, setConfirming] = useState(false)
+  const plates = plateCount(cartCount)
+
   const message = hasPendingSubmission
-    ? 'Revisá el envío pendiente antes de abrir otra sesión.'
-    : 'Los productos del carrito no se enviarán.'
+    ? 'Revisá el envío pendiente antes de empezar de nuevo.'
+    : cartCount > 0
+      ? `Tenés ${plates} sin enviar en el carrito.`
+      : ''
+
+  // Empezar de nuevo descarta el carrito y eso no se puede deshacer, así que se
+  // pregunta antes. Con el carrito vacío no hay nada que perder ni que preguntar.
+  if (confirming) {
+    return (
+      <div className="notice">
+        <p>
+          Si empezás de nuevo, se descartan los {plates} que todavía no enviaste. No vas a poder
+          recuperarlos.
+        </p>
+        <div className="cart-actions">
+          <button onClick={() => setConfirming(false)}>Seguir en esta cuenta</button>
+          <button className="primary" onClick={onOpenNewSession}>
+            Descartar y empezar de nuevo
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="notice">
-      <p>Esta sesión se cerró. Podés consultar sus pedidos y cuenta. {message}</p>
-      <button disabled={hasPendingSubmission} onClick={onOpenNewSession}>
-        Abrir una nueva sesión
+      <p>La mesa cerró su cuenta. Podés seguir consultando sus pedidos. {message}</p>
+      <button
+        disabled={hasPendingSubmission}
+        onClick={() => (cartCount > 0 ? setConfirming(true) : onOpenNewSession())}
+      >
+        Empezar de nuevo en esta mesa
       </button>
     </div>
   )

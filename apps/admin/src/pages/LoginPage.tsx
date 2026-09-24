@@ -29,14 +29,15 @@ export function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-neutral-100 p-4">
+    <main className="flex min-h-dvh items-center justify-center bg-canvas p-4">
+      <title>{mode === 'login' ? 'Ingresar · Panel del restaurante' : 'Crear cuenta · Panel del restaurante'}</title>
       <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-sm">
         <div className="mb-6 flex flex-col items-center gap-2">
-          <div className="rounded-xl bg-indigo-600 p-3 text-white">
+          <div className="rounded-xl bg-primary p-3 text-white">
             {mode === 'login' ? <UtensilsCrossed size={22} /> : <Store size={22} />}
           </div>
           <h1 className="text-xl font-bold text-neutral-900">Panel del restaurante</h1>
-          <p className="text-sm text-neutral-500">
+          <p className="text-sm text-muted">
             {mode === 'login' ? 'Ingresá con tu cuenta' : 'Creá una cuenta para tu restaurante'}
           </p>
         </div>
@@ -44,6 +45,9 @@ export function LoginPage() {
           <Field label="Email">
             <Input
               type="email"
+              // `username` y no `email`: es lo que los gestores de contraseñas
+              // asocian con la contraseña de al lado para guardarla y completarla.
+              autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="admin@turestaurante.com"
@@ -53,6 +57,8 @@ export function LoginPage() {
           <Field label="Contraseña">
             <Input
               type="password"
+              // Al registrarse, `new-password` hace que el gestor ofrezca generar una.
+              autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
@@ -60,13 +66,13 @@ export function LoginPage() {
               required
             />
           </Field>
-          <ErrorText message={error} />
+          <ErrorText error={error} />
           <Button type="submit" disabled={submitting} className="w-full">
             {submitting ? 'Enviando…' : mode === 'login' ? 'Ingresar' : 'Crear cuenta'}
           </Button>
         </form>
         <button
-          className="mt-4 w-full cursor-pointer text-center text-sm text-indigo-600 hover:underline"
+          className="mt-4 w-full cursor-pointer text-center text-sm text-primary hover:underline"
           onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}
         >
           {mode === 'login' ? '¿No tenés cuenta? Registrate' : '¿Ya tenés cuenta? Ingresá'}

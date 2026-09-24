@@ -3,7 +3,7 @@ import { Link } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { formatElapsed, formatPrice, sessionRequestsOf } from '@restaurant-platform/shared'
 import { useCan, useRestaurant } from '@/context/pos-context'
-import { Badge, Button, EmptyState, ErrorText, Modal, Spinner, useSaveErrors } from '@restaurant-platform/ui'
+import { Badge, Button, EmptyState, ErrorText, Modal, Spinner, useNow, useSaveErrors } from '@restaurant-platform/ui'
 import {
   closePosSession,
   loadRestaurantTables,
@@ -12,7 +12,6 @@ import {
   type PosOpenSessionCard,
 } from './api'
 import { AttendRequestButtons, ChargedBadge, SessionRequestBadges } from './ServiceRequests'
-import { useNow } from './useNow'
 
 export function ActiveTables() {
   const restaurant = useRestaurant()
@@ -60,7 +59,7 @@ export function ActiveTables() {
       </div>
 
       {(sessions.isError || tables.isError) && (
-        <ErrorText message="No pudimos actualizar el estado de las mesas." />
+        <ErrorText error={sessions.error ?? tables.error} fallback="No pudimos actualizar el estado de las mesas." />
       )}
 
       {calling.length > 0 && (
@@ -107,7 +106,7 @@ export function ActiveTables() {
                     <p className="text-xs text-neutral-500">
                       {session.participant_names.length} comensal
                       {session.participant_names.length === 1 ? '' : 'es'} ·{' '}
-                      {formatElapsed(session.opened_at, now)}
+                      {formatElapsed(session.opened_at, now, 'exact')}
                     </p>
                   </div>
                   {canPay && (
@@ -217,7 +216,7 @@ export function ActiveTables() {
                 Hay pedidos enviados sin aceptar. Podés cancelarlos desde Comandas.
               </p>
             )}
-            <ErrorText message={errors.message} />
+            <ErrorText error={errors.message} />
             <div className="flex gap-2">
               <Button variant="secondary" className="flex-1" onClick={() => setClosing(null)}>
                 Seguir abierta

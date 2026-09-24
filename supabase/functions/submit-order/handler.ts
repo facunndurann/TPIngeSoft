@@ -1,5 +1,5 @@
-import { submitOrderSchema, type SubmitOrderError } from '../../../packages/shared/src/orders.ts';
-import { AppError } from '../../../packages/shared/src/errors.ts';
+import { submitOrderSchema } from '../../../packages/shared/src/orders.ts';
+import { AppError, type AppErrorBody } from '../../../packages/shared/src/errors.ts';
 import type { OrderGateway } from '../_shared/order-gateway.ts';
 
 const headers = {
@@ -12,7 +12,7 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
   status, headers: { ...headers, 'Content-Type': 'application/json' },
 });
 const errorResponse = ({ code, message, status }: AppError) =>
-  json({ error: { code, message } } satisfies SubmitOrderError, status);
+  json({ error: { code, message } } satisfies AppErrorBody, status);
 
 async function readBody(request: Request): Promise<unknown> {
   const limit = 128 * 1024;
@@ -52,7 +52,14 @@ export function createSubmitOrderHandler(authenticate: (jwt: string) => Promise<
       const gateway = await authenticate(token);
       return json(await gateway.submit(parsed.data));
     } catch (error) {
-      return errorResponse(error instanceof AppError ? error : new AppError('SERVER_ERROR'));
+      if (error instanceof AppError) return errorResponse(error);
+      // Una falla inesperada durante un envío deja el resultado en duda, y el
+      // mensaje genérico del catálogo no alcanza: acá hay que pedir el reintento
+      // del mismo envío, que es lo único que evita el pedido duplicado.
+      return errorResponse(new AppError(
+        'SERVER_ERROR',
+        'No pudimos confirmar el resultado. Reintentá el mismo envío para evitar duplicados.',
+      ));
     }
   };
 }

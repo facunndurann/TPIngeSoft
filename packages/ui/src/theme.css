@@ -1,0 +1,43 @@
+/*
+ * Colores con rol de los paneles (admin y POS). Un texto o un ícono elige su rol,
+ * no un gris de la escala: así el contraste se decide acá una sola vez. Las
+ * relaciones están medidas con los valores oklch de Tailwind.
+ *
+ * - canvas: fondo de la página, detrás de las tarjetas.
+ * - muted: texto secundario (subtítulos, descripciones, datos). 7,2:1 sobre canvas
+ *   y 7,8:1 sobre blanco.
+ * - faint: lo de menor énfasis que igual tiene que verse: íconos de acción en
+ *   reposo, placeholders y lo que está fuera de servicio. 4,7:1 sobre blanco y
+ *   4,5:1 sobre neutral-50. Sobre canvas baja a 4,3:1, así que ahí sirve para
+ *   íconos (piden 3:1) pero no para texto.
+ * - primary: la marca en botones, selección y foco. primary-hover al pasar el
+ *   mouse, primary-soft de fondo para lo elegido y primary-ink para texto de marca
+ *   sobre fondos claros.
+ *
+ * `inline` hace que cada utilidad use el color de la escala directamente
+ * (`text-muted` → `var(--color-neutral-600)`), así Tailwind sabe qué variables
+ * de la escala tiene que emitir.
+ */
+@theme inline {
+  --color-canvas: var(--color-neutral-100);
+  --color-muted: var(--color-neutral-600);
+  --color-faint: var(--color-neutral-500);
+  --color-primary: var(--color-indigo-600);
+  --color-primary-hover: var(--color-indigo-700);
+  --color-primary-soft: var(--color-indigo-50);
+  --color-primary-ink: var(--color-indigo-700);
+}
+
+/*
+ * Lo que los componentes de ui traen por defecto y quien los usa puede cambiar
+ * con `className`. Va en la capa de componentes y no como utilidad: dos
+ * utilidades del mismo tipo no se pisan por el orden en que se escriben sino por
+ * el del CSS, y `w-full` le ganaba a cualquier `w-56`. Una utilidad siempre le
+ * gana a esta capa, así que el ancho que se pase se aplica.
+ */
+@layer components {
+  /* Input, Select y Textarea ocupan su contenedor salvo que se les dé otro ancho. */
+  .field-control {
+    width: 100%;
+  }
+}

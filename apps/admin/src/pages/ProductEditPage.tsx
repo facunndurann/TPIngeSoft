@@ -1,11 +1,14 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { Link, useNavigate, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
-import { PRODUCT_MEDIA_LIMIT, type Tables } from '@restaurant-platform/shared'
+import { Plus, Trash2 } from 'lucide-react'
+import { DIETARY_TAGS, PRODUCT_MEDIA_LIMIT, type Tables } from '@restaurant-platform/shared'
 import {
   Button,
+  ChoiceChip,
   ErrorText,
+  IconButton,
   Field,
   Input,
   Select,
@@ -19,20 +22,15 @@ import { modifierGroupsQuery, type ModifierGroupWithOptions } from '@/queries/mo
 import { productQuery, productsByCategoryQuery, saveProduct } from '@/queries/products'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { MediaUploader } from '@/features/MediaUploader'
+import { Page } from '@/features/Page'
 import {
   draftErrors,
   draftFrom,
   emptyDraft,
+  type DraftField,
   type IngredientDraft,
   type ProductDraft,
 } from '@/features/product-draft'
-
-const DIETARY_TAGS = [
-  { value: 'vegetariano', label: 'Vegetariano' },
-  { value: 'vegano', label: 'Vegano' },
-  { value: 'sin-tacc', label: 'Sin TACC' },
-  { value: 'picante', label: 'Picante' },
-]
 
 /**
  * Resuelve los datos y recién ahí monta el formulario, ya cargado. El `key` es
@@ -48,13 +46,17 @@ export function ProductEditPage() {
   const groups = useQuery(modifierGroupsQuery(restaurant.id))
   const product = useQuery({ ...productQuery(productId ?? ''), enabled: !!productId })
 
-  if (productId && product.isLoading) return <Spinner />
-  if (productId && !product.data) {
+  // El formulario se monta con todo lo que muestra, no solo con el producto: si
+  // no, mientras cargan, la categoría no tendría opciones y la personalización
+  // diría «Todavía no hay grupos».
+  if (categories.isLoading || groups.isLoading || (productId && product.isLoading)) {
+    return <Spinner />
+  }
+  if (!categories.data || !groups.data || (productId && !product.data)) {
     return (
-      <div className="mx-auto max-w-2xl space-y-4">
-        <BackLink />
-        <ErrorText message="No pudimos cargar este producto. Volvé a la lista e intentá de nuevo." />
-      </div>
+      <Page title="Producto" back={{ to: '/productos', label: 'Volver a productos' }}>
+        <ErrorText error="No pudimos cargar los datos del producto. Volvé a la lista e intentá de nuevo." />
+      </Page>
     )
   }
 
@@ -64,17 +66,9 @@ export function ProductEditPage() {
       productId={productId}
       title={product.data ? `Editar "${product.data.name}"` : 'Nuevo producto'}
       initial={product.data ? draftFrom(product.data) : emptyDraft()}
-      categories={categories.data ?? []}
-      groups={groups.data ?? []}
+      categories={categories.data}
+      groups={groups.data}
     />
-  )
-}
-
-function BackLink() {
-  return (
-    <Link to="/productos" className="text-neutral-400 hover:text-neutral-700" aria-label="Volver">
-      <ArrowLeft size={20} />
-    </Link>
   )
 }
 
@@ -92,18 +86,24 @@ function ProductForm({ productId, title, initial, categories, groups }: ProductF
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const errors = useSaveErrors()
+  const dietaryLabelId = useId()
 
   // Un solo estado, inicializado con lo que ya llegó: no hay paso intermedio.
   const [draft, setDraft] = useState(initial)
   const patch = (changes: Partial<ProductDraft>) =>
     setDraft((current) => ({ ...current, ...changes }))
 
+  // Los errores de cada campo aparecen recién al intentar guardar; desde ahí se
+  // recalculan con cada cambio, así el campo corregido deja de marcarse solo.
+  const formId = useId()
+  const fieldId = (field: DraftField) => `${formId}-${field}`
+  const [attempted, setAttempted] = useState(false)
+  const fieldErrors = attempted ? draftErrors(draft) : []
+  const errorFor = (field: DraftField) =>
+    fieldErrors.find((error) => error.field === field)?.message
+
   const save = useMutation(errors.saving('No pudimos guardar el producto.', {
-    mutationFn: async () => {
-      const invalid = draftErrors(draft)
-      if (invalid) throw new Error(invalid)
-      return saveProduct({ restaurantId: restaurant.id, productId, draft })
-    },
+    mutationFn: () => saveProduct({ restaurantId: restaurant.id, productId, draft }),
     onSuccess: async (savedId) => {
       // Las dos cachés son independientes: no hay razón para encadenarlas.
       await Promise.all([
@@ -113,6 +113,18 @@ function ProductForm({ productId, title, initial, categories, groups }: ProductF
       navigate('/productos')
     },
   }))
+
+  function submit() {
+    const [first] = draftErrors(draft)
+    if (!first) {
+      save.mutate()
+      return
+    }
+    // El error tiene que estar en el DOM antes de mover el foco: así el lector
+    // de pantalla anuncia el campo junto con su error, y no solo el campo.
+    flushSync(() => setAttempted(true))
+    document.getElementById(fieldId(first.field))?.focus()
+  }
 
   const toggle = <T,>(list: T[], value: T) =>
     list.includes(value) ? list.filter((entry) => entry !== value) : [...list, value]
@@ -125,16 +137,12 @@ function ProductForm({ productId, title, initial, categories, groups }: ProductF
     })
 
   return (
-    <div className="mx-auto max-w-2xl space-y-5">
-      <div className="flex items-center gap-3">
-        <BackLink />
-        <h1 className="text-xl font-bold text-neutral-900">{title}</h1>
-      </div>
-
+    <Page title={title} back={{ to: '/productos', label: 'Volver a productos' }}>
       <section className="space-y-4 rounded-xl border border-neutral-200 bg-white p-5">
         <h2 className="font-semibold text-neutral-900">Información básica</h2>
-        <Field label="Nombre">
+        <Field label="Nombre" error={errorFor('name')}>
           <Input
+            id={fieldId('name')}
             value={draft.name}
             onChange={(e) => patch({ name: e.target.value })}
             placeholder="Ej: Hamburguesa clásica"
@@ -149,8 +157,12 @@ function ProductForm({ productId, title, initial, categories, groups }: ProductF
           />
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Categoría">
-            <Select value={draft.categoryId} onChange={(e) => patch({ categoryId: e.target.value })}>
+          <Field label="Categoría" error={errorFor('categoryId')}>
+            <Select
+              id={fieldId('categoryId')}
+              value={draft.categoryId}
+              onChange={(e) => patch({ categoryId: e.target.value })}
+            >
               <option value="">Elegir…</option>
               {categories.map((category) => (
                 <option key={category.id} value={category.id}>
@@ -159,8 +171,9 @@ function ProductForm({ productId, title, initial, categories, groups }: ProductF
               ))}
             </Select>
           </Field>
-          <Field label="Precio base ($)">
+          <Field label="Precio base ($)" error={errorFor('basePrice')}>
             <Input
+              id={fieldId('basePrice')}
               type="number"
               min={0}
               step="0.01"
@@ -178,21 +191,18 @@ function ProductForm({ productId, title, initial, categories, groups }: ProductF
           />
         </Field>
         <div>
-          <p className="mb-1.5 text-sm font-medium text-neutral-700">Etiquetas dietarias</p>
-          <div className="flex flex-wrap gap-1.5">
+          <p id={dietaryLabelId} className="mb-1.5 text-sm font-medium text-neutral-700">
+            Etiquetas dietarias
+          </p>
+          <div className="flex flex-wrap gap-1.5" role="group" aria-labelledby={dietaryLabelId}>
             {DIETARY_TAGS.map((tag) => (
-              <button
+              <ChoiceChip
                 key={tag.value}
-                type="button"
+                pressed={draft.dietaryTags.includes(tag.value)}
                 onClick={() => patch({ dietaryTags: toggle(draft.dietaryTags, tag.value) })}
-                className={`cursor-pointer rounded-full px-3 py-1 text-sm font-medium transition-colors ${
-                  draft.dietaryTags.includes(tag.value)
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
-                }`}
               >
                 {tag.label}
-              </button>
+              </ChoiceChip>
             ))}
           </div>
         </div>
@@ -219,34 +229,52 @@ function ProductForm({ productId, title, initial, categories, groups }: ProductF
       <section className="space-y-3 rounded-xl border border-neutral-200 bg-white p-5">
         <div>
           <h2 className="font-semibold text-neutral-900">Ingredientes</h2>
-          <p className="text-sm text-neutral-500">
+          <p className="text-sm text-muted">
             Declarar la composición permite que el cliente quite lo que no quiere (solo lo marcado como
             removible).
           </p>
         </div>
         <div className="space-y-2">
-          {draft.ingredients.map((ingredient, index) => (
-            <div key={ingredient.id ?? `new-${index}`} className="flex items-center gap-2">
-              <Input
-                value={ingredient.name}
-                onChange={(e) => updateIngredient(index, { name: e.target.value })}
-                placeholder="Ej: Cebolla"
-                className="flex-1"
-              />
-              <Toggle
-                checked={ingredient.is_removable}
-                onChange={(is_removable) => updateIngredient(index, { is_removable })}
-                label="Removible"
-              />
-              <button
-                className="cursor-pointer p-1 text-neutral-400 hover:text-red-600"
-                onClick={() => patch({ ingredients: draft.ingredients.filter((_, i) => i !== index) })}
-                aria-label="Quitar ingrediente"
-              >
-                <Trash2 size={15} />
-              </button>
-            </div>
-          ))}
+          {draft.ingredients.map((ingredient, index) => {
+            // Las filas no van en un Field (no tienen rótulo visible), así que el
+            // error y su enlace con el campo se arman acá.
+            const field = `ingredient-${index}` as const
+            const error = errorFor(field)
+            const errorId = `${fieldId(field)}-error`
+            return (
+              <div key={ingredient.id ?? `new-${index}`}>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id={fieldId(field)}
+                    value={ingredient.name}
+                    onChange={(e) => updateIngredient(index, { name: e.target.value })}
+                    placeholder="Ej: Cebolla"
+                    aria-label={`Ingrediente ${index + 1}`}
+                    aria-invalid={error ? true : undefined}
+                    aria-describedby={error ? errorId : undefined}
+                    className="flex-1"
+                  />
+                  <Toggle
+                    checked={ingredient.is_removable}
+                    onChange={(is_removable) => updateIngredient(index, { is_removable })}
+                    label="Removible"
+                  />
+                  <IconButton
+                    label={`Quitar ${ingredient.name.trim() || `ingrediente ${index + 1}`}`}
+                    tone="danger"
+                    onClick={() => patch({ ingredients: draft.ingredients.filter((_, i) => i !== index) })}
+                  >
+                    <Trash2 size={15} />
+                  </IconButton>
+                </div>
+                {error && (
+                  <p id={errorId} className="mt-1 text-xs text-red-700">
+                    {error}
+                  </p>
+                )}
+              </div>
+            )
+          })}
         </div>
         <Button
           variant="secondary"
@@ -263,14 +291,14 @@ function ProductForm({ productId, title, initial, categories, groups }: ProductF
       <section className="space-y-3 rounded-xl border border-neutral-200 bg-white p-5">
         <div>
           <h2 className="font-semibold text-neutral-900">Personalización</h2>
-          <p className="text-sm text-neutral-500">
+          <p className="text-sm text-muted">
             Grupos de modificadores que aplican a este producto (se crean en la sección Modificadores).
           </p>
         </div>
         {groups.length === 0 ? (
-          <p className="text-sm text-neutral-500">
+          <p className="text-sm text-muted">
             Todavía no hay grupos.{' '}
-            <Link to="/modificadores" className="text-indigo-600 hover:underline">
+            <Link to="/modificadores" className="text-primary hover:underline">
               Crear el primero
             </Link>
           </p>
@@ -282,10 +310,10 @@ function ProductForm({ productId, title, initial, categories, groups }: ProductF
                   type="checkbox"
                   checked={draft.groupIds.includes(group.id)}
                   onChange={() => patch({ groupIds: toggle(draft.groupIds, group.id) })}
-                  className="h-4 w-4 accent-indigo-600"
+                  className="h-4 w-4 accent-primary"
                 />
                 <span className="font-medium text-neutral-800">{group.name}</span>
-                <span className="text-xs text-neutral-500">
+                <span className="text-xs text-muted">
                   ({group.min_select > 0 ? 'obligatorio' : 'opcional'}, máx {group.max_select})
                 </span>
               </label>
@@ -294,16 +322,16 @@ function ProductForm({ productId, title, initial, categories, groups }: ProductF
         )}
       </section>
 
-      <ErrorText message={errors.message} />
+      <ErrorText error={errors.message} />
 
       <div className="flex justify-end gap-2 pb-8">
         <Link to="/productos">
           <Button variant="secondary">Cancelar</Button>
         </Link>
-        <Button onClick={() => save.mutate()} disabled={save.isPending}>
+        <Button onClick={submit} disabled={save.isPending}>
           {save.isPending ? 'Guardando…' : productId ? 'Guardar cambios' : 'Crear producto'}
         </Button>
       </div>
-    </div>
+    </Page>
   )
 }
