@@ -1,10 +1,8 @@
 import { queryOptions, skipToken } from '@tanstack/react-query'
-import { FunctionsHttpError } from '@supabase/supabase-js'
 import {
   AppError,
-  appErrorBodySchema,
   fromPostgres,
-  isAppErrorCode,
+  invokeFunction,
   submitOrderResultSchema,
   type SessionRequestKind,
   type SessionSplit,
@@ -17,56 +15,15 @@ import {
 import { SESSION_POLL_MS, sessionKey } from '@/features/session'
 import { supabase } from '@/lib/supabase'
 
-/** Lo único que hace falta de un schema de zod para validar una respuesta. */
-type ResponseSchema<T> = {
-  safeParse: (data: unknown) => { success: true; data: T } | { success: false }
-}
-
-/**
- * Llama a una Edge Function y devuelve su respuesta validada. Hay tres salidas de
- * error, y solo la primera es un rechazo:
- * - el servidor respondió con un error: vuelve su código y su mensaje, que el
- *   servidor ya eligió del catálogo o escribió para ese caso;
- * - la respuesta no llegó, o llegó un error ilegible: CONNECTION_ERROR;
- * - llegó una respuesta exitosa que no se puede leer: `unreadable`, que cada
- *   llamada elige porque de eso depende qué conviene hacer después.
- */
-async function invokeFunction<T>(
-  name: string,
-  body: object,
-  schema: ResponseSchema<T>,
-  unreadable = new AppError('SERVER_ERROR'),
-): Promise<T> {
-  const { data, error } = await supabase.functions.invoke<unknown>(name, { body })
-
-  if (error) {
-    if (error instanceof FunctionsHttpError) {
-      const rejection = appErrorBodySchema.safeParse(await error.context.json().catch(() => null))
-      if (rejection.success) {
-        const { code, message } = rejection.data.error
-        throw new AppError(isAppErrorCode(code) ? code : 'SERVER_ERROR', message)
-      }
-    }
-    throw new AppError('CONNECTION_ERROR')
-  }
-
-  const result = schema.safeParse(data)
-  if (!result.success) throw unreadable
-  return result.data
-}
-
 export function submitOrder(input: SubmitOrderInput): Promise<SubmitOrderResult> {
   // El pedido pudo haberse creado aunque la respuesta sea ilegible: se conserva el
   // envío y reintentar con el mismo requestId devuelve su resultado sin duplicarlo.
-  return invokeFunction(
-    'submit-order',
-    input,
-    submitOrderResultSchema,
-    new AppError(
+  return invokeFunction(supabase, 'submit-order', input, submitOrderResultSchema, {
+    unreadable: new AppError(
       'CONNECTION_ERROR',
       'No pudimos confirmar la respuesta. Reintentá el mismo envío para consultar su resultado.',
     ),
-  )
+  })
 }
 
 export type AbandonResult =
@@ -153,7 +110,7 @@ export function paymentsQuery(sessionId: string | undefined) {
 }
 
 export function runMobilePayment(input: MobilePaymentRequest): Promise<MobilePaymentResult> {
-  return invokeFunction('mobile-payment', input, mobilePaymentResultSchema)
+  return invokeFunction(supabase, 'mobile-payment', input, mobilePaymentResultSchema)
 }
 
 /**

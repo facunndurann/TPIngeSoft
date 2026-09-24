@@ -71,6 +71,10 @@ export const appErrors = {
   CATEGORY_IN_USE: { status: 409, retryable: false, message: 'No se puede eliminar: la categoría tiene productos. Movelos o eliminalos primero.' },
   BRANCH_IN_USE: { status: 409, retryable: false, message: 'No se puede eliminar: la sucursal tiene mesas asociadas.' },
 
+  // Cuentas de empleados (employee-accounts)
+  USERNAME_TAKEN: { status: 409, retryable: false, message: 'Ese nombre de usuario ya existe. Elegí otro.' },
+  PROVISIONING_CLEANUP_REQUIRED: { status: 500, retryable: false, message: 'El alta quedó pendiente de revisión. Contactá al soporte antes de reintentar.' },
+
   // Falla inesperada: el detalle interno nunca se expone. El mensaje sirve a
   // cualquier operación de las tres apps, lecturas incluidas; quien necesite
   // decir algo más preciso lo pasa al constructor de AppError.

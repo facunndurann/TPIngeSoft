@@ -1,75 +1,73 @@
-import { employeeEmail, employeeRoles, normalizeUsername, type EmployeeRole } from '../../../packages/shared/src/employees.ts'
+import { employeeEmail, employeeRequestSchema, type EmployeeRequest } from '../../../packages/shared/src/employees.ts'
+import { AppError, type AppErrorBody, type AppErrorCode } from '../../../packages/shared/src/errors.ts'
 
-export type EmployeeRequest = {
-  action: 'create' | 'update' | 'reset-password'
-  restaurantId: string
-  userId?: string
-  username?: string
-  password?: string
-  fullName?: string
-  roles?: EmployeeRole[]
-  branchIds?: string[]
-  active?: boolean
-  legacyId?: string
-}
+export type ResetRequest = Extract<EmployeeRequest, { action: 'reset-password' }>
+export type AccessRequest = Exclude<EmployeeRequest, ResetRequest>
+
 export interface EmployeeGateway {
   authorize(input: EmployeeRequest): Promise<void>
   createAuth(email: string, password: string): Promise<string>
   deleteAuth(id: string): Promise<void>
-  save(input: EmployeeRequest, userId: string): Promise<void>
+  save(input: AccessRequest, userId: string): Promise<void>
   resetPassword(userId: string, password: string): Promise<void>
-  auditReset(input: EmployeeRequest, completed: boolean): Promise<void>
+  auditReset(input: ResetRequest, completed: boolean): Promise<void>
 }
-const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-export function parseEmployeeRequest(value: unknown): EmployeeRequest {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('INVALID_REQUEST')
-  const x = value as Record<string, unknown>
-  const keys = ['action','restaurantId','userId','username','password','fullName','roles','branchIds','active','legacyId']
-  if (Object.keys(x).some(k => !keys.includes(k)) || !['create','update','reset-password'].includes(String(x.action))
-    || typeof x.restaurantId !== 'string' || !uuid.test(x.restaurantId)) throw new Error('INVALID_REQUEST')
-  if (x.action !== 'create' && (typeof x.userId !== 'string' || !uuid.test(x.userId))) throw new Error('INVALID_REQUEST')
-  if (x.action === 'create' && (x.userId !== undefined || typeof x.username !== 'string')) throw new Error('INVALID_REQUEST')
-  if (x.action === 'create' || x.action === 'reset-password') {
-    if (typeof x.password !== 'string' || x.password.length < 10 || x.password.length > 128) throw new Error('INVALID_PASSWORD')
-  } else if (x.password !== undefined || x.username !== undefined) throw new Error('INVALID_REQUEST')
-  if (x.action !== 'reset-password') {
-    if (typeof x.fullName !== 'string' || !x.fullName.trim() || x.fullName.trim().length > 100
-      || typeof x.active !== 'boolean'
-      || !Array.isArray(x.roles) || !x.roles.length || x.roles.some(r => !employeeRoles.includes(r))
-      || (x.roles.includes('manager') && x.roles.length > 1)
-      || !Array.isArray(x.branchIds) || !x.branchIds.length || x.branchIds.some(b => typeof b !== 'string' || !uuid.test(b))
-      || (x.legacyId !== undefined && (typeof x.legacyId !== 'string' || !uuid.test(x.legacyId)))) throw new Error('INVALID_REQUEST')
-  }
-  return { ...x, ...(x.username ? { username: normalizeUsername(x.username as string) } : {}) } as EmployeeRequest
+
+/**
+ * Textos de esta función para códigos genéricos del catálogo: el código es el
+ * mismo que en el resto de las apps, pero acá se puede decir qué se rechazó.
+ */
+const messages: Partial<Record<AppErrorCode, string>> = {
+  FORBIDDEN: 'No tenés permiso para modificar esta cuenta o alguna de sus membresías.',
+  INVALID_REQUEST: 'Revisá los datos, roles y sucursales. La contraseña debe tener al menos 10 caracteres.',
+  SERVER_ERROR: 'No pudimos guardar la cuenta. Reintentá.',
 }
+const fail = (code: AppErrorCode) => new AppError(code, messages[code])
+
+/** Lo que tiran Auth, las RPCs o el parseo, traducido a un código del catálogo. */
+function toAppError(error: unknown): AppError {
+  if (error instanceof AppError) return error
+  const message = error instanceof Error ? error.message : ''
+  if (/AUTH_REQUIRED/.test(message)) return fail('AUTH_REQUIRED')
+  if (/FORBIDDEN/.test(message)) return fail('FORBIDDEN')
+  if (/already.*registered|already.*exists|duplicate key|USERNAME_TAKEN/i.test(message)) return fail('USERNAME_TAKEN')
+  if (/INVALID_/.test(message) || error instanceof SyntaxError) return fail('INVALID_REQUEST')
+  return fail('SERVER_ERROR')
+}
+
+const errorBody = ({ code, message }: AppError): AppErrorBody => ({ error: { code, message } })
 
 export function createEmployeeHandler(authenticate: (jwt: string) => Promise<EmployeeGateway>, domain: string) {
   const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info',
     'Access-Control-Allow-Methods': 'POST, OPTIONS' }
   const response = (body: unknown, status: number) => new Response(JSON.stringify(body), { status, headers })
+  const errorResponse = (error: AppError) => response(errorBody(error), error.status)
+
   return async (request: Request): Promise<Response> => {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers })
-    if (request.method !== 'POST') return response({ error: 'METHOD_NOT_ALLOWED' }, 405)
+    if (request.method !== 'POST') return errorResponse(fail('METHOD_NOT_ALLOWED'))
     try {
       const jwt = request.headers.get('Authorization')?.match(/^Bearer (.+)$/i)?.[1]
-      if (!jwt) return response({ error: 'AUTH_REQUIRED' }, 401)
+      if (!jwt) throw fail('AUTH_REQUIRED')
       const gateway = await authenticate(jwt)
       const body = await request.text()
-      if (body.length > 16_384) return response({ error: 'INVALID_REQUEST' }, 413)
-      const input = parseEmployeeRequest(JSON.parse(body))
+      if (body.length > 16_384) throw fail('PAYLOAD_TOO_LARGE')
+      const parsed = employeeRequestSchema.safeParse(JSON.parse(body))
+      if (!parsed.success) throw fail('INVALID_REQUEST')
+      const input = parsed.data
       await gateway.authorize(input) // Must precede every Auth Admin API call.
       if (input.action === 'reset-password') {
         await gateway.auditReset(input, false)
-        await gateway.resetPassword(input.userId!, input.password!)
+        await gateway.resetPassword(input.userId, input.password)
         await gateway.auditReset(input, true)
         return response({ userId: input.userId }, 200)
       }
       let createdId: string | undefined
       try {
         const userId = input.action === 'create'
-          ? (createdId = await gateway.createAuth(employeeEmail(input.username!, domain), input.password!))
-          : input.userId!
+          ? (createdId = await gateway.createAuth(employeeEmail(input.username, domain), input.password))
+          : input.userId
         await gateway.save(input, userId)
         return response({ userId }, input.action === 'create' ? 201 : 200)
       } catch (error) {
@@ -78,18 +76,14 @@ export function createEmployeeHandler(authenticate: (jwt: string) => Promise<Emp
           catch {
             // ID only: never log request bodies, JWTs, emails or passwords.
             console.error('EMPLOYEE_PROVISIONING_CLEANUP_REQUIRED', createdId)
-            return response({ error: 'PROVISIONING_CLEANUP_REQUIRED', reference: createdId }, 500)
+            const cleanup = fail('PROVISIONING_CLEANUP_REQUIRED')
+            return response({ ...errorBody(cleanup), reference: createdId }, cleanup.status)
           }
         }
         throw error
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : ''
-      if (/AUTH_REQUIRED/.test(message)) return response({ error: 'AUTH_REQUIRED' }, 401)
-      if (/FORBIDDEN/.test(message)) return response({ error: 'FORBIDDEN' }, 403)
-      if (/already.*registered|already.*exists|duplicate key|USERNAME_TAKEN/i.test(message)) return response({ error: 'USERNAME_TAKEN' }, 409)
-      if (/INVALID_|usuario debe|JSON/.test(message) || error instanceof SyntaxError) return response({ error: 'INVALID_REQUEST' }, 400)
-      return response({ error: 'EMPLOYEE_OPERATION_FAILED' }, 500)
+      return errorResponse(toAppError(error))
     }
   }
 }

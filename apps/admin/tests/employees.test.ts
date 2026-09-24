@@ -1,6 +1,6 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
-import { auditActorLabel } from '../src/features/employees/audit'
+import { auditActorLabel, auditSubject } from '../src/features/employees/audit'
 
 const supervisor = { user_id: 'cccccccc-cccc-cccc-cccc-cccccccccccc', full_name: 'Supervisor Esquina' }
 
@@ -50,4 +50,9 @@ test('audit keeps historical PIN rows without inventing an account', () => {
     ),
     'Ana (mozo)',
   )
+})
+
+test('audit subject reads only a stored string name', () => {
+  assert.equal(auditSubject({ details: { fullName: 'Ana Pérez' } }), 'Ana Pérez')
+  for (const details of [null, [], 'Ana', { fullName: 42 }]) assert.equal(auditSubject({ details }), null)
 })
