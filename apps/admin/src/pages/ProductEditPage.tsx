@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
 import { DIETARY_TAGS, PRODUCT_MEDIA_LIMIT, type Tables } from '@restaurant-platform/shared'
 import {
   Button,
+  ChoiceChip,
   ErrorText,
   Field,
   Input,
@@ -90,6 +91,7 @@ function ProductForm({ productId, title, initial, categories, groups }: ProductF
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const errors = useSaveErrors()
+  const dietaryLabelId = useId()
 
   // Un solo estado, inicializado con lo que ya llegó: no hay paso intermedio.
   const [draft, setDraft] = useState(initial)
@@ -176,21 +178,18 @@ function ProductForm({ productId, title, initial, categories, groups }: ProductF
           />
         </Field>
         <div>
-          <p className="mb-1.5 text-sm font-medium text-neutral-700">Etiquetas dietarias</p>
-          <div className="flex flex-wrap gap-1.5">
+          <p id={dietaryLabelId} className="mb-1.5 text-sm font-medium text-neutral-700">
+            Etiquetas dietarias
+          </p>
+          <div className="flex flex-wrap gap-1.5" role="group" aria-labelledby={dietaryLabelId}>
             {DIETARY_TAGS.map((tag) => (
-              <button
+              <ChoiceChip
                 key={tag.value}
-                type="button"
+                pressed={draft.dietaryTags.includes(tag.value)}
                 onClick={() => patch({ dietaryTags: toggle(draft.dietaryTags, tag.value) })}
-                className={`cursor-pointer rounded-full px-3 py-1 text-sm font-medium transition-colors ${
-                  draft.dietaryTags.includes(tag.value)
-                    ? 'bg-primary text-white'
-                    : 'bg-neutral-100 text-muted hover:bg-neutral-200'
-                }`}
               >
                 {tag.label}
-              </button>
+              </ChoiceChip>
             ))}
           </div>
         </div>

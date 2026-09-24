@@ -2,7 +2,7 @@ import { useState, type ComponentType } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Eye, SquarePen } from 'lucide-react'
 import { useRestaurant } from '@/restaurant/restaurant-context'
-import { Badge, EmptyState, Select, Spinner } from '@restaurant-platform/ui'
+import { Badge, ChoiceChip, EmptyState, Select, Spinner } from '@restaurant-platform/ui'
 import { FloorEditor } from '@/features/floor/FloorEditor'
 import { FloorView } from '@/features/floor/FloorView'
 import { useFloor, type Floor } from '@/features/floor/useFloor'
@@ -153,23 +153,25 @@ function SectionTabs({
   if (sections.length === 0) return null
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Sectores">
       {sections.map((entry) => {
         const count = tables.filter((table) => table.section_id === entry.id).length
         return (
-          <button
+          <ChoiceChip
             key={entry.id}
+            tone="outline"
+            pressed={entry.id === activeId}
             onClick={() => onChoose(entry.id)}
-            className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium ${
-              entry.id === activeId
-                ? 'border-primary bg-primary-soft text-primary-ink'
-                : 'border-neutral-200 bg-white text-muted hover:bg-neutral-50'
-            }`}
           >
             {entry.name}
-            <span className="text-xs opacity-60">{count}</span>
+            {/* Se distingue por tamaño y peso, no con opacidad: atenuada no llegaba
+                a 4,5:1 sobre el fondo del sector elegido. Se lee «4 mesas». */}
+            <span className="text-xs font-normal tabular-nums">
+              {count}
+              <span className="sr-only"> {count === 1 ? 'mesa' : 'mesas'}</span>
+            </span>
             {!entry.is_active && <Badge color="red">Sin uso</Badge>}
-          </button>
+          </ChoiceChip>
         )
       })}
     </div>

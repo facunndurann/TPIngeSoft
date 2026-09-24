@@ -1,6 +1,6 @@
 import { useId, useLayoutEffect, useRef } from 'react'
 import type { ButtonHTMLAttributes, ComponentProps, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react'
-import { X } from 'lucide-react'
+import { Check, X } from 'lucide-react'
 
 type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost'
 
@@ -100,6 +100,61 @@ export function Toggle({
         />
       </span>
       <span className={hideLabel ? 'sr-only' : 'text-sm text-neutral-700'}>{label}</span>
+    </button>
+  )
+}
+
+type ChipTone = 'pill' | 'outline'
+
+const chipTones: Record<ChipTone, { base: string; on: string; off: string }> = {
+  // Filtros y etiquetas.
+  pill: {
+    base: 'rounded-full px-3 py-1',
+    on: 'bg-primary text-white',
+    off: 'bg-white text-muted ring-1 ring-inset ring-neutral-200 hover:bg-neutral-100',
+  },
+  // Opciones con más peso, como medios de pago o sectores.
+  outline: {
+    base: 'rounded-lg border px-2.5 py-1.5',
+    on: 'border-primary bg-primary-soft text-primary-ink',
+    off: 'border-neutral-200 bg-white text-muted hover:bg-neutral-50',
+  },
+}
+
+/**
+ * Una opción que se elige dentro de un grupo: un filtro, una etiqueta, un medio
+ * de pago, un sector. Lo elegido no se dice solo con color: `aria-pressed` lo
+ * anuncia y el ✓ lo muestra. Sirve igual para elegir una sola opción (el grupo
+ * garantiza que haya una prendida) que para varias. Quien la usa envuelve las
+ * opciones en un `role="group"` con nombre.
+ *
+ * No acepta `className`: dos clases del mismo tipo (dos tamaños de letra, dos
+ * paddings) no se pisan por orden de escritura sino por el orden del CSS, así que
+ * el estilo sale solo de `tone`.
+ */
+export function ChoiceChip({
+  pressed,
+  onClick,
+  children,
+  tone = 'pill',
+  ...props
+}: Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'aria-pressed' | 'type' | 'className' | 'onClick'> & {
+  pressed: boolean
+  onClick: () => void
+  tone?: ChipTone
+}) {
+  const { base, on, off } = chipTones[tone]
+
+  return (
+    <button
+      {...props}
+      type="button"
+      aria-pressed={pressed}
+      onClick={onClick}
+      className={`inline-flex cursor-pointer items-center gap-1.5 text-sm font-medium transition-colors disabled:cursor-default disabled:opacity-50 ${base} ${pressed ? on : off}`}
+    >
+      {pressed && <Check size={14} aria-hidden="true" />}
+      {children}
     </button>
   )
 }

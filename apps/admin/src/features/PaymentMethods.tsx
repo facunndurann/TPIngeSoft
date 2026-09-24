@@ -5,7 +5,7 @@ import {
   paymentMethodLabels,
   paymentMethods,
 } from '@restaurant-platform/shared'
-import { Check } from 'lucide-react'
+import { ChoiceChip } from '@restaurant-platform/ui'
 
 /**
  * Medios de pago habilitados en una sucursal (MI-48). Cada chip explica qué
@@ -33,27 +33,18 @@ export function PaymentMethodsField({
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap gap-2" role="group" aria-label="Medios de pago habilitados">
-        {paymentMethods.map((method) => {
-          const on = enabled.includes(method)
-          return (
-            <button
-              key={method}
-              type="button"
-              disabled={disabled}
-              aria-pressed={on}
-              title={paymentMethodDescriptions[method]}
-              onClick={() => toggle(method)}
-              className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors disabled:cursor-default disabled:opacity-50 ${
-                on
-                  ? 'border-primary bg-primary-soft text-primary-ink'
-                  : 'border-neutral-200 bg-white text-muted hover:bg-neutral-50'
-              }`}
-            >
-              {on && <Check size={13} aria-hidden="true" />}
-              {paymentMethodLabels[method]}
-            </button>
-          )
-        })}
+        {paymentMethods.map((method) => (
+          <ChoiceChip
+            key={method}
+            tone="outline"
+            pressed={enabled.includes(method)}
+            disabled={disabled}
+            title={paymentMethodDescriptions[method]}
+            onClick={() => toggle(method)}
+          >
+            {paymentMethodLabels[method]}
+          </ChoiceChip>
+        ))}
       </div>
       <p className="text-xs text-muted">
         {enabled.length === 0

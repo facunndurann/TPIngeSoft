@@ -7,7 +7,7 @@ import { MediaThumb } from '@/features/MediaThumb'
 import { supabase, unwrap } from '@/lib/supabase'
 import { productsByCategoryQuery } from '@/queries/products'
 import { useRestaurant } from '@/restaurant/restaurant-context'
-import { Badge, Button, EmptyState, ErrorText, Spinner, Toggle, useSaveErrors } from '@restaurant-platform/ui'
+import { Badge, Button, ChoiceChip, EmptyState, ErrorText, Spinner, Toggle, useSaveErrors } from '@restaurant-platform/ui'
 
 export function ProductsPage() {
   const restaurant = useRestaurant()
@@ -52,18 +52,18 @@ export function ProductsPage() {
         </Link>
       </div>
 
-      <div className="flex flex-wrap gap-1.5">
-        <FilterChip active={categoryFilter === 'all'} onClick={() => setCategoryFilter('all')}>
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filtrar por categoría">
+        <ChoiceChip pressed={categoryFilter === 'all'} onClick={() => setCategoryFilter('all')}>
           Todos
-        </FilterChip>
+        </ChoiceChip>
         {categories?.map((category) => (
-          <FilterChip
+          <ChoiceChip
             key={category.id}
-            active={categoryFilter === category.id}
+            pressed={categoryFilter === category.id}
             onClick={() => setCategoryFilter(category.id)}
           >
             {category.name}
-          </FilterChip>
+          </ChoiceChip>
         ))}
       </div>
 
@@ -142,26 +142,5 @@ function ProductRow({
         <Trash2 size={15} />
       </button>
     </li>
-  )
-}
-
-function FilterChip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean
-  onClick: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`cursor-pointer rounded-full px-3 py-1 text-sm font-medium transition-colors ${
-        active ? 'bg-primary text-white' : 'bg-white text-muted hover:bg-neutral-200'
-      }`}
-    >
-      {children}
-    </button>
   )
 }
