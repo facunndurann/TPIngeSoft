@@ -10,7 +10,7 @@ import {
   type EmployeeRole,
 } from '@restaurant-platform/shared'
 import { Badge, Button, ErrorText, Field, Input, Modal, Select, Spinner } from '@restaurant-platform/ui'
-import { auditActorLabel, auditSubject } from '@/features/employees/audit'
+import { auditActionLabel, auditActorLabel } from '@/features/employees/audit'
 import { branchesQuery } from '@/queries/branches'
 import {
   changeEmployee,
@@ -49,7 +49,7 @@ export function EmployeesPage() {
       {employees.isPending ? (
         <Spinner />
       ) : (
-        <ul className="divide-y rounded-xl bg-white">
+        <ul className="divide-y divide-neutral-200 rounded-xl border border-neutral-200 bg-white">
           {employees.data?.map((employee) => (
             <li
               key={employee.user_id}
@@ -115,23 +115,27 @@ export function EmployeesPage() {
 
 function AuditLog({ restaurantId, employees }: { restaurantId: string; employees: Employee[] }) {
   const audit = useQuery(employeeAuditQuery(restaurantId))
+  // La misma consulta de sucursales que el resto del panel: el nombre, no el id.
+  const branches = useQuery(branchesQuery(restaurantId))
+  const branchNames = new Map(branches.data?.map((branch) => [branch.id, branch.name]))
 
   return (
     <section className="space-y-3">
       <h2 className="font-semibold">Auditoría POS</h2>
       {audit.isError && <ErrorText error="No pudimos cargar la auditoría." />}
-      <ul className="divide-y rounded-xl bg-white text-sm">
+      <ul className="divide-y divide-neutral-200 rounded-xl border border-neutral-200 bg-white text-sm">
         {audit.data?.map((entry) => {
-          const subject = auditSubject(entry)
+          // Una sucursal que ya no está (o que todavía no cargó) no se nombra:
+          // mejor nada que un pedazo de id.
+          const branch = entry.branch_id ? branchNames.get(entry.branch_id) : undefined
           return (
             <li key={entry.id} className="p-3">
               <p>
-                {auditActorLabel(entry, employees)} · {entry.action}
-                {subject ? ` · ${subject}` : ''}
+                {auditActorLabel(entry, employees)} · {auditActionLabel(entry, employees)}
               </p>
               <p className="text-xs text-muted">
                 {new Date(entry.created_at).toLocaleString('es-AR')}
-                {entry.branch_id ? ` · Sucursal ${entry.branch_id.slice(0, 8)}` : ''}
+                {branch ? ` · ${branch}` : ''}
               </p>
             </li>
           )
