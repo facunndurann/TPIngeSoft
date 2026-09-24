@@ -2,11 +2,10 @@ import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowDown, ArrowUp, Check, Pencil, Plus, Trash2 } from 'lucide-react'
 import type { Tables } from '@restaurant-platform/shared'
-import { supabase } from '@/lib/supabase'
+import { supabase, unwrap } from '@/lib/supabase'
 import { categoriesQuery } from '@/queries/categories'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { Badge, Button, EmptyState, ErrorText, Input, Spinner, Toggle, useSaveErrors } from '@restaurant-platform/ui'
-import { fromPostgres } from '@restaurant-platform/shared'
 
 type Category = Tables<'menu_categories'>
 
@@ -23,14 +22,14 @@ export function CategoriesPage() {
   const invalidate = () => queryClient.invalidateQueries({ queryKey: categoriesQuery(restaurant.id).queryKey })
 
   const createMutation = useMutation(errors.saving('No pudimos crear la categoría.', {
-    mutationFn: async (name: string) => {
-      const { error: mErr } = await supabase.from('menu_categories').insert({
-        restaurant_id: restaurant.id,
-        name,
-        sort_order: categories?.length ?? 0,
-      })
-      if (mErr) throw mErr
-    },
+    mutationFn: async (name: string) =>
+      unwrap(
+        await supabase.from('menu_categories').insert({
+          restaurant_id: restaurant.id,
+          name,
+          sort_order: categories?.length ?? 0,
+        }),
+      ),
     onSuccess: () => {
       setNewName('')
       invalidate()
@@ -38,11 +37,8 @@ export function CategoriesPage() {
   }))
 
   const updateMutation = useMutation(errors.saving('No pudimos guardar la categoría.', {
-    mutationFn: async (patch: Partial<Category> & { id: string }) => {
-      const { id, ...rest } = patch
-      const { error: mErr } = await supabase.from('menu_categories').update(rest).eq('id', id)
-      if (mErr) throw mErr
-    },
+    mutationFn: async ({ id, ...rest }: Partial<Category> & { id: string }) =>
+      unwrap(await supabase.from('menu_categories').update(rest).eq('id', id)),
     onSuccess: () => {
       setEditingId(null)
       invalidate()
@@ -50,24 +46,21 @@ export function CategoriesPage() {
   }))
 
   const deleteMutation = useMutation(errors.saving('No pudimos eliminar la categoría.', {
-    mutationFn: async (id: string) => {
-      const { error: mErr } = await supabase.from('menu_categories').delete().eq('id', id)
-      // products_category_id_fkey ya tiene su mensaje en el catálogo.
-      if (mErr) throw fromPostgres(mErr)
-    },
+    mutationFn: async (id: string) =>
+      unwrap(await supabase.from('menu_categories').delete().eq('id', id)),
     onSuccess: invalidate,
   }))
 
   // Se envía la lista completa en el orden nuevo: la base la aplica de una vez y
   // rechaza la operación si la lista quedó desactualizada.
   const reorderMutation = useMutation(errors.saving('No pudimos reordenar las categorías.', {
-    mutationFn: async (categoryIds: string[]) => {
-      const { error: mErr } = await supabase.rpc('reorder_categories', {
-        p_restaurant_id: restaurant.id,
-        p_category_ids: categoryIds,
-      })
-      if (mErr) throw fromPostgres(mErr)
-    },
+    mutationFn: async (categoryIds: string[]) =>
+      unwrap(
+        await supabase.rpc('reorder_categories', {
+          p_restaurant_id: restaurant.id,
+          p_category_ids: categoryIds,
+        }),
+      ),
     onSettled: invalidate,
   }))
 

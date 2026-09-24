@@ -8,7 +8,7 @@ import {
   type Footprint,
 } from '@restaurant-platform/shared'
 import { FloorGrid } from '@restaurant-platform/ui'
-import type { FloorTable } from './floor-api'
+import type { FloorTable } from '@/queries/floor'
 
 type Gesture =
   | {

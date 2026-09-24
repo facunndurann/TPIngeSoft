@@ -1,14 +1,14 @@
 import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Trash2 } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { supabase, unwrap } from '@/lib/supabase'
 import { branchesQuery } from '@/queries/branches'
 import { myRestaurantQuery } from '@/queries/restaurant'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { DesignPicker } from '@/features/DesignPicker'
 import { PaymentMethodsField } from '@/features/PaymentMethods'
 import { Badge, Button, ErrorText, Field, Input, Spinner, Textarea, Toggle, useSaveErrors } from '@restaurant-platform/ui'
-import { fromPostgres, type Tables } from '@restaurant-platform/shared'
+import type { Tables } from '@restaurant-platform/shared'
 
 export function SettingsPage() {
   const restaurant = useRestaurant()
@@ -20,17 +20,17 @@ export function SettingsPage() {
   const errors = useSaveErrors()
 
   const saveMutation = useMutation(errors.saving('No pudimos guardar los datos del restaurante.', {
-    mutationFn: async () => {
-      const { error: mErr } = await supabase
-        .from('restaurants')
-        .update({
-          name: name.trim(),
-          description: description.trim() || null,
-          menu_design: menuDesign,
-        })
-        .eq('id', restaurant.id)
-      if (mErr) throw mErr
-    },
+    mutationFn: async () =>
+      unwrap(
+        await supabase
+          .from('restaurants')
+          .update({
+            name: name.trim(),
+            description: description.trim() || null,
+            menu_design: menuDesign,
+          })
+          .eq('id', restaurant.id),
+      ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: myRestaurantQuery.queryKey })
       setSavedMessage(true)
@@ -86,14 +86,14 @@ function BranchesSection({ restaurantId }: { restaurantId: string }) {
   const invalidate = () => queryClient.invalidateQueries({ queryKey: branchesQuery(restaurantId).queryKey })
 
   const createMutation = useMutation(errors.saving('No pudimos crear la sucursal.', {
-    mutationFn: async () => {
-      const { error: mErr } = await supabase.from('branches').insert({
-        restaurant_id: restaurantId,
-        name: newName.trim(),
-        address: newAddress.trim() || null,
-      })
-      if (mErr) throw mErr
-    },
+    mutationFn: async () =>
+      unwrap(
+        await supabase.from('branches').insert({
+          restaurant_id: restaurantId,
+          name: newName.trim(),
+          address: newAddress.trim() || null,
+        }),
+      ),
     onSuccess: () => {
       setNewName('')
       setNewAddress('')
@@ -106,19 +106,14 @@ function BranchesSection({ restaurantId }: { restaurantId: string }) {
     mutationFn: async ({
       id,
       ...changes
-    }: { id: string } & Partial<Pick<Tables<'branches'>, 'is_active' | 'payment_methods'>>) => {
-      const { error: mErr } = await supabase.from('branches').update(changes).eq('id', id)
-      if (mErr) throw mErr
-    },
+    }: { id: string } & Partial<Pick<Tables<'branches'>, 'is_active' | 'payment_methods'>>) =>
+      unwrap(await supabase.from('branches').update(changes).eq('id', id)),
     onSuccess: invalidate,
   }))
 
   const deleteMutation = useMutation(errors.saving('No pudimos eliminar la sucursal.', {
-    mutationFn: async (id: string) => {
-      const { error: mErr } = await supabase.from('branches').delete().eq('id', id)
-      // tables_branch_id_fkey ya tiene su mensaje en el catálogo.
-      if (mErr) throw fromPostgres(mErr)
-    },
+    mutationFn: async (id: string) =>
+      unwrap(await supabase.from('branches').delete().eq('id', id)),
     onSuccess: invalidate,
   }))
 

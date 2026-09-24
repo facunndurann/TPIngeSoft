@@ -1,11 +1,11 @@
 import { useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
-import { formatPrice, fromPostgres } from '@restaurant-platform/shared'
+import { supabase, unwrap } from '@/lib/supabase'
+import { formatPrice } from '@restaurant-platform/shared'
 import { modifierGroupsQuery, type ModifierGroupWithOptions } from '@/queries/modifier-groups'
 import { useRestaurant } from '@/restaurant/restaurant-context'
-import { Badge, Button, EmptyState, ErrorText, Field, Input, Modal, Spinner, Toggle } from '@restaurant-platform/ui'
+import { Badge, Button, EmptyState, ErrorText, Field, Input, Modal, Spinner, Toggle, useSaveErrors } from '@restaurant-platform/ui'
 
 /** Opción tal como se envía a save_modifier_group; sin `id` es una opción nueva. */
 type OptionDraft = {
@@ -19,18 +19,23 @@ export function ModifiersPage() {
   const restaurant = useRestaurant()
   const queryClient = useQueryClient()
   const [editing, setEditing] = useState<ModifierGroupWithOptions | 'new' | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const errors = useSaveErrors()
 
   const { data: groups, isLoading } = useQuery(modifierGroupsQuery(restaurant.id))
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: modifierGroupsQuery(restaurant.id).queryKey })
 
-  async function deleteGroup(group: ModifierGroupWithOptions) {
-    if (!confirm(`¿Eliminar el grupo "${group.name}" y todas sus opciones?`)) return
-    const { error: dErr } = await supabase.from('modifier_groups').delete().eq('id', group.id)
-    if (dErr) setError(dErr.message)
-    else invalidate()
+  const deleteMutation = useMutation(errors.saving('No pudimos eliminar el grupo.', {
+    mutationFn: async (id: string) =>
+      unwrap(await supabase.from('modifier_groups').delete().eq('id', id)),
+    onSuccess: invalidate,
+  }))
+
+  function deleteGroup(group: ModifierGroupWithOptions) {
+    if (confirm(`¿Eliminar el grupo "${group.name}" y todas sus opciones?`)) {
+      deleteMutation.mutate(group.id)
+    }
   }
 
   return (
@@ -47,7 +52,7 @@ export function ModifiersPage() {
         </Button>
       </div>
 
-      <ErrorText error={error} fallback="No pudimos eliminar el grupo." />
+      <ErrorText error={errors.message} />
 
       {isLoading ? (
         <Spinner />
@@ -166,17 +171,17 @@ function GroupEditor({
     try {
       // El grupo y su lista completa de opciones (en este orden) se guardan en una
       // transacción: las opciones que ya no están en la lista se eliminan.
-      const { error: rpcErr } = await supabase.rpc('save_modifier_group', {
-        p_restaurant_id: restaurantId,
-        p_group_id: group?.id,
-        p_name: name,
-        p_min_select: minSelect,
-        p_max_select: maxSelect,
-        p_is_available: isAvailable,
-        p_options: options,
-      })
-      if (rpcErr) throw fromPostgres(rpcErr)
-
+      unwrap(
+        await supabase.rpc('save_modifier_group', {
+          p_restaurant_id: restaurantId,
+          p_group_id: group?.id,
+          p_name: name,
+          p_min_select: minSelect,
+          p_max_select: maxSelect,
+          p_is_available: isAvailable,
+          p_options: options,
+        }),
+      )
       onSaved()
     } catch (err) {
       setError(err)

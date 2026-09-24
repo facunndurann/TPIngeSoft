@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { formatPrice, productMedia, type Tables } from '@restaurant-platform/shared'
 import { MediaThumb } from '@/features/MediaThumb'
-import { supabase } from '@/lib/supabase'
+import { supabase, unwrap } from '@/lib/supabase'
 import { productsByCategoryQuery } from '@/queries/products'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { Badge, Button, EmptyState, ErrorText, Spinner, Toggle, useSaveErrors } from '@restaurant-platform/ui'
@@ -21,18 +21,13 @@ export function ProductsPage() {
     queryClient.invalidateQueries({ queryKey: productsByCategoryQuery(restaurant.id).queryKey })
 
   const availabilityMutation = useMutation(errors.saving('No pudimos cambiar la disponibilidad.', {
-    mutationFn: async ({ id, is_available }: { id: string; is_available: boolean }) => {
-      const { error: mErr } = await supabase.from('products').update({ is_available }).eq('id', id)
-      if (mErr) throw mErr
-    },
+    mutationFn: async ({ id, is_available }: { id: string; is_available: boolean }) =>
+      unwrap(await supabase.from('products').update({ is_available }).eq('id', id)),
     onSuccess: invalidate,
   }))
 
   const deleteMutation = useMutation(errors.saving('No pudimos eliminar el producto.', {
-    mutationFn: async (id: string) => {
-      const { error: mErr } = await supabase.from('products').delete().eq('id', id)
-      if (mErr) throw mErr
-    },
+    mutationFn: async (id: string) => unwrap(await supabase.from('products').delete().eq('id', id)),
     onSuccess: invalidate,
   }))
 

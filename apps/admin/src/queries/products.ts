@@ -1,8 +1,7 @@
 import { queryOptions } from '@tanstack/react-query'
-import { fromPostgres } from '@restaurant-platform/shared'
 import { draftPrice, type ProductDraft } from '@/features/product-draft'
 import type { MediaDraft } from '@/features/product-media'
-import { supabase } from '@/lib/supabase'
+import { supabase, unwrap } from '@/lib/supabase'
 
 const MEDIA_BUCKET = 'product-images'
 
@@ -10,32 +9,30 @@ const MEDIA_BUCKET = 'product-images'
 export const productsByCategoryQuery = (restaurantId: string) =>
   queryOptions({
     queryKey: ['products', restaurantId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('menu_categories')
-        .select('*, products(*)')
-        .eq('restaurant_id', restaurantId)
-        .order('sort_order')
-        .order('sort_order', { referencedTable: 'products' })
-      if (error) throw error
-      return data
-    },
+    queryFn: async () =>
+      unwrap(
+        await supabase
+          .from('menu_categories')
+          .select('*, products(*)')
+          .eq('restaurant_id', restaurantId)
+          .order('sort_order')
+          .order('sort_order', { referencedTable: 'products' }),
+      ),
   })
 
 /** Producto a editar, con sus ingredientes y los grupos asignados en el orden guardado. */
 export const productQuery = (productId: string) =>
   queryOptions({
     queryKey: ['product', productId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('products')
-        .select('*, product_ingredients(*), product_modifier_groups(group_id)')
-        .eq('id', productId)
-        .order('sort_order', { referencedTable: 'product_modifier_groups' })
-        .single()
-      if (error) throw error
-      return data
-    },
+    queryFn: async () =>
+      unwrap(
+        await supabase
+          .from('products')
+          .select('*, product_ingredients(*), product_modifier_groups(group_id)')
+          .eq('id', productId)
+          .order('sort_order', { referencedTable: 'product_modifier_groups' })
+          .single(),
+      ),
   })
 
 /**
@@ -59,26 +56,28 @@ export async function saveProduct(input: {
 
   const { urls: mediaUrls, discardUploads } = await uploadMediaDrafts(restaurantId, draft.media)
 
-  const { data: savedId, error } = await supabase.rpc('save_product', {
-    p_restaurant_id: restaurantId,
-    p_product_id: productId,
-    p_category_id: draft.categoryId,
-    p_name: draft.name,
-    p_description: draft.description,
-    p_base_price: price,
-    p_food_info: draft.foodInfo,
-    p_dietary_tags: draft.dietaryTags,
-    p_is_available: draft.isAvailable,
-    p_media_urls: mediaUrls,
-    p_ingredients: draft.ingredients,
-    p_group_ids: draft.groupIds,
-  })
-  if (error) {
+  try {
+    return unwrap(
+      await supabase.rpc('save_product', {
+        p_restaurant_id: restaurantId,
+        p_product_id: productId,
+        p_category_id: draft.categoryId,
+        p_name: draft.name,
+        p_description: draft.description,
+        p_base_price: price,
+        p_food_info: draft.foodInfo,
+        p_dietary_tags: draft.dietaryTags,
+        p_is_available: draft.isAvailable,
+        p_media_urls: mediaUrls,
+        p_ingredients: draft.ingredients,
+        p_group_ids: draft.groupIds,
+      }),
+    )
+  } catch (error) {
     // No se guardó nada, así que ningún producto referencia lo recién subido.
     await discardUploads()
-    throw fromPostgres(error)
+    throw error
   }
-  return savedId
 }
 
 type Upload = { url: string; path?: string }

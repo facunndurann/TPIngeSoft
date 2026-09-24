@@ -1,9 +1,9 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Store } from 'lucide-react'
-import { DEFAULT_MENU_DESIGN, fromPostgres } from '@restaurant-platform/shared'
+import { DEFAULT_MENU_DESIGN } from '@restaurant-platform/shared'
 import { myRestaurantQuery } from '@/queries/restaurant'
-import { supabase } from '@/lib/supabase'
+import { supabase, unwrap } from '@/lib/supabase'
 import { Button, ErrorText, Field, Input, Spinner, Textarea, useAuth } from '@restaurant-platform/ui'
 import { DesignPicker } from '@/features/DesignPicker'
 import { RestaurantContext } from './restaurant-context'
@@ -60,15 +60,15 @@ function CreateRestaurantScreen() {
     setError(null)
     setSubmitting(true)
     try {
-      const { error: rpcErr } = await supabase.rpc('create_restaurant', {
-        p_name: name,
-        p_slug: slugify(name),
-        p_description: description,
-        p_menu_design: menuDesign,
-        p_branch_name: branchName,
-      })
-      if (rpcErr) throw fromPostgres(rpcErr)
-
+      unwrap(
+        await supabase.rpc('create_restaurant', {
+          p_name: name,
+          p_slug: slugify(name),
+          p_description: description,
+          p_menu_design: menuDesign,
+          p_branch_name: branchName,
+        }),
+      )
       await queryClient.invalidateQueries({ queryKey: ['my-restaurant'] })
     } catch (err) {
       setError(err)

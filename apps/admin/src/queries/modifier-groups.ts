@@ -1,6 +1,6 @@
 import { queryOptions } from '@tanstack/react-query'
 import type { QueryData } from '@supabase/supabase-js'
-import { supabase } from '@/lib/supabase'
+import { supabase, unwrap } from '@/lib/supabase'
 
 const modifierGroupsOf = (restaurantId: string) =>
   supabase
@@ -16,9 +16,5 @@ export type ModifierGroupWithOptions = QueryData<ReturnType<typeof modifierGroup
 export const modifierGroupsQuery = (restaurantId: string) =>
   queryOptions({
     queryKey: ['modifier-groups', restaurantId],
-    queryFn: async () => {
-      const { data, error } = await modifierGroupsOf(restaurantId)
-      if (error) throw error
-      return data
-    },
+    queryFn: async () => unwrap(await modifierGroupsOf(restaurantId)),
   })

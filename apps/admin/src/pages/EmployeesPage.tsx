@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { employeeRoles, employeeRoleLabels, type EmployeeRole } from '@restaurant-platform/shared'
 import { useMembership } from '@/restaurant/restaurant-context'
-import { supabase } from '@/lib/supabase'
+import { supabase, unwrap } from '@/lib/supabase'
+import { branchesQuery } from '@/queries/branches'
 import { changeEmployee, loadEmployees, type Employee } from '@/features/employees/api'
 import { auditActorLabel } from '@/features/employees/audit'
 import { Badge, Button, ErrorText, Field, Input, Modal, Select, Spinner } from '@restaurant-platform/ui'
@@ -16,11 +17,7 @@ export function EmployeesPage() {
   const employees = useQuery({ queryKey: ['employees', restaurant.id], queryFn: () => loadEmployees(restaurant.id) })
   const audit = useQuery({
     queryKey: ['employee-audit', restaurant.id],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('pos_audit_log').select('*, legacy_employee:pos_employees(full_name)').eq('restaurant_id', restaurant.id).order('created_at', { ascending: false }).limit(100)
-      if (error) throw error
-      return data
-    },
+    queryFn: async () => unwrap(await supabase.from('pos_audit_log').select('*, legacy_employee:pos_employees(full_name)').eq('restaurant_id', restaurant.id).order('created_at', { ascending: false }).limit(100)),
     refetchInterval: 30000,
   })
   function invalidate() {
@@ -80,17 +77,15 @@ function EmployeeForm({ employee, restaurantId, owner, onClose, onSaved }: {
   const [active, setActive] = useState(employee?.is_active ?? true)
   const [legacyId, setLegacyId] = useState('')
   const [existingId, setExistingId] = useState('')
-  const branches = useQuery({
-    queryKey: ['branches', restaurantId],
-    queryFn: async () => { const { data, error } = await supabase.from('branches').select('id,name').eq('restaurant_id', restaurantId).eq('is_active', true); if (error) throw error; return data },
-  })
+  // La misma consulta de sucursales que el resto del panel; acá solo se ofrecen las activas.
+  const branches = useQuery({ ...branchesQuery(restaurantId), select: bs => bs.filter(b => b.is_active) })
   const legacy = useQuery({
     queryKey: ['legacy-employees', restaurantId],
-    queryFn: async () => { const { data, error } = await supabase.from('pos_employees').select('id,full_name').eq('restaurant_id', restaurantId).is('migrated_user_id', null); if (error) throw error; return data },
+    queryFn: async () => unwrap(await supabase.from('pos_employees').select('id,full_name').eq('restaurant_id', restaurantId).is('migrated_user_id', null)),
   })
   const accounts = useQuery({
     queryKey: ['managed-accounts'],
-    queryFn: async () => { const { data, error } = await supabase.from('profiles').select('id,full_name,username_normalized'); if (error) throw error; return data },
+    queryFn: async () => unwrap(await supabase.from('profiles').select('id,full_name,username_normalized')),
     enabled: !employee,
   })
   const save = useMutation({

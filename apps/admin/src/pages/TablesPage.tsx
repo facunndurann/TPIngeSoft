@@ -3,19 +3,20 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { QRCodeSVG } from 'qrcode.react'
 import { Copy, Plus, Printer, QrCode, Trash2 } from 'lucide-react'
 import { Link } from 'react-router'
-import type { Tables } from '@restaurant-platform/shared'
 import { customerAppUrl } from '@/lib/customer-app'
-import { supabase } from '@/lib/supabase'
 import { branchesQuery } from '@/queries/branches'
-import { branchTablesQuery } from '@/queries/tables'
+import {
+  createTable,
+  deleteTable,
+  sectionsQuery,
+  tablesQuery,
+  updateTable,
+  type FloorTable,
+} from '@/queries/floor'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { Badge, Button, EmptyState, ErrorText, Input, Modal, Select, Spinner, Toggle, useSaveErrors } from '@restaurant-platform/ui'
 
-type DiningTable = Tables<'tables'> & {
-  floor_sections: Pick<Tables<'floor_sections'>, 'id' | 'name'> | null
-}
-
-function tableUrl(table: DiningTable) {
+function tableUrl(table: FloorTable) {
   return customerAppUrl(`/m/${table.qr_token}`)
 }
 
@@ -24,27 +25,28 @@ export function TablesPage() {
   const queryClient = useQueryClient()
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null)
   const [newLabel, setNewLabel] = useState('')
-  const [qrTable, setQrTable] = useState<DiningTable | null>(null)
+  const [qrTable, setQrTable] = useState<FloorTable | null>(null)
   const errors = useSaveErrors()
 
   const { data: branches } = useQuery(branchesQuery(restaurant.id))
 
   const branchId = selectedBranchId ?? branches?.[0]?.id ?? null
 
-  const tablesQuery = branchTablesQuery(branchId ?? '')
-  const { data: tables, isLoading } = useQuery({ ...tablesQuery, enabled: !!branchId })
+  // Las mismas consultas que Salón: lo que se cambia en una pantalla ya está en la otra.
+  const branchTables = tablesQuery(branchId ?? '')
+  const tables = useQuery({ ...branchTables, enabled: !!branchId })
+  const sections = useQuery({ ...sectionsQuery(branchId ?? ''), enabled: !!branchId })
+  const sectionNames = new Map<string | null, string>(
+    sections.data?.map((section) => [section.id, section.name]),
+  )
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: tablesQuery.queryKey })
+  // Acá solo cambian mesas, así que alcanza con invalidar las mesas.
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: branchTables.queryKey })
 
   const createMutation = useMutation(errors.saving('No pudimos crear la mesa.', {
-    mutationFn: async (label: string) => {
-      const { error: mErr } = await supabase.from('tables').insert({
-        restaurant_id: restaurant.id,
-        branch_id: branchId!,
-        label,
-      })
-      if (mErr) throw mErr
-    },
+    // Sin sector: existe y tiene QR, y se ubica después en Salón.
+    mutationFn: (label: string) =>
+      createTable({ restaurant_id: restaurant.id, branch_id: branchId!, label }),
     onSuccess: () => {
       setNewLabel('')
       invalidate()
@@ -52,18 +54,13 @@ export function TablesPage() {
   }))
 
   const updateMutation = useMutation(errors.saving('No pudimos guardar la mesa.', {
-    mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
-      const { error: mErr } = await supabase.from('tables').update({ is_active }).eq('id', id)
-      if (mErr) throw mErr
-    },
+    mutationFn: ({ id, is_active }: { id: string; is_active: boolean }) =>
+      updateTable(id, { is_active }),
     onSuccess: invalidate,
   }))
 
   const deleteMutation = useMutation(errors.saving('No pudimos eliminar la mesa.', {
-    mutationFn: async (id: string) => {
-      const { error: mErr } = await supabase.from('tables').delete().eq('id', id)
-      if (mErr) throw mErr
-    },
+    mutationFn: (id: string) => deleteTable(id),
     onSuccess: invalidate,
   }))
 
@@ -109,20 +106,20 @@ export function TablesPage() {
 
       <ErrorText error={errors.message} />
 
-      {isLoading ? (
+      {tables.isLoading || sections.isLoading ? (
         <Spinner />
-      ) : !tables?.length ? (
+      ) : !tables.data?.length ? (
         <EmptyState message="No hay mesas en esta sucursal. Agregá la primera arriba." />
       ) : (
         <ul className="space-y-2">
-          {tables.map((table) => (
+          {tables.data.map((table) => (
             <li
               key={table.id}
               className="flex items-center gap-3 rounded-xl border border-neutral-200 bg-white px-4 py-3"
             >
               <span className="flex-1 text-sm font-medium text-neutral-900">{table.label}</span>
-              <Badge color={table.floor_sections ? 'neutral' : 'amber'}>
-                {table.floor_sections?.name ?? 'Sin sector'}
+              <Badge color={sectionNames.has(table.section_id) ? 'neutral' : 'amber'}>
+                {sectionNames.get(table.section_id) ?? 'Sin sector'}
               </Badge>
               {!table.is_visible && table.is_active && <Badge color="amber">Oculta</Badge>}
               {!table.is_active && <Badge color="red">Inactiva</Badge>}
@@ -159,7 +156,7 @@ function QrModal({
   restaurantName,
   onClose,
 }: {
-  table: DiningTable
+  table: FloorTable
   restaurantName: string
   onClose: () => void
 }) {

@@ -5,22 +5,22 @@ import { findFreeCell, isOperable, resizePlacement, tableFootprint } from '@rest
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { Badge, Button, EmptyState, ErrorText, Input, Select, Spinner, Toggle, useSaveErrors } from '@restaurant-platform/ui'
 import { FloorCanvas } from '@/features/floor/FloorCanvas'
-import { TableInspector } from '@/features/floor/TableInspector'
+import { TableInspector, type TableIntent } from '@/features/floor/TableInspector'
+import { branchesQuery } from '@/queries/branches'
 import {
   createSection,
   createTable,
   deleteSection,
   deleteTable,
-  loadBranches,
-  loadSections,
-  loadTables,
+  floorKey,
+  sectionsQuery,
+  tablesQuery,
   updateSection,
-  updateTableLayout,
+  updateTable,
   type FloorSection,
   type FloorTable,
-  type TableIntent,
-  type TableLayoutPatch,
-} from '@/features/floor/floor-api'
+  type TablePatch,
+} from '@/queries/floor'
 
 type Mode = 'view' | 'edit'
 
@@ -41,22 +41,12 @@ export function FloorPlanPage() {
   const [renaming, setRenaming] = useState<FloorSection | null>(null)
   const errors = useSaveErrors()
 
-  const branches = useQuery({
-    queryKey: ['branches', restaurant.id],
-    queryFn: () => loadBranches(restaurant.id),
-  })
+  const branches = useQuery(branchesQuery(restaurant.id))
   const branchId = branchChoice ?? branches.data?.[0]?.id ?? null
 
-  const sections = useQuery({
-    queryKey: ['floor', branchId, 'sections'],
-    queryFn: () => loadSections(branchId!),
-    enabled: !!branchId,
-  })
-  const tables = useQuery({
-    queryKey: ['floor', branchId, 'tables'],
-    queryFn: () => loadTables(branchId!),
-    enabled: !!branchId,
-  })
+  const branchTables = tablesQuery(branchId ?? '')
+  const sections = useQuery({ ...sectionsQuery(branchId ?? ''), enabled: !!branchId })
+  const tables = useQuery({ ...branchTables, enabled: !!branchId })
 
   const sectionId = sectionChoice ?? sections.data?.[0]?.id ?? null
   const section = sections.data?.find((entry) => entry.id === sectionId) ?? null
@@ -71,12 +61,10 @@ export function FloorPlanPage() {
   )
 
   const selectedTable = (tables.data ?? []).find((table) => table.id === selectedTableId) ?? null
-  const tablesKey = ['floor', branchId, 'tables'] as const
 
+  /** Sectores y mesas juntos: borrar un sector también cambia sus mesas. */
   function refresh() {
-    void queryClient.invalidateQueries({ queryKey: ['floor', branchId] })
-    // La lista de Mesas y QR lee las mismas filas.
-    void queryClient.invalidateQueries({ queryKey: ['tables'] })
+    void queryClient.invalidateQueries({ queryKey: floorKey(branchId ?? '') })
   }
 
   /** Toda mutación del plano falla igual: limpia, guarda y reporta. */
@@ -96,10 +84,10 @@ export function FloorPlanPage() {
   const addSection = useMutation(
     run((name: string) =>
       createSection({
-        restaurantId: restaurant.id,
-        branchId: branchId!,
+        restaurant_id: restaurant.id,
+        branch_id: branchId!,
         name,
-        sortOrder: sections.data?.length ?? 0,
+        sort_order: sections.data?.length ?? 0,
       }),
     ),
   )
@@ -114,32 +102,32 @@ export function FloorPlanPage() {
     run((label: string) => {
       const { x, y } = findFreeCell(tableFootprint(NEW_TABLE_SPAN), occupiedCells(sectionId))
       return createTable({
-        restaurantId: restaurant.id,
-        branchId: branchId!,
-        sectionId,
+        restaurant_id: restaurant.id,
+        branch_id: branchId!,
+        section_id: sectionId,
         label,
-        positionX: x,
-        positionY: y,
+        position_x: x,
+        position_y: y,
       })
     }),
   )
   const removeTable = useMutation(run((id: string) => deleteTable(id)))
 
   const patchTable = useMutation(errors.saving(SAVE_FAILED, {
-    mutationFn: ({ id, patch }: { id: string; patch: TableLayoutPatch }) =>
-      updateTableLayout(id, patch),
+    mutationFn: ({ id, patch }: { id: string; patch: TablePatch }) => updateTable(id, patch),
     // Optimista: al soltar una mesa tiene que quedar donde la soltaste, no
     // saltar a la posición vieja hasta que vuelva el refetch.
     onMutate: async ({ id, patch }) => {
-      await queryClient.cancelQueries({ queryKey: tablesKey })
-      const previous = queryClient.getQueryData<FloorTable[]>(tablesKey)
-      queryClient.setQueryData<FloorTable[]>(tablesKey, (current) =>
+      const { queryKey } = branchTables
+      await queryClient.cancelQueries({ queryKey })
+      const previous = queryClient.getQueryData(queryKey)
+      queryClient.setQueryData(queryKey, (current) =>
         current?.map((table) => (table.id === id ? { ...table, ...patch } : table)),
       )
       return { previous }
     },
     onError: (_err, _variables, context) => {
-      if (context?.previous) queryClient.setQueryData(tablesKey, context.previous)
+      if (context?.previous) queryClient.setQueryData(branchTables.queryKey, context.previous)
     },
     onSettled: refresh,
   }))

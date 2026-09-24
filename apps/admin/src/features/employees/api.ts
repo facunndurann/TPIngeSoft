@@ -1,5 +1,5 @@
 import type { Database, EmployeeRole } from '@restaurant-platform/shared'
-import { supabase } from '@/lib/supabase'
+import { supabase, unwrap } from '@/lib/supabase'
 
 export type Employee = Database['public']['Functions']['list_employee_accounts']['Returns'][number]
 export type EmployeeChange = {
@@ -15,9 +15,7 @@ export type EmployeeChange = {
   legacyId?: string
 }
 export async function loadEmployees(restaurantId: string) {
-  const { data, error } = await supabase.rpc('list_employee_accounts', { p_restaurant: restaurantId })
-  if (error) throw error
-  return data
+  return unwrap(await supabase.rpc('list_employee_accounts', { p_restaurant: restaurantId }))
 }
 
 export async function changeEmployee(body: EmployeeChange) {

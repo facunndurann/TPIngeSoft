@@ -2,7 +2,18 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import { TABLE_SPAN, tableShapeLabels, tableShapes } from '@restaurant-platform/shared'
 import { Button, Field, Input, Select, Toggle } from '@restaurant-platform/ui'
-import type { FloorSection, FloorTable, TableIntent } from './floor-api'
+import type { FloorSection, FloorTable, TablePatch } from '@/queries/floor'
+
+/**
+ * Lo que el inspector le pide al plano. Son tres operaciones con semántica
+ * propia — redimensionar recalcula la posición, mudar de sector busca un hueco
+ * libre, editar es un update plano — así que viajan discriminadas en vez de
+ * como un `Partial<>` suelto cuyas claves haya que olfatear del otro lado.
+ */
+export type TableIntent =
+  | { kind: 'edit'; patch: Omit<TablePatch, 'section_id' | 'width' | 'height'> }
+  | { kind: 'resize'; width: number; height: number }
+  | { kind: 'move-to-section'; sectionId: string | null }
 
 type TableInspectorProps = {
   table: FloorTable
