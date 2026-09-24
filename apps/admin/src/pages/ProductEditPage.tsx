@@ -41,12 +41,17 @@ export function ProductEditPage() {
   const groups = useQuery(modifierGroupsQuery(restaurant.id))
   const product = useQuery({ ...productQuery(productId ?? ''), enabled: !!productId })
 
-  if (productId && product.isLoading) return <Spinner />
-  if (productId && !product.data) {
+  // El formulario se monta con todo lo que muestra, no solo con el producto: si
+  // no, mientras cargan, la categoría no tendría opciones y la personalización
+  // diría «Todavía no hay grupos».
+  if (categories.isLoading || groups.isLoading || (productId && product.isLoading)) {
+    return <Spinner />
+  }
+  if (!categories.data || !groups.data || (productId && !product.data)) {
     return (
       <div className="mx-auto max-w-2xl space-y-4">
         <BackLink />
-        <ErrorText error="No pudimos cargar este producto. Volvé a la lista e intentá de nuevo." />
+        <ErrorText error="No pudimos cargar los datos del producto. Volvé a la lista e intentá de nuevo." />
       </div>
     )
   }
@@ -57,8 +62,8 @@ export function ProductEditPage() {
       productId={productId}
       title={product.data ? `Editar "${product.data.name}"` : 'Nuevo producto'}
       initial={product.data ? draftFrom(product.data) : emptyDraft()}
-      categories={categories.data ?? []}
-      groups={groups.data ?? []}
+      categories={categories.data}
+      groups={groups.data}
     />
   )
 }

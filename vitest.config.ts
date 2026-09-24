@@ -33,6 +33,15 @@ export default defineConfig({
         },
       },
       {
+        // La lógica que comparten las tres apps (plano, tablero del POS, fechas)
+        // se prueba acá, junto a su código, y no en la app que la usa primero.
+        test: {
+          name: 'shared',
+          root: 'packages/shared',
+          include: ['tests/**/*.test.ts'],
+        },
+      },
+      {
         // Contrato HTTP de submit-order, catálogo de errores, máquina de estados
         // y cuentas de empleados. orders.integration.mjs queda afuera: necesita
         // el stack local (`pnpm test:orders:integration`).

@@ -6,7 +6,7 @@ import {
   occupiedBy,
   resizePlacement,
   tablePlacement,
-} from '@restaurant-platform/shared'
+} from '../src/floor.ts'
 
 const lastColumn = FLOOR_GRID.cols - 3
 
