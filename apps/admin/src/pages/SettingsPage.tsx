@@ -109,13 +109,13 @@ function BranchesSection({ restaurantId }: { restaurantId: string }) {
     }: { id: string } & Partial<Pick<Tables<'branches'>, 'is_active' | 'payment_methods'>>) =>
       unwrap(await supabase.from('branches').update(changes).eq('id', id)),
     onSuccess: invalidate,
-  }))
+  }, ({ id }) => id))
 
   const deleteMutation = useMutation(errors.saving('No pudimos eliminar la sucursal.', {
     mutationFn: async (id: string) =>
       unwrap(await supabase.from('branches').delete().eq('id', id)),
     onSuccess: invalidate,
-  }))
+  }, (id) => id))
 
   function handleCreate(e: FormEvent) {
     e.preventDefault()
@@ -191,6 +191,7 @@ function BranchesSection({ restaurantId }: { restaurantId: string }) {
                   updateMutation.mutate({ id: branch.id, payment_methods })
                 }
               />
+              <ErrorText error={errors.messageFor(branch.id)} />
             </li>
           ))}
         </ul>

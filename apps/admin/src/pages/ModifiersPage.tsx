@@ -34,7 +34,7 @@ export function ModifiersPage() {
     mutationFn: async (id: string) =>
       unwrap(await supabase.from('modifier_groups').delete().eq('id', id)),
     onSuccess: invalidate,
-  }))
+  }, (id) => id))
 
   function deleteGroup(group: ModifierGroupWithOptions) {
     if (confirm(`¿Eliminar el grupo "${group.name}" y todas sus opciones?`)) {
@@ -100,6 +100,11 @@ export function ModifiersPage() {
               {!group.is_available && (
                 <div className="mt-2">
                   <Badge color="red">No disponible</Badge>
+                </div>
+              )}
+              {errors.messageFor(group.id) && (
+                <div className="mt-2">
+                  <ErrorText error={errors.messageFor(group.id)} />
                 </div>
               )}
             </div>

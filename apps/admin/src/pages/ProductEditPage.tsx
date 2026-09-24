@@ -1,4 +1,5 @@
 import { useId, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { Link, useNavigate, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
@@ -26,6 +27,7 @@ import {
   draftErrors,
   draftFrom,
   emptyDraft,
+  type DraftField,
   type IngredientDraft,
   type ProductDraft,
 } from '@/features/product-draft'
@@ -105,12 +107,17 @@ function ProductForm({ productId, title, initial, categories, groups }: ProductF
   const patch = (changes: Partial<ProductDraft>) =>
     setDraft((current) => ({ ...current, ...changes }))
 
+  // Los errores de cada campo aparecen recién al intentar guardar; desde ahí se
+  // recalculan con cada cambio, así el campo corregido deja de marcarse solo.
+  const formId = useId()
+  const fieldId = (field: DraftField) => `${formId}-${field}`
+  const [attempted, setAttempted] = useState(false)
+  const fieldErrors = attempted ? draftErrors(draft) : []
+  const errorFor = (field: DraftField) =>
+    fieldErrors.find((error) => error.field === field)?.message
+
   const save = useMutation(errors.saving('No pudimos guardar el producto.', {
-    mutationFn: async () => {
-      const invalid = draftErrors(draft)
-      if (invalid) throw new Error(invalid)
-      return saveProduct({ restaurantId: restaurant.id, productId, draft })
-    },
+    mutationFn: () => saveProduct({ restaurantId: restaurant.id, productId, draft }),
     onSuccess: async (savedId) => {
       // Las dos cachés son independientes: no hay razón para encadenarlas.
       await Promise.all([
@@ -120,6 +127,18 @@ function ProductForm({ productId, title, initial, categories, groups }: ProductF
       navigate('/productos')
     },
   }))
+
+  function submit() {
+    const [first] = draftErrors(draft)
+    if (!first) {
+      save.mutate()
+      return
+    }
+    // El error tiene que estar en el DOM antes de mover el foco: así el lector
+    // de pantalla anuncia el campo junto con su error, y no solo el campo.
+    flushSync(() => setAttempted(true))
+    document.getElementById(fieldId(first.field))?.focus()
+  }
 
   const toggle = <T,>(list: T[], value: T) =>
     list.includes(value) ? list.filter((entry) => entry !== value) : [...list, value]
@@ -140,8 +159,9 @@ function ProductForm({ productId, title, initial, categories, groups }: ProductF
 
       <section className="space-y-4 rounded-xl border border-neutral-200 bg-white p-5">
         <h2 className="font-semibold text-neutral-900">Información básica</h2>
-        <Field label="Nombre">
+        <Field label="Nombre" error={errorFor('name')}>
           <Input
+            id={fieldId('name')}
             value={draft.name}
             onChange={(e) => patch({ name: e.target.value })}
             placeholder="Ej: Hamburguesa clásica"
@@ -156,8 +176,12 @@ function ProductForm({ productId, title, initial, categories, groups }: ProductF
           />
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Categoría">
-            <Select value={draft.categoryId} onChange={(e) => patch({ categoryId: e.target.value })}>
+          <Field label="Categoría" error={errorFor('categoryId')}>
+            <Select
+              id={fieldId('categoryId')}
+              value={draft.categoryId}
+              onChange={(e) => patch({ categoryId: e.target.value })}
+            >
               <option value="">Elegir…</option>
               {categories.map((category) => (
                 <option key={category.id} value={category.id}>
@@ -166,8 +190,9 @@ function ProductForm({ productId, title, initial, categories, groups }: ProductF
               ))}
             </Select>
           </Field>
-          <Field label="Precio base ($)">
+          <Field label="Precio base ($)" error={errorFor('basePrice')}>
             <Input
+              id={fieldId('basePrice')}
               type="number"
               min={0}
               step="0.01"
@@ -229,29 +254,46 @@ function ProductForm({ productId, title, initial, categories, groups }: ProductF
           </p>
         </div>
         <div className="space-y-2">
-          {draft.ingredients.map((ingredient, index) => (
-            <div key={ingredient.id ?? `new-${index}`} className="flex items-center gap-2">
-              <Input
-                value={ingredient.name}
-                onChange={(e) => updateIngredient(index, { name: e.target.value })}
-                placeholder="Ej: Cebolla"
-                aria-label={`Ingrediente ${index + 1}`}
-                className="flex-1"
-              />
-              <Toggle
-                checked={ingredient.is_removable}
-                onChange={(is_removable) => updateIngredient(index, { is_removable })}
-                label="Removible"
-              />
-              <IconButton
-                label={`Quitar ${ingredient.name.trim() || `ingrediente ${index + 1}`}`}
-                tone="danger"
-                onClick={() => patch({ ingredients: draft.ingredients.filter((_, i) => i !== index) })}
-              >
-                <Trash2 size={15} />
-              </IconButton>
-            </div>
-          ))}
+          {draft.ingredients.map((ingredient, index) => {
+            // Las filas no van en un Field (no tienen rótulo visible), así que el
+            // error y su enlace con el campo se arman acá.
+            const field = `ingredient-${index}` as const
+            const error = errorFor(field)
+            const errorId = `${fieldId(field)}-error`
+            return (
+              <div key={ingredient.id ?? `new-${index}`}>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id={fieldId(field)}
+                    value={ingredient.name}
+                    onChange={(e) => updateIngredient(index, { name: e.target.value })}
+                    placeholder="Ej: Cebolla"
+                    aria-label={`Ingrediente ${index + 1}`}
+                    aria-invalid={error ? true : undefined}
+                    aria-describedby={error ? errorId : undefined}
+                    className="flex-1"
+                  />
+                  <Toggle
+                    checked={ingredient.is_removable}
+                    onChange={(is_removable) => updateIngredient(index, { is_removable })}
+                    label="Removible"
+                  />
+                  <IconButton
+                    label={`Quitar ${ingredient.name.trim() || `ingrediente ${index + 1}`}`}
+                    tone="danger"
+                    onClick={() => patch({ ingredients: draft.ingredients.filter((_, i) => i !== index) })}
+                  >
+                    <Trash2 size={15} />
+                  </IconButton>
+                </div>
+                {error && (
+                  <p id={errorId} className="mt-1 text-xs text-red-700">
+                    {error}
+                  </p>
+                )}
+              </div>
+            )
+          })}
         </div>
         <Button
           variant="secondary"
@@ -305,7 +347,7 @@ function ProductForm({ productId, title, initial, categories, groups }: ProductF
         <Link to="/productos">
           <Button variant="secondary">Cancelar</Button>
         </Link>
-        <Button onClick={() => save.mutate()} disabled={save.isPending}>
+        <Button onClick={submit} disabled={save.isPending}>
           {save.isPending ? 'Guardando…' : productId ? 'Guardar cambios' : 'Crear producto'}
         </Button>
       </div>

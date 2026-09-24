@@ -35,12 +35,12 @@ export function ProductsPage() {
     mutationFn: async ({ id, is_available }: { id: string; is_available: boolean }) =>
       unwrap(await supabase.from('products').update({ is_available }).eq('id', id)),
     onSuccess: invalidate,
-  }))
+  }, ({ id }) => id))
 
   const deleteMutation = useMutation(errors.saving('No pudimos eliminar el producto.', {
     mutationFn: async (id: string) => unwrap(await supabase.from('products').delete().eq('id', id)),
     onSuccess: invalidate,
-  }))
+  }, (id) => id))
 
   const groups = (categories ?? []).filter(
     (category) =>
@@ -96,6 +96,7 @@ export function ProductsPage() {
                   <ProductRow
                     key={product.id}
                     product={product}
+                    error={errors.messageFor(product.id)}
                     onAvailabilityChange={(value) =>
                       availabilityMutation.mutate({ id: product.id, is_available: value })
                     }
@@ -115,40 +116,46 @@ export function ProductsPage() {
 
 function ProductRow({
   product,
+  error,
   onAvailabilityChange,
   onDelete,
 }: {
   product: Tables<'products'>
+  /** Error de la última escritura sobre este producto: se muestra acá y no arriba de la lista. */
+  error: string | null
   onAvailabilityChange: (value: boolean) => void
   onDelete: () => void
 }) {
   return (
-    <li className="flex items-center gap-3 rounded-xl border border-neutral-200 bg-white p-3">
-      <MediaThumb media={productMedia(product)[0]} alt={product.name} className="h-14 w-14" />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <p className="truncate text-sm font-medium text-neutral-900">{product.name}</p>
-          {!product.is_available && <Badge color="red">Sin stock</Badge>}
+    <li className="space-y-2 rounded-xl border border-neutral-200 bg-white p-3">
+      <div className="flex items-center gap-3">
+        <MediaThumb media={productMedia(product)[0]} alt={product.name} className="h-14 w-14" />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="truncate text-sm font-medium text-neutral-900">{product.name}</p>
+            {!product.is_available && <Badge color="red">Sin stock</Badge>}
+          </div>
+          <p className="text-xs text-muted">{formatPrice(product.base_price)}</p>
         </div>
-        <p className="text-xs text-muted">{formatPrice(product.base_price)}</p>
+        <Toggle
+          checked={product.is_available}
+          onChange={onAvailabilityChange}
+          label={`Disponible: ${product.name}`}
+          hideLabel
+        />
+        <Link
+          to={`/productos/${product.id}`}
+          className={iconButtonClass()}
+          aria-label={`Editar ${product.name}`}
+          title={`Editar ${product.name}`}
+        >
+          <Pencil size={15} />
+        </Link>
+        <IconButton label={`Eliminar ${product.name}`} tone="danger" onClick={onDelete}>
+          <Trash2 size={15} />
+        </IconButton>
       </div>
-      <Toggle
-        checked={product.is_available}
-        onChange={onAvailabilityChange}
-        label={`Disponible: ${product.name}`}
-        hideLabel
-      />
-      <Link
-        to={`/productos/${product.id}`}
-        className={iconButtonClass()}
-        aria-label={`Editar ${product.name}`}
-        title={`Editar ${product.name}`}
-      >
-        <Pencil size={15} />
-      </Link>
-      <IconButton label={`Eliminar ${product.name}`} tone="danger" onClick={onDelete}>
-        <Trash2 size={15} />
-      </IconButton>
+      <ErrorText error={error} />
     </li>
   )
 }

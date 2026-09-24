@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useRef } from 'react'
+import { createContext, useContext, useId, useLayoutEffect, useRef } from 'react'
 import type { ButtonHTMLAttributes, ComponentProps, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react'
 import { Check, X } from 'lucide-react'
 
@@ -26,41 +26,58 @@ export function Button({
   )
 }
 
+/**
+ * Lo común a los campos de texto y de selección. Con error (`aria-invalid`) el
+ * borde pasa a rojo además del mensaje, así el color no es la única señal.
+ */
+const controlClass =
+  'w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-faint focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary aria-invalid:border-red-600 aria-invalid:ring-1 aria-invalid:ring-red-600'
+
+/** Lo que un Field le avisa a su control: tiene un error, y este es el id del mensaje. */
+const FieldContext = createContext<{ errorId: string } | null>(null)
+
+/**
+ * `aria-invalid` y `aria-describedby` del Field que envuelve al control, si hay
+ * error. Van antes de las props, así quien lo necesite puede pisarlas.
+ */
+function useFieldError() {
+  const field = useContext(FieldContext)
+  return field ? { 'aria-invalid': true as const, 'aria-describedby': field.errorId } : {}
+}
+
 export function Input({ className = '', ref, ...props }: ComponentProps<'input'>) {
-  return (
-    <input
-      ref={ref}
-      className={`w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-faint focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary ${className}`}
-      {...props}
-    />
-  )
+  return <input ref={ref} {...useFieldError()} className={`${controlClass} ${className}`} {...props} />
 }
 
 export function Textarea({ className = '', ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return (
-    <textarea
-      className={`w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-faint focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary ${className}`}
-      {...props}
-    />
-  )
+  return <textarea {...useFieldError()} className={`${controlClass} ${className}`} {...props} />
 }
 
 export function Select({ className = '', ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
-  return (
-    <select
-      className={`w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary ${className}`}
-      {...props}
-    />
-  )
+  return <select {...useFieldError()} className={`${controlClass} ${className}`} {...props} />
 }
 
+/**
+ * Rótulo, control y, si hay, el error de ese control. El error va fuera del
+ * `<label>` (adentro se sumaría al nombre del campo en vez de describirlo) y se
+ * enlaza por contexto: el Input, Select o Textarea de adentro queda marcado como
+ * inválido y descrito por el mensaje sin que cada formulario lo repita.
+ */
 export function Field({ label, children, error }: { label: string; children: ReactNode; error?: string }) {
+  const errorId = useId()
+
   return (
-    <label className="block">
-      <span className="mb-1 block text-sm font-medium text-neutral-700">{label}</span>
-      {children}
-      {error && <span className="mt-1 block text-xs text-red-600">{error}</span>}
-    </label>
+    <div>
+      <label className="block">
+        <span className="mb-1 block text-sm font-medium text-neutral-700">{label}</span>
+        <FieldContext value={error ? { errorId } : null}>{children}</FieldContext>
+      </label>
+      {error && (
+        <p id={errorId} className="mt-1 text-xs text-red-700">
+          {error}
+        </p>
+      )}
+    </div>
   )
 }
 

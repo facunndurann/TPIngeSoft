@@ -74,13 +74,27 @@ export function draftPrice(draft: ProductDraft): number | null {
   return parsePrice(draft.basePrice)
 }
 
-/** Primer problema que impide guardar, o `null`. La base revalida igual. */
-export function draftErrors(draft: ProductDraft): string | null {
-  if (!draft.name.trim()) return 'El producto necesita un nombre'
-  if (!draft.categoryId) return 'Elegí una categoría'
-  if (draftPrice(draft) === null) return 'El precio no es válido'
-  if (draft.ingredients.some((ingredient) => !ingredient.name.trim())) {
-    return 'Todos los ingredientes necesitan nombre'
+/** Un campo del formulario que puede tener un error: los fijos y cada ingrediente. */
+export type DraftField = 'name' | 'categoryId' | 'basePrice' | `ingredient-${number}`
+
+export type DraftError = { field: DraftField; message: string }
+
+/**
+ * Todo lo que impide guardar, en el orden del formulario y con el campo de cada
+ * problema: así cada error se muestra debajo de su campo y el foco va al primero.
+ * La base revalida igual.
+ */
+export function draftErrors(draft: ProductDraft): DraftError[] {
+  const errors: DraftError[] = []
+  if (!draft.name.trim()) errors.push({ field: 'name', message: 'El producto necesita un nombre.' })
+  if (!draft.categoryId) errors.push({ field: 'categoryId', message: 'Elegí una categoría.' })
+  if (draftPrice(draft) === null) {
+    errors.push({ field: 'basePrice', message: 'Ingresá un precio de 0 o más, sin letras.' })
   }
-  return null
+  draft.ingredients.forEach((ingredient, index) => {
+    if (!ingredient.name.trim()) {
+      errors.push({ field: `ingredient-${index}`, message: 'Escribí el ingrediente o quitalo.' })
+    }
+  })
+  return errors
 }

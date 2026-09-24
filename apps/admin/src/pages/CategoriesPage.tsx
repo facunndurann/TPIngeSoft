@@ -43,13 +43,13 @@ export function CategoriesPage() {
       setEditingId(null)
       invalidate()
     },
-  }))
+  }, ({ id }) => id))
 
   const deleteMutation = useMutation(errors.saving('No pudimos eliminar la categoría.', {
     mutationFn: async (id: string) =>
       unwrap(await supabase.from('menu_categories').delete().eq('id', id)),
     onSuccess: invalidate,
-  }))
+  }, (id) => id))
 
   // Se envía la lista completa en el orden nuevo: la base la aplica de una vez y
   // rechaza la operación si la lista quedó desactualizada.
@@ -109,77 +109,80 @@ export function CategoriesPage() {
           {categories.map((category, index) => (
             <li
               key={category.id}
-              className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-white py-2 pr-3 pl-2"
+              className="space-y-2 rounded-xl border border-neutral-200 bg-white py-2 pr-3 pl-2"
             >
-              {/* Una al lado de la otra y de 32 px: apiladas medían 15 px, pegadas. */}
-              <div className="flex">
-                <IconButton
-                  label={`Subir ${category.name}`}
-                  disabled={index === 0 || reorderMutation.isPending}
-                  onClick={() => move(index, -1)}
-                >
-                  <ArrowUp size={16} />
-                </IconButton>
-                <IconButton
-                  label={`Bajar ${category.name}`}
-                  disabled={index === categories.length - 1 || reorderMutation.isPending}
-                  onClick={() => move(index, 1)}
-                >
-                  <ArrowDown size={16} />
-                </IconButton>
-              </div>
+              <div className="flex items-center gap-2">
+                {/* Una al lado de la otra y de 32 px: apiladas medían 15 px, pegadas. */}
+                <div className="flex">
+                  <IconButton
+                    label={`Subir ${category.name}`}
+                    disabled={index === 0 || reorderMutation.isPending}
+                    onClick={() => move(index, -1)}
+                  >
+                    <ArrowUp size={16} />
+                  </IconButton>
+                  <IconButton
+                    label={`Bajar ${category.name}`}
+                    disabled={index === categories.length - 1 || reorderMutation.isPending}
+                    onClick={() => move(index, 1)}
+                  >
+                    <ArrowDown size={16} />
+                  </IconButton>
+                </div>
 
-              {editingId === category.id ? (
-                <form
-                  className="flex flex-1 items-center gap-2"
-                  onSubmit={(e) => {
-                    e.preventDefault()
-                    updateMutation.mutate({ id: category.id, name: editingName })
+                {editingId === category.id ? (
+                  <form
+                    className="flex flex-1 items-center gap-2"
+                    onSubmit={(e) => {
+                      e.preventDefault()
+                      updateMutation.mutate({ id: category.id, name: editingName })
+                    }}
+                  >
+                    <Input
+                      value={editingName}
+                      onChange={(e) => setEditingName(e.target.value)}
+                      aria-label={`Nuevo nombre de ${category.name}`}
+                      autoFocus
+                    />
+                    <Button type="submit" variant="secondary" aria-label="Guardar nombre">
+                      <Check size={15} />
+                    </Button>
+                  </form>
+                ) : (
+                  <>
+                    <span className="flex-1 text-sm font-medium text-neutral-900">{category.name}</span>
+                    {!category.is_active && <Badge color="red">Inactiva</Badge>}
+                  </>
+                )}
+
+                <Toggle
+                  checked={category.is_active}
+                  onChange={(value) => updateMutation.mutate({ id: category.id, is_active: value })}
+                  label={`Activa: ${category.name}`}
+                  hideLabel
+                />
+                <IconButton
+                  label={`Renombrar ${category.name}`}
+                  onClick={() => {
+                    setEditingId(category.id)
+                    setEditingName(category.name)
                   }}
                 >
-                  <Input
-                    value={editingName}
-                    onChange={(e) => setEditingName(e.target.value)}
-                    aria-label={`Nuevo nombre de ${category.name}`}
-                    autoFocus
-                  />
-                  <Button type="submit" variant="secondary" aria-label="Guardar nombre">
-                    <Check size={15} />
-                  </Button>
-                </form>
-              ) : (
-                <>
-                  <span className="flex-1 text-sm font-medium text-neutral-900">{category.name}</span>
-                  {!category.is_active && <Badge color="red">Inactiva</Badge>}
-                </>
-              )}
-
-              <Toggle
-                checked={category.is_active}
-                onChange={(value) => updateMutation.mutate({ id: category.id, is_active: value })}
-                label={`Activa: ${category.name}`}
-                hideLabel
-              />
-              <IconButton
-                label={`Renombrar ${category.name}`}
-                onClick={() => {
-                  setEditingId(category.id)
-                  setEditingName(category.name)
-                }}
-              >
-                <Pencil size={15} />
-              </IconButton>
-              <IconButton
-                label={`Eliminar ${category.name}`}
-                tone="danger"
-                onClick={() => {
-                  if (confirm(`¿Eliminar la categoría "${category.name}"?`)) {
-                    deleteMutation.mutate(category.id)
-                  }
-                }}
-              >
-                <Trash2 size={15} />
-              </IconButton>
+                  <Pencil size={15} />
+                </IconButton>
+                <IconButton
+                  label={`Eliminar ${category.name}`}
+                  tone="danger"
+                  onClick={() => {
+                    if (confirm(`¿Eliminar la categoría "${category.name}"?`)) {
+                      deleteMutation.mutate(category.id)
+                    }
+                  }}
+                >
+                  <Trash2 size={15} />
+                </IconButton>
+              </div>
+              <ErrorText error={errors.messageFor(category.id)} />
             </li>
           ))}
         </ul>

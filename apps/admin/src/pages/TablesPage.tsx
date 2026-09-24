@@ -57,12 +57,12 @@ export function TablesPage() {
     mutationFn: ({ id, is_active }: { id: string; is_active: boolean }) =>
       updateTable(id, { is_active }),
     onSuccess: invalidate,
-  }))
+  }, ({ id }) => id))
 
   const deleteMutation = useMutation(errors.saving('No pudimos eliminar la mesa.', {
     mutationFn: (id: string) => deleteTable(id),
     onSuccess: invalidate,
-  }))
+  }, (id) => id))
 
   function handleCreate(e: FormEvent) {
     e.preventDefault()
@@ -120,34 +120,37 @@ export function TablesPage() {
           {tables.data.map((table) => (
             <li
               key={table.id}
-              className="flex items-center gap-3 rounded-xl border border-neutral-200 bg-white px-4 py-3"
+              className="space-y-2 rounded-xl border border-neutral-200 bg-white px-4 py-3"
             >
-              <span className="flex-1 text-sm font-medium text-neutral-900">{table.label}</span>
-              <Badge color={sectionNames.has(table.section_id) ? 'neutral' : 'amber'}>
-                {sectionNames.get(table.section_id) ?? 'Sin sector'}
-              </Badge>
-              {!table.is_visible && table.is_active && <Badge color="amber">Oculta</Badge>}
-              {!table.is_active && <Badge color="red">Inactiva</Badge>}
-              <Button variant="secondary" onClick={() => setQrTable(table)}>
-                <QrCode size={15} /> Ver QR
-              </Button>
-              <Toggle
-                checked={table.is_active}
-                onChange={(value) => updateMutation.mutate({ id: table.id, is_active: value })}
-                label={`En servicio: ${table.label}`}
-                hideLabel
-              />
-              <IconButton
-                label={`Eliminar ${table.label}`}
-                tone="danger"
-                onClick={() => {
-                  if (confirm(`¿Eliminar "${table.label}"? Se pierde su QR.`)) {
-                    deleteMutation.mutate(table.id)
-                  }
-                }}
-              >
-                <Trash2 size={15} />
-              </IconButton>
+              <div className="flex items-center gap-3">
+                <span className="flex-1 text-sm font-medium text-neutral-900">{table.label}</span>
+                <Badge color={sectionNames.has(table.section_id) ? 'neutral' : 'amber'}>
+                  {sectionNames.get(table.section_id) ?? 'Sin sector'}
+                </Badge>
+                {!table.is_visible && table.is_active && <Badge color="amber">Oculta</Badge>}
+                {!table.is_active && <Badge color="red">Inactiva</Badge>}
+                <Button variant="secondary" onClick={() => setQrTable(table)}>
+                  <QrCode size={15} /> Ver QR
+                </Button>
+                <Toggle
+                  checked={table.is_active}
+                  onChange={(value) => updateMutation.mutate({ id: table.id, is_active: value })}
+                  label={`En servicio: ${table.label}`}
+                  hideLabel
+                />
+                <IconButton
+                  label={`Eliminar ${table.label}`}
+                  tone="danger"
+                  onClick={() => {
+                    if (confirm(`¿Eliminar "${table.label}"? Se pierde su QR.`)) {
+                      deleteMutation.mutate(table.id)
+                    }
+                  }}
+                >
+                  <Trash2 size={15} />
+                </IconButton>
+              </div>
+              <ErrorText error={errors.messageFor(table.id)} />
             </li>
           ))}
         </ul>
