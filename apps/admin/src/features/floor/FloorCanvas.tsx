@@ -4,8 +4,9 @@ import {
   clampSpan,
   clampToGrid,
   collidesWithAny,
-  tableFootprint,
-  type Footprint,
+  occupiedBy,
+  tablePlacement,
+  type TableSpan,
 } from '@restaurant-platform/shared'
 import { FloorGrid } from '@restaurant-platform/ui'
 import type { FloorTable } from '@/queries/floor'
@@ -35,7 +36,7 @@ type FloorCanvasProps = {
   onSelect: (tableId: string) => void
   /** Ausente en modo visualizar: el plano queda de solo lectura. */
   onMove?: (tableId: string, x: number, y: number) => void
-  onResize?: (tableId: string, width: number, height: number) => void
+  onResize?: (table: FloorTable, span: TableSpan) => void
   onReject?: (message: string) => void
 }
 
@@ -68,14 +69,6 @@ export function FloorCanvas({
   const [gesture, setGesture] = useState<Gesture | null>(null)
   const editable = !!onMove
 
-  const layoutOf = (table: FloorTable) => {
-    const footprint = tableFootprint(table)
-    return { footprint, ...clampToGrid(table.position_x, table.position_y, footprint) }
-  }
-
-  const obstaclesFor = (tableId: string) =>
-    tables.filter((other) => other.id !== tableId).map(layoutOf)
-
   const cellFromPointer = (event: { clientX: number; clientY: number }) => {
     const grid = surface.current?.firstElementChild?.getBoundingClientRect()
     if (!grid) return { x: 0, y: 0 }
@@ -86,7 +79,7 @@ export function FloorCanvas({
   /** Caja del gesto en curso; sin gesto, FloorGrid dibuja la posición guardada. */
   const previewOf = (table: FloorTable) => {
     if (gesture?.tableId !== table.id) return null
-    const saved = layoutOf(table)
+    const saved = tablePlacement(table)
     return gesture.kind === 'move'
       ? { footprint: saved.footprint, x: gesture.x, y: gesture.y }
       : { footprint: { w: gesture.width, h: gesture.height }, x: saved.x, y: saved.y }
@@ -95,7 +88,7 @@ export function FloorCanvas({
   function startMove(event: ReactPointerEvent<HTMLElement>, table: FloorTable) {
     onSelect(table.id)
     if (!editable) return
-    const origin = layoutOf(table)
+    const origin = tablePlacement(table)
     const pointer = cellFromPointer(event)
     event.currentTarget.setPointerCapture(event.pointerId)
     setGesture({
@@ -112,18 +105,18 @@ export function FloorCanvas({
   function moveTo(event: ReactPointerEvent<HTMLElement>, table: FloorTable) {
     if (gesture?.kind !== 'move' || gesture.tableId !== table.id) return
     const pointer = cellFromPointer(event)
-    const footprint: Footprint = tableFootprint(table)
+    const { footprint } = tablePlacement(table)
     const next = clampToGrid(pointer.x - gesture.offsetX, pointer.y - gesture.offsetY, footprint)
     setGesture({
       ...gesture,
       ...next,
-      valid: !collidesWithAny({ ...next, footprint }, obstaclesFor(table.id)),
+      valid: !collidesWithAny({ ...next, footprint }, occupiedBy(tables, table.id)),
     })
   }
 
   function startResize(event: ReactPointerEvent<HTMLElement>, table: FloorTable) {
     event.stopPropagation()
-    const { footprint } = layoutOf(table)
+    const { footprint } = tablePlacement(table)
     event.currentTarget.setPointerCapture(event.pointerId)
     setGesture({
       kind: 'resize',
@@ -138,7 +131,7 @@ export function FloorCanvas({
     if (gesture?.kind !== 'resize' || gesture.tableId !== table.id) return
     event.stopPropagation()
     const pointer = cellFromPointer(event)
-    const origin = layoutOf(table)
+    const origin = tablePlacement(table)
     // La esquina superior izquierda no se mueve: el lado es la distancia hasta
     // el puntero, recortada a lo que queda de grilla.
     const width = clampSpan(pointer.x - origin.x, FLOOR_GRID.cols - origin.x)
@@ -149,14 +142,14 @@ export function FloorCanvas({
       height,
       valid: !collidesWithAny(
         { x: origin.x, y: origin.y, footprint: { w: width, h: height } },
-        obstaclesFor(table.id),
+        occupiedBy(tables, table.id),
       ),
     })
   }
 
   function endGesture(table: FloorTable) {
     if (gesture?.tableId !== table.id) return
-    const origin = layoutOf(table)
+    const origin = tablePlacement(table)
 
     if (gesture.kind === 'move') {
       const moved = gesture.x !== origin.x || gesture.y !== origin.y
@@ -164,7 +157,7 @@ export function FloorCanvas({
       if (moved && !gesture.valid) onReject?.(OVERLAP_MESSAGE)
     } else {
       const resized = gesture.width !== origin.footprint.w || gesture.height !== origin.footprint.h
-      if (resized && gesture.valid) onResize?.(table.id, gesture.width, gesture.height)
+      if (resized && gesture.valid) onResize?.(table, { width: gesture.width, height: gesture.height })
       if (resized && !gesture.valid) onReject?.(OVERLAP_MESSAGE)
     }
     setGesture(null)
@@ -176,10 +169,10 @@ export function FloorCanvas({
     const step = ARROW_STEPS[event.key]
     if (!step) return
     event.preventDefault()
-    const origin = layoutOf(table)
+    const origin = tablePlacement(table)
     const next = clampToGrid(origin.x + step.dx, origin.y + step.dy, origin.footprint)
     if (next.x === origin.x && next.y === origin.y) return
-    if (collidesWithAny({ ...next, footprint: origin.footprint }, obstaclesFor(table.id))) {
+    if (collidesWithAny({ ...next, footprint: origin.footprint }, occupiedBy(tables, table.id))) {
       onReject?.(OVERLAP_MESSAGE)
       return
     }

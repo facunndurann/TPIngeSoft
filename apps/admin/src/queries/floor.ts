@@ -38,10 +38,9 @@ export async function createSection(section: TablesInsert<'floor_sections'>) {
   unwrap(await supabase.from('floor_sections').insert(section))
 }
 
-export async function updateSection(
-  sectionId: string,
-  patch: Partial<Pick<FloorSection, 'name' | 'is_active' | 'sort_order'>>,
-) {
+export type SectionPatch = Partial<Pick<FloorSection, 'name' | 'is_active' | 'sort_order'>>
+
+export async function updateSection(sectionId: string, patch: SectionPatch) {
   unwrap(await supabase.from('floor_sections').update(patch).eq('id', sectionId))
 }
 
