@@ -1,8 +1,9 @@
 import { useId, useState, type ChangeEvent, type KeyboardEvent } from 'react'
 import { Trash2 } from 'lucide-react'
-import { TABLE_SPAN, tableShapeLabels, tableShapes } from '@restaurant-platform/shared'
+import { FLOOR_GRID, TABLE_SPAN, tablePlacement, tableShapeLabels, tableShapes } from '@restaurant-platform/shared'
 import { Button, Field, Input, Select, Toggle } from '@restaurant-platform/ui'
 import type { FloorSection, FloorTable, TablePatch } from '@/queries/floor'
+import { OVERLAP_MESSAGE, overlapsAt } from './placement'
 
 /**
  * Lo que el inspector le pide al plano. Son tres operaciones con semántica
@@ -17,6 +18,8 @@ export type TableIntent =
 
 type TableInspectorProps = {
   table: FloorTable
+  /** Las mesas del sector de esta mesa: una posición que las pise no se guarda. */
+  neighbors: FloorTable[]
   sections: FloorSection[]
   onIntent: (intent: TableIntent) => void
   onDelete: () => void
@@ -34,7 +37,8 @@ const SEATS = { min: 1, max: 40 } as const
 function useDraftField<T extends string | number>(
   value: T,
   parse: (text: string) => T | null,
-  onCommit: (next: T) => void,
+  /** Devuelve `false` si rechaza el valor (una posición ocupada): el campo vuelve a lo guardado. */
+  onCommit: (next: T) => boolean | void,
 ) {
   // Lo tipeado y sobre qué valor guardado se tipeó. Sin borrador, el campo
   // muestra el valor guardado: no hay que copiar props al estado.
@@ -51,9 +55,9 @@ function useDraftField<T extends string | number>(
     const next = parse(text)
     // Si se guarda, el borrador queda a la vista hasta que llega el valor nuevo:
     // el update optimista llega un momento después, y soltarlo ahora mostraría
-    // por un instante el valor viejo.
-    if (next !== null && next !== value) onCommit(next)
-    else setDraft(null)
+    // por un instante el valor viejo. Si no se guarda, vuelve a lo guardado.
+    if (next !== null && next !== value && onCommit(next) !== false) return
+    setDraft(null)
   }
 
   return {
@@ -92,7 +96,7 @@ function NumberField({
   value: number
   min: number
   max: number
-  onCommit: (next: number) => void
+  onCommit: (next: number) => boolean | void
 }) {
   const id = useId()
   const field = useDraftField(value, (text) => wholeNumberIn(text, min, max), onCommit)
@@ -135,20 +139,38 @@ function NumberField({
  * Propiedades de la mesa seleccionada en el plano. El editor lo monta con
  * `key={table.id}`, así que un borrador nunca pasa de una mesa a otra.
  */
-export function TableInspector({ table, sections, onIntent, onDelete, busy }: TableInspectorProps) {
+export function TableInspector({ table, neighbors, sections, onIntent, onDelete, busy }: TableInspectorProps) {
   const label = useDraftField(
     table.label,
     (text) => text.trim() || null,
     (next) => onIntent({ kind: 'edit', patch: { label: next } }),
   )
 
+  // Donde se dibuja la mesa: la posición guardada, recortada a la grilla.
+  const placed = tablePlacement(table)
+  const here = `${placed.x},${placed.y}`
+  // Desde dónde se pidió la última posición rechazada. El aviso vale mientras la
+  // mesa siga ahí: moverla desde el plano lo descarta, sin un efecto que lo limpie.
+  const [rejectedFrom, setRejectedFrom] = useState<string | null>(null)
+  const positionError = rejectedFrom === here ? OVERLAP_MESSAGE : null
+
+  /** Mueve la mesa sin arrastrarla, con la misma regla que el plano. */
+  function moveTo(x: number, y: number) {
+    if (overlapsAt(table, x, y, neighbors)) {
+      setRejectedFrom(here)
+      return false
+    }
+    setRejectedFrom(null)
+    onIntent({ kind: 'edit', patch: { position_x: x, position_y: y } })
+    return true
+  }
+
   return (
     <aside className="space-y-4 rounded-xl border border-neutral-200 bg-white p-4">
       <div>
         <h2 className="text-sm font-semibold text-neutral-900">Mesa seleccionada</h2>
         <p className="text-xs text-muted">
-          Posición {table.position_x}, {table.position_y} · arrastrala para moverla o tirá de la
-          esquina para cambiarle el tamaño.
+          Movela arrastrándola en el plano, con las flechas del teclado o desde acá.
         </p>
       </div>
 
@@ -188,6 +210,39 @@ export function TableInspector({ table, sections, onIntent, onDelete, busy }: Ta
           </Select>
         </Field>
       </div>
+
+      {/* Moverla con un solo toque, sin arrastrar (WCAG 2.5.7). Una mesa sin sector
+          no está en ningún plano, así que no tiene posición que editar. Se cuenta
+          desde 1, como se leen filas y columnas; se guarda desde 0. */}
+      {table.section_id && (
+        <div>
+          <div className="grid grid-cols-2 gap-3">
+            <NumberField
+              label="Columna"
+              value={placed.x + 1}
+              min={1}
+              max={FLOOR_GRID.cols - placed.footprint.w + 1}
+              onCommit={(column) => moveTo(column - 1, placed.y)}
+            />
+            <NumberField
+              label="Fila"
+              value={placed.y + 1}
+              min={1}
+              max={FLOOR_GRID.rows - placed.footprint.h + 1}
+              onCommit={(row) => moveTo(placed.x, row - 1)}
+            />
+          </div>
+          {positionError ? (
+            <p role="alert" className="mt-1 text-xs text-red-700">
+              {positionError}
+            </p>
+          ) : (
+            <p className="mt-1 text-xs text-muted">
+              Contadas desde la esquina de arriba a la izquierda.
+            </p>
+          )}
+        </div>
+      )}
 
       <div>
         {/* Un lado nuevo siempre viaja con el otro: el plano necesita la huella

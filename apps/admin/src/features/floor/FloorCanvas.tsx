@@ -10,6 +10,7 @@ import {
 } from '@restaurant-platform/shared'
 import { FloorGrid } from '@restaurant-platform/ui'
 import type { FloorTable } from '@/queries/floor'
+import { OVERLAP_MESSAGE, overlapsAt } from './placement'
 
 type Gesture =
   | {
@@ -46,8 +47,6 @@ const ARROW_STEPS: Record<string, { dx: number; dy: number }> = {
   ArrowUp: { dx: 0, dy: -1 },
   ArrowDown: { dx: 0, dy: 1 },
 }
-
-const OVERLAP_MESSAGE = 'Ahí se superpone con otra mesa. Buscá un lugar libre.'
 
 /**
  * Plano del sector. Las mesas se arrastran y se estiran sobre una grilla: se
@@ -110,7 +109,7 @@ export function FloorCanvas({
     setGesture({
       ...gesture,
       ...next,
-      valid: !collidesWithAny({ ...next, footprint }, occupiedBy(tables, table.id)),
+      valid: !overlapsAt(table, next.x, next.y, tables),
     })
   }
 
@@ -163,7 +162,7 @@ export function FloorCanvas({
     setGesture(null)
   }
 
-  /** Mover con flechas: precisión fina y la única vía sin mouse. */
+  /** Mover con flechas: precisión fina sin salir del plano. La otra vía sin arrastrar son los campos del inspector. */
   function handleKeyDown(event: KeyboardEvent<HTMLElement>, table: FloorTable) {
     if (!editable) return
     const step = ARROW_STEPS[event.key]
@@ -172,7 +171,7 @@ export function FloorCanvas({
     const origin = tablePlacement(table)
     const next = clampToGrid(origin.x + step.dx, origin.y + step.dy, origin.footprint)
     if (next.x === origin.x && next.y === origin.y) return
-    if (collidesWithAny({ ...next, footprint: origin.footprint }, occupiedBy(tables, table.id))) {
+    if (overlapsAt(table, next.x, next.y, tables)) {
       onReject?.(OVERLAP_MESSAGE)
       return
     }
@@ -221,14 +220,12 @@ export function FloorCanvas({
                 <span className="text-[10px] leading-tight opacity-70">{table.seats} lug.</span>
               </button>
 
-              {/* Manija de tamaño: solo sobre la mesa elegida, para no ensuciar el plano. */}
+              {/* Manija de tamaño: solo sobre la mesa elegida, para no ensuciar el plano.
+                  Es un atajo para el mouse y el dedo, sin rol ni foco: el tamaño con
+                  teclado o con un solo toque se cambia en el inspector (Ancho y Alto). */}
               {editable && selected && (
                 <span
-                  role="slider"
-                  aria-label={`Tamaño de ${table.label}: ${tile.footprint.w} por ${tile.footprint.h} celdas`}
-                  aria-valuetext={`${tile.footprint.w} por ${tile.footprint.h} celdas`}
-                  aria-valuenow={tile.footprint.w}
-                  tabIndex={-1}
+                  aria-hidden="true"
                   onPointerDown={(event) => startResize(event, table)}
                   onPointerMove={(event) => resizeTo(event, table)}
                   onPointerUp={() => endGesture(table)}

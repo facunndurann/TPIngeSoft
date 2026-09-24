@@ -102,6 +102,7 @@ function SectionEditor({
             // Otra mesa, otro inspector: un borrador a medio escribir no pasa de una a otra.
             key={selected.id}
             table={selected}
+            neighbors={floor.tablesIn(selected.section_id)}
             sections={floor.sections}
             busy={editor.removeTable.isPending}
             onIntent={(intent) => editor.applyIntent(selected, intent)}
@@ -111,7 +112,8 @@ function SectionEditor({
           />
         ) : (
           <aside className="rounded-xl border border-dashed border-neutral-300 bg-white p-4 text-sm text-muted">
-            Tocá una mesa del plano para editar su identificador, capacidad, tamaño y visibilidad.
+            Tocá una mesa del plano para editar su identificador, capacidad, posición, tamaño y
+            visibilidad.
           </aside>
         )}
       </div>
