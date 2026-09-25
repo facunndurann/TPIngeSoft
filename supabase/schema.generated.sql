@@ -2429,23 +2429,30 @@ CREATE OR REPLACE VIEW "public"."pos_open_sessions" WITH ("security_invoker"='tr
     "t"."branch_id",
     "b"."name" AS "branch_name",
     COALESCE("p"."names", '{}'::"text"[]) AS "participant_names",
-    COALESCE("bill"."submitted_amount", (0)::numeric) AS "submitted_amount",
-    COALESCE("bill"."total_amount", (0)::numeric) AS "total_amount",
-    COALESCE("bill"."paid_amount", (0)::numeric) AS "paid_amount",
-    COALESCE("bill"."pending_amount", (0)::numeric) AS "pending_amount",
+    "bill"."submitted_amount",
+    "bill"."total_amount",
+    "bill"."paid_amount",
+    "bill"."pending_amount",
     "s"."bill_requested_at",
     "s"."bill_attended_at",
     "s"."in_person_payment_requested_at",
     "s"."in_person_payment_attended_at",
-    "k"."tickets" AS "kitchen_tickets"
-   FROM ((((("public"."table_sessions" "s"
+    "k"."tickets" AS "kitchen_tickets",
+    COALESCE("k"."statuses", '{}'::"public"."order_status"[]) AS "kitchen_statuses",
+    "e"."full_name" AS "assigned_employee_name",
+    (EXISTS ( SELECT 1
+           FROM "public"."payments" "pay"
+          WHERE (("pay"."session_id" = "s"."id") AND ("pay"."restaurant_id" = "s"."restaurant_id") AND ("pay"."status" = 'pending'::"public"."payment_status")))) AS "has_pending_payment"
+   FROM (((((("public"."table_sessions" "s"
      JOIN "public"."tables" "t" ON (("t"."id" = "s"."table_id")))
      JOIN "public"."branches" "b" ON (("b"."id" = "t"."branch_id")))
      LEFT JOIN "public"."session_bills" "bill" ON (("bill"."session_id" = "s"."id")))
+     LEFT JOIN "public"."profiles" "e" ON (("e"."id" = "s"."assigned_user_id")))
      LEFT JOIN LATERAL ( SELECT "array_agg"("sp"."display_name" ORDER BY "sp"."joined_at") AS "names"
            FROM "public"."session_participants" "sp"
           WHERE ("sp"."session_id" = "s"."id")) "p" ON (true))
-     LEFT JOIN LATERAL ( SELECT ("count"(*))::integer AS "tickets"
+     LEFT JOIN LATERAL ( SELECT ("count"(*))::integer AS "tickets",
+            "array_agg"("o"."status" ORDER BY "o"."created_at") AS "statuses"
            FROM "public"."orders" "o"
           WHERE (("o"."session_id" = "s"."id") AND (EXISTS ( SELECT 1
                    FROM "public"."order_status_transitions" "tr"

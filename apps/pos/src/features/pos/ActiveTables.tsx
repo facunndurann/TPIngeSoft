@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { formatElapsed, formatPrice, sessionRequestsOf } from '@restaurant-platform/shared'
+import { asAmount, formatElapsed, formatPrice, sessionRequestsOf } from '@restaurant-platform/shared'
 import { useCan, useRestaurant } from '@/context/pos-context'
 import { Badge, Button, EmptyState, ErrorText, Modal, Spinner, useNow, useSaveErrors } from '@restaurant-platform/ui'
 import {
@@ -9,17 +9,16 @@ import {
   loadRestaurantTables,
   posOpenSessionsQuery,
   posQueryKey,
-  type PosOpenSessionCard,
+  type PosOpenSession,
 } from './api'
 import { AttendRequestButtons, ChargedBadge, SessionRequestBadges } from './ServiceRequests'
 
 export function ActiveTables() {
   const restaurant = useRestaurant()
   const can = useCan()
-  const canPay = can('payments.read')
   const queryClient = useQueryClient()
   const now = useNow()
-  const [closing, setClosing] = useState<PosOpenSessionCard | null>(null)
+  const [closing, setClosing] = useState<PosOpenSession | null>(null)
   const errors = useSaveErrors()
 
   const sessions = useQuery(posOpenSessionsQuery(restaurant.id, restaurant.branchId))
@@ -109,7 +108,8 @@ export function ActiveTables() {
                       {formatElapsed(session.opened_at, now, 'exact')}
                     </p>
                   </div>
-                  {canPay && (
+                  {/* Sin payments.read la vista trae los importes en null: no hay saldo que mostrar. */}
+                  {session.pending_amount !== null && (
                     <Badge color={session.pending_amount > 0 ? 'amber' : 'green'}>
                       {session.pending_amount > 0 ? 'Pendiente' : 'Sin saldo'}
                     </Badge>
@@ -121,7 +121,7 @@ export function ActiveTables() {
                 <SessionRequestBadges session={session} now={now} />
                 {/* Cobrada y todavía abierta: es la mesa que hay que liberar. */}
                 <ChargedBadge session={session} now={now} />
-                {canPay && (
+                {session.total_amount !== null && (
                   <dl className="grid grid-cols-2 gap-2 text-xs">
                     <div>
                       <dt className="text-neutral-500">Por confirmar</dt>
@@ -199,7 +199,7 @@ export function ActiveTables() {
               Los comensales no podrán enviar más pedidos en esta cuenta. Si vuelven a escanear el QR se
               abre una sesión nueva.
             </p>
-            {canPay && closing.pending_amount > 0 && (
+            {asAmount(closing.pending_amount) > 0 && (
               <p className="rounded-lg bg-amber-50 px-3 py-2 text-amber-950">
                 Queda {formatPrice(closing.pending_amount)} pendiente. Registrá el cobro desde la
                 comanda antes de cerrar si la mesa ya pagó.
@@ -211,7 +211,7 @@ export function ActiveTables() {
                 seguir visibles en el tablero.
               </p>
             )}
-            {closing.submitted_amount > 0 && (
+            {asAmount(closing.submitted_amount) > 0 && (
               <p className="rounded-lg bg-red-50 px-3 py-2 text-red-800">
                 Hay pedidos enviados sin aceptar. Podés cancelarlos desde Comandas.
               </p>

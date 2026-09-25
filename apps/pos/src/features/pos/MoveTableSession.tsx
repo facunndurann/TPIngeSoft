@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, ErrorText, Modal, Select, Spinner } from '@restaurant-platform/ui'
 import { useRestaurant } from '@/context/pos-context'
-import { loadOpenSessions, loadRestaurantTables, movePosTableSession } from './api'
+import { loadRestaurantTables, movePosTableSession, posOpenSessionsQuery } from './api'
 import type { PosDiningTable } from './types'
 
 export function MoveTableSession({
@@ -21,11 +21,7 @@ export function MoveTableSession({
     queryKey: ['pos', restaurant.id, restaurant.branchId, 'tables'],
     queryFn: () => loadRestaurantTables(restaurant.id, restaurant.branchId),
   })
-  const sessions = useQuery({
-    queryKey: ['pos', restaurant.id, restaurant.branchId, 'sessions'],
-    queryFn: () => loadOpenSessions(restaurant.id, restaurant.branchId),
-    refetchInterval: 15000,
-  })
+  const sessions = useQuery(posOpenSessionsQuery(restaurant.id, restaurant.branchId))
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['pos', restaurant.id] })
   const move = useMutation({
     mutationFn: () => movePosTableSession(sessionId, source.id, destinationId),

@@ -13,6 +13,7 @@ import {
   getPosTableState,
   isKitchenTicket,
   posActions,
+  type PosTableStateSession,
 } from '../../packages/shared/src/pos.ts'
 import { splitPercentageAmounts } from '../../packages/shared/src/split.ts'
 import {
@@ -249,28 +250,31 @@ test('the error catalog decides which failures keep a submission for retry', () 
 })
 
 test('table map states follow operational priority without inventing occupancy', () => {
-  const orders = (...statuses: OrderStatus[]) => statuses.map((status) => ({ status }))
+  // Una fila de pos_open_sessions sin comandas de cocina ni pagos por confirmar.
+  // Entregados y cancelados no son comandas de cocina: la vista ya no los trae.
+  const seated: PosTableStateSession = { kitchen_statuses: [], has_pending_payment: false }
+  const kitchen = (...kitchen_statuses: OrderStatus[]) => ({ ...seated, kitchen_statuses })
   assert.equal(getPosTableState(null), 'free')
-  assert.equal(getPosTableState({ bill_requested_at: '2026-09-18' }), 'bill_requested')
-  assert.equal(getPosTableState({}), 'occupied')
-  assert.equal(getPosTableState({ orders: orders('delivered') }), 'occupied')
-  assert.equal(getPosTableState({ orders: orders('accepted') }), 'order_pending')
-  assert.equal(getPosTableState({ orders: orders('in_preparation') }), 'in_preparation')
-  assert.equal(getPosTableState({ orders: orders('submitted', 'ready') }), 'ready')
+  assert.equal(getPosTableState({ ...seated, bill_requested_at: '2026-09-18' }), 'bill_requested')
+  assert.equal(getPosTableState(seated), 'occupied')
+  assert.equal(getPosTableState(kitchen('accepted')), 'order_pending')
+  assert.equal(getPosTableState(kitchen('in_preparation')), 'in_preparation')
+  assert.equal(getPosTableState(kitchen('submitted', 'ready')), 'ready')
   assert.equal(getPosTableState({
-    orders: orders('ready'),
+    ...kitchen('ready'),
     bill_requested_at: '2026-09-18T12:00:00Z',
   }), 'bill_requested')
   assert.equal(getPosTableState({
+    ...seated,
     bill_requested_at: '2026-09-18T12:00:00Z',
-    payments: [{ status: 'pending' }],
+    has_pending_payment: true,
   }), 'payment_pending')
   // Llamar al mozo para que cobre manda a alguien a la mesa; un pago electrónico
   // a medio confirmar, no. Por eso son dos estados y ese va primero.
   assert.equal(getPosTableState({
+    ...kitchen('ready'),
     in_person_payment_requested_at: '2026-09-18T12:00:00Z',
-    payments: [{ status: 'pending' }],
-    orders: orders('ready'),
+    has_pending_payment: true,
   }), 'in_person_payment')
 })
 

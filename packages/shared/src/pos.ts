@@ -3,7 +3,7 @@
  * dibuja y en qué orden. La plata, el tiempo y las solicitudes de la mesa son
  * conceptos de toda la plataforma y viven en sus propios módulos.
  */
-import type { Database } from './database.types.ts'
+import { Constants, type Database } from './database.types.ts'
 import type { OrderStatus } from './orders.ts'
 import { type SessionRequestSource, sessionRequestLabels } from './session-requests.ts'
 
@@ -57,10 +57,17 @@ export const posActions: Record<OrderStatus, PosOrderActions> = {
   cancelled: {},
 }
 
-/** Un pedido sigue siendo comanda de cocina mientras todavía puede avanzar. */
+/**
+ * Un pedido sigue siendo comanda de cocina mientras todavía puede avanzar. La
+ * vista `pos_open_sessions` aplica la misma regla contra `order_status_transitions`.
+ */
 export function isKitchenTicket(status: OrderStatus): boolean {
   return posActions[status].advance !== undefined
 }
+
+/** Estados de las comandas de cocina, en el orden del enum: lo que el tablero pide a la base. */
+export const kitchenTicketStatuses: readonly OrderStatus[] =
+  Constants.public.Enums.order_status.filter(isKitchenTicket)
 
 export type PosTableState =
   | 'free'
@@ -83,10 +90,15 @@ export const posTableStateLabels: Record<PosTableState, string> = {
   payment_pending: 'Cobro pendiente',
 }
 
-/** Sesión abierta tal como la leen el plano y la comanda. */
+/**
+ * Sesión abierta tal como la trae la vista `pos_open_sessions`, que es la
+ * única lectura de mesas abiertas del POS.
+ */
 export type PosTableStateSession = SessionRequestSource & {
-  orders?: readonly { status: OrderStatus }[]
-  payments?: readonly { status: string }[]
+  /** Estados de las comandas de cocina de la mesa (ver `isKitchenTicket`). */
+  kitchen_statuses: readonly OrderStatus[]
+  /** Hay un pago electrónico iniciado que el proveedor todavía no confirmó. */
+  has_pending_payment: boolean
 }
 
 /**
@@ -100,10 +112,10 @@ export function getPosTableState(session: PosTableStateSession | null | undefine
   // Una mesa que llamó al mozo para cobrarle va primero, y se distingue de un
   // pago electrónico a medio confirmar: la primera necesita que alguien vaya.
   if (session.in_person_payment_requested_at) return 'in_person_payment'
-  if (session.payments?.some((payment) => payment.status === 'pending')) return 'payment_pending'
+  if (session.has_pending_payment) return 'payment_pending'
   if (session.bill_requested_at) return 'bill_requested'
 
-  const statuses = (session.orders ?? []).map((order) => order.status)
+  const statuses = session.kitchen_statuses
   if (statuses.includes('ready')) return 'ready'
   if (statuses.includes('submitted') || statuses.includes('accepted')) return 'order_pending'
   if (statuses.includes('in_preparation')) return 'in_preparation'

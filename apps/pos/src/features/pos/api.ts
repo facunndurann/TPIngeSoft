@@ -1,10 +1,10 @@
 import { queryOptions } from '@tanstack/react-query'
-import { AppError, fromPostgres, isOperable, localDateKey, type OrderStatus, type PaymentMethod, type PaymentMode, type SessionRequestKind, type Tables } from '@restaurant-platform/shared'
+import { AppError, fromPostgres, isOperable, kitchenTicketStatuses, localDateKey, type OrderStatus, type PaymentMethod, type PaymentMode, type SessionRequestKind, type Tables } from '@restaurant-platform/shared'
 import { supabase } from '@/lib/supabase'
-import type { PosBill, PosDiningTable, PosFloorSection, PosOpenSession, PosOrder } from './types'
-import { posOrderSelect, posSessionSelect } from './types'
+import type { PosDiningTable, PosFloorSection, PosOrder } from './types'
+import { posOrderSelect } from './types'
 
-export type { PosBill, PosDiningTable, PosFloorSection, PosOpenSession, PosOrder, PosOrderItem } from './types'
+export type { PosDiningTable, PosFloorSection, PosOrder, PosOrderItem } from './types'
 
 function throwIfError(error: { message: string } | null): void {
   // fromPostgres conserva el código, así que quien llama puede ramificar.
@@ -37,7 +37,7 @@ export const posBoardQuery = (restaurantId: string, branchId: string) =>
     queryFn: () =>
       rowsOf(
         ordersOf(restaurantId, branchId)
-          .or(`status.in.(submitted,accepted,in_preparation,ready),and(status.eq.delivered,local_date.eq.${localDateKey()})`)
+          .or(`status.in.(${kitchenTicketStatuses.join(',')}),and(status.eq.delivered,local_date.eq.${localDateKey()})`)
           .order('created_at', { ascending: false }),
       ) as Promise<PosOrder[]>,
     refetchInterval: 15_000,
@@ -55,63 +55,56 @@ export const posHistoryQuery = (restaurantId: string, branchId: string, dateKey:
     refetchInterval: 15_000,
   })
 
-/** Columnas de la vista cuyo null significa algo: no pidió, o no se atendió. */
-type OpenSessionRequestColumn =
+type OpenSessionRow = Tables<'pos_open_sessions'>
+
+/**
+ * Columnas de la vista cuyo null significa algo. El generador marca todas las
+ * columnas de una vista como nullable; de verdad lo son solo estas:
+ * - las solicitudes: la mesa no pidió, o no se atendió;
+ * - los importes: salen de `session_bills`, que solo tiene fila para quien
+ *   tiene `payments.read`. Son null los cuatro juntos, y null es «no se puede
+ *   ver», no «debe $0»;
+ * - el responsable: nadie tiene la mesa asignada.
+ */
+type NullableOpenSessionColumn =
   | 'bill_requested_at'
   | 'bill_attended_at'
   | 'in_person_payment_requested_at'
   | 'in_person_payment_attended_at'
+  | 'submitted_amount'
+  | 'total_amount'
+  | 'paid_amount'
+  | 'pending_amount'
+  | 'assigned_employee_name'
 
 /**
- * Fila de la vista pos_open_sessions: sesión abierta con mesa, sucursal, comensales,
- * cuenta, solicitudes y comandas en cocina. Distinta de PosOpenSession (sesión
- * completa del plano). El generador marca todas las columnas de una vista como
- * nullable; las únicas que de verdad lo son acá son las dos solicitudes.
+ * Sesión abierta tal como la lee todo el POS (plano, comanda, mesas activas y
+ * traslado): una fila de `pos_open_sessions` con mesa, comensales, cuenta,
+ * solicitudes, responsable y comandas en cocina.
  */
-export type PosOpenSessionCard = {
-  [Column in Exclude<keyof Tables<'pos_open_sessions'>, OpenSessionRequestColumn>]-?: NonNullable<
-    Tables<'pos_open_sessions'>[Column]
-  >
-} & { [Column in OpenSessionRequestColumn]: string | null }
+export type PosOpenSession = {
+  [Column in Exclude<keyof OpenSessionRow, NullableOpenSessionColumn>]-?: NonNullable<OpenSessionRow[Column]>
+} & { [Column in NullableOpenSessionColumn]: NonNullable<OpenSessionRow[Column]> | null }
 
-const openSessionCardsOf = (restaurantId: string, branchId: string) =>
+const openSessionsOf = (restaurantId: string, branchId: string) =>
   supabase
     .from('pos_open_sessions')
     .select('*')
     .eq('restaurant_id', restaurantId)
     .eq('branch_id', branchId)
     .order('opened_at', { ascending: true })
-    .overrideTypes<PosOpenSessionCard[], { merge: false }>()
+    .overrideTypes<PosOpenSession[], { merge: false }>()
 
-/** Mesas activas de la sucursal: una lectura de la vista, con cuenta y comandas en cocina. */
+/**
+ * Mesas abiertas de la sucursal: la única lectura de sesiones del POS. Todas
+ * las pantallas comparten esta key, así que un cambio refresca a todas juntas.
+ */
 export const posOpenSessionsQuery = (restaurantId: string, branchId: string) =>
   queryOptions({
-    queryKey: [...posQueryKey(restaurantId, branchId), 'session-cards'],
-    queryFn: () => rowsOf(openSessionCardsOf(restaurantId, branchId)),
+    queryKey: [...posQueryKey(restaurantId, branchId), 'open-sessions'],
+    queryFn: () => rowsOf(openSessionsOf(restaurantId, branchId)),
     refetchInterval: 15_000,
   })
-
-export async function loadOpenSessions(restaurantId: string, branchId: string) {
-  const { data, error } = await supabase
-    .from('table_sessions')
-    .select(posSessionSelect)
-    .eq('restaurant_id', restaurantId)
-    .eq('tables.branch_id', branchId)
-    .eq('status', 'open')
-    .order('opened_at', { ascending: true })
-  throwIfError(error)
-  return (data ?? []) as PosOpenSession[]
-}
-
-export async function loadSessionBills(sessionIds: string[]) {
-  if (sessionIds.length === 0) return [] as PosBill[]
-  const { data, error } = await supabase
-    .from('session_bills')
-    .select('*')
-    .in('session_id', sessionIds)
-  throwIfError(error)
-  return (data ?? []) as PosBill[]
-}
 
 export async function loadSessionPayments(sessionId: string) {
   const { data, error } = await supabase
@@ -197,17 +190,6 @@ export async function openPosTableSession(tableId: string) {
   throwIfError(error)
   if (!data) throw new AppError('SESSION_NOT_FOUND')
   return data as string
-}
-
-export async function loadTableSession(tableId: string) {
-  const { data, error } = await supabase
-    .from('table_sessions')
-    .select(posSessionSelect)
-    .eq('table_id', tableId)
-    .eq('status', 'open')
-    .maybeSingle()
-  throwIfError(error)
-  return (data ?? null) as PosOpenSession | null
 }
 
 export async function loadSessionOrders(sessionId: string) {

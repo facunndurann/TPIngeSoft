@@ -22,16 +22,6 @@ export type PosOrder = Tables<'orders'> & {
   table_sessions: PosSessionRef
 }
 
-export type PosOpenSession = Tables<'table_sessions'> & {
-  tables: PosTableRef
-  session_participants: Pick<Tables<'session_participants'>, 'id' | 'display_name' | 'joined_at'>[]
-  assigned_employee: Pick<Tables<'profiles'>, 'id' | 'full_name'> | null
-  orders: Pick<Tables<'orders'>, 'id' | 'status'>[]
-  payments: Pick<Tables<'payments'>, 'id' | 'status'>[]
-}
-
-export type PosBill = Tables<'session_bills'>
-
 export type PosDiningTable = Pick<
   Tables<'tables'>,
   | 'id'
@@ -78,19 +68,5 @@ export const posOrderSelect = `
       branch_id,
       branch:branches (id, name)
     )
-  )
-` as const
-
-export const posSessionSelect = `
-  *,
-  session_participants (id, display_name, joined_at),
-  assigned_employee:profiles!table_sessions_assigned_user_id_fkey (id, full_name),
-  orders (id, status),
-  payments (id, status),
-  tables!inner (
-    id,
-    label,
-    branch_id,
-    branch:branches (id, name)
   )
 ` as const

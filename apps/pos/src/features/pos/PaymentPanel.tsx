@@ -10,20 +10,20 @@ import {
 } from '@restaurant-platform/shared'
 import { Button, ErrorText, useSaveErrors } from '@restaurant-platform/ui'
 import { useCan, useRestaurant } from '@/context/pos-context'
-import { loadSessionPayments, posQueryKey, recordPosPayment, type PosBill } from './api'
+import { loadSessionPayments, posQueryKey, recordPosPayment, type PosOpenSession } from './api'
 
 type PaymentPanelProps = {
   sessionId: string
-  bill?: PosBill
+  pendingAmount: PosOpenSession['pending_amount']
   enabledMethods: PaymentMethod[]
 }
 
-export function PaymentPanel({ sessionId, bill, enabledMethods }: PaymentPanelProps) {
+export function PaymentPanel({ sessionId, pendingAmount, enabledMethods }: PaymentPanelProps) {
   const restaurant = useRestaurant()
   const can = useCan()
   const queryClient = useQueryClient()
   const errors = useSaveErrors()
-  const pending = asAmount(bill?.pending_amount)
+  const pending = asAmount(pendingAmount)
   const recordable: PaymentMethod[] = enabledMethods.filter((method) => method !== 'mobile')
   const [amount, setAmount] = useState('')
   const [method, setMethod] = useState<PaymentMethod | ''>(recordable[0] ?? '')

@@ -161,8 +161,9 @@ begin
   if card.bill_requested_at is distinct from asked
     or card.in_person_payment_requested_at is distinct from paid_ask then
     raise exception 'pos_open_sessions does not expose the requests'; end if;
-  if card.total_amount is null or card.pending_amount is null then
-    raise exception 'Hidden amounts must read as 0, not null'; end if;
+  -- Un importe que no puede ver no es un «$ 0»: la pantalla lo oculta en vez de mostrarlo.
+  if card.total_amount is not null or card.pending_amount is not null then
+    raise exception 'Hidden amounts must read as null, not 0'; end if;
   if exists (select 1 from public.pos_open_sessions where id = other_sid) then
     raise exception 'pos_open_sessions leaked another restaurant session'; end if;
   perform set_config('role', 'postgres', true);

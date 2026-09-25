@@ -8,10 +8,9 @@ import { useCan, useRestaurant } from '@/context/pos-context'
 import {
   closePosSession,
   loadRestaurantTables,
-  loadSessionBills,
   loadSessionOrders,
-  loadTableSession,
   openPosTableSession,
+  posOpenSessionsQuery,
   transitionPosOrder,
 } from './api'
 import { OrderTicket } from './OrderTicket'
@@ -40,27 +39,19 @@ export function TableCommand() {
     queryKey: ['pos', restaurant.id, restaurant.branchId, 'tables'],
     queryFn: () => loadRestaurantTables(restaurant.id, restaurant.branchId),
   })
-  const session = useQuery({
-    queryKey: ['pos', restaurant.id, restaurant.branchId, 'table-session', tableId],
-    queryFn: () => loadTableSession(tableId),
-    refetchInterval: 15000,
-  })
-  const sessionId = session.data?.id
+  // La misma lectura que el plano y Mesas activas: la mesa está ocupada si su
+  // sesión figura entre las abiertas de la sucursal.
+  const sessions = useQuery(posOpenSessionsQuery(restaurant.id, restaurant.branchId))
+  const open = sessions.data?.find((entry) => entry.table_id === tableId)
+  const sessionId = open?.id
   const orders = useQuery({
     queryKey: ['pos', restaurant.id, restaurant.branchId, 'session-orders', sessionId],
     queryFn: () => loadSessionOrders(sessionId!),
     enabled: !!sessionId,
     refetchInterval: 15000,
   })
-  const bills = useQuery({
-    queryKey: ['pos', restaurant.id, restaurant.branchId, 'bills', sessionId ?? ''],
-    queryFn: () => loadSessionBills(sessionId ? [sessionId] : []),
-    enabled: !!sessionId,
-    refetchInterval: 15000,
-  })
 
   const table = tables.data?.find((entry) => entry.id === tableId)
-  const bill = bills.data?.[0]
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['pos', restaurant.id] })
 
@@ -85,13 +76,13 @@ export function TableCommand() {
     },
   }))
 
-  if (tables.isLoading || session.isLoading) return <Spinner />
+  if (tables.isLoading || sessions.isLoading) return <Spinner />
 
-  if (tables.isError || session.isError) {
+  if (tables.isError || sessions.isError) {
     return (
       <div className="space-y-3">
         <BackLink to={backToMap} />
-        <ErrorText error={tables.error ?? session.error} fallback="No pudimos cargar la comanda de la mesa." />
+        <ErrorText error={tables.error ?? sessions.error} fallback="No pudimos cargar la comanda de la mesa." />
       </div>
     )
   }
@@ -105,7 +96,6 @@ export function TableCommand() {
     )
   }
 
-  const open = session.data
   const state = getPosTableState(open)
   const branchMethods = enabledPaymentMethods(table.branches)
   const kitchenOrders = (orders.data ?? []).filter((order) => isKitchenTicket(order.status)).length
@@ -158,22 +148,23 @@ export function TableCommand() {
         <>
           <dl className="flex flex-wrap gap-x-8 gap-y-3 rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm">
             <SummaryItem as="dl-pair" icon={Clock3} label="Abierta" value={formatElapsed(open.opened_at, now, 'exact')} />
-            {can('payments.read') && <>
-              <SummaryItem as="dl-pair" label="En cuenta" value={formatPrice(bill?.total_amount)} />
-              <SummaryItem as="dl-pair" label="Pagado" value={formatPrice(bill?.paid_amount)} />
-              <SummaryItem as="dl-pair" label="Pendiente" value={formatPrice(bill?.pending_amount)} />
+            {/* Los importes vienen juntos o no vienen: sin payments.read la vista los trae en null. */}
+            {open.total_amount !== null && <>
+              <SummaryItem as="dl-pair" label="En cuenta" value={formatPrice(open.total_amount)} />
+              <SummaryItem as="dl-pair" label="Pagado" value={formatPrice(open.paid_amount)} />
+              <SummaryItem as="dl-pair" label="Pendiente" value={formatPrice(open.pending_amount)} />
             </>}
             <SummaryItem
               as="dl-pair"
               icon={UserRound}
               label="Responsable"
-              value={open.assigned_employee?.full_name ?? 'Sin asignar'}
+              value={open.assigned_employee_name ?? 'Sin asignar'}
             />
             <SummaryItem
               as="dl-pair"
               icon={Users}
               label="Comensales"
-              value={String(open.session_participants.length)}
+              value={String(open.participant_names.length)}
             />
           </dl>
 
@@ -230,7 +221,7 @@ export function TableCommand() {
           </section>
 
           {can('payments.read') && (
-            <PaymentPanel sessionId={open.id} bill={bill} enabledMethods={branchMethods} />
+            <PaymentPanel sessionId={open.id} pendingAmount={open.pending_amount} enabledMethods={branchMethods} />
           )}
         </>
       )}
@@ -242,9 +233,9 @@ export function TableCommand() {
               Los comensales no podrán enviar más pedidos en esta cuenta. Si vuelven a escanear el QR
               se abre una sesión nueva.
             </p>
-            {can('payments.read') && asAmount(bill?.pending_amount) > 0 && (
+            {asAmount(open.pending_amount) > 0 && (
               <p className="rounded-lg bg-amber-50 px-3 py-2 text-amber-950">
-                Queda {formatPrice(bill?.pending_amount)} pendiente.
+                Queda {formatPrice(open.pending_amount)} pendiente.
               </p>
             )}
             {kitchenOrders > 0 && (

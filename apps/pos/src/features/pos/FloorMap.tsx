@@ -6,14 +6,14 @@ import { ClipboardList, Clock3, Move, UserRound, Users } from 'lucide-react'
 import { Button, EmptyState, ErrorText, FloorGrid, Select, Spinner, SummaryItem, useNow } from '@restaurant-platform/ui'
 import { useCan, useRestaurant } from '@/context/pos-context'
 import {
-  loadOpenSessions,
   loadPosFloorSections,
   loadRestaurantTables,
-  loadSessionBills,
+  posOpenSessionsQuery,
+  type PosOpenSession,
 } from './api'
 import { MoveTableSession } from './MoveTableSession'
 import { AttendRequestButtons, SessionRequestBadges } from './ServiceRequests'
-import type { PosBill, PosDiningTable, PosOpenSession } from './types'
+import type { PosDiningTable } from './types'
 
 /**
  * Plano operativo del salón (MI-62/MI-63/MI-64). El layout viene de la
@@ -26,7 +26,6 @@ import type { PosBill, PosDiningTable, PosOpenSession } from './types'
  */
 export function FloorMap() {
   const restaurant = useRestaurant()
-  const canPay = useCan()('payments.read')
   const now = useNow()
   const [moving, setMoving] = useState<FloorMapEntry | null>(null)
   const navigate = useNavigate()
@@ -49,18 +48,7 @@ export function FloorMap() {
     queryKey: ['pos', restaurant.id, restaurant.branchId, 'tables'],
     queryFn: () => loadRestaurantTables(restaurant.id, restaurant.branchId),
   })
-  const sessions = useQuery({
-    queryKey: ['pos', restaurant.id, restaurant.branchId, 'sessions'],
-    queryFn: () => loadOpenSessions(restaurant.id, restaurant.branchId),
-    refetchInterval: 15000,
-  })
-  const sessionIds = (sessions.data ?? []).map((session) => session.id)
-  const bills = useQuery({
-    queryKey: ['pos', restaurant.id, restaurant.branchId, 'bills', sessionIds.join(',')],
-    queryFn: () => loadSessionBills(sessionIds),
-    enabled: sessions.isSuccess && canPay,
-    refetchInterval: 15000,
-  })
+  const sessions = useQuery(posOpenSessionsQuery(restaurant.id, restaurant.branchId))
 
   const branches = useMemo(() => {
     const byId = new Map<string, { id: string; name: string }>()
@@ -84,29 +72,14 @@ export function FloorMap() {
     () => new Map((sessions.data ?? []).map((session) => [session.table_id, session])),
     [sessions.data],
   )
-  const billBySession = useMemo(
-    () => new Map((bills.data ?? []).flatMap((bill) => bill.session_id ? [[bill.session_id, bill]] : [])),
-    [bills.data],
-  )
   const entries = sectionTables.map((table): FloorMapEntry => {
     const session = sessionByTable.get(table.id)
-    const bill = session ? billBySession.get(session.id) : undefined
-    return {
-      table,
-      session,
-      bill,
-      state: getPosTableState(session),
-    }
+    return { table, session, state: getPosTableState(session) }
   })
 
-  if (
-    sections.isLoading ||
-    tables.isLoading ||
-    sessions.isLoading ||
-    (sessions.isSuccess && bills.isLoading)
-  ) return <Spinner />
-  const queryFailed = sections.isError || tables.isError || sessions.isError || bills.isError
-  const queryError = sections.error ?? tables.error ?? sessions.error ?? bills.error
+  if (sections.isLoading || tables.isLoading || sessions.isLoading) return <Spinner />
+  const queryFailed = sections.isError || tables.isError || sessions.isError
+  const queryError = sections.error ?? tables.error ?? sessions.error
 
   return (
     <div className="min-w-0 space-y-4">
@@ -213,8 +186,17 @@ export function FloorMap() {
 type FloorMapEntry = {
   table: PosDiningTable
   session?: PosOpenSession
-  bill?: PosBill
   state: PosTableState
+}
+
+/**
+ * Total de la mesa listo para mostrar, o null si no hay sesión o si quien mira
+ * no tiene `payments.read`: la vista trae ese importe en null, y la mesa no
+ * muestra un «$ 0» que no es.
+ */
+function visibleTotal(session: PosOpenSession | undefined): string | null {
+  if (!session || session.total_amount === null) return null
+  return formatPrice(session.total_amount)
 }
 
 const stateStyles: Record<PosTableState, { table: string; badge: string; dot: string }> = {
@@ -311,11 +293,12 @@ function FloorSurface({
           ariaLabel="Mesas del sector"
           emptyMessage="Este sector todavía no tiene mesas operativas."
           renderTable={(table, tile) => {
-            const { session, bill, state } = entries.find((entry) => entry.table.id === table.id)!
+            const { session, state } = entries.find((entry) => entry.table.id === table.id)!
             const selectedTable = selectedId === table.id
-            const operator = session?.assigned_employee?.full_name ?? 'Sin asignar'
+            const operator = session?.assigned_employee_name ?? 'Sin asignar'
+            const total = visibleTotal(session)
             const summary = session
-              ? `${formatElapsed(session.opened_at, now, 'exact')}, ${formatPrice(bill?.total_amount)}, ${operator}`
+              ? `${formatElapsed(session.opened_at, now, 'exact')}${total === null ? '' : `, ${total}`}, ${operator}`
               : `${table.seats} lugares`
 
             return (
@@ -340,9 +323,11 @@ function FloorSurface({
                     <span className="mt-1 max-w-[90%] truncate text-[10px] font-medium leading-none">
                       {formatElapsed(session.opened_at, now, 'exact')}
                     </span>
-                    <span className="mt-1 max-w-[90%] truncate text-[10px] font-semibold leading-none">
-                      {formatPrice(bill?.total_amount)}
-                    </span>
+                    {total !== null && (
+                      <span className="mt-1 max-w-[90%] truncate text-[10px] font-semibold leading-none">
+                        {total}
+                      </span>
+                    )}
                     <span className="mt-1 max-w-[90%] truncate text-[9px] leading-none opacity-75">
                       {operator}
                     </span>
@@ -374,10 +359,8 @@ function TableSummary({
   onMove: (entry: FloorMapEntry) => void
 }) {
   const can = useCan()
-  const { table, session, bill, state } = entry
-  const activeOrders = session?.orders.filter((order) =>
-    ['submitted', 'accepted', 'in_preparation', 'ready'].includes(order.status),
-  ).length ?? 0
+  const { table, session, state } = entry
+  const total = visibleTotal(session)
 
   return (
     <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm shadow-sm">
@@ -391,12 +374,12 @@ function TableSummary({
       {session ? (
         <>
           <SummaryItem icon={Clock3} label="Abierta" value={formatElapsed(session.opened_at, now, 'exact')} />
-          <SummaryItem label="Total acumulado" value={bill ? formatPrice(bill.total_amount) : '—'} />
-          <SummaryItem label="Pedidos activos" value={String(activeOrders)} />
+          {total !== null && <SummaryItem label="Total acumulado" value={total} />}
+          <SummaryItem label="Pedidos activos" value={String(session.kitchen_tickets)} />
           <SummaryItem
             icon={UserRound}
             label="Responsable"
-            value={session.assigned_employee?.full_name ?? 'Sin asignar'}
+            value={session.assigned_employee_name ?? 'Sin asignar'}
           />
         </>
       ) : (

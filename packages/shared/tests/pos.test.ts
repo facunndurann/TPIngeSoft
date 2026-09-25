@@ -1,6 +1,6 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
-import { groupOrdersByColumn, posColumnFor } from '../src/pos.ts'
+import { groupOrdersByColumn, kitchenTicketStatuses, posColumnFor } from '../src/pos.ts'
 import { localDateKey } from '../src/time.ts'
 
 test('POS board groups kitchen columns, FIFO in prep/ready, and newest first otherwise', () => {
@@ -19,6 +19,11 @@ test('POS board groups kitchen columns, FIFO in prep/ready, and newest first oth
   assert.deepEqual(grouped.ready.map((order) => order.id), ['r'])
   assert.deepEqual(grouped.delivered.map((order) => order.id), ['d'])
   assert.equal(posColumnFor('cancelled'), null)
+})
+
+// El tablero pide a la base estos estados; entregados y cancelados quedan afuera.
+test('kitchen tickets are the statuses that can still advance', () => {
+  assert.deepEqual(kitchenTicketStatuses, ['submitted', 'accepted', 'in_preparation', 'ready'])
 })
 
 test('the restaurant day changes at Argentina midnight, matching orders.local_date', () => {
