@@ -77,17 +77,14 @@ test('account without active context is denied', () => {
 })
 
 test('kitchen cannot deliver, revert or cancel from ticket buttons', () => {
+  // El ticket es dueño de su mutación: necesita un QueryClient como en la app.
   const ticket = (status: PosOrder['status']) =>
     renderToStaticMarkup(
-      <AccessContext value={context}>
-        <OrderTicket
-          order={{ ...order, status }}
-          now={Date.now()}
-          busy={false}
-          error={null}
-          onTransition={() => {}}
-        />
-      </AccessContext>,
+      <QueryClientProvider client={new QueryClient()}>
+        <AccessContext value={context}>
+          <OrderTicket order={{ ...order, status }} now={Date.now()} />
+        </AccessContext>
+      </QueryClientProvider>,
     )
 
   // 'ready' solo avanza a 'delivered', y cocina no tiene orders.deliver.

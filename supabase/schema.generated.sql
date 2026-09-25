@@ -2281,6 +2281,20 @@ CREATE TABLE IF NOT EXISTS "public"."pos_integrations" (
 ALTER TABLE "public"."pos_integrations" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."profiles" (
+    "id" "uuid" NOT NULL,
+    "username_normalized" "text" NOT NULL,
+    "full_name" "text" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "profiles_full_name_check" CHECK ((("length"("btrim"("full_name")) >= 1) AND ("length"("btrim"("full_name")) <= 100))),
+    CONSTRAINT "valid_username" CHECK ((("username_normalized" = "lower"("btrim"("username_normalized"))) AND ("username_normalized" ~ '^[a-z0-9][a-z0-9._-]{1,30}[a-z0-9]$'::"text")))
+);
+
+
+ALTER TABLE "public"."profiles" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."table_sessions" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "restaurant_id" "uuid" NOT NULL,
@@ -2519,20 +2533,6 @@ CREATE TABLE IF NOT EXISTS "public"."products" (
 
 
 ALTER TABLE "public"."products" OWNER TO "postgres";
-
-
-CREATE TABLE IF NOT EXISTS "public"."profiles" (
-    "id" "uuid" NOT NULL,
-    "username_normalized" "text" NOT NULL,
-    "full_name" "text" NOT NULL,
-    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    CONSTRAINT "profiles_full_name_check" CHECK ((("length"("btrim"("full_name")) >= 1) AND ("length"("btrim"("full_name")) <= 100))),
-    CONSTRAINT "valid_username" CHECK ((("username_normalized" = "lower"("btrim"("username_normalized"))) AND ("username_normalized" ~ '^[a-z0-9][a-z0-9._-]{1,30}[a-z0-9]$'::"text")))
-);
-
-
-ALTER TABLE "public"."profiles" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."restaurant_members" (
@@ -3926,6 +3926,11 @@ GRANT ALL ON TABLE "public"."pos_integrations" TO "service_role";
 
 
 
+GRANT ALL ON TABLE "public"."profiles" TO "service_role";
+GRANT SELECT ON TABLE "public"."profiles" TO "authenticated";
+
+
+
 GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."table_sessions" TO "anon";
 GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."table_sessions" TO "authenticated";
 GRANT ALL ON TABLE "public"."table_sessions" TO "service_role";
@@ -3975,11 +3980,6 @@ GRANT ALL ON TABLE "public"."product_modifier_groups" TO "service_role";
 GRANT ALL ON TABLE "public"."products" TO "anon";
 GRANT ALL ON TABLE "public"."products" TO "authenticated";
 GRANT ALL ON TABLE "public"."products" TO "service_role";
-
-
-
-GRANT ALL ON TABLE "public"."profiles" TO "service_role";
-GRANT SELECT ON TABLE "public"."profiles" TO "authenticated";
 
 
 

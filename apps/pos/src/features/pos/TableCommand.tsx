@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { asAmount, enabledPaymentMethods, formatElapsed, formatPrice, getPosTableState, isKitchenTicket, type OrderStatus, paymentMethodLabels, posTableStateLabels, sessionRequestsOf } from '@restaurant-platform/shared'
+import { asAmount, enabledPaymentMethods, formatElapsed, formatPrice, getPosTableState, isKitchenTicket, paymentMethodLabels, posTableStateLabels, sessionRequestsOf } from '@restaurant-platform/shared'
 import { ArrowLeft, Clock3, PlayCircle, UserRound, Users } from 'lucide-react'
 import { Badge, Button, EmptyState, ErrorText, Modal, Spinner, SummaryItem, useNow, useSaveErrors } from '@restaurant-platform/ui'
 import { useCan, useRestaurant } from '@/context/pos-context'
@@ -11,7 +11,6 @@ import {
   loadSessionOrders,
   openPosTableSession,
   posOpenSessionsQuery,
-  transitionPosOrder,
 } from './api'
 import { OrderTicket } from './OrderTicket'
 import { PaymentPanel } from './PaymentPanel'
@@ -31,7 +30,6 @@ export function TableCommand() {
   const now = useNow()
   const [closing, setClosing] = useState(false)
   const errors = useSaveErrors()
-  const [pendingOrderId, setPendingOrderId] = useState<string | null>(null)
 
   const backToMap = `/salon${searchParams.toString() ? `?${searchParams}` : ''}`
 
@@ -58,14 +56,6 @@ export function TableCommand() {
   const openSession = useMutation(errors.saving('No pudimos abrir la comanda.', {
     mutationFn: () => openPosTableSession(tableId),
     onSuccess: refresh,
-  }))
-
-  const transition = useMutation(errors.saving('No pudimos actualizar el pedido.', {
-    mutationFn: ({ orderId, status }: { orderId: string; status: OrderStatus }) =>
-      transitionPosOrder(orderId, status),
-    onMutate: ({ orderId }) => setPendingOrderId(orderId),
-    onSuccess: refresh,
-    onSettled: () => setPendingOrderId(null),
   }))
 
   const close = useMutation(errors.saving('No pudimos cerrar la sesión.', {
@@ -202,19 +192,7 @@ export function TableCommand() {
             ) : (
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {orders.data?.map((order) => (
-                  <OrderTicket
-                    key={order.id}
-                    order={order}
-                    now={now}
-                    busy={pendingOrderId === order.id}
-                    error={null}
-                    onTransition={(to) => {
-                      const confirmed =
-                        to !== 'cancelled' ||
-                        window.confirm(`¿Cancelar este pedido de ${table.label}? Se saca de la cuenta.`)
-                      if (confirmed) transition.mutate({ orderId: order.id, status: to })
-                    }}
-                  />
+                  <OrderTicket key={order.id} order={order} now={now} />
                 ))}
               </div>
             )}

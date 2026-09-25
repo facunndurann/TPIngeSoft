@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { groupOrdersByColumn, type OrderStatus, posBoardColumns } from '@restaurant-platform/shared'
+import { useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { groupOrdersByColumn, posBoardColumns } from '@restaurant-platform/shared'
 import { useRestaurant } from '@/context/pos-context'
 import { ErrorText, Spinner, useNow } from '@restaurant-platform/ui'
-import { posBoardQuery, posQueryKey, transitionPosOrder, type PosOrder } from './api'
+import { posBoardQuery } from './api'
 import { OrderTicket } from './OrderTicket'
 
 const columnStyles: Record<string, string> = {
@@ -15,34 +15,10 @@ const columnStyles: Record<string, string> = {
 
 export function CommandBoard() {
   const restaurant = useRestaurant()
-  const queryClient = useQueryClient()
   const now = useNow()
-  const [pendingId, setPendingId] = useState<string | null>(null)
-  const [actionError, setActionError] = useState<{ id: string; error: unknown } | null>(null)
 
   const board = useQuery(posBoardQuery(restaurant.id, restaurant.branchId))
-  const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: posQueryKey(restaurant.id, restaurant.branchId) })
-
-  const transition = useMutation({
-    mutationFn: ({ orderId, status }: { orderId: string; status: PosOrder['status'] }) =>
-      transitionPosOrder(orderId, status),
-    onMutate: ({ orderId }) => {
-      setPendingId(orderId)
-      setActionError(null)
-    },
-    onSuccess: invalidate,
-    onError: (error, { orderId }) => setActionError({ id: orderId, error }),
-    onSettled: () => setPendingId(null),
-  })
-
   const grouped = useMemo(() => groupOrdersByColumn(board.data ?? []), [board.data])
-
-  function handleTransition(order: PosOrder, to: OrderStatus) {
-    const confirmed = to !== 'cancelled'
-      || window.confirm(`¿Cancelar el pedido de ${order.table_sessions.tables.label}? Se saca de la cuenta.`)
-    if (confirmed) transition.mutate({ orderId: order.id, status: to })
-  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
@@ -81,14 +57,7 @@ export function CommandBoard() {
                     </p>
                   )}
                   {orders.map((order) => (
-                    <OrderTicket
-                      key={order.id}
-                      order={order}
-                      now={now}
-                      busy={pendingId === order.id}
-                      error={actionError?.id === order.id ? actionError.error : null}
-                      onTransition={(to) => handleTransition(order, to)}
-                    />
+                    <OrderTicket key={order.id} order={order} now={now} />
                   ))}
                 </div>
               </section>

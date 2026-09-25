@@ -1,28 +1,34 @@
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Undo2 } from 'lucide-react'
 import { formatElapsed, formatPrice, type OrderStatus, orderStatusLabels, posActions, transitionPermission } from '@restaurant-platform/shared'
-import { Badge, Button, errorMessage } from '@restaurant-platform/ui'
-import type { PosOrder, PosOrderItem } from './api'
-import { useCan } from '@/context/pos-context'
+import { Badge, Button, useSaveErrors } from '@restaurant-platform/ui'
+import { posQueryKey, transitionPosOrder, type PosOrder, type PosOrderItem } from './api'
+import { useCan, useRestaurant } from '@/context/pos-context'
 
 function participantName(order: PosOrder, participantId: string | null) {
   return order.table_sessions.session_participants.find((entry) => entry.id === participantId)
     ?.display_name ?? 'Comensal'
 }
 
-export function OrderTicket({
-  order,
-  now,
-  busy,
-  error,
-  onTransition,
-}: {
-  order: PosOrder
-  now: number
-  busy: boolean
-  error: unknown
-  onTransition: (to: OrderStatus) => void
-}) {
+/**
+ * Una comanda con sus botones. Es dueña de su transición: el «Actualizando…»,
+ * la confirmación al cancelar y el error son de este pedido, en el tablero y en
+ * la comanda de la mesa por igual, sin que la pantalla que la muestra lleve la cuenta.
+ */
+export function OrderTicket({ order, now }: { order: PosOrder; now: number }) {
   const can = useCan()
+  const restaurant = useRestaurant()
+  const queryClient = useQueryClient()
+  const errors = useSaveErrors()
+
+  const transition = useMutation(errors.saving('No pudimos actualizar el pedido.', {
+    mutationFn: (to: OrderStatus) => transitionPosOrder(order.id, to),
+    // Se devuelve la promesa: el botón sigue ocupado hasta que llega el pedido
+    // en su estado nuevo, y no queda un instante habilitado con el estado viejo.
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: posQueryKey(restaurant.id, restaurant.branchId) }),
+  }))
+
   const allowed = (step: { to: OrderStatus; label: string } | undefined) =>
     step && can(transitionPermission(order.status, step.to)) ? step : undefined
   const actions = posActions[order.status]
@@ -32,6 +38,14 @@ export function OrderTicket({
   const table = order.table_sessions.tables
   const branch = table.branch?.name
   const submitter = participantName(order, order.submitted_by)
+  const busy = transition.isPending
+
+  function move(to: OrderStatus) {
+    // Cancelar saca el pedido de la cuenta: es la única transición que se confirma.
+    const confirmed = to !== 'cancelled'
+      || window.confirm(`¿Cancelar el pedido de ${table.label}? Se saca de la cuenta.`)
+    if (confirmed) transition.mutate(to)
+  }
 
   return (
     <article className="rounded-xl border border-neutral-200 bg-white p-3 shadow-sm flex flex-col">
@@ -72,23 +86,21 @@ export function OrderTicket({
         <strong className="text-neutral-900">{formatPrice(order.total_amount)}</strong>
       </div>
 
-      {/* El aviso del ticket es una línea, no un panel: el texto sale del mismo
-          helper que usa ErrorText, así el catálogo manda igual acá. */}
-      {!!error && (
-        <p className="mt-2 text-xs text-red-700">
-          {errorMessage(error, 'No pudimos actualizar el pedido.')}
-        </p>
+      {/* El aviso del ticket es una línea, no un panel. useSaveErrors ya resuelve
+          el texto con el mismo catálogo que usa ErrorText. */}
+      {errors.message && (
+        <p className="mt-2 text-xs text-red-700">{errors.message}</p>
       )}
 
       <div className="mt-auto pt-3 flex flex-col gap-2">
         <div className="flex gap-2 w-full">
           {advance && (
-            <Button className="flex-1" disabled={busy} onClick={() => onTransition(advance.to)}>
+            <Button className="flex-1" disabled={busy} onClick={() => move(advance.to)}>
               {busy ? 'Actualizando…' : advance.label}
             </Button>
           )}
           {cancel && (
-            <Button variant="danger" disabled={busy} onClick={() => onTransition(cancel.to)}>
+            <Button variant="danger" disabled={busy} onClick={() => move(cancel.to)}>
               {cancel.label}
             </Button>
           )}
@@ -98,7 +110,7 @@ export function OrderTicket({
             variant="ghost"
             className="w-full text-xs opacity-75 hover:opacity-100"
             disabled={busy}
-            onClick={() => onTransition(revert.to)}
+            onClick={() => move(revert.to)}
           >
             <Undo2 size={12} /> {revert.label}
           </Button>
