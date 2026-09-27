@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { groupOrdersByColumn, type OrderStatus, posBoardColumns } from '@restaurant-platform/shared'
+import { groupOrdersByColumn, type OrderStatus, posBoardColumns, sessionPlaceLabel } from '@restaurant-platform/shared'
 import { useRestaurant } from '@/context/pos-context'
 import { ErrorText, Spinner, useNow } from '@restaurant-platform/ui'
 import { posBoardQuery, posQueryKey, transitionPosOrder, type PosOrder } from './api'
@@ -40,7 +40,7 @@ export function CommandBoard() {
 
   function handleTransition(order: PosOrder, to: OrderStatus) {
     const confirmed = to !== 'cancelled'
-      || window.confirm(`¿Cancelar el pedido de ${order.table_sessions.tables.label}? Se saca de la cuenta.`)
+      || window.confirm(`¿Cancelar el pedido de ${sessionPlaceLabel(order.table_sessions)}? Se saca de la cuenta.`)
     if (confirmed) transition.mutate({ orderId: order.id, status: to })
   }
 

@@ -28,7 +28,7 @@ const ordersOf = (restaurantId: string, branchId: string) =>
     .from('orders')
     .select(posOrderSelect)
     .eq('restaurant_id', restaurantId)
-    .eq('table_sessions.tables.branch_id', branchId)
+    .eq('table_sessions.branch_id', branchId)
 
 /** Comandas activas y las entregadas hoy (día del restaurante, columna local_date). */
 export const posBoardQuery = (restaurantId: string, branchId: string) =>
@@ -63,10 +63,12 @@ type OpenSessionRequestColumn =
   | 'in_person_payment_attended_at'
 
 /**
- * Fila de la vista pos_open_sessions: sesión abierta con mesa, sucursal, comensales,
- * cuenta, solicitudes y comandas en cocina. Distinta de PosOpenSession (sesión
- * completa del plano). El generador marca todas las columnas de una vista como
- * nullable; las únicas que de verdad lo son acá son las dos solicitudes.
+ * Fila de la vista pos_open_sessions filtrada a cuentas de mesa: sesión abierta
+ * con mesa, sucursal, comensales, cuenta, solicitudes y comandas en cocina.
+ * Distinta de PosOpenSession (sesión completa del plano). El generador marca
+ * todas las columnas de una vista como nullable; acá solo lo son de verdad las
+ * solicitudes. La mesa también lo sería en una cuenta para llevar, pero el
+ * filtro por `kind` las deja afuera.
  */
 export type PosOpenSessionCard = {
   [Column in Exclude<keyof Tables<'pos_open_sessions'>, OpenSessionRequestColumn>]-?: NonNullable<
@@ -80,6 +82,8 @@ const openSessionCardsOf = (restaurantId: string, branchId: string) =>
     .select('*')
     .eq('restaurant_id', restaurantId)
     .eq('branch_id', branchId)
+    // Son las mesas activas: una cuenta para llevar no ocupa mesa ni va a /salon.
+    .eq('kind', 'table')
     .order('opened_at', { ascending: true })
     .overrideTypes<PosOpenSessionCard[], { merge: false }>()
 
@@ -96,7 +100,7 @@ export async function loadOpenSessions(restaurantId: string, branchId: string) {
     .from('table_sessions')
     .select(posSessionSelect)
     .eq('restaurant_id', restaurantId)
-    .eq('tables.branch_id', branchId)
+    .eq('branch_id', branchId)
     .eq('status', 'open')
     .order('opened_at', { ascending: true })
   throwIfError(error)

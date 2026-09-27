@@ -47,6 +47,15 @@ CREATE TYPE "public"."menu_design" AS ENUM (
 ALTER TYPE "public"."menu_design" OWNER TO "postgres";
 
 
+CREATE TYPE "public"."order_origin" AS ENUM (
+    'qr',
+    'pos'
+);
+
+
+ALTER TYPE "public"."order_origin" OWNER TO "postgres";
+
+
 CREATE TYPE "public"."order_status" AS ENUM (
     'submitted',
     'accepted',
@@ -114,6 +123,15 @@ CREATE TYPE "public"."pos_type" AS ENUM (
 
 
 ALTER TYPE "public"."pos_type" OWNER TO "postgres";
+
+
+CREATE TYPE "public"."session_kind" AS ENUM (
+    'table',
+    'takeout'
+);
+
+
+ALTER TYPE "public"."session_kind" OWNER TO "postgres";
 
 
 CREATE TYPE "public"."session_request_kind" AS ENUM (
@@ -311,10 +329,10 @@ CREATE OR REPLACE FUNCTION "public"."can_read_session"("sid" "uuid", "permission
     LANGUAGE "sql" STABLE SECURITY DEFINER
     SET "search_path" TO 'public'
     AS $$
-  select exists (select 1 from table_sessions s join tables t on t.id = s.table_id
-    where s.id = sid and t.restaurant_id = s.restaurant_id and (
+  select exists (select 1 from table_sessions s
+    where s.id = sid and (
       (public.is_restaurant_admin(s.restaurant_id) and not exists(select 1 from profiles where id=auth.uid())) or
-      public.has_permission(s.restaurant_id, permission_name, t.branch_id)
+      public.has_permission(s.restaurant_id, permission_name, s.branch_id)
     ));
 $$;
 
@@ -376,9 +394,8 @@ begin
   select id into diner_id from public.session_participants
     where session_id=target.id and user_id=auth.uid();
   if diner_id is null then raise exception 'NOT_PARTICIPANT'; end if;
-  select b.payment_methods into methods from public.tables t
-    join public.branches b on b.id=t.branch_id and b.restaurant_id=t.restaurant_id
-    where t.id=target.table_id and t.restaurant_id=target.restaurant_id;
+  select b.payment_methods into methods from public.branches b
+    where b.id=target.branch_id and b.restaurant_id=target.restaurant_id;
   if not ('mobile'=any(methods)) then raise exception 'PAYMENT_METHOD_DISABLED'; end if;
 
   select * into saved from public.payments
@@ -694,6 +711,23 @@ $$;
 ALTER FUNCTION "public"."employee_email_exists"("p_email" "text") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."fill_session_branch"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  if new.branch_id is null and new.table_id is not null then
+    select branch_id into new.branch_id from public.tables
+      where id = new.table_id and restaurant_id = new.restaurant_id;
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."fill_session_branch"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."get_order_pos_type"("p_order_id" "uuid") RETURNS "public"."pos_type"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -808,6 +842,26 @@ $$;
 ALTER FUNCTION "public"."join_table_session"("qr" "text", "participant_name" "text") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."keep_order_authorship"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  if new.origin is distinct from old.origin
+    or new.staff_author_name is distinct from old.staff_author_name
+    or (new.submitted_by is distinct from old.submitted_by and new.submitted_by is not null)
+    or (new.staff_author_id is distinct from old.staff_author_id and new.staff_author_id is not null)
+  then
+    raise exception 'ORDER_AUTHORSHIP_IMMUTABLE';
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."keep_order_authorship"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."list_employee_accounts"("p_restaurant" "uuid") RETURNS TABLE("user_id" "uuid", "username" "text", "full_name" "text", "roles" "public"."member_role"[], "is_active" boolean, "branch_ids" "uuid"[])
     LANGUAGE "plpgsql" STABLE SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -834,10 +888,10 @@ begin
   if auth.uid() is null then raise exception 'AUTH_REQUIRED'; end if;
   if not exists(select 1 from profiles where id=auth.uid()) or
     not public.can_read_session(p_session_id,'sessions.close') then raise exception 'FORBIDDEN'; end if;
-  -- Same table/session lock order as join/submit.
+  -- Same table/session lock order as join/submit. Una cuenta sin mesa solo bloquea la sesión.
   perform 1 from tables t join table_sessions s on s.table_id=t.id where s.id=p_session_id for update of t;
   select * into target from table_sessions where id=p_session_id for update;
-  select branch_id into bid from tables where id=target.table_id and restaurant_id=target.restaurant_id;
+  bid := target.branch_id;
   if bid is null or not public.has_permission(target.restaurant_id,'sessions.close',bid) then raise exception 'FORBIDDEN'; end if;
   if target.status='closed' then return target.id; end if;
   update table_sessions set status='closed',closed_at=now() where id=target.id;
@@ -878,7 +932,7 @@ begin
   if not found then raise exception 'SESSION_NOT_FOUND'; end if;
   if target.restaurant_id <> source_table.restaurant_id then raise exception 'FORBIDDEN'; end if;
   -- El origen esperado evita mover otra vez una comanda ya trasladada.
-  if target.status <> 'open' or target.table_id <> source_table.id then
+  if target.status <> 'open' or target.table_id is distinct from source_table.id then
     raise exception 'SESSION_MOVE_CONFLICT'; end if;
   if not destination.is_active or not destination.is_visible
     or not exists(select 1 from branches where id = destination.branch_id and is_active)
@@ -975,11 +1029,10 @@ begin
   if not found then raise exception 'SESSION_NOT_FOUND'; end if;
   if target.status <> 'open' then raise exception 'SESSION_CLOSED'; end if;
 
-  select t.branch_id, b.payment_methods into target_branch, enabled_methods
-  from public.tables t
-  join public.branches b on b.id = t.branch_id and b.restaurant_id = t.restaurant_id
-  where t.id = target.table_id and t.restaurant_id = target.restaurant_id;
-  if target_branch is null then raise exception 'TABLE_NOT_FOUND'; end if;
+  target_branch := target.branch_id;
+  select b.payment_methods into enabled_methods
+  from public.branches b
+  where b.id = target.branch_id and b.restaurant_id = target.restaurant_id;
   if not exists(select 1 from public.profiles where id = auth.uid())
     or not public.has_permission(target.restaurant_id, 'payments.write', target_branch)
     then raise exception 'FORBIDDEN'; end if;
@@ -1054,9 +1107,8 @@ begin
 
   select * into target from public.table_sessions where id = p_session_id for update;
   if not found then raise exception 'SESSION_NOT_FOUND'; end if;
-  select branch_id into bid from public.tables
-    where id = target.table_id and restaurant_id = target.restaurant_id;
-  if bid is null or not public.has_permission(target.restaurant_id, 'sessions.attend', bid)
+  bid := target.branch_id;
+  if not public.has_permission(target.restaurant_id, 'sessions.attend', bid)
     then raise exception 'FORBIDDEN'; end if;
 
   requested := case p_kind
@@ -1106,8 +1158,8 @@ begin
   select o.* into target from orders o where o.id=p_order_id
     and public.can_read_session(o.session_id) for update;
   if not found then raise exception 'FORBIDDEN'; end if;
-  select t.branch_id into bid from table_sessions s join tables t on t.id=s.table_id
-    where s.id=target.session_id and t.restaurant_id=target.restaurant_id;
+  select s.branch_id into bid from table_sessions s
+    where s.id=target.session_id and s.restaurant_id=target.restaurant_id;
   needed := case
     when p_status='cancelled' then 'orders.cancel'
     when p_status < target.status then 'orders.revert'
@@ -1251,9 +1303,8 @@ begin
   -- Pedir la cuenta no es pagar: eso se puede siempre. Que venga un mozo a
   -- cobrar sí es un medio de pago, y la sucursal puede no ofrecerlo (MI-48).
   if p_kind = 'in_person_payment' and not exists (
-    select 1 from public.tables t
-    join public.branches b on b.id = t.branch_id
-    where t.id = target.table_id and 'in_person' = any (b.payment_methods)
+    select 1 from public.branches b
+    where b.id = target.branch_id and 'in_person' = any (b.payment_methods)
   ) then raise exception 'PAYMENT_METHOD_DISABLED'; end if;
 
   requested := case p_kind
@@ -1599,11 +1650,32 @@ CREATE TABLE IF NOT EXISTS "public"."orders" (
     "cancelled_at" timestamp with time zone,
     "request_id" "uuid",
     "request_payload" "jsonb",
-    "local_date" "date" GENERATED ALWAYS AS ((("created_at" AT TIME ZONE 'America/Argentina/Buenos_Aires'::"text"))::"date") STORED
+    "local_date" "date" GENERATED ALWAYS AS ((("created_at" AT TIME ZONE 'America/Argentina/Buenos_Aires'::"text"))::"date") STORED,
+    "origin" "public"."order_origin" DEFAULT 'qr'::"public"."order_origin" NOT NULL,
+    "staff_author_id" "uuid",
+    "staff_author_name" "text",
+    CONSTRAINT "orders_author_matches_origin" CHECK (
+CASE "origin"
+    WHEN 'qr'::"public"."order_origin" THEN (("staff_author_id" IS NULL) AND ("staff_author_name" IS NULL))
+    WHEN 'pos'::"public"."order_origin" THEN (("submitted_by" IS NULL) AND ("staff_author_name" IS NOT NULL) AND (("length"("btrim"("staff_author_name")) >= 1) AND ("length"("btrim"("staff_author_name")) <= 100)))
+    ELSE NULL::boolean
+END)
 );
 
 
 ALTER TABLE "public"."orders" OWNER TO "postgres";
+
+
+COMMENT ON COLUMN "public"."orders"."origin" IS 'Canal por el que entró el pedido: qr (comensal) o pos (personal). No cambia.';
+
+
+
+COMMENT ON COLUMN "public"."orders"."staff_author_id" IS 'Cuenta de personal que cargó un pedido POS. Nulo en pedidos QR o si la cuenta se borró.';
+
+
+
+COMMENT ON COLUMN "public"."orders"."staff_author_name" IS 'Nombre de quien cargó un pedido POS, copiado al crearlo.';
+
 
 
 CREATE OR REPLACE FUNCTION "public"."submit_order"("p_session_id" "uuid", "p_request_id" "uuid", "p_items" "jsonb", "p_expected_total" numeric, "p_notes" "text" DEFAULT NULL::"text") RETURNS "public"."orders"
@@ -1682,6 +1754,7 @@ begin
   end loop;
 
   -- Use the same table-before-session lock order as join_table_session.
+  -- Una cuenta sin mesa no tiene mesa que bloquear.
   perform 1 from public.tables t
     join public.table_sessions s on s.table_id = t.id
     where s.id = p_session_id for share of t;
@@ -1706,9 +1779,13 @@ begin
     return previous_order;
   end if;
   if target_session.status <> 'open' then raise exception 'SESSION_CLOSED'; end if;
-  perform 1 from public.tables t
-    join public.branches b on b.id = t.branch_id
-    where t.id = target_session.table_id and t.is_active and b.is_active;
+  -- La sucursal de la cuenta tiene que estar activa, y si la cuenta es de una
+  -- mesa, también la mesa.
+  perform 1 from public.branches b
+    where b.id = target_session.branch_id and b.is_active
+      and (target_session.table_id is null or exists (
+        select 1 from public.tables t
+        where t.id = target_session.table_id and t.is_active));
   if not found then raise exception 'TABLE_UNAVAILABLE'; end if;
 
   -- One SQL statement captures the entire relevant menu at one MVCC snapshot.
@@ -1732,8 +1809,8 @@ begin
   where p.restaurant_id = target_session.restaurant_id
     and p.id in (select (value->>'productId')::uuid from jsonb_array_elements(p_items));
 
-  insert into public.orders(restaurant_id, session_id, submitted_by, request_id, request_payload, notes)
-    values(target_session.restaurant_id, p_session_id, participant, p_request_id, request_body, p_notes)
+  insert into public.orders(restaurant_id, session_id, origin, submitted_by, request_id, request_payload, notes)
+    values(target_session.restaurant_id, p_session_id, 'qr', participant, p_request_id, request_body, p_notes)
     returning id into order_id;
 
   for item in select value from jsonb_array_elements(p_items) loop
@@ -2284,7 +2361,7 @@ ALTER TABLE "public"."pos_integrations" OWNER TO "postgres";
 CREATE TABLE IF NOT EXISTS "public"."table_sessions" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "restaurant_id" "uuid" NOT NULL,
-    "table_id" "uuid" NOT NULL,
+    "table_id" "uuid",
     "status" "public"."session_status" DEFAULT 'open'::"public"."session_status" NOT NULL,
     "opened_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "closed_at" timestamp with time zone,
@@ -2299,7 +2376,10 @@ CREATE TABLE IF NOT EXISTS "public"."table_sessions" (
     "split_equal_parts" smallint,
     "split_updated_by" "uuid",
     "split_updated_at" timestamp with time zone,
-    CONSTRAINT "table_sessions_equal_parts_valid" CHECK (((("split_type" = 'equal'::"public"."split_type") AND (("split_equal_parts" >= 2) AND ("split_equal_parts" <= 50))) OR (("split_type" <> 'equal'::"public"."split_type") AND ("split_equal_parts" IS NULL))))
+    "kind" "public"."session_kind" DEFAULT 'table'::"public"."session_kind" NOT NULL,
+    "branch_id" "uuid" NOT NULL,
+    CONSTRAINT "table_sessions_equal_parts_valid" CHECK (((("split_type" = 'equal'::"public"."split_type") AND (("split_equal_parts" >= 2) AND ("split_equal_parts" <= 50))) OR (("split_type" <> 'equal'::"public"."split_type") AND ("split_equal_parts" IS NULL)))),
+    CONSTRAINT "table_sessions_kind_matches_table" CHECK ((("kind" = 'table'::"public"."session_kind") = ("table_id" IS NOT NULL)))
 );
 
 
@@ -2335,6 +2415,14 @@ COMMENT ON COLUMN "public"."table_sessions"."split_updated_by" IS 'Comensal (ses
 
 
 COMMENT ON COLUMN "public"."table_sessions"."split_updated_at" IS 'Momento del último guardado de la división, aunque no haya cambiado ningún valor.';
+
+
+
+COMMENT ON COLUMN "public"."table_sessions"."kind" IS 'table = cuenta de una mesa (table_id obligatorio); takeout = compra para llevar, sin mesa.';
+
+
+
+COMMENT ON COLUMN "public"."table_sessions"."branch_id" IS 'Sucursal de la cuenta. Decide permisos, medios de pago y tablero. En una cuenta de mesa es la de su mesa y se completa sola al insertar.';
 
 
 
@@ -2426,7 +2514,7 @@ CREATE OR REPLACE VIEW "public"."pos_open_sessions" WITH ("security_invoker"='tr
     "s"."table_id",
     "s"."opened_at",
     "t"."label" AS "table_label",
-    "t"."branch_id",
+    "s"."branch_id",
     "b"."name" AS "branch_name",
     COALESCE("p"."names", '{}'::"text"[]) AS "participant_names",
     COALESCE("bill"."submitted_amount", (0)::numeric) AS "submitted_amount",
@@ -2437,10 +2525,11 @@ CREATE OR REPLACE VIEW "public"."pos_open_sessions" WITH ("security_invoker"='tr
     "s"."bill_attended_at",
     "s"."in_person_payment_requested_at",
     "s"."in_person_payment_attended_at",
-    "k"."tickets" AS "kitchen_tickets"
+    "k"."tickets" AS "kitchen_tickets",
+    "s"."kind"
    FROM ((((("public"."table_sessions" "s"
-     JOIN "public"."tables" "t" ON (("t"."id" = "s"."table_id")))
-     JOIN "public"."branches" "b" ON (("b"."id" = "t"."branch_id")))
+     LEFT JOIN "public"."tables" "t" ON (("t"."id" = "s"."table_id")))
+     JOIN "public"."branches" "b" ON (("b"."id" = "s"."branch_id")))
      LEFT JOIN "public"."session_bills" "bill" ON (("bill"."session_id" = "s"."id")))
      LEFT JOIN LATERAL ( SELECT "array_agg"("sp"."display_name" ORDER BY "sp"."joined_at") AS "names"
            FROM "public"."session_participants" "sp"
@@ -2817,6 +2906,11 @@ ALTER TABLE ONLY "public"."tables"
 
 
 ALTER TABLE ONLY "public"."tables"
+    ADD CONSTRAINT "tables_restaurant_branch_id_key" UNIQUE ("restaurant_id", "branch_id", "id");
+
+
+
+ALTER TABLE ONLY "public"."tables"
     ADD CONSTRAINT "tables_restaurant_id_id_key" UNIQUE ("restaurant_id", "id");
 
 
@@ -2869,6 +2963,10 @@ CREATE INDEX "orders_session_id_idx" ON "public"."orders" USING "btree" ("sessio
 
 
 
+CREATE UNIQUE INDEX "orders_staff_request_unique" ON "public"."orders" USING "btree" ("staff_author_id", "request_id") WHERE ("origin" = 'pos'::"public"."order_origin");
+
+
+
 CREATE INDEX "payment_order_items_order_item_id_idx" ON "public"."payment_order_items" USING "btree" ("order_item_id");
 
 
@@ -2917,6 +3015,10 @@ CREATE INDEX "table_sessions_assigned_employee_idx" ON "public"."table_sessions"
 
 
 
+CREATE INDEX "table_sessions_branch_status_idx" ON "public"."table_sessions" USING "btree" ("branch_id", "status");
+
+
+
 CREATE UNIQUE INDEX "table_sessions_one_open_per_table" ON "public"."table_sessions" USING "btree" ("table_id") WHERE ("status" = 'open'::"public"."session_status");
 
 
@@ -2937,7 +3039,15 @@ CREATE INDEX "tables_section_id_idx" ON "public"."tables" USING "btree" ("sectio
 
 
 
+CREATE OR REPLACE TRIGGER "orders_keep_authorship" BEFORE UPDATE ON "public"."orders" FOR EACH ROW EXECUTE FUNCTION "public"."keep_order_authorship"();
+
+
+
 CREATE OR REPLACE TRIGGER "orders_reject_abandoned_request" BEFORE INSERT ON "public"."orders" FOR EACH ROW WHEN (("new"."request_id" IS NOT NULL)) EXECUTE FUNCTION "public"."reject_abandoned_order_request"();
+
+
+
+CREATE OR REPLACE TRIGGER "table_sessions_fill_branch" BEFORE INSERT ON "public"."table_sessions" FOR EACH ROW EXECUTE FUNCTION "public"."fill_session_branch"();
 
 
 
@@ -3048,6 +3158,11 @@ ALTER TABLE ONLY "public"."orders"
 
 ALTER TABLE ONLY "public"."orders"
     ADD CONSTRAINT "orders_session_id_fkey" FOREIGN KEY ("restaurant_id", "session_id") REFERENCES "public"."table_sessions"("restaurant_id", "id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."orders"
+    ADD CONSTRAINT "orders_staff_author_id_fkey" FOREIGN KEY ("staff_author_id") REFERENCES "public"."profiles"("id") ON DELETE SET NULL;
 
 
 
@@ -3212,12 +3327,17 @@ ALTER TABLE ONLY "public"."table_sessions"
 
 
 ALTER TABLE ONLY "public"."table_sessions"
+    ADD CONSTRAINT "table_sessions_branch_fkey" FOREIGN KEY ("restaurant_id", "branch_id") REFERENCES "public"."branches"("restaurant_id", "id");
+
+
+
+ALTER TABLE ONLY "public"."table_sessions"
     ADD CONSTRAINT "table_sessions_restaurant_id_fkey" FOREIGN KEY ("restaurant_id") REFERENCES "public"."restaurants"("id") ON DELETE CASCADE;
 
 
 
 ALTER TABLE ONLY "public"."table_sessions"
-    ADD CONSTRAINT "table_sessions_table_id_fkey" FOREIGN KEY ("restaurant_id", "table_id") REFERENCES "public"."tables"("restaurant_id", "id") ON DELETE CASCADE;
+    ADD CONSTRAINT "table_sessions_table_id_fkey" FOREIGN KEY ("restaurant_id", "branch_id", "table_id") REFERENCES "public"."tables"("restaurant_id", "branch_id", "id") ON DELETE CASCADE;
 
 
 
@@ -3630,6 +3750,12 @@ GRANT ALL ON FUNCTION "public"."employee_email_exists"("p_email" "text") TO "ser
 
 
 
+GRANT ALL ON FUNCTION "public"."fill_session_branch"() TO "anon";
+GRANT ALL ON FUNCTION "public"."fill_session_branch"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."fill_session_branch"() TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."get_order_pos_type"("p_order_id" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "public"."get_order_pos_type"("p_order_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."get_order_pos_type"("p_order_id" "uuid") TO "service_role";
@@ -3669,6 +3795,12 @@ GRANT ALL ON FUNCTION "public"."is_session_participant"("sid" "uuid") TO "servic
 REVOKE ALL ON FUNCTION "public"."join_table_session"("qr" "text", "participant_name" "text") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."join_table_session"("qr" "text", "participant_name" "text") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."join_table_session"("qr" "text", "participant_name" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."keep_order_authorship"() TO "anon";
+GRANT ALL ON FUNCTION "public"."keep_order_authorship"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."keep_order_authorship"() TO "service_role";
 
 
 

@@ -3,7 +3,8 @@ import type { PendingSubmission } from './cart'
 
 type RecoverableSession = {
   id: string
-  table_id: string
+  // Una cuenta para llevar no tiene mesa; la recuperación compara contra la mesa del QR.
+  table_id: string | null
   session_participants: { user_id: string | null }[]
 }
 

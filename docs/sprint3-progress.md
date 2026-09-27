@@ -62,8 +62,8 @@ El simulador **no es Mercado Pago**: `mobile-payment` resuelve con `confirm` sol
 - **`reassign_order_items` ya no existe:** `20261001010000_atomic_guest_participant.sql` la eliminó. Ahora `add_guest_participant(p_session_id, p_display_name, p_item_ids)` reasigna en la misma transacción **cualquier** ítem de cualquier pedido de la sesión, sin importar quién lo pidió ni el origen del pedido. La restricción de MI-69 (el comensal no modifica consumo cargado por el restaurante) debe aplicarse sobre esta función en la fase 8.
 - **Orden de migraciones:** ya hay dos migraciones con fecha `20261001…`. Toda migración nueva del sprint debe llevar un timestamp **posterior a `20261001010000`** (por ejemplo `20261001020000_…`), aunque la fecha real sea anterior.
 - **Dependencia de mesa confirmada.** Leen la sucursal a través de `tables`:
-  - funciones y vistas: `can_read_session`, `submit_order`, `abandon_order_request`, `create_mobile_payment`, `pos_record_payment`, `pos_transition_order`, `pos_close_table_session`, `pos_resolve_session_request`, `request_session_service` y la vista `pos_open_sessions`;
-  - política: la de `payment_order_items`;
+  - funciones y vistas: `can_read_session`, `submit_order`, `create_mobile_payment`, `pos_record_payment`, `pos_transition_order`, `pos_close_table_session`, `pos_resolve_session_request`, `request_session_service` y la vista `pos_open_sessions`;
+  - corregido en la fase 2: `abandon_order_request` solo bloquea la mesa para ordenar locks (sin mesa, no bloquea nada), y la política de `payment_order_items` no usa `tables`; las dos figuraban acá por error;
   - frontend: `posOrderSelect` y `posSessionSelect` (`tables!inner`), los filtros `.eq('table_sessions.tables.branch_id', …)` de `apps/pos/src/features/pos/api.ts` y las lecturas no opcionales de `order.table_sessions.tables.label` en `OrderHistory`, `OrderTicket` y `CommandBoard`.
 
   `join_table_session`/`customer_join_table_session`, `pos_open_table_session` y `pos_move_table_session` trabajan con mesas por definición y pueden conservar ese join.
@@ -127,12 +127,16 @@ Cada contrato indica quién lo produce, quién lo consume y qué queda compatibl
 
 ### C1 — Contexto de cuenta (fase 2)
 
-**Esquema propuesto** (una migración después de `20261001010000`):
+**Esquema** (implementado en `20261001020000_session_branch_and_order_authorship.sql`):
 
-- `table_sessions.branch_id uuid not null`, completado desde `tables.branch_id`, con FK `(restaurant_id, branch_id) → branches(restaurant_id, id)` (esa unicidad ya existe).
+- `table_sessions.branch_id uuid not null`, completado desde `tables.branch_id`, con FK `table_sessions_branch_fkey (restaurant_id, branch_id) → branches(restaurant_id, id)`.
 - `table_sessions.kind` con un enum nuevo `session_kind ('table','takeout')`, por defecto `'table'`.
 - Un check `(kind = 'table') = (table_id is not null)`.
-- Coherencia entre mesa y sucursal: una unicidad nueva `tables(branch_id, id)` y una FK `(branch_id, table_id) → tables(branch_id, id)`. `pos_move_table_session` ya impide moverse entre sucursales (`TABLE_BRANCH_MISMATCH`), así que el traslado sigue siendo válido.
+- Coherencia entre mesa y sucursal: `table_sessions_table_id_fkey` se reemplazó, con el mismo nombre, por `(restaurant_id, branch_id, table_id) → tables(restaurant_id, branch_id, id)`, apoyada en la unicidad nueva `tables_restaurant_branch_id_key`.
+  - Se descartó la FK adicional que había propuesto: con dos FKs entre `table_sessions` y `tables`, todo embed `tables(...)` sin hint queda ambiguo para PostgREST.
+  - La FK tampoco deja cambiar la sucursal de una mesa que tiene cuentas: esa cuenta pasaría a otra sucursal sin que nadie la moviera.
+  - `pos_move_table_session` ya impedía moverse entre sucursales (`TABLE_BRANCH_MISMATCH`).
+- Un trigger `table_sessions_fill_branch` completa `branch_id` desde la mesa cuando no viene. Es el único valor válido, así que `join_table_session`, `pos_open_table_session` y los fixtures de las pruebas no cambian. Una cuenta takeout sin sucursal la rechaza el `not null`.
 - `table_sessions_one_open_per_table` sigue funcionando: un índice único admite varios `table_id` nulos.
 
 **Forma que leen las apps:**
@@ -148,19 +152,25 @@ type SessionContext = {
 }
 ```
 
-- **Productor:** SQL. Las funciones listadas en "Diferencias" pasan a leer `table_sessions.branch_id` en lugar de hacer join con `tables`. `pos_open_sessions` usa `left join tables`.
+El tipo vive en `packages/shared/src/orders.ts`, junto con `sessionPlaceLabel(session)`: devuelve la mesa, "Para llevar" o "Mesa" si la consulta no trajo la mesa.
+
+- **Productor:** SQL. Las funciones listadas en "Diferencias" leen `table_sessions.branch_id` en lugar de hacer join con `tables`. La vista `pos_open_sessions` usa `left join tables` y agrega la columna `kind` al final.
 - **Consumidores:** tablero, historial y cuentas activas del POS (fase 2); pagos (fases 4–6); takeout (fase 9).
 - **Compatibilidad:** las sesiones existentes quedan como `kind='table'` con la misma mesa. El plano sigue mostrando solo mesas físicas. Donde hoy se lee `tables.label`, una sesión takeout muestra "Para llevar" y su número (fase 9).
 
 ### C2 — Creación de pedido (fases 2 y 8)
 
-**Esquema propuesto:**
+**Esquema** (implementado en la misma migración):
 
-- `orders.origin`, con un enum nuevo `order_origin ('qr','pos')`.
+- `orders.origin`, con un enum nuevo `order_origin ('qr','pos')`, por defecto `'qr'`. El default conserva los fixtures y cualquier inserción QR anterior; un camino POS que lo olvide choca con el check.
   - Los pedidos existentes se completan como `qr`. La evidencia: `submit_order` es la única vía de escritura (los navegadores no tienen `INSERT` en `orders`, lo verifica la integración 25) y los pedidos locales tienen participante y `request_id`.
   - Un pedido cuyo participante se borró queda `qr` con autor desconocido (`submitted_by` nulo).
 - `orders.staff_author_id uuid references profiles(id) on delete set null`, más `orders.staff_author_name text` como copia del nombre.
-- Checks: `origin = 'pos'` exige `staff_author_name`; `origin = 'qr'` exige `staff_author_id` nulo.
+- Check `orders_author_matches_origin`:
+  - `qr`: `staff_author_id` y `staff_author_name` nulos.
+  - `pos`: `submitted_by` nulo y `staff_author_name` de 1 a 100 caracteres, con `is not null` explícito (un check que da null se acepta).
+- Trigger `orders_keep_authorship`: `origin`, `staff_author_name` y un `submitted_by`/`staff_author_id` no nulo no cambian (`ORDER_AUTHORSHIP_IMMUTABLE`). Solo pueden quedar nulos por `on delete set null`.
+- `orderAuthorName(order, participants)` en `packages/shared/src/orders.ts` es la forma de nombrar al autor en pantalla.
 
 **Identidad e idempotencia:**
 
@@ -333,3 +343,59 @@ Las dos historias se verifican contra ese subsistema y se cierran juntas en la f
   - Inventario de dispositivos.
   - Confirmación del umbral de rellamado y del permiso `orders.create`.
 - **Siguiente paso concreto:** en la fase 2, escribir la migración de C1 y C2 y actualizar las funciones que dependen de `tables`, la vista `pos_open_sessions`, la política de `payment_order_items`, `posOrderSelect`/`posSessionSelect` y los tipos de POS. Después regenerar `database.types.ts` y el snapshot, y agregar los fixtures de mesa y takeout que pide su verificación.
+
+### Fase 2 — Resultado
+
+- **Estado:** completa.
+- **Historias:** base de MI-67, MI-70, MI-71 y pagos. No cierra ningún criterio de Jira: mostrar origen y responsable en el POS es de la fase 8, y la entrada QR de mostrador, de la fase 9.
+- **Incremento que se puede ejecutar:**
+  - Una cuenta sin mesa (`kind='takeout'`, creada por ahora con SQL o con la clave de servicio) recibe pedidos por `submit-order` y aparece como "Para llevar" en el tablero y el historial de su sucursal.
+  - Admite pedir cobro, cobro presencial, pago móvil y cierre, y queda aislada de otros comensales, sucursales y restaurantes.
+  - Las cuentas de mesa se comportan igual que antes.
+- **Archivos y migraciones:**
+  - `supabase/migrations/20261001020000_session_branch_and_order_authorship.sql`
+  - `supabase/tests/session-context.sql` (nuevo)
+  - `supabase/tests/orders.integration.mjs`
+  - `packages/shared/src/{orders,errors,database.types}.ts` y `packages/shared/tests/orders.test.ts` (nuevo)
+  - `apps/pos/src/features/pos/{types,api,OrderTicket,OrderHistory,CommandBoard}.ts(x)`
+  - `apps/customer/src/features/session-recovery.ts`
+  - `supabase/schema.generated.sql`
+- **Contratos entregados:**
+  - Cuenta: `table_sessions.kind` y `table_sessions.branch_id`, con el trigger que completa la sucursal y las FKs descriptas en C1. En TS: `SessionKind`, `SessionContext` y `sessionPlaceLabel`.
+  - Pedido: `orders.origin`, `staff_author_id` y `staff_author_name`, el índice `orders_staff_request_unique` y el trigger de autoría inmutable descriptos en C2. En TS: `OrderOrigin`, `orderOriginLabels` y `orderAuthorName`.
+  - Resuelven la sucursal desde la cuenta: `can_read_session`, `submit_order`, `create_mobile_payment`, `pos_record_payment`, `pos_transition_order`, `pos_close_table_session`, `pos_resolve_session_request`, `request_session_service` y la vista `pos_open_sessions`. Mantienen sus firmas y errores públicos, con tres diferencias:
+    - `pos_record_payment` ya no puede dar `TABLE_NOT_FOUND`, que antes era inalcanzable.
+    - `pos_move_table_session` responde `SESSION_MOVE_CONFLICT` a una cuenta sin mesa. Antes, `<>` contra un nulo la dejaba pasar.
+    - `ORDER_AUTHORSHIP_IMMUTABLE` es interno: ningún camino de las apps lo produce y no está en el catálogo.
+  - Consultas del POS:
+    - `posOrderSelect` (tablero, historial y pedidos de una mesa) trae la mesa opcional y la sucursal desde la cuenta (`branch:branches!table_sessions_branch_fkey`), y filtra por `table_sessions.branch_id`.
+    - `posSessionSelect` (plano, comanda de mesa y traslado) conserva `tables!inner`.
+    - "Mesas activas" filtra `kind='table'`.
+  - `BRANCH_IN_USE` también traduce `table_sessions_branch_fkey`, y su mensaje ahora dice "mesas o cuentas".
+- **Consumidor siguiente:**
+  - Fase 3: la disponibilidad del proveedor por sucursal usa `table_sessions.branch_id`.
+  - Fase 4: `create_mobile_payment` ya toma los medios de la sucursal de la cuenta.
+  - Fase 8: la entrada POS inserta `origin='pos'`, `staff_author_id = auth.uid()` y `staff_author_name` desde `profiles.full_name`, con idempotencia por `orders_staff_request_unique`.
+  - Fase 9: abre cuentas `kind='takeout'` con `branch_id` y el comprador como participante, y decide si "Mesas activas" lista también las cuentas para llevar (hoy la vista las trae y el POS las filtra).
+- **Compatibilidad:**
+  - Las firmas de RPC, `submitOrderSchema` y el contrato de `mobile-payment` no cambian.
+  - Los datos existentes quedan como cuentas `table` con la sucursal de su mesa, y pedidos `qr` con su autor.
+  - `pos_open_sessions` suma `kind` al final.
+  - `RecoverableSession.table_id` admite `null` en customer.
+- **Pruebas ejecutadas y resultado:**
+  - `pnpm test`: 28 archivos y 162 pruebas; `typecheck`, `lint` y `build` pasan.
+  - `pnpm test:sql`: 17 archivos, con `session-context.sql` nuevo. Pasan sobre la base local con datos y también sobre un entorno limpio.
+  - `pnpm test:orders:integration`: 41 verificaciones; la 23 es nueva y cubre takeout en el tablero y su aislamiento. Además, ahora la suite usa el `posOrderSelect` real del POS.
+  - `pnpm test:employees:integration` pasa, y la prueba de humo del simulador de pagos también (8 verificaciones).
+  - Entorno limpio: un segundo stack Supabase temporal aplicó todas las migraciones y el seed sin errores. Su snapshot es **idéntico** a `schema.generated.sql`.
+- **Recorrido manual y entorno/dispositivo:** no se ejecutó. "Para llevar" en el tablero y el historial está verificado por consulta integrada y typecheck, no visualmente.
+- **Decisiones nuevas y motivo:**
+  - Se reemplazó la FK de mesa en lugar de agregar otra, para no romper los embeds de PostgREST.
+  - El trigger de sucursal evita tocar los fixtures y las funciones de alta de mesa, porque el valor está determinado por la mesa.
+  - `origin` conserva el default `'qr'` por compatibilidad; el check frena los errores del lado POS.
+  - `submit_order` reutiliza `TABLE_UNAVAILABLE` cuando la sucursal de una cuenta takeout está inactiva. Su mensaje habla de "mesa": la fase 9 debería decidir un código o texto propio.
+- **Bloqueos y evidencia pendiente:**
+  - Siguen los bloqueos externos de la fase 1.
+  - `add_guest_participant` todavía reasigna cualquier ítem de la cuenta (fase 8).
+  - Falta el recorrido visual del POS con una cuenta takeout.
+- **Siguiente paso concreto:** en la fase 3, modelar la configuración de Mercado Pago por restaurante con asociación explícita a sucursales. Tiene que exponer al panel solo un estado enmascarado y resolver en backend la disponibilidad efectiva para una cuenta, usando `table_sessions.branch_id`.

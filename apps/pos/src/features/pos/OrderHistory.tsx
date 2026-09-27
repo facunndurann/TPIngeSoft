@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { formatPrice, localDateKey, type OrderStatus, orderStatusLabels, RESTAURANT_TIME_ZONE } from '@restaurant-platform/shared'
+import { formatPrice, localDateKey, type OrderStatus, orderStatusLabels, RESTAURANT_TIME_ZONE, sessionPlaceLabel } from '@restaurant-platform/shared'
 import { useRestaurant } from '@/context/pos-context'
 import { Badge, EmptyState, ErrorText, Input, Modal, Select, Spinner } from '@restaurant-platform/ui'
 import { posHistoryQuery, type PosOrder } from './api'
@@ -29,7 +29,7 @@ export function OrderHistory() {
     return (history.data ?? []).filter((order) => {
       if (status !== 'all' && order.status !== status) return false
       if (!query) return true
-      const table = order.table_sessions.tables.label.toLocaleLowerCase()
+      const table = sessionPlaceLabel(order.table_sessions).toLocaleLowerCase()
       const products = order.order_items.map((item) => item.product_name.toLocaleLowerCase()).join(' ')
       const people = order.table_sessions.session_participants
         .map((participant) => participant.display_name.toLocaleLowerCase())
@@ -117,9 +117,9 @@ export function OrderHistory() {
                 >
                   <td className="px-4 py-3 text-neutral-700">{formatClock(order.created_at)}</td>
                   <td className="px-4 py-3 font-medium text-neutral-900">
-                    {order.table_sessions.tables.label}
+                    {sessionPlaceLabel(order.table_sessions)}
                     <span className="block text-xs font-normal text-neutral-500">
-                      {order.table_sessions.tables.branch?.name}
+                      {order.table_sessions.branch?.name}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-neutral-600">
@@ -143,7 +143,7 @@ export function OrderHistory() {
       )}
 
       {selected && (
-        <Modal title={`${selected.table_sessions.tables.label} · ${formatClock(selected.created_at)}`} onClose={() => setSelected(null)}>
+        <Modal title={`${sessionPlaceLabel(selected.table_sessions)} · ${formatClock(selected.created_at)}`} onClose={() => setSelected(null)}>
           <HistoryDetail order={selected} />
         </Modal>
       )}

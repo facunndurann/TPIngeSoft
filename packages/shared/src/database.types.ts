@@ -515,12 +515,15 @@ export type Database = {
           id: string
           local_date: string | null
           notes: string | null
+          origin: Database["public"]["Enums"]["order_origin"]
           preparing_at: string | null
           ready_at: string | null
           request_id: string | null
           request_payload: Json | null
           restaurant_id: string
           session_id: string
+          staff_author_id: string | null
+          staff_author_name: string | null
           status: Database["public"]["Enums"]["order_status"]
           submitted_by: string | null
           total_amount: number
@@ -533,12 +536,15 @@ export type Database = {
           id?: string
           local_date?: string | null
           notes?: string | null
+          origin?: Database["public"]["Enums"]["order_origin"]
           preparing_at?: string | null
           ready_at?: string | null
           request_id?: string | null
           request_payload?: Json | null
           restaurant_id: string
           session_id: string
+          staff_author_id?: string | null
+          staff_author_name?: string | null
           status?: Database["public"]["Enums"]["order_status"]
           submitted_by?: string | null
           total_amount?: number
@@ -551,12 +557,15 @@ export type Database = {
           id?: string
           local_date?: string | null
           notes?: string | null
+          origin?: Database["public"]["Enums"]["order_origin"]
           preparing_at?: string | null
           ready_at?: string | null
           request_id?: string | null
           request_payload?: Json | null
           restaurant_id?: string
           session_id?: string
+          staff_author_id?: string | null
+          staff_author_name?: string | null
           status?: Database["public"]["Enums"]["order_status"]
           submitted_by?: string | null
           total_amount?: number
@@ -589,6 +598,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "table_sessions"
             referencedColumns: ["restaurant_id", "id"]
+          },
+          {
+            foreignKeyName: "orders_staff_author_id_fkey"
+            columns: ["staff_author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "orders_submitted_by_fkey"
@@ -1237,10 +1253,12 @@ export type Database = {
           assigned_user_id: string | null
           bill_attended_at: string | null
           bill_requested_at: string | null
+          branch_id: string
           closed_at: string | null
           id: string
           in_person_payment_attended_at: string | null
           in_person_payment_requested_at: string | null
+          kind: Database["public"]["Enums"]["session_kind"]
           opened_at: string
           restaurant_id: string
           split_allocations: Json
@@ -1249,17 +1267,19 @@ export type Database = {
           split_updated_at: string | null
           split_updated_by: string | null
           status: Database["public"]["Enums"]["session_status"]
-          table_id: string
+          table_id: string | null
         }
         Insert: {
           assigned_employee_id?: string | null
           assigned_user_id?: string | null
           bill_attended_at?: string | null
           bill_requested_at?: string | null
+          branch_id: string
           closed_at?: string | null
           id?: string
           in_person_payment_attended_at?: string | null
           in_person_payment_requested_at?: string | null
+          kind?: Database["public"]["Enums"]["session_kind"]
           opened_at?: string
           restaurant_id: string
           split_allocations?: Json
@@ -1268,17 +1288,19 @@ export type Database = {
           split_updated_at?: string | null
           split_updated_by?: string | null
           status?: Database["public"]["Enums"]["session_status"]
-          table_id: string
+          table_id?: string | null
         }
         Update: {
           assigned_employee_id?: string | null
           assigned_user_id?: string | null
           bill_attended_at?: string | null
           bill_requested_at?: string | null
+          branch_id?: string
           closed_at?: string | null
           id?: string
           in_person_payment_attended_at?: string | null
           in_person_payment_requested_at?: string | null
+          kind?: Database["public"]["Enums"]["session_kind"]
           opened_at?: string
           restaurant_id?: string
           split_allocations?: Json
@@ -1287,7 +1309,7 @@ export type Database = {
           split_updated_at?: string | null
           split_updated_by?: string | null
           status?: Database["public"]["Enums"]["session_status"]
-          table_id?: string
+          table_id?: string | null
         }
         Relationships: [
           {
@@ -1305,6 +1327,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "table_sessions_branch_fkey"
+            columns: ["restaurant_id", "branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["restaurant_id", "id"]
+          },
+          {
             foreignKeyName: "table_sessions_restaurant_id_fkey"
             columns: ["restaurant_id"]
             isOneToOne: false
@@ -1313,10 +1342,10 @@ export type Database = {
           },
           {
             foreignKeyName: "table_sessions_table_id_fkey"
-            columns: ["restaurant_id", "table_id"]
+            columns: ["restaurant_id", "branch_id", "table_id"]
             isOneToOne: false
             referencedRelation: "tables"
-            referencedColumns: ["restaurant_id", "id"]
+            referencedColumns: ["restaurant_id", "branch_id", "id"]
           },
         ]
       }
@@ -1407,6 +1436,7 @@ export type Database = {
           id: string | null
           in_person_payment_attended_at: string | null
           in_person_payment_requested_at: string | null
+          kind: Database["public"]["Enums"]["session_kind"] | null
           kitchen_tickets: number | null
           opened_at: string | null
           paid_amount: number | null
@@ -1420,6 +1450,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "table_sessions_branch_fkey"
+            columns: ["restaurant_id", "branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["restaurant_id", "id"]
+          },
+          {
             foreignKeyName: "table_sessions_restaurant_id_fkey"
             columns: ["restaurant_id"]
             isOneToOne: false
@@ -1428,10 +1465,10 @@ export type Database = {
           },
           {
             foreignKeyName: "table_sessions_table_id_fkey"
-            columns: ["restaurant_id", "table_id"]
+            columns: ["restaurant_id", "branch_id", "table_id"]
             isOneToOne: false
             referencedRelation: "tables"
-            referencedColumns: ["restaurant_id", "id"]
+            referencedColumns: ["restaurant_id", "branch_id", "id"]
           },
         ]
       }
@@ -1708,12 +1745,15 @@ export type Database = {
           id: string
           local_date: string | null
           notes: string | null
+          origin: Database["public"]["Enums"]["order_origin"]
           preparing_at: string | null
           ready_at: string | null
           request_id: string | null
           request_payload: Json | null
           restaurant_id: string
           session_id: string
+          staff_author_id: string | null
+          staff_author_name: string | null
           status: Database["public"]["Enums"]["order_status"]
           submitted_by: string | null
           total_amount: number
@@ -1769,6 +1809,7 @@ export type Database = {
         | "cashier"
         | "kitchen"
       menu_design: "oliva" | "brasas" | "linterna"
+      order_origin: "qr" | "pos"
       order_status:
         | "submitted"
         | "accepted"
@@ -1786,6 +1827,7 @@ export type Database = {
         | "percentage_split"
       payment_status: "pending" | "approved" | "rejected" | "cancelled"
       pos_type: "internal" | "fudo"
+      session_kind: "table" | "takeout"
       session_request_kind: "bill" | "in_person_payment"
       session_status: "open" | "closed"
       split_type: "none" | "equal" | "percentages"
@@ -1929,6 +1971,7 @@ export const Constants = {
         "kitchen",
       ],
       menu_design: ["oliva", "brasas", "linterna"],
+      order_origin: ["qr", "pos"],
       order_status: [
         "submitted",
         "accepted",
@@ -1948,6 +1991,7 @@ export const Constants = {
       ],
       payment_status: ["pending", "approved", "rejected", "cancelled"],
       pos_type: ["internal", "fudo"],
+      session_kind: ["table", "takeout"],
       session_request_kind: ["bill", "in_person_payment"],
       session_status: ["open", "closed"],
       split_type: ["none", "equal", "percentages"],
