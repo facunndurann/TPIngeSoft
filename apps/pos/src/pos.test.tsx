@@ -8,7 +8,7 @@ import App from './App'
 import { AuthContext } from '@restaurant-platform/ui'
 import { AccessContext, type PosContext } from './context/pos-context'
 import { OrderTicket } from './features/pos/OrderTicket'
-import type { PosOrder } from './features/pos/types'
+import type { PosOrder } from './features/pos/queries'
 
 const context: PosContext = {
   restaurant_id: 'restaurant-a',

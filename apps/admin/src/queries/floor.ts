@@ -1,6 +1,7 @@
 import { queryOptions } from '@tanstack/react-query'
 import type { Tables, TablesInsert } from '@restaurant-platform/shared'
-import { supabase, unwrap } from '@/lib/supabase'
+import { unwrap } from '@restaurant-platform/shared'
+import { supabase } from '@/lib/supabase'
 
 export type FloorSection = Tables<'floor_sections'>
 export type FloorTable = Tables<'tables'>

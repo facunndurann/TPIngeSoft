@@ -1,5 +1,6 @@
 import { queryOptions } from '@tanstack/react-query'
-import { supabase, unwrap } from '@/lib/supabase'
+import { unwrap } from '@restaurant-platform/shared'
+import { supabase } from '@/lib/supabase'
 
 export const categoriesQuery = (restaurantId: string) =>
   queryOptions({

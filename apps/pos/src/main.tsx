@@ -2,12 +2,13 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter } from 'react-router'
-import { AuthProvider, createQueryClient } from '@restaurant-platform/ui'
+import { AuthProvider } from '@restaurant-platform/ui'
 import './index.css'
 import App from './App.tsx'
+import { createPosQueryClient } from './lib/query-client'
 import { supabase } from './lib/supabase'
 
-const queryClient = createQueryClient()
+const queryClient = createPosQueryClient()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

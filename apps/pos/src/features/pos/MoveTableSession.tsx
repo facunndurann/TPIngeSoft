@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, ErrorText, Modal, Select, Spinner } from '@restaurant-platform/ui'
 import { useRestaurant } from '@/context/pos-context'
-import { loadRestaurantTables, movePosTableSession, posOpenSessionsQuery } from './api'
-import type { PosDiningTable } from './types'
+import { refreshPos } from '@/lib/query-client'
+import { movePosTableSession, posOpenSessionsQuery, posTablesQuery, type PosDiningTable } from './queries'
 
 export function MoveTableSession({
   source,
@@ -17,19 +17,15 @@ export function MoveTableSession({
   const restaurant = useRestaurant()
   const queryClient = useQueryClient()
   const [destinationId, setDestinationId] = useState('')
-  const tables = useQuery({
-    queryKey: ['pos', restaurant.id, restaurant.branchId, 'tables'],
-    queryFn: () => loadRestaurantTables(restaurant.id, restaurant.branchId),
-  })
+  const tables = useQuery(posTablesQuery(restaurant.id, restaurant.branchId))
   const sessions = useQuery(posOpenSessionsQuery(restaurant.id, restaurant.branchId))
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ['pos', restaurant.id] })
   const move = useMutation({
     mutationFn: () => movePosTableSession(sessionId, source.id, destinationId),
-    onSuccess: async () => {
-      await refresh()
-      onClose()
-    },
-    onError: () => { void refresh() },
+    // El cliente del POS ya releyó todo: se cierra con el plano actualizado.
+    onSuccess: onClose,
+    // También al fallar: lo más probable es que otro ocupó la mesa destino, y la
+    // lista tiene que dejar de ofrecerla.
+    onError: () => { void refreshPos(queryClient) },
   })
   const destinations = (tables.data ?? []).filter((table) =>
     table.id !== source.id &&

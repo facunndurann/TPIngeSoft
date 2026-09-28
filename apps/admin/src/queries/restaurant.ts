@@ -1,5 +1,6 @@
 import { queryOptions } from '@tanstack/react-query'
-import { supabase, unwrap } from '@/lib/supabase'
+import { unwrap } from '@restaurant-platform/shared'
+import { supabase } from '@/lib/supabase'
 import type { Membership } from '@/restaurant/restaurant-context'
 
 /** Raíz de la key: invalidarla recarga la membresía sin tener que conocer al usuario. */

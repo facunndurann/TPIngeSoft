@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import type { PosPermission } from '@restaurant-platform/shared'
 import { Button, ClockProvider } from '@restaurant-platform/ui'
 import { useCan, usePosContext } from '@/context/pos-context'
+import { refreshPos } from '@/lib/query-client'
 import { supabase } from '@/lib/supabase'
 import { subscribeToRestaurantPos } from './realtime'
 
@@ -22,7 +23,7 @@ export function PosPage({ multipleContexts }: { multipleContexts: boolean }) {
   useEffect(
     () =>
       subscribeToRestaurantPos(context.restaurant_id, () => {
-        void queryClient.invalidateQueries({ queryKey: ['pos', context.restaurant_id] })
+        void refreshPos(queryClient)
       }),
     [context.restaurant_id, queryClient],
   )

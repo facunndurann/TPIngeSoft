@@ -5,15 +5,15 @@ import { formatElapsed, formatPrice, getPosTableState, type PosTableState, posTa
 import { ClipboardList, Clock3, Move, UserRound, Users } from 'lucide-react'
 import { Button, EmptyState, ErrorText, FloorGrid, Spinner, SummaryItem, useNow } from '@restaurant-platform/ui'
 import { useCan, useRestaurant } from '@/context/pos-context'
-import {
-  loadPosFloorSections,
-  loadRestaurantTables,
-  posOpenSessionsQuery,
-  type PosOpenSession,
-} from './api'
 import { MoveTableSession } from './MoveTableSession'
+import {
+  posFloorSectionsQuery,
+  posOpenSessionsQuery,
+  posTablesQuery,
+  type PosDiningTable,
+  type PosOpenSession,
+} from './queries'
 import { AttendRequestButtons, SessionRequestBadges } from './ServiceRequests'
-import type { PosDiningTable } from './types'
 
 /**
  * Plano operativo del salón (MI-62/MI-63/MI-64). El layout viene de la
@@ -33,14 +33,8 @@ export function FloorMap() {
 
   const chooseSection = (id: string) => setSearchParams({ sector: id }, { replace: true })
 
-  const sections = useQuery({
-    queryKey: ['pos', restaurant.id, restaurant.branchId, 'floor-sections'],
-    queryFn: () => loadPosFloorSections(restaurant.id, restaurant.branchId),
-  })
-  const tables = useQuery({
-    queryKey: ['pos', restaurant.id, restaurant.branchId, 'tables'],
-    queryFn: () => loadRestaurantTables(restaurant.id, restaurant.branchId),
-  })
+  const sections = useQuery(posFloorSectionsQuery(restaurant.id, restaurant.branchId))
+  const tables = useQuery(posTablesQuery(restaurant.id, restaurant.branchId))
   const sessions = useQuery(posOpenSessionsQuery(restaurant.id, restaurant.branchId))
 
   const floorSections = sections.data ?? []

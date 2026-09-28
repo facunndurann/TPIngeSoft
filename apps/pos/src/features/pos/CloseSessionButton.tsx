@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation } from '@tanstack/react-query'
 import { asAmount, formatPrice } from '@restaurant-platform/shared'
 import { Button, ErrorText, Modal, useSaveErrors } from '@restaurant-platform/ui'
-import { useCan, useRestaurant } from '@/context/pos-context'
-import { closePosSession, posQueryKey, type PosOpenSession } from './api'
+import { useCan } from '@/context/pos-context'
+import { closePosSession, type PosOpenSession } from './queries'
 
 /**
  * Cierre manual de una mesa: el botón, la confirmación y la mutación. Los avisos
@@ -13,19 +13,14 @@ import { closePosSession, posQueryKey, type PosOpenSession } from './api'
  */
 export function CloseSessionButton({ session, className }: { session: PosOpenSession; className?: string }) {
   const can = useCan()
-  const restaurant = useRestaurant()
-  const queryClient = useQueryClient()
   const errors = useSaveErrors()
   const [confirming, setConfirming] = useState(false)
 
   const close = useMutation(errors.saving('No pudimos cerrar la sesión.', {
     mutationFn: () => closePosSession(session.id),
-    // Se espera la relectura antes de soltar el modal: el «Cerrando…» sigue hasta
-    // que la mesa sale de las abiertas y la pantalla deja de mostrarla.
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: posQueryKey(restaurant.id, restaurant.branchId) })
-      setConfirming(false)
-    },
+    // El cliente del POS ya releyó todo: el «Cerrando…» siguió hasta que la mesa
+    // salió de las abiertas, y recién ahí se suelta el modal.
+    onSuccess: () => setConfirming(false),
   }))
 
   if (!can('sessions.close')) return null

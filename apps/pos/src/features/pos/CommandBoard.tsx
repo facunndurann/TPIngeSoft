@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { groupOrdersByColumn, posBoardColumns } from '@restaurant-platform/shared'
 import { useRestaurant } from '@/context/pos-context'
 import { ErrorText, Spinner, useNow } from '@restaurant-platform/ui'
-import { posBoardQuery } from './api'
+import { posBoardQuery } from './queries'
 import { OrderTicket } from './OrderTicket'
 
 const columnStyles: Record<string, string> = {

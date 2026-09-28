@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { formatElapsed, formatPrice, sessionRequestsOf } from '@restaurant-platform/shared'
 import { useRestaurant } from '@/context/pos-context'
 import { Badge, Button, EmptyState, ErrorText, Spinner, useNow } from '@restaurant-platform/ui'
-import { loadRestaurantTables, posOpenSessionsQuery, posQueryKey } from './api'
+import { posOpenSessionsQuery, posTablesQuery } from './queries'
 import { CloseSessionButton } from './CloseSessionButton'
 import { AttendRequestButtons, ChargedBadge, SessionRequestBadges } from './ServiceRequests'
 
@@ -12,10 +12,7 @@ export function ActiveTables() {
   const now = useNow()
 
   const sessions = useQuery(posOpenSessionsQuery(restaurant.id, restaurant.branchId))
-  const tables = useQuery({
-    queryKey: [...posQueryKey(restaurant.id, restaurant.branchId), 'tables'],
-    queryFn: () => loadRestaurantTables(restaurant.id, restaurant.branchId),
-  })
+  const tables = useQuery(posTablesQuery(restaurant.id, restaurant.branchId))
 
   const occupiedIds = new Set((sessions.data ?? []).map((session) => session.table_id))
   const freeTables = (tables.data ?? []).filter((table) => !occupiedIds.has(table.id))

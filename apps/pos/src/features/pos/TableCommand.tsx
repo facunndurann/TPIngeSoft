@@ -1,21 +1,20 @@
 import { Link, useParams, useSearchParams } from 'react-router'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { formatElapsed, formatPrice, getPosTableState, paymentMethodLabels, posTableStateLabels, sessionRequestsOf, type PaymentMethod } from '@restaurant-platform/shared'
 import { ArrowLeft, Clock3, PlayCircle, UserRound, Users } from 'lucide-react'
 import { Badge, Button, EmptyState, ErrorText, Spinner, SummaryItem, useNow, useSaveErrors } from '@restaurant-platform/ui'
 import { useCan, useRestaurant } from '@/context/pos-context'
-import {
-  loadRestaurantTables,
-  loadSessionOrders,
-  openPosTableSession,
-  posOpenSessionsQuery,
-  posPaymentMethodsQuery,
-  posQueryKey,
-  type PosOpenSession,
-} from './api'
 import { CloseSessionButton } from './CloseSessionButton'
 import { OrderTicket } from './OrderTicket'
 import { PaymentPanel } from './PaymentPanel'
+import {
+  openPosTableSession,
+  posOpenSessionsQuery,
+  posPaymentMethodsQuery,
+  posTablesQuery,
+  sessionOrdersQuery,
+  type PosOpenSession,
+} from './queries'
 import { AttendRequestButtons, ChargedBadge, SessionRequestBadges } from './ServiceRequests'
 
 /**
@@ -31,10 +30,7 @@ export function TableCommand() {
 
   const backToMap = `/salon${searchParams.toString() ? `?${searchParams}` : ''}`
 
-  const tables = useQuery({
-    queryKey: [...posQueryKey(restaurant.id, restaurant.branchId), 'tables'],
-    queryFn: () => loadRestaurantTables(restaurant.id, restaurant.branchId),
-  })
+  const tables = useQuery(posTablesQuery(restaurant.id, restaurant.branchId))
   // La misma lectura que el plano y Mesas activas: la mesa está ocupada si su
   // sesión figura entre las abiertas de la sucursal.
   const sessions = useQuery(posOpenSessionsQuery(restaurant.id, restaurant.branchId))
@@ -103,17 +99,13 @@ export function TableCommand() {
 
 /** Mesa sin sesión: lo único que se puede hacer es abrir la comanda. */
 function FreeTable({ tableId }: { tableId: string }) {
-  const restaurant = useRestaurant()
   const can = useCan()
-  const queryClient = useQueryClient()
   const errors = useSaveErrors()
 
+  // El «Abriendo…» sigue hasta que el cliente del POS relee las mesas abiertas
+  // y la pantalla pasa a la de mesa ocupada.
   const openSession = useMutation(errors.saving('No pudimos abrir la comanda.', {
     mutationFn: () => openPosTableSession(tableId),
-    // Se devuelve la promesa: el «Abriendo…» sigue hasta que la sesión nueva
-    // llega y la pantalla pasa a la de mesa ocupada.
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: posQueryKey(restaurant.id, restaurant.branchId) }),
   }))
 
   return (
@@ -145,11 +137,7 @@ function OccupiedTable({ session, paymentMethods }: { session: PosOpenSession; p
   const can = useCan()
   const now = useNow()
 
-  const orders = useQuery({
-    queryKey: [...posQueryKey(restaurant.id, restaurant.branchId), 'session-orders', session.id],
-    queryFn: () => loadSessionOrders(session.id),
-    refetchInterval: 15000,
-  })
+  const orders = useQuery(sessionOrdersQuery(restaurant.id, restaurant.branchId, session.id))
 
   const kitchen = session.kitchen_tickets
 

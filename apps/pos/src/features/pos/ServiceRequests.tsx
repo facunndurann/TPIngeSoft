@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation } from '@tanstack/react-query'
 import {
   formatElapsed,
   type SessionRequestKind,
@@ -9,8 +9,8 @@ import {
 } from '@restaurant-platform/shared'
 import { BadgeCheck, BellRing, Check } from 'lucide-react'
 import { Badge, Button, ErrorText, useSaveErrors } from '@restaurant-platform/ui'
-import { useCan, useRestaurant } from '@/context/pos-context'
-import { posQueryKey, resolvePosSessionRequest } from './api'
+import { useCan } from '@/context/pos-context'
+import { resolvePosSessionRequest } from './queries'
 
 /** El color es el mismo que pinta la mesa en el plano para ese estado. */
 const requestColors: Record<SessionRequestKind, 'indigo' | 'red'> = {
@@ -88,17 +88,11 @@ export function AttendRequestButtons({
   session: SessionRequestSource
 }) {
   const can = useCan()
-  const restaurant = useRestaurant()
-  const queryClient = useQueryClient()
   const errors = useSaveErrors()
 
   const attend = useMutation(
     errors.saving('No pudimos marcar la solicitud como atendida.', {
       mutationFn: (kind: SessionRequestKind) => resolvePosSessionRequest(sessionId, kind),
-      onSuccess: () =>
-        queryClient.invalidateQueries({
-          queryKey: posQueryKey(restaurant.id, restaurant.branchId),
-        }),
     }),
   )
 

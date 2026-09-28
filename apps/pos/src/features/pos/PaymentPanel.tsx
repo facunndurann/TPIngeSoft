@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import {
   asAmount,
   formatPrice,
@@ -10,7 +10,7 @@ import {
 } from '@restaurant-platform/shared'
 import { Button, ErrorText, useSaveErrors } from '@restaurant-platform/ui'
 import { useCan, useRestaurant } from '@/context/pos-context'
-import { loadSessionPayments, posQueryKey, recordPosPayment, type PosOpenSession } from './api'
+import { recordPosPayment, sessionPaymentsQuery, type PosOpenSession } from './queries'
 
 type PaymentPanelProps = {
   sessionId: string
@@ -21,7 +21,6 @@ type PaymentPanelProps = {
 export function PaymentPanel({ sessionId, pendingAmount, enabledMethods }: PaymentPanelProps) {
   const restaurant = useRestaurant()
   const can = useCan()
-  const queryClient = useQueryClient()
   const errors = useSaveErrors()
   const pending = asAmount(pendingAmount)
   const recordable: PaymentMethod[] = enabledMethods.filter((method) => method !== 'mobile')
@@ -37,11 +36,7 @@ export function PaymentPanel({ sessionId, pendingAmount, enabledMethods }: Payme
     if (!method || !recordable.includes(method)) setMethod(recordable[0] ?? '')
   }, [method, recordable])
 
-  const payments = useQuery({
-    queryKey: [...posQueryKey(restaurant.id, restaurant.branchId), 'payments', sessionId],
-    queryFn: () => loadSessionPayments(sessionId),
-    refetchInterval: 15000,
-  })
+  const payments = useQuery(sessionPaymentsQuery(restaurant.id, restaurant.branchId, sessionId))
 
   const record = useMutation(errors.saving('No pudimos registrar el pago.', {
     mutationFn: () => {
@@ -54,10 +49,7 @@ export function PaymentPanel({ sessionId, pendingAmount, enabledMethods }: Payme
         externalReference: reference.trim() || undefined,
       })
     },
-    onSuccess: async () => {
-      setReference('')
-      await queryClient.invalidateQueries({ queryKey: posQueryKey(restaurant.id, restaurant.branchId) })
-    },
+    onSuccess: () => setReference(''),
   }))
 
   const numericAmount = Number(amount)

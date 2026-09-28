@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { formatPrice, localDateKey, type OrderStatus, orderStatusLabels, RESTAURANT_TIME_ZONE } from '@restaurant-platform/shared'
 import { useRestaurant } from '@/context/pos-context'
 import { Badge, EmptyState, ErrorText, Input, Modal, Select, Spinner } from '@restaurant-platform/ui'
-import { posHistoryQuery, type PosOrder } from './api'
+import { posHistoryQuery, type PosOrder } from './queries'
 
 const statusFilterOptions: Array<{ value: 'all' | OrderStatus; label: string }> = [
   { value: 'all', label: 'Todos los estados' },

@@ -5,6 +5,7 @@ import type { PosPermission } from '@restaurant-platform/shared'
 import { Button, ErrorText, Spinner, useAuth } from '@restaurant-platform/ui'
 import { supabase } from '@/lib/supabase'
 import { AccessContext, useCan, type PosContext } from '@/context/pos-context'
+import { posContextsQuery } from '@/features/pos/queries'
 import { LoginPage } from '@/pages/LoginPage'
 import { PosPage } from '@/features/pos/PosPage'
 import { CommandBoard } from '@/features/pos/CommandBoard'
@@ -57,16 +58,7 @@ function AuthenticatedPos({ userId }: { userId: string }) {
   const navigate = useNavigate()
   const [selected, setSelected] = useState<string | null>(() => readStoredContext(userId))
 
-  const contexts = useQuery({
-    queryKey: ['pos-contexts', userId],
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc('get_pos_contexts')
-      if (error) throw error
-      return data
-    },
-    refetchInterval: 15_000,
-    refetchOnWindowFocus: 'always',
-  })
+  const contexts = useQuery(posContextsQuery(userId))
 
   if (contexts.isPending) return <Spinner />
 

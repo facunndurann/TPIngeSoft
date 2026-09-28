@@ -1,9 +1,9 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation } from '@tanstack/react-query'
 import { Undo2 } from 'lucide-react'
 import { formatElapsed, formatPrice, type OrderStatus, orderStatusLabels, posActions, transitionPermission } from '@restaurant-platform/shared'
 import { Badge, Button, useSaveErrors } from '@restaurant-platform/ui'
-import { posQueryKey, transitionPosOrder, type PosOrder, type PosOrderItem } from './api'
-import { useCan, useRestaurant } from '@/context/pos-context'
+import { useCan } from '@/context/pos-context'
+import { transitionPosOrder, type PosOrder, type PosOrderItem } from './queries'
 
 function participantName(order: PosOrder, participantId: string | null) {
   return order.table_sessions.session_participants.find((entry) => entry.id === participantId)
@@ -17,16 +17,12 @@ function participantName(order: PosOrder, participantId: string | null) {
  */
 export function OrderTicket({ order, now }: { order: PosOrder; now: number }) {
   const can = useCan()
-  const restaurant = useRestaurant()
-  const queryClient = useQueryClient()
   const errors = useSaveErrors()
 
+  // El botón sigue ocupado hasta que el cliente del POS relee el pedido en su
+  // estado nuevo: no queda un instante habilitado con el estado viejo.
   const transition = useMutation(errors.saving('No pudimos actualizar el pedido.', {
     mutationFn: (to: OrderStatus) => transitionPosOrder(order.id, to),
-    // Se devuelve la promesa: el botón sigue ocupado hasta que llega el pedido
-    // en su estado nuevo, y no queda un instante habilitado con el estado viejo.
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: posQueryKey(restaurant.id, restaurant.branchId) }),
   }))
 
   const allowed = (step: { to: OrderStatus; label: string } | undefined) =>

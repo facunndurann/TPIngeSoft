@@ -3,14 +3,15 @@ import { afterEach, test, vi } from 'vitest'
 import assert from 'node:assert/strict'
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { AccessContext, type PosContext } from './context/pos-context'
-import { closePosSession, type PosOpenSession } from './features/pos/api'
+import { closePosSession, type PosOpenSession } from './features/pos/queries'
 import { CloseSessionButton } from './features/pos/CloseSessionButton'
+import { createPosQueryClient } from './lib/query-client'
 
 // Sin red: el cliente de Supabase no llega a crearse y el cierre lo decide cada prueba.
 vi.mock('./lib/supabase', () => ({ supabase: {} }))
-vi.mock(import('./features/pos/api'), async (importOriginal) => ({
+vi.mock(import('./features/pos/queries'), async (importOriginal) => ({
   ...(await importOriginal()),
   closePosSession: vi.fn(),
 }))
@@ -45,7 +46,7 @@ afterEach(() => {
 })
 
 async function renderButton(session: PosOpenSession, context = cashier) {
-  const client = new QueryClient()
+  const client = createPosQueryClient()
   const invalidate = vi.spyOn(client, 'invalidateQueries')
   const container = document.createElement('div')
   document.body.append(container)
@@ -97,7 +98,7 @@ test('the confirmation warns with what the session row says is still open', asyn
   assert.equal(vi.mocked(closePosSession).mock.calls.length, 0)
 })
 
-test('confirming closes that session and refreshes the branch', async () => {
+test('confirming closes that session and refreshes the POS', async () => {
   vi.mocked(closePosSession).mockResolvedValue(undefined)
   const { container, invalidate } = await renderButton(openAt())
 
@@ -106,7 +107,7 @@ test('confirming closes that session and refreshes the branch', async () => {
   await settle()
 
   assert.deepEqual(vi.mocked(closePosSession).mock.calls, [['session-a']])
-  assert.deepEqual(invalidate.mock.calls, [[{ queryKey: ['pos', 'restaurant-a', 'branch-a'] }]])
+  assert.deepEqual(invalidate.mock.calls, [[{ queryKey: ['pos'] }]])
   assert.equal(dialogIn(container), null)
 })
 
