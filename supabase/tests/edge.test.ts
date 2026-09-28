@@ -40,8 +40,7 @@ import floorLayoutSql from '../migrations/20260918030000_free_table_sizes.sql?ra
 import { DEFAULT_MENU_DESIGN } from '../../packages/shared/src/designs.ts'
 // Si otra migración cambia el default de restaurants.menu_design, apuntá este import a esa.
 import menuDesignEnumSql from '../migrations/20260915150000_menu_design_enum.sql?raw'
-import { createSubmitOrderHandler } from '../functions/submit-order/handler.ts'
-import type { OrderGateway } from '../functions/_shared/order-gateway.ts'
+import { createSubmitOrderHandler, type OrderGateway } from '../functions/submit-order/handler.ts'
 import { createMobilePaymentHandler, type MobilePaymentGateway } from '../functions/mobile-payment/handler.ts'
 
 const input = {
@@ -170,7 +169,9 @@ test('mobile payment endpoint creates and confirms only validated requests', asy
 test('mobile payment endpoint handles preflight and never leaks provider failures', async () => {
   const handler=createMobilePaymentHandler(async () => ({execute:async () => {throw new Error('provider secret')}}))
   assert.equal((await handler(new Request('http://local',{method:'OPTIONS'}))).status,204)
-  assert.equal((await handler(new Request('http://local'))).status,405)
+  const wrongMethod=await handler(new Request('http://local'))
+  assert.equal(wrongMethod.status,405)
+  assert.deepEqual(appErrorBodySchema.parse(await wrongMethod.json()).error,{code:'METHOD_NOT_ALLOWED',message:'Usá POST para iniciar un pago.'})
   const response=await handler(new Request('http://local',{method:'POST',headers:{Authorization:'Bearer x','Content-Type':'application/json'},body:'{' }))
   assert.equal(response.status,400)
   assert.doesNotMatch(await response.text(),/provider secret/)

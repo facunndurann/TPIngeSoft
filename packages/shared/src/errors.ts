@@ -73,6 +73,7 @@ export const appErrors = {
 
   // Cuentas de empleados (employee-accounts)
   USERNAME_TAKEN: { status: 409, retryable: false, message: 'Ese nombre de usuario ya existe. Elegí otro.' },
+  INVALID_LEGACY_EMPLOYEE: { status: 409, retryable: false, message: 'Ese empleado del POS anterior ya fue vinculado o no existe. Actualizá la lista.' },
   PROVISIONING_CLEANUP_REQUIRED: { status: 500, retryable: false, message: 'El alta quedó pendiente de revisión. Contactá al soporte antes de reintentar.' },
 
   // Falla inesperada: el detalle interno nunca se expone. El mensaje sirve a
@@ -109,6 +110,9 @@ const constraintCodes: Record<string, AppErrorCode> = {
   tables_branch_id_fkey: 'BRANCH_IN_USE',
   // Una cuenta para llevar cuelga de la sucursal sin pasar por una mesa.
   table_sessions_branch_fkey: 'BRANCH_IN_USE',
+  // Dos altas simultáneas con el mismo usuario: el índice único es el último guardián.
+  profiles_username_normalized_key: 'USERNAME_TAKEN',
+  profiles_username_case_insensitive: 'USERNAME_TAKEN',
 }
 
 /** Error de negocio con todo lo que el catálogo sabe de él. */

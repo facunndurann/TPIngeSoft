@@ -14,5 +14,5 @@
       "@supabase/supabase-js": ["../../apps/customer/node_modules/@supabase/supabase-js"]
     }
   },
-  "include": ["_shared/**/*.ts", "submit-order/handler.ts", "employee-accounts/handler.ts", "employee-accounts/gateway.ts", "mobile-payment/handler.ts", "mobile-payment/gateway.ts"]
+  "include": ["_shared/**/*.ts", "submit-order/handler.ts", "submit-order/gateway.ts", "employee-accounts/handler.ts", "employee-accounts/gateway.ts", "mobile-payment/handler.ts", "mobile-payment/gateway.ts"]
 }
