@@ -72,6 +72,13 @@ test('each history row has a button to open it, named after the table and the ti
   assert.match(html, /<tr[^>]*>(?:(?!<\/tr>).)*<button type="button" aria-haspopup="dialog"[^>]*>Mesa 1<span class="sr-only">, pedido de las /)
 })
 
+test('every history filter has its own name, not just a placeholder', () => {
+  const fields = render(<OrderHistory />).match(/<(?:input|select)\b[^>]*>/g) ?? []
+  // Fecha, estado y búsqueda.
+  assert.equal(fields.length, 3)
+  for (const field of fields) assert.match(field, /aria-label="[^"]+"/, field)
+})
+
 test('"Continuar comanda" is a touch-sized link with no button nested inside', () => {
   const html = render(<ActiveTables />)
   assert.match(html, /<a class="[^"]*\bmin-h-11\b[^"]*" href="\/salon\/table-1"[^>]*>Continuar comanda<\/a>/)

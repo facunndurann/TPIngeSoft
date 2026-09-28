@@ -37,10 +37,10 @@ type FloorGridProps<T extends FloorGridTable> = {
    */
   preview?: (table: T) => Placed | null
   /**
-   * Las mesas se arrastran con el dedo. Solo entonces la grilla se queda con
-   * los gestos táctiles; si no, un dedo que la recorre desplaza el plano.
+   * La grilla nunca se queda con los gestos táctiles: un dedo que la recorre
+   * desplaza el plano. Si las mesas se arrastran, quien las dibuja les pone
+   * `touch-none` a ellas, no a la superficie.
    */
-  editable?: boolean
   renderTable: (table: T, tile: FloorTile) => ReactNode
 }
 
@@ -77,16 +77,15 @@ export function FloorGrid<T extends FloorGridTable>({
   emptyMessage,
   ariaLabel,
   preview,
-  editable = false,
   renderTable,
 }: FloorGridProps<T>) {
   return (
     <div
-      // `touch-none` le saca al navegador el desplazamiento de todo toque que
-      // empiece sobre la grilla, que es todo el plano: sirve para arrastrar
-      // mesas y bloquea el scroll donde no se edita. `touch-manipulation` deja
-      // desplazar y quita la espera del doble toque para hacer zoom.
-      className={`relative ${editable ? 'touch-none' : 'touch-manipulation'}`}
+      // `touch-manipulation` deja desplazar el plano y quita la espera del doble
+      // toque para hacer zoom. Con `touch-none` acá, en el editor ningún toque
+      // desplazaba (la grilla es todo el plano) y en una tablet no se llegaba a
+      // la parte que no entraba en pantalla.
+      className="relative touch-manipulation"
       style={{
         width: FLOOR_GRID.cols * FLOOR_GRID.cell,
         height: FLOOR_GRID.rows * FLOOR_GRID.cell,

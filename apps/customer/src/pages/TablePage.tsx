@@ -161,28 +161,6 @@ function TableApp({ token }: { token: string }) {
           }}
         >
           <MenuShell>
-            {/* La bienvenida es para la carta, que es donde cae el QR: en el resto de
-                las pantallas el encabezado se reduce a decir dónde estás. */}
-            <TableHeader
-              restaurantName={restaurant.name}
-              branchName={branch.name}
-              tableLabel={currentTable.label}
-              compact={!atMenu}
-            />
-
-            {/* Lo que el panel sabe de la mesa lo lee del contexto; acá solo recibe el
-                ingreso, que es de esta pantalla, y lo que puede hacer. */}
-            <SessionPanel
-              connecting={joined.isPending}
-              connection={failureOf(joined)}
-              rename={rename}
-              onOpenNewSession={() => {
-                setAnnouncement(undefined)
-                cart.clear(cartKey)
-                void joined.refetch()
-              }}
-            />
-
             {nameGate.asking && (
               <NameModal
                 rename={rename}
@@ -193,7 +171,32 @@ function TableApp({ token }: { token: string }) {
               />
             )}
 
+            {/* Con el diálogo del nombre abierto, todo lo demás queda inerte: ni el Tab
+                ni el lector de pantalla salen del diálogo. Por eso la cabecera y el panel
+                de la mesa van adentro y el diálogo, afuera. */}
             <div {...(nameGate.asking ? { inert: true } : {})}>
+              {/* La bienvenida es para la carta, que es donde cae el QR: en el resto de
+                  las pantallas el encabezado se reduce a decir dónde estás. */}
+              <TableHeader
+                restaurantName={restaurant.name}
+                branchName={branch.name}
+                tableLabel={currentTable.label}
+                compact={!atMenu}
+              />
+
+              {/* Lo que el panel sabe de la mesa lo lee del contexto; acá solo recibe el
+                  ingreso, que es de esta pantalla, y lo que puede hacer. */}
+              <SessionPanel
+                connecting={joined.isPending}
+                connection={failureOf(joined)}
+                rename={rename}
+                onOpenNewSession={() => {
+                  setAnnouncement(undefined)
+                  cart.clear(cartKey)
+                  void joined.refetch()
+                }}
+              />
+
               <TableNav token={token} cartCount={cartCount} />
 
               {/* El aviso se va solo cuando termina su salida: cada aviso nuevo remonta el

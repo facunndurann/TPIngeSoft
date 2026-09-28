@@ -49,7 +49,9 @@ export function MenuBrowse({ token, menu }: MenuBrowseProps) {
         />
       </div>
 
-      <div className="categories" aria-label="Categorías">
+      {/* Enlaces que llevan a otra vista de la carta: es navegación, y con `nav` el
+          nombre «Categorías» se anuncia (en un div sin rol el aria-label se ignora). */}
+      <nav className="categories" aria-label="Categorías">
         <CurrentLink to={menuPath(token, 'all', search)} current={category === 'all'}>
           Todo
         </CurrentLink>
@@ -62,7 +64,7 @@ export function MenuBrowse({ token, menu }: MenuBrowseProps) {
             {entry.name}
           </CurrentLink>
         ))}
-      </div>
+      </nav>
 
       {sections.map((entry) => (
         <section key={entry.id}>

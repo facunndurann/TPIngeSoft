@@ -43,7 +43,7 @@ export function OrderTicket({ order }: { order: PosOrder }) {
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 flex-[1_1_8rem]">
           <p className="text-sm font-semibold text-neutral-900 break-words">{place}</p>
-          <p className="text-xs text-neutral-500 break-words">
+          <p className="text-xs text-muted break-words">
             {submitter} · <Elapsed since={order.created_at} precision="exact" />
           </p>
         </div>
@@ -70,7 +70,7 @@ export function OrderTicket({ order }: { order: PosOrder }) {
       )}
 
       <div className="mt-3 flex items-center justify-between text-sm">
-        <span className="text-neutral-500">Total</span>
+        <span className="text-muted">Total</span>
         <strong className="text-neutral-900">{formatPrice(order.total_amount)}</strong>
       </div>
 

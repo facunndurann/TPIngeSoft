@@ -503,12 +503,16 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; }
   z-index: 1;
   pointer-events: none;
 }
+/* El punto activo lleva aria-pressed: sin anular el radio y la sombra de `button` y de
+   `button[aria-pressed=true]`, se le dibujaba un recuadro del color de acento alrededor. */
 .carousel-dots .dot {
   width: 24px;
   height: 24px;
   min-height: auto;
   padding: 0;
   border: none;
+  border-radius: 50%;
+  box-shadow: none;
   background: transparent;
   display: grid;
   place-items: center;

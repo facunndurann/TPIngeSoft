@@ -8,6 +8,7 @@ import {
 import { ErrorText } from '@restaurant-platform/ui'
 import { addGuestParticipant, type loadOrders } from '@/features/orders-api'
 import { useTable } from '@/features/table-context'
+import { useReturnFocus } from '@/hooks/useReturnFocus'
 
 type Order = Awaited<ReturnType<typeof loadOrders>>[number]
 
@@ -23,10 +24,13 @@ type AddGuestProps = {
  */
 export function AddGuest(props: AddGuestProps) {
   const [open, setOpen] = useState(false)
+  // Al abrir, el foco va al nombre (autoFocus del formulario); al cerrar, con
+  // «Cancelar» o ya creado el invitado, vuelve a este botón.
+  const opener = useReturnFocus(open)
 
   if (!open) {
     return (
-      <button type="button" className="text-button" onClick={() => setOpen(true)}>
+      <button ref={opener} type="button" className="text-button" onClick={() => setOpen(true)}>
         Agregar invitado a la cuenta
       </button>
     )
@@ -75,6 +79,8 @@ function GuestForm({
         className="wide"
         aria-label="Nombre del invitado"
         placeholder="Nombre"
+        // El botón que abrió el formulario ya no existe: el foco sigue acá.
+        autoFocus
         maxLength={PARTICIPANT_NAME_MAX_LENGTH}
         value={name}
         disabled={add.isPending}

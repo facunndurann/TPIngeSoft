@@ -8,6 +8,7 @@ import {
   tablePlacement,
   type TableSpan,
 } from '@restaurant-platform/shared'
+import { Users } from 'lucide-react'
 import { FloorGrid } from '@restaurant-platform/ui'
 import type { FloorTable } from '@/queries/floor'
 import { OVERLAP_MESSAGE, overlapsAt } from './placement'
@@ -185,7 +186,6 @@ export function FloorCanvas({
         ariaLabel="Plano del sector"
         emptyMessage="Este sector todavía no tiene mesas."
         preview={previewOf}
-        editable={editable}
         renderTable={(table, tile) => {
           const active = gesture?.tableId === table.id
           const invalid = active && !gesture.valid
@@ -201,8 +201,10 @@ export function FloorCanvas({
                 onPointerUp={() => endGesture(table)}
                 onPointerCancel={() => setGesture(null)}
                 onKeyDown={(event) => handleKeyDown(event, table)}
+                // Editando, el toque que empieza sobre una mesa es para arrastrarla
+                // (`touch-none`); el que empieza en la grilla vacía desplaza el plano.
                 className={`absolute flex flex-col items-center justify-center overflow-hidden border-2 text-center transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
-                  editable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
+                  editable ? 'cursor-grab touch-none active:cursor-grabbing' : 'cursor-pointer'
                 } ${tile.shapeClass} ${
                   invalid
                     ? 'border-red-500 bg-red-50 text-red-700'
@@ -218,7 +220,13 @@ export function FloorCanvas({
                 }`}
               >
                 <span className="px-1 text-xs leading-tight font-semibold">{table.label}</span>
-                <span className="text-[10px] leading-tight opacity-70">{table.seats} lug.</span>
+                {/* Los lugares con ícono, como en el plano del POS: «12 lug.» a 12px no entra
+                    en una mesa de una celda (38px). A contraste pleno y sin opacidad: se
+                    distingue del nombre por el peso. El número entero ya está en el aria-label. */}
+                <span className="inline-flex items-center gap-0.5 text-xs leading-tight">
+                  <Users size={12} aria-hidden="true" />
+                  {table.seats}
+                </span>
               </button>
 
               {/* Manija de tamaño: solo sobre la mesa elegida, para no ensuciar el plano.
@@ -231,7 +239,7 @@ export function FloorCanvas({
                   onPointerMove={(event) => resizeTo(event, table)}
                   onPointerUp={() => endGesture(table)}
                   onPointerCancel={() => setGesture(null)}
-                  className="absolute h-3.5 w-3.5 cursor-se-resize rounded-sm border-2 border-white bg-primary shadow"
+                  className="absolute h-3.5 w-3.5 cursor-se-resize touch-none rounded-sm border-2 border-white bg-primary shadow"
                   style={{
                     left: tile.box.left + tile.box.width - 4,
                     top: tile.box.top + tile.box.height - 4,

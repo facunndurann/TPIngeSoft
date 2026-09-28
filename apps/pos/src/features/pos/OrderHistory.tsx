@@ -55,7 +55,7 @@ export function OrderHistory() {
     <div className="space-y-4">
       <div>
         <h1 className="text-xl font-bold text-neutral-900">Historial del día</h1>
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-muted">
           Pedidos del {formatLongDate(dateKey)}, con detalle de modificaciones y totales.
         </p>
       </div>
@@ -82,11 +82,15 @@ export function OrderHistory() {
             </option>
           ))}
         </Select>
+        {/* El placeholder se borra al escribir y no todos los lectores lo leen como
+            nombre: el campo lleva el suyo, igual que la fecha y el estado. */}
         <Input
+          type="search"
           className="min-w-56 flex-1"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Buscar mesa, producto o comensal"
+          aria-label="Buscar pedidos por mesa, producto o comensal"
         />
       </div>
 
@@ -96,7 +100,7 @@ export function OrderHistory() {
           const totals = totalsOf(filtered)
           return (
             <>
-              <p className="text-sm text-neutral-600">
+              <p className="text-sm text-muted">
                 {countLabel(totals.count, 'pedido')} · {formatPrice(totals.amount)} en cuenta (sin
                 cancelados)
               </p>
@@ -105,7 +109,7 @@ export function OrderHistory() {
               ) : (
                 <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
                   <table className="w-full min-w-[40rem] text-left text-sm">
-                    <thead className="border-b border-neutral-200 bg-neutral-50 text-xs uppercase tracking-wide text-neutral-500">
+                    <thead className="border-b border-neutral-200 bg-neutral-50 text-xs uppercase tracking-wide text-muted">
                       <tr>
                         <th className="px-4 py-3 font-medium">Hora</th>
                         <th className="px-4 py-3 font-medium">Mesa</th>
@@ -137,7 +141,7 @@ export function OrderHistory() {
                               <span className="sr-only">, pedido de las {formatClock(order.created_at)}</span>
                             </button>
                           </td>
-                          <td className="px-4 py-3 text-neutral-600">
+                          <td className="px-4 py-3 text-muted">
                             {order.order_items
                               .map((item) => `${item.quantity} × ${item.product_name}`)
                               .join(', ')}
@@ -175,7 +179,7 @@ function HistoryDetail({ order }: { order: PosOrder }) {
         <OrderStatusBadge status={order.status} />
         <span className="font-semibold">{formatPrice(order.total_amount)}</span>
       </div>
-      <p className="text-xs text-neutral-500">#{order.id.slice(0, 8)}</p>
+      <p className="text-xs text-muted">#{order.id.slice(0, 8)}</p>
       {order.order_items.map((item) => (
         <div key={item.id} className="rounded-lg border border-neutral-200 px-3 py-2">
           <OrderItemLine order={order} item={item} withPrices />

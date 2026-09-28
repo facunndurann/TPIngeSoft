@@ -18,7 +18,7 @@ export function ActiveTables() {
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-bold text-neutral-900">Mesas activas</h1>
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-muted">
           Mesas que llamaron, consumo acumulado, estado de pago y cierre manual de mesas. El cobro
           digital corresponde a la siguiente fase; los cobros presenciales se registran desde la comanda.
         </p>
@@ -78,7 +78,7 @@ export function ActiveTables() {
                         <div className="flex items-start justify-between gap-2">
                           <div>
                             <p className="font-semibold text-neutral-900">{session.table_label}</p>
-                            <p className="text-xs text-neutral-500">
+                            <p className="text-xs text-muted">
                               {countLabel(session.participant_names.length, 'comensal', 'comensales')} ·{' '}
                               <Elapsed since={session.opened_at} precision="exact" />
                             </p>
@@ -90,7 +90,7 @@ export function ActiveTables() {
                             </Badge>
                           )}
                         </div>
-                        <p className="text-xs text-neutral-500 break-words">
+                        <p className="text-xs text-muted break-words">
                           {session.participant_names.join(' · ') || 'Sin nombres'}
                         </p>
                         <SessionRequestBadges session={session} />
@@ -99,25 +99,25 @@ export function ActiveTables() {
                         {session.total_amount !== null && (
                           <dl className="grid grid-cols-2 gap-2 text-xs">
                             <div>
-                              <dt className="text-neutral-500">Por confirmar</dt>
+                              <dt className="text-muted">Por confirmar</dt>
                               <dd className="font-medium text-neutral-900">
                                 {formatPrice(session.submitted_amount)}
                               </dd>
                             </div>
                             <div>
-                              <dt className="text-neutral-500">En cuenta</dt>
+                              <dt className="text-muted">En cuenta</dt>
                               <dd className="font-medium text-neutral-900">
                                 {formatPrice(session.total_amount)}
                               </dd>
                             </div>
                             <div>
-                              <dt className="text-neutral-500">Pagado</dt>
+                              <dt className="text-muted">Pagado</dt>
                               <dd className="font-medium text-neutral-900">
                                 {formatPrice(session.paid_amount)}
                               </dd>
                             </div>
                             <div>
-                              <dt className="text-neutral-500">Pendiente</dt>
+                              <dt className="text-muted">Pendiente</dt>
                               <dd className="font-medium text-neutral-900">
                                 {formatPrice(session.pending_amount)}
                               </dd>
@@ -150,7 +150,7 @@ export function ActiveTables() {
                       <li key={table.id}>
                         <Link
                           to={`/salon/${table.id}`}
-                          className="flex min-h-11 items-center rounded-lg border border-dashed border-neutral-300 bg-white px-3 text-sm text-neutral-600 hover:border-indigo-400 hover:text-indigo-700"
+                          className="flex min-h-11 items-center rounded-lg border border-dashed border-neutral-300 bg-white px-3 text-sm text-muted hover:border-indigo-400 hover:text-indigo-700"
                         >
                           {table.label}
                         </Link>
