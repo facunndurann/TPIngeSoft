@@ -118,7 +118,7 @@ export function FloorMap() {
                 </div>
                 <p className="inline-flex items-center gap-1.5 text-xs text-neutral-500">
                   <Move size={14} aria-hidden="true" />
-                  Deslizá para recorrer · tocá una mesa para ver su comanda
+                  Deslizá para recorrer · tocá una mesa para ver su resumen
                 </p>
               </div>
               <StateLegend />
