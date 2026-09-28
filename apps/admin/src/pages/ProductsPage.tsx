@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
-import { formatPrice, productMedia, type Tables } from '@restaurant-platform/shared'
+import { formatPrice, productMedia, SOLD_OUT_LABEL, type Tables } from '@restaurant-platform/shared'
 import { Page } from '@/features/Page'
 import { MediaThumb } from '@/features/MediaThumb'
 import { optimistic } from '@/lib/optimistic'
@@ -18,6 +18,7 @@ import {
   QueryView,
   Toggle,
   iconButtonClass,
+  useConfirm,
   useSaveErrors,
 } from '@restaurant-platform/ui'
 
@@ -26,6 +27,7 @@ export function ProductsPage() {
   const queryClient = useQueryClient()
   const [categoryFilter, setCategoryFilter] = useState<string | 'all'>('all')
   const errors = useSaveErrors()
+  const { confirm, dialog } = useConfirm()
 
   const categories = useQuery(productsByCategoryQuery(restaurant.id))
 
@@ -111,8 +113,13 @@ export function ProductsPage() {
                             onAvailabilityChange={(value) =>
                               availabilityMutation.mutate({ id: product.id, is_available: value })
                             }
-                            onDelete={() => {
-                              if (confirm(`¿Eliminar "${product.name}"?`)) deleteMutation.mutate(product.id)
+                            onDelete={async () => {
+                              const confirmed = await confirm({
+                                title: `¿Eliminar "${product.name}"?`,
+                                message: 'Deja de aparecer en la carta. Los pedidos ya hechos lo conservan.',
+                                confirmLabel: 'Eliminar producto',
+                              })
+                              if (confirmed) deleteMutation.mutate(product.id)
                             }}
                           />
                         ))}
@@ -125,6 +132,7 @@ export function ProductsPage() {
           )
         }}
       </QueryView>
+      {dialog}
     </Page>
   )
 }
@@ -151,7 +159,7 @@ function ProductRow({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <p className="truncate text-sm font-medium text-neutral-900">{product.name}</p>
-            {!product.is_available && <Badge color="red">Sin stock</Badge>}
+            {!product.is_available && <Badge color="red">{SOLD_OUT_LABEL}</Badge>}
           </div>
           <p className="text-xs text-muted">{formatPrice(product.base_price)}</p>
         </div>

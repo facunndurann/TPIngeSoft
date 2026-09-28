@@ -6,13 +6,7 @@ import { usePosScope } from '@/context/pos-context'
 import { IconButton, QueryView } from '@restaurant-platform/ui'
 import { posBoardQuery } from './queries'
 import { OrderTicket } from './OrderTicket'
-
-const columnStyles: Record<PosBoardColumnId, string> = {
-  new: 'border-amber-200 bg-amber-50',
-  in_preparation: 'border-indigo-200 bg-indigo-50',
-  ready: 'border-green-200 bg-green-50',
-  delivered: 'border-neutral-200 bg-neutral-50',
-}
+import { boardColumnStyles } from './status-colors'
 
 /** La columna que se puede plegar: la que menos se consulta durante el servicio. */
 const COLLAPSIBLE: PosBoardColumnId = 'delivered'
@@ -53,7 +47,7 @@ export function CommandBoard() {
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div>
         <h1 className="text-xl font-bold text-neutral-900">Comandas</h1>
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-muted">
           Pedidos en vivo. Los cambios se reflejan en la mesa del comensal.
         </p>
       </div>
@@ -74,7 +68,7 @@ export function CommandBoard() {
                   <section
                     key={column.id}
                     aria-label={column.label}
-                    className={`flex shrink-0 flex-col rounded-xl border ${columnStyles[column.id]} ${
+                    className={`flex shrink-0 flex-col rounded-xl border ${boardColumnStyles[column.id]} ${
                       collapsed ? 'w-16 items-center p-2' : 'w-72 p-3 lg:w-auto lg:min-w-0 lg:flex-1'
                     }`}
                   >
@@ -85,7 +79,7 @@ export function CommandBoard() {
                       <h2 className={`text-sm font-semibold text-neutral-800 ${collapsed ? 'order-2 [writing-mode:vertical-rl]' : ''}`}>
                         {column.label}
                       </h2>
-                      <span className={`rounded-full bg-white px-2 py-0.5 text-xs font-medium text-neutral-600 ${collapsed ? 'order-3' : 'ml-auto'}`}>
+                      <span className={`rounded-full bg-white px-2 py-0.5 text-xs font-medium text-muted ${collapsed ? 'order-3' : 'ml-auto'}`}>
                         {orders.length}
                       </span>
                       {/* Es el mismo botón abierta y plegada, en el mismo lugar del
@@ -106,7 +100,7 @@ export function CommandBoard() {
                     {!collapsed && (
                       <div id={listId} className="flex-1 space-y-3 overflow-y-auto pr-0.5">
                         {orders.length === 0 && (
-                          <p className="rounded-lg border border-dashed border-neutral-300 bg-white px-3 py-6 text-center text-xs text-neutral-500">
+                          <p className="rounded-lg border border-dashed border-neutral-300 bg-white px-3 py-6 text-center text-xs text-muted">
                             {column.id === 'new' ? 'No hay pedidos nuevos.' : 'Vacío'}
                           </p>
                         )}

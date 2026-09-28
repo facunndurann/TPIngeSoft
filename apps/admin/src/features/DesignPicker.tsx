@@ -69,8 +69,9 @@ export function DesignPicker({ value, onChange, hint }: DesignPickerProps) {
                       fontFamily: 'var(--menu-font)',
                     }}
                   >
+                    {/* 12px, lo mismo que mide el eyebrow en la carta real (--text-xs). */}
                     <p
-                      className="text-[10px] font-bold tracking-[0.16em]"
+                      className="text-xs font-bold tracking-[0.16em]"
                       style={{ color: 'var(--menu-eyebrow)', fontFamily: 'var(--menu-font-display)' }}
                     >
                       {design.copy.welcome}
@@ -95,13 +96,14 @@ export function DesignPicker({ value, onChange, hint }: DesignPickerProps) {
               </label>
               {/* 32 px como el resto de los controles de ícono, con el ícono en el mismo
                   lugar que antes (a 31 px de la esquina). No usa IconButton porque
-                  toma el color de cada diseño: `faint` no se leería sobre Brasas. */}
+                  toma el color de cada diseño: `faint` no se leería sobre Brasas. En
+                  reposo va en el tono apagado del diseño, medido contra su fondo, y no
+                  con opacidad, que bajaba el contraste sin control. */}
               <button
                 type="button"
                 aria-label={`Vista previa de ${design.name}`}
                 title="Vista previa"
-                className="absolute top-3.75 right-3.75 inline-flex h-8 w-8 items-center justify-center rounded-md cursor-pointer transition-colors opacity-60 hover:opacity-100 hover:bg-black/5"
-                style={{ color: 'var(--menu-text)' }}
+                className="absolute top-3.75 right-3.75 inline-flex h-8 w-8 items-center justify-center rounded-md cursor-pointer text-(--menu-muted) transition-colors hover:bg-black/5 hover:text-(--menu-text)"
                 onClick={() => setPreviewDesign(design)}
               >
                 <Maximize2 size={14} />

@@ -277,6 +277,8 @@ test('text sizes come from one scale, fields are 16px, and what a finger taps is
   assert.match(declarationsOf('.carousel-btn'), /width: 44px;[\s\S]*height: 44px/)
   assert.match(declarationsOf('.carousel-dots .dot'), /width: 24px;[\s\S]*height: 24px/)
   assert.match(declarationsOf('.carousel-dots'), /gap: 4px/)
+  // El punto activo lleva aria-pressed: no hereda el recuadro de lo elegido ni el radio del botón.
+  assert.match(declarationsOf('.carousel-dots .dot'), /border-radius: 50%;[\s\S]*box-shadow: none/)
 })
 
 test('motion respects the system setting, and the toast waits while it is being read', () => {

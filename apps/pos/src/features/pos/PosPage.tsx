@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase'
 import { alertSummary, posAlertCopy, usePosAlerts } from './alerts'
 import { subscribeToRestaurantPos } from './realtime'
 import { posSections } from './sections'
+import { SoundControl } from './SoundControl'
 
 export function PosPage({ multipleContexts }: { multipleContexts: boolean }) {
   const context = usePosContext()
@@ -24,15 +25,19 @@ export function PosPage({ multipleContexts }: { multipleContexts: boolean }) {
   )
 
   return (
-    <main className="min-h-dvh space-y-5 bg-neutral-100 p-4 lg:p-8">
+    <div className="min-h-dvh space-y-5 bg-neutral-100 p-4 lg:p-8">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="font-bold">
+          {/* Dónde se trabaja, no el título de la pantalla: el único h1 es el de cada
+              sección («Comandas», «Salón»…), que es lo que cambia al navegar. */}
+          <p className="font-bold text-neutral-900">
             {context.restaurant_name} · {context.branch_name}
-          </h1>
-          <p className="text-sm text-neutral-600">{context.full_name}</p>
+          </p>
+          <p className="text-sm text-muted">{context.full_name}</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Suena para quien toma las comandas nuevas (ver usePosAlerts): solo ahí se controla. */}
+          {can('orders.prepare') && <SoundControl />}
           {multipleContexts && (
             <Link to="/select-context" className="inline-flex min-h-11 items-center text-sm text-indigo-700">
               Cambiar sucursal
@@ -80,11 +85,15 @@ export function PosPage({ multipleContexts }: { multipleContexts: boolean }) {
         {alertSummary(alerts)}
       </p>
 
-      {/* El salón mira el tablero por horas: un tic cada 30 s alcanza para que
+      {/* El contenido principal es solo la sección: la cabecera y las pestañas
+          quedan afuera, así «saltar al contenido» cae en su h1.
+          El salón mira el tablero por horas: un tic cada 30 s alcanza para que
           los «hace X» no queden viejos y no redibuja de más una pantalla llena. */}
-      <ClockProvider tickMs={30_000}>
-        <Outlet />
-      </ClockProvider>
-    </main>
+      <main>
+        <ClockProvider tickMs={30_000}>
+          <Outlet />
+        </ClockProvider>
+      </main>
+    </div>
   )
 }

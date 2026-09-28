@@ -3,6 +3,7 @@ import {
   itemPriceCents,
   MAX_ITEM_QUANTITY,
   MIN_ITEM_QUANTITY,
+  SOLD_OUT_LABEL,
   type Tables,
 } from '@restaurant-platform/shared'
 
@@ -137,7 +138,7 @@ export function groupRule(group: Pick<ModifierGroup, 'min_select' | 'max_select'
     : min === 0 ? `Opcional · hasta ${max}`
       : min === max ? `Elegí ${max}`
         : `Elegí entre ${min} y ${max}`
-  return group.is_available ? rule : `${rule} · Agotado`
+  return group.is_available ? rule : `${rule} · ${SOLD_OUT_LABEL}`
 }
 
 /**

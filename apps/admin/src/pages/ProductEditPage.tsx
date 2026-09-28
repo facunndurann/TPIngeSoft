@@ -17,6 +17,7 @@ import {
   Textarea,
   Toggle,
   useSaveErrors,
+  useToast,
 } from '@restaurant-platform/ui'
 import { categoriesQuery } from '@/queries/categories'
 import { modifierGroupsQuery, type ModifierGroupWithOptions } from '@/queries/modifier-groups'
@@ -24,6 +25,7 @@ import { productQuery, productsByCategoryQuery, saveProduct } from '@/queries/pr
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { MediaUploader } from '@/features/MediaUploader'
 import { Page } from '@/features/Page'
+import { UnsavedChangesGuard } from '@/features/UnsavedChangesGuard'
 import {
   draftFrom,
   emptyDraft,
@@ -92,12 +94,16 @@ function ProductForm({ productId, initial, categories, groups }: ProductFormProp
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const errors = useSaveErrors()
+  const toast = useToast()
   const dietaryLabelId = useId()
 
   // Un solo estado, inicializado con lo que ya llegó: no hay paso intermedio.
+  // Cada cambio arma un borrador nuevo, así que distinto del inicial es «editado».
   const [draft, setDraft] = useState(initial)
   const patch = (changes: Partial<ProductDraft>) =>
     setDraft((current) => ({ ...current, ...changes }))
+  // Ya guardado, volver a la lista no pierde nada: el guard se apaga antes de navegar.
+  const [saved, setSaved] = useState(false)
 
   // Los errores de cada campo aparecen recién al intentar guardar; desde ahí se
   // recalculan con cada cambio, así el campo corregido deja de marcarse solo.
@@ -111,12 +117,16 @@ function ProductForm({ productId, initial, categories, groups }: ProductFormProp
 
   const save = useMutation(errors.saving('No pudimos guardar el producto.', {
     mutationFn: (payload: ProductPayload) => saveProduct({ restaurantId: restaurant.id, productId, payload }),
-    onSuccess: async (savedId) => {
+    onSuccess: async (savedId, payload) => {
       // Las dos cachés son independientes: no hay razón para encadenarlas.
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: productsByCategoryQuery(restaurant.id).queryKey }),
         queryClient.invalidateQueries({ queryKey: productQuery(savedId).queryKey }),
       ])
+      // La lista no dice por sí sola que el guardado salió: lo dice el aviso.
+      toast(productId ? `Guardamos los cambios de «${payload.name.trim()}».` : `Creamos «${payload.name.trim()}».`)
+      // Síncrono: el router tiene que ver el guard ya apagado cuando llega el navigate.
+      flushSync(() => setSaved(true))
       navigate('/productos')
     },
   }))
@@ -145,6 +155,7 @@ function ProductForm({ productId, initial, categories, groups }: ProductFormProp
 
   return (
     <>
+      <UnsavedChangesGuard when={draft !== initial && !saved} />
       <section className="space-y-4 rounded-xl border border-neutral-200 bg-white p-5">
         <h2 className="font-semibold text-neutral-900">Información básica</h2>
         <Field label="Nombre" error={errorFor('name')}>

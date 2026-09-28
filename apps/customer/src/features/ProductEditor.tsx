@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { dietaryTagsText, formatPrice, productMedia } from '@restaurant-platform/shared'
+import { dietaryTagsText, formatPrice, formatPriceDelta, productMedia, SOLD_OUT_LABEL } from '@restaurant-platform/shared'
 import { QuantityField } from '@/components/QuantityField'
 import { MediaCarousel } from '@/features/MediaCarousel'
 import { groupRule, isSingleChoice, price, selectedInGroup, selectionIssues } from '@/features/menu'
@@ -181,7 +181,7 @@ function IngredientsFieldset({
       )}
       {ingredients.map((ingredient) => {
         const included = !removedIds.includes(ingredient.id)
-        const notes = [!ingredient.is_available && 'Agotado', !ingredient.is_removable && 'No se puede quitar']
+        const notes = [!ingredient.is_available && SOLD_OUT_LABEL, !ingredient.is_removable && 'No se puede quitar']
           .filter(Boolean)
           .join(' · ')
         return (
@@ -279,6 +279,5 @@ function GroupFieldset({
 }
 
 function optionNote(option: ModifierOption) {
-  if (!option.is_available) return 'Agotado'
-  return option.price_delta === 0 ? 'Sin cargo' : formatPrice(option.price_delta)
+  return option.is_available ? formatPriceDelta(option.price_delta) : SOLD_OUT_LABEL
 }

@@ -54,7 +54,7 @@ export function MobilePayment({ sessionId, ...account }: MobilePaymentProps) {
   }
 
   return (
-    <div className="bill-panel" aria-label="Pago electrónico">
+    <section className="bill-panel" aria-label="Pago electrónico">
       <h3>Pagar desde el celular</h3>
       {plan.items.length > 0 && (
         <fieldset className="payment-items" disabled={account.closed || plan.step.kind === 'pending'}>
@@ -96,7 +96,7 @@ export function MobilePayment({ sessionId, ...account }: MobilePaymentProps) {
         onConfirm={(paymentId, outcome) => confirm.mutate({ paymentId, outcome })}
       />
       <ErrorText variant="menu" error={start.error ?? confirm.error} />
-    </div>
+    </section>
   )
 }
 

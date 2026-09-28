@@ -7,7 +7,14 @@ import { MemoryRouter } from 'react-router'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { AccessContext, scopeOf, type PosContext } from './context/pos-context'
 import { FloorMap } from './features/pos/FloorMap'
-import { posFloorSectionsQuery, posOpenSessionsQuery, posTablesQuery } from './features/pos/queries'
+import { OrderItemLine } from './features/pos/OrderItemLine'
+import {
+  posFloorSectionsQuery,
+  posOpenSessionsQuery,
+  posTablesQuery,
+  type PosOrder,
+  type PosOrderItem,
+} from './features/pos/queries'
 import { createPosQueryClient } from './lib/query-client'
 
 /** Los .tsx de una carpeta, recorrida entera. */
@@ -32,6 +39,31 @@ test('nothing the POS draws is smaller than 12px or faded with opacity', () => {
     .filter(({ file }) => file.includes('/apps/pos/'))
     .flatMap(({ file, text }) => [...text.matchAll(/(?<![:\w-])opacity-\d+/g)].map(([match]) => `${file}: ${match}`))
   assert.deepEqual(faded, [])
+})
+
+test('secondary text in the POS takes its gray from the muted role, never from the scale', () => {
+  // `text-neutral-500` sobre el fondo del POS (neutral-100) da 4,35:1, debajo del
+  // 4,5:1 que pide el texto. `text-muted` está medido en theme.css: 7,2:1. Los
+  // estados (`hover:`, `disabled:`…) quedan libres, igual que en el admin.
+  const raw = sourcesUnder(join(__dirname)).flatMap(({ file, text }) =>
+    [...text.matchAll(/(?<![\w:/[-])text-neutral-(?:400|500|600)(?![\w-])/g)].map(([match]) => `${file}: ${match}`),
+  )
+  assert.deepEqual(raw, [])
+})
+
+test('on a kitchen ticket what changes the dish reads at dish size, and what is taken out stands out', () => {
+  const order = { submitted_by: null, table_sessions: { session_participants: [] } } as unknown as PosOrder
+  const item = {
+    id: 'item-1', quantity: 1, product_name: 'Hamburguesa', is_shared: true, participant_id: null,
+    order_item_modifiers: [{ id: 'modifier-1', group_name: 'Extras', option_name: 'Cheddar', price_delta: 500 }],
+    order_item_removed_ingredients: [{ id: 'removed-1', ingredient_name: 'Cebolla' }],
+  } as unknown as PosOrderItem
+
+  const html = renderToStaticMarkup(<OrderItemLine order={order} item={item} />)
+
+  assert.match(html, /<p class="text-sm [^"]*">\+ Extras: Cheddar<\/p>/)
+  // Lo que se saca no se distingue solo por el rojo: también por el peso y la palabra «Sin».
+  assert.match(html, /<p class="text-sm font-semibold text-red-800">Sin Cebolla<\/p>/)
 })
 
 const cashier: PosContext = {

@@ -1,8 +1,9 @@
-import { type FormEvent, useState } from 'react'
+import { type FormEvent, useId, useState } from 'react'
 import { ErrorText } from '@restaurant-platform/ui'
 import { plateCount } from '@/features/cart'
 import { NameInput } from '@/features/NameInput'
 import { useTable } from '@/features/table-context'
+import { useReturnFocus } from '@/hooks/useReturnFocus'
 import type { RenameField } from '@/hooks/useTableSession'
 import { useCart } from '@/stores/cart'
 
@@ -63,6 +64,8 @@ export function SessionPanel({ connecting, connection, rename, onOpenNewSession 
   const canRename = named && !closed
   // Mientras hay un envío sin resolver el nombre queda como está (el diálogo de la mesa sigue la misma regla).
   const canSaveName = rename.canSubmit && !hasPendingSubmission
+  // Guardado o cancelado el nombre, el formulario se va con el foco: vuelve al lápiz.
+  const editNameButton = useReturnFocus(rename.editing)
 
   function handleRename(event: FormEvent) {
     event.preventDefault()
@@ -117,6 +120,7 @@ export function SessionPanel({ connecting, connection, rename, onOpenNewSession 
                 <strong>{me.display_name}</strong>
                 {canRename && (
                   <button
+                    ref={editNameButton}
                     type="button"
                     className="icon-button edit-name"
                     aria-label="Editar nombre"
@@ -159,6 +163,9 @@ function ClosedSessionNotice({
   onOpenNewSession: () => void
 }) {
   const [confirming, setConfirming] = useState(false)
+  // «Seguir en esta cuenta» cierra la confirmación: el foco vuelve a «Empezar de nuevo».
+  const startOverButton = useReturnFocus(confirming)
+  const warningId = useId()
   const plates = plateCount(cartCount)
 
   const message = hasPendingSubmission
@@ -172,12 +179,16 @@ function ClosedSessionNotice({
   if (confirming) {
     return (
       <div className="notice">
-        <p>
+        <p id={warningId}>
           Si empezás de nuevo, se descartan los {plates} que todavía no enviaste. No vas a poder
           recuperarlos.
         </p>
         <div className="cart-actions">
-          <button onClick={() => setConfirming(false)}>Seguir en esta cuenta</button>
+          {/* El botón que abrió la confirmación ya no está: el foco pasa a la opción que
+              no pierde nada, y el aviso la describe, así se oye qué se descarta antes de elegir. */}
+          <button autoFocus aria-describedby={warningId} onClick={() => setConfirming(false)}>
+            Seguir en esta cuenta
+          </button>
           <button className="primary" onClick={onOpenNewSession}>
             Descartar y empezar de nuevo
           </button>
@@ -190,6 +201,7 @@ function ClosedSessionNotice({
     <div className="notice">
       <p>La mesa cerró su cuenta. Podés seguir consultando sus pedidos. {message}</p>
       <button
+        ref={startOverButton}
         disabled={hasPendingSubmission}
         onClick={() => (cartCount > 0 ? setConfirming(true) : onOpenNewSession())}
       >

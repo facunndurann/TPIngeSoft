@@ -31,3 +31,22 @@ test('the remembered table survives only as three usable strings', () => {
   }
   globalThis.localStorage.removeItem('customer-last-table')
 })
+
+test('the way back to the last table is a real button, on the landing and on a broken link', async () => {
+  const { createElement } = await import('react')
+  const { renderToStaticMarkup } = await import('react-dom/server')
+  const { MemoryRouter } = await import('react-router')
+  const { LandingPage } = await import('../src/pages/LandingPage')
+
+  rememberTable({ token: 'qr-1', tableLabel: 'Mesa 4', restaurantName: 'La Parrilla' })
+  try {
+    for (const notFound of [false, true]) {
+      const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(LandingPage, { notFound })))
+      // `primary` solo pinta: sin `btn` el enlace no tiene padding, radio ni los 44px de alto.
+      const link = /<a [^>]*href="\/m\/qr-1"[^>]*>/.exec(html)?.[0] ?? ''
+      assert.match(link, /class="btn primary"/, notFound ? 'not found' : 'landing')
+    }
+  } finally {
+    globalThis.localStorage.removeItem('customer-last-table')
+  }
+})

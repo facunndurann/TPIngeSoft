@@ -1,6 +1,6 @@
 import { Link, useLocation, useSearchParams } from 'react-router'
 import { CurrentLink } from '@/components/CurrentLink'
-import { dietaryTagsText, formatPrice, productMedia } from '@restaurant-platform/shared'
+import { dietaryTagsText, formatPrice, productMedia, SOLD_OUT_LABEL } from '@restaurant-platform/shared'
 import { MediaThumb } from '@/features/MediaCarousel'
 import { useMenuDesign } from '@/features/menu-design'
 import { matchesSearch } from '@/features/menu'
@@ -49,7 +49,9 @@ export function MenuBrowse({ token, menu }: MenuBrowseProps) {
         />
       </div>
 
-      <div className="categories" aria-label="Categorías">
+      {/* Enlaces que llevan a otra vista de la carta: es navegación, y con `nav` el
+          nombre «Categorías» se anuncia (en un div sin rol el aria-label se ignora). */}
+      <nav className="categories" aria-label="Categorías">
         <CurrentLink to={menuPath(token, 'all', search)} current={category === 'all'}>
           Todo
         </CurrentLink>
@@ -62,7 +64,7 @@ export function MenuBrowse({ token, menu }: MenuBrowseProps) {
             {entry.name}
           </CurrentLink>
         ))}
-      </div>
+      </nav>
 
       {sections.map((entry) => (
         <section key={entry.id}>
@@ -101,7 +103,7 @@ function ProductCard({ product, to }: { product: Product; to: string }) {
         <p>{product.description}</p>
         {product.dietary_tags.length > 0 && <small>{dietaryTagsText(product.dietary_tags)}</small>}
         <strong>{formatPrice(product.base_price)}</strong>
-        {!product.is_available && <span className="unavailable">Agotado</span>}
+        {!product.is_available && <span className="unavailable">{SOLD_OUT_LABEL}</span>}
       </div>
       <MediaThumb media={productMedia(product)} />
     </article>

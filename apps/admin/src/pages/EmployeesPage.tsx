@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   employeeRoleLabels,
@@ -9,7 +10,7 @@ import {
   type EmployeeRequest,
   type EmployeeRole,
 } from '@restaurant-platform/shared'
-import { Badge, Button, ErrorText, Field, Input, Modal, QueryView, Select } from '@restaurant-platform/ui'
+import { Badge, Button, ErrorText, Field, Input, Modal, QueryView, Select, useToast } from '@restaurant-platform/ui'
 import { Page } from '@/features/Page'
 import { auditActionLabel, auditActorLabel } from '@/features/employees/audit'
 import { branchesQuery } from '@/queries/branches'
@@ -27,6 +28,7 @@ import { useMembership } from '@/restaurant/restaurant-context'
 export function EmployeesPage() {
   const { restaurant, role } = useMembership()
   const queryClient = useQueryClient()
+  const toast = useToast()
   const [editing, setEditing] = useState<Employee | 'new' | null>(null)
   const [resetting, setResetting] = useState<Employee | null>(null)
 
@@ -86,7 +88,9 @@ export function EmployeesPage() {
           restaurantId={restaurant.id}
           owner={role === 'owner'}
           onClose={() => setEditing(null)}
-          onSaved={() => {
+          // El modal se cierra al guardar: sin el aviso, no queda señal de que salió.
+          onSaved={(name) => {
+            toast(editing === 'new' ? `Agregamos a ${name} al equipo.` : `Guardamos los cambios de ${name}.`)
             setEditing(null)
             void invalidate()
           }}
@@ -98,6 +102,7 @@ export function EmployeesPage() {
           restaurantId={restaurant.id}
           onClose={() => setResetting(null)}
           onSaved={() => {
+            toast(`Restablecimos la contraseña de ${resetting.full_name}.`)
             setResetting(null)
             void invalidate()
           }}
@@ -153,7 +158,8 @@ function EmployeeForm({
   restaurantId: string
   owner: boolean
   onClose: () => void
-  onSaved: () => void
+  /** Guardado: recibe el nombre visible, para el aviso. */
+  onSaved: (name: string) => void
 }) {
   const [fullName, setFullName] = useState(employee?.full_name ?? '')
   const [username, setUsername] = useState('')
@@ -185,7 +191,30 @@ function EmployeeForm({
       : { action: 'create', username, password, ...access }
   }
 
-  const save = useMutation({ mutationFn: () => changeEmployee(request()), onSuccess: onSaved })
+  const save = useMutation({ mutationFn: () => changeEmployee(request()), onSuccess: () => onSaved(fullName.trim()) })
+
+  // Roles y sucursales no los cubre la validación del navegador (son casillas
+  // sueltas): se revisan al guardar y el motivo queda debajo de cada grupo, en vez
+  // de un «Guardar» apagado que no dice por qué. Igual que el formulario de producto.
+  const rolesId = useId()
+  const branchesId = useId()
+  const [attempted, setAttempted] = useState(false)
+  const missing: { roles?: string; branches?: string } = {
+    roles: roles.length === 0 ? 'Elegí al menos un rol.' : undefined,
+    branches: branchIds.length === 0 ? 'Elegí al menos una sucursal donde trabaja.' : undefined,
+  }
+  const shown: typeof missing = attempted ? missing : {}
+
+  function submit() {
+    const firstMissing = missing.roles ? rolesId : missing.branches ? branchesId : null
+    if (!firstMissing) {
+      save.mutate()
+      return
+    }
+    // El error tiene que estar en el DOM antes del foco, así se anuncia con el grupo.
+    flushSync(() => setAttempted(true))
+    document.getElementById(firstMissing)?.focus()
+  }
 
   function linkAccount(id: string) {
     setExistingId(id)
@@ -206,7 +235,7 @@ function EmployeeForm({
         onChange={() => setEdited(true)}
         onSubmit={(event) => {
           event.preventDefault()
-          save.mutate()
+          submit()
         }}
       >
         {!employee && (
@@ -231,7 +260,10 @@ function EmployeeForm({
         </Field>
         {!employee && !existingId && (
           <>
-            <Field label="Usuario global">
+            <Field
+              label="Usuario global"
+              hint="Con él ingresa al POS. De 3 a 32 caracteres: letras, números, puntos, guiones o guiones bajos."
+            >
               <Input
                 autoComplete="off"
                 value={username}
@@ -241,7 +273,7 @@ function EmployeeForm({
                 required
               />
             </Field>
-            <Field label="Contraseña inicial">
+            <Field label="Contraseña inicial" hint="Mínimo 10 caracteres.">
               <Input
                 type="password"
                 autoComplete="new-password"
@@ -254,7 +286,12 @@ function EmployeeForm({
             </Field>
           </>
         )}
-        <fieldset>
+        <fieldset
+          id={rolesId}
+          tabIndex={-1}
+          aria-describedby={shown.roles ? `${rolesId}-error` : undefined}
+          className="rounded-lg"
+        >
           <legend className="mb-2 text-sm font-medium">Roles</legend>
           <div className="flex flex-wrap gap-3">
             {/* Solo el dueño puede nombrar gestores. */}
@@ -271,8 +308,18 @@ function EmployeeForm({
                 </label>
               ))}
           </div>
+          {shown.roles && (
+            <p id={`${rolesId}-error`} className="mt-1 text-xs text-red-700">
+              {shown.roles}
+            </p>
+          )}
         </fieldset>
-        <fieldset>
+        <fieldset
+          id={branchesId}
+          tabIndex={-1}
+          aria-describedby={shown.branches ? `${branchesId}-error` : undefined}
+          className="rounded-lg"
+        >
           <legend className="mb-2 text-sm font-medium">Sucursales habilitadas</legend>
           <div className="flex flex-wrap gap-3">
             {branches.data?.map((branch) => (
@@ -292,6 +339,11 @@ function EmployeeForm({
               </label>
             ))}
           </div>
+          {shown.branches && (
+            <p id={`${branchesId}-error`} className="mt-1 text-xs text-red-700">
+              {shown.branches}
+            </p>
+          )}
         </fieldset>
         {legacy.data && legacy.data.length > 0 && (
           <Field label="Vincular registro de empleado anterior (opcional)">
@@ -314,9 +366,7 @@ function EmployeeForm({
           restaurantes.
         </p>
         <ErrorText error={save.error ?? (loadFailed ? 'No pudimos cargar los datos del formulario.' : null)} />
-        <Button disabled={save.isPending || !roles.length || !branchIds.length}>
-          {save.isPending ? 'Guardando…' : 'Guardar'}
-        </Button>
+        <Button disabled={save.isPending}>{save.isPending ? 'Guardando…' : 'Guardar'}</Button>
       </form>
     </Modal>
   )
@@ -354,7 +404,7 @@ function ResetPasswordModal({
           reset.mutate()
         }}
       >
-        <Field label="Nueva contraseña">
+        <Field label="Nueva contraseña" hint="Mínimo 10 caracteres.">
           <Input
             type="password"
             autoComplete="new-password"

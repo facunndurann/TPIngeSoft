@@ -81,7 +81,7 @@ export function PaymentPanel({ sessionId, pendingAmount, enabledMethods }: Payme
     <section className="space-y-3 rounded-xl border border-neutral-200 bg-white p-4" aria-label="Pagos de la cuenta">
       <div>
         <h2 className="text-sm font-semibold text-neutral-800">Pagos de la cuenta</h2>
-        <p className="text-xs text-neutral-500">Sólo los pagos aprobados descuentan del pendiente.</p>
+        <p className="text-xs text-muted">Sólo los pagos aprobados descuentan del pendiente.</p>
       </div>
 
       {can('payments.write') && pending > 0 && recordable.length > 0 && (
@@ -144,7 +144,7 @@ export function PaymentPanel({ sessionId, pendingAmount, enabledMethods }: Payme
         {(payments) =>
           // Una línea y no el recuadro de vacío: el historial es una parte chica del panel.
           payments.length === 0 ? (
-            <p className="text-sm text-neutral-500">Todavía no hay pagos registrados.</p>
+            <p className="text-sm text-muted">Todavía no hay pagos registrados.</p>
           ) : (
             <ul className="divide-y divide-neutral-100 text-sm">
               {payments.map((payment) => (
@@ -153,12 +153,12 @@ export function PaymentPanel({ sessionId, pendingAmount, enabledMethods }: Payme
                     <p className="font-medium text-neutral-900">
                       {formatPrice(payment.amount)} · {paymentStatusLabels[payment.status]}
                     </p>
-                    <p className="text-xs text-neutral-500">
+                    <p className="text-xs text-muted">
                       {paymentMethodLabels[payment.method]} · {paymentModeLabels[payment.mode]}
                       {payment.external_reference ? ` · Ref. ${payment.external_reference}` : ''}
                     </p>
                   </div>
-                  <time className="shrink-0 text-xs text-neutral-500" dateTime={payment.created_at}>
+                  <time className="shrink-0 text-xs text-muted" dateTime={payment.created_at}>
                     {formatTableTime(payment.created_at, now)}
                   </time>
                 </li>

@@ -31,8 +31,9 @@ export function LandingPage({ notFound = false }: { notFound?: boolean }) {
         </>
       )}
 
+      {/* `btn` le da la forma de botón (padding, radio, 44px); `primary`, solo el color. */}
       {table && (
-        <Link className="primary" to={tableRoot(table.token)}>
+        <Link className="btn primary" to={tableRoot(table.token)}>
           Volver a {table.tableLabel} · {table.restaurantName}
         </Link>
       )}

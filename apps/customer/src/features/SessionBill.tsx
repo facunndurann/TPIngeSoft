@@ -96,15 +96,17 @@ export function SessionBill() {
   )
 }
 
+// Los bloques de la cuenta son `section`, como la división y la atención: en un `div`
+// sin rol el aria-label no se anuncia.
 function BillSummary({ bill }: { bill: Bill }) {
   return (
-    <div className="bill-panel" aria-label="Resumen de cuenta">
+    <section className="bill-panel" aria-label="Resumen de cuenta">
       <dl className="bill-due">
         <dt>Falta pagar</dt>
         <dd>{formatPrice(bill.pending_amount ?? 0)}</dd>
       </dl>
       {bill.is_settled && (bill.total_amount ?? 0) > 0 && <p className="settled">Cuenta pagada</p>}
-    </div>
+    </section>
   )
 }
 
@@ -126,7 +128,7 @@ function PaymentHistory({
   if (!payments?.length) return null
 
   return (
-    <div className="bill-panel" aria-label="Historial de pagos">
+    <section className="bill-panel" aria-label="Historial de pagos">
       <h3>Pagos registrados</h3>
       {/* Cada pago en una fila: importe y estado a la izquierda, la hora a la derecha. */}
       <ul className="payment-list">
@@ -146,6 +148,6 @@ function PaymentHistory({
         ))}
       </ul>
       <p className="muted">Los pagos pendientes o rechazados se muestran, pero no reducen el saldo.</p>
-    </div>
+    </section>
   )
 }

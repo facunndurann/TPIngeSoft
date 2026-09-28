@@ -57,12 +57,12 @@ export function TableCommand() {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h1 className="text-xl font-bold text-neutral-900">{table.label}</h1>
-                  <p className="text-sm text-neutral-500">
+                  <p className="text-sm text-muted">
                     {table.floor_sections?.name ?? 'Sin sector'} · {table.seats} lugares
                   </p>
                   {/* Lo que el admin habilitó para esta sucursal (MI-48): es lo que el
                       comensal ve como opción y lo único que se le puede cobrar acá. */}
-                  <p className="text-xs text-neutral-500">
+                  <p className="text-xs text-muted">
                     Medios de pago:{' '}
                     {paymentMethods.length === 0
                       ? 'ninguno habilitado'
@@ -100,7 +100,7 @@ function FreeTable({ tableId }: { tableId: string }) {
 
   return (
     <div className="space-y-3 rounded-xl border border-neutral-200 bg-white p-6 text-center">
-      <p className="text-sm text-neutral-600">
+      <p className="text-sm text-muted">
         La mesa está libre. Al abrir la comanda queda ocupada en el plano y los comensales pueden
         sumarse escaneando el QR.
       </p>
@@ -115,7 +115,7 @@ function FreeTable({ tableId }: { tableId: string }) {
           {openSession.isPending ? 'Abriendo…' : 'Abrir comanda'}
         </Button>
       ) : (
-        <p className="text-sm text-neutral-500">Tu rol no abre comandas. Pedíselo a un mozo o supervisor.</p>
+        <p className="text-sm text-muted">Tu rol no abre comandas. Pedíselo a un mozo o supervisor.</p>
       )}
     </div>
   )
@@ -205,7 +205,7 @@ function BackLink({ to }: { to: string }) {
   return (
     <Link
       to={to}
-      className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-neutral-600 hover:text-indigo-700"
+      className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-muted hover:text-indigo-700"
     >
       <ArrowLeft size={16} />
       Volver al plano

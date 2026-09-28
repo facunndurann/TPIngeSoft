@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { asAmount, countLabel, formatPrice } from '@restaurant-platform/shared'
-import { Button, ErrorText, Modal, useSaveErrors } from '@restaurant-platform/ui'
+import { Button, ConfirmDialog, ErrorText, useSaveErrors } from '@restaurant-platform/ui'
 import { useCan } from '@/context/pos-context'
 import { closePosSession, type PosOpenSession } from './queries'
 
@@ -41,8 +41,16 @@ export function CloseSessionButton({ session, className }: { session: PosOpenSes
       </Button>
 
       {confirming && (
-        <Modal title={`Cerrar ${session.table_label}`} onClose={() => setConfirming(false)}>
-          <div className="space-y-3 text-sm text-neutral-700">
+        <ConfirmDialog
+          title={`Cerrar ${session.table_label}`}
+          confirmLabel="Cerrar mesa"
+          busyLabel="Cerrando mesa…"
+          cancelLabel="Seguir abierta"
+          busy={close.isPending}
+          onConfirm={() => close.mutate()}
+          onCancel={() => setConfirming(false)}
+        >
+          <div className="space-y-3">
             <p>
               Los comensales no podrán enviar más pedidos en esta cuenta. Si vuelven a escanear el QR se
               abre una cuenta nueva.
@@ -65,21 +73,8 @@ export function CloseSessionButton({ session, className }: { session: PosOpenSes
               </p>
             )}
             <ErrorText error={errors.message} />
-            <div className="flex gap-2">
-              <Button variant="secondary" className="flex-1" onClick={() => setConfirming(false)}>
-                Seguir abierta
-              </Button>
-              <Button
-                variant="danger"
-                className="flex-1"
-                disabled={close.isPending}
-                onClick={() => close.mutate()}
-              >
-                {close.isPending ? 'Cerrando mesa…' : 'Cerrar mesa'}
-              </Button>
-            </div>
           </div>
-        </Modal>
+        </ConfirmDialog>
       )}
     </>
   )

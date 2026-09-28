@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { countLabel, formatElapsed, formatPrice, getPosTableState, type PosTableState, posTableStateLabels, posTableStates } from '@restaurant-platform/shared'
-import { ClipboardList, Clock3, Move, UserRound, Users } from 'lucide-react'
-import { Button, ChoiceChip, Elapsed, FloorGrid, QueryView, SummaryItem, useNow } from '@restaurant-platform/ui'
+import { ClipboardList, Clock3, Move, UserRound, Users, X } from 'lucide-react'
+import { Button, ChoiceChip, Elapsed, FloorGrid, IconButton, QueryView, SummaryItem, useNow } from '@restaurant-platform/ui'
 import { useCan, usePosScope } from '@/context/pos-context'
 import { MoveTableSession } from './MoveTableSession'
 import {
@@ -33,7 +33,7 @@ export function FloorMap() {
     <div className="min-w-0 space-y-4">
       <div>
         <h1 className="text-xl font-bold text-neutral-900">Salón</h1>
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-muted">
           Plano operativo de las mesas disponibles, organizado por sector.
         </p>
       </div>
@@ -115,12 +115,12 @@ function FloorSections({
             <h2 id="floor-map-heading" className="text-sm font-semibold text-neutral-800">
               {activeSection.name}
             </h2>
-            <p className="text-xs text-neutral-500">
+            <p className="text-xs text-muted">
               {countLabel(entries.length, 'mesa operativa', 'mesas operativas')} ·{' '}
               {countLabel(occupied, 'ocupada')}
             </p>
           </div>
-          <p className="inline-flex items-center gap-1.5 text-xs text-neutral-500">
+          <p className="inline-flex items-center gap-1.5 text-xs text-muted">
             <Move size={14} aria-hidden="true" />
             Deslizá para recorrer · tocá una mesa para ver su resumen
           </p>
@@ -163,7 +163,7 @@ function visibleTotal(session: PosOpenSession | undefined): string | null {
 
 function StateLegend() {
   return (
-    <ul className="flex gap-x-4 gap-y-1 overflow-x-auto rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs text-neutral-600">
+    <ul className="flex gap-x-4 gap-y-1 overflow-x-auto rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs text-muted">
       {posTableStates.map((state) => (
         <li key={state} className="flex shrink-0 items-center gap-1.5">
           <span className={`h-2.5 w-2.5 rounded-full ${tableStateStyles[state].dot}`} aria-hidden="true" />
@@ -188,11 +188,19 @@ function FloorSurface({
   const now = useNow()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const selected = entries.find((entry) => entry.id === selectedId)
+  const planRef = useRef<HTMLDivElement>(null)
+
+  function closeSummary() {
+    // El botón que cerró el resumen desaparece con él: el foco vuelve a la mesa
+    // en lugar de caer al <body>.
+    planRef.current?.querySelector<HTMLElement>(`[data-table-id="${selectedId}"]`)?.focus()
+    setSelectedId(null)
+  }
 
   return (
     <div className="min-w-0 space-y-2">
-      {selected && <TableSummary entry={selected} onOpen={onOpenTable} onMove={onMoveTable} />}
       <div
+        ref={planRef}
         className="max-h-[calc(100dvh-18rem)] min-h-80 overflow-auto overscroll-contain rounded-xl border border-neutral-200 bg-white p-3 shadow-sm"
         tabIndex={0}
         aria-label="Plano desplazable del sector"
@@ -215,6 +223,7 @@ function FloorSurface({
               <button
                 key={table.id}
                 type="button"
+                data-table-id={table.id}
                 onClick={() => setSelectedId(table.id)}
                 onDoubleClick={() => onOpenTable(table.id)}
                 aria-pressed={selectedTable}
@@ -257,6 +266,16 @@ function FloorSurface({
           }}
         />
       </div>
+
+      {/* El resumen va después del plano y no antes: al aparecer no empuja las mesas,
+          así la mesa tocada queda bajo el dedo y el doble clic cae en la misma. Como
+          el plano llega al pie de la pantalla, se pega abajo (sticky) y flota sobre
+          su borde inferior; al bajar la página vuelve a su lugar, sin tapar nada. */}
+      {selected && (
+        <div className="sticky bottom-4 z-10">
+          <TableSummary entry={selected} onOpen={onOpenTable} onMove={onMoveTable} onClose={closeSummary} />
+        </div>
+      )}
     </div>
   )
 }
@@ -265,17 +284,24 @@ function TableSummary({
   entry,
   onOpen,
   onMove,
+  onClose,
 }: {
   entry: FloorMapEntry
   onOpen: (tableId: string) => void
   onMove: (entry: FloorMapEntry) => void
+  /** Flota sobre el plano: tiene que poder cerrarse para ver lo que tapa. */
+  onClose: () => void
 }) {
   const can = useCan()
   const { session, state } = entry
   const total = visibleTotal(session)
 
   return (
-    <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm shadow-sm">
+    <div
+      role="region"
+      aria-label={`Resumen de ${entry.label}`}
+      className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm shadow-lg"
+    >
       <div className="mr-auto space-y-1">
         <p className="font-semibold text-neutral-900">{entry.label}</p>
         <TableStateBadge state={state} />
@@ -305,6 +331,9 @@ function TableSummary({
         <ClipboardList size={15} />
         {session ? 'Continuar comanda' : 'Abrir comanda'}
       </Button>
+      <IconButton label={`Cerrar resumen de ${entry.label}`} onClick={onClose}>
+        <X size={18} aria-hidden="true" />
+      </IconButton>
     </div>
   )
 }

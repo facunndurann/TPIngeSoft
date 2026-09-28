@@ -1,31 +1,54 @@
 import { useState, type FormEvent } from 'react'
-import { UtensilsCrossed, Store } from 'lucide-react'
+import { MailCheck, UtensilsCrossed, Store } from 'lucide-react'
+import { authErrorMessage, type AuthMode } from '@/lib/auth-errors'
 import { supabase } from '@/lib/supabase'
 import { Button, ErrorText, Field, Input } from '@restaurant-platform/ui'
 
 export function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [mode, setMode] = useState<'login' | 'signup'>('login')
+  const [mode, setMode] = useState<AuthMode>('login')
   const [error, setError] = useState<string | null>(null)
+  // A qué email mandamos la confirmación de la cuenta recién creada.
+  const [confirmationSentTo, setConfirmationSentTo] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError(null)
+    setConfirmationSentTo(null)
     setSubmitting(true)
-    const { error: authError } =
-      mode === 'login'
-        ? await supabase.auth.signInWithPassword({ email, password })
-        : await supabase.auth.signUp({ email, password })
-    if (authError) {
-      setError(
-        authError.message === 'Invalid login credentials'
-          ? 'Email o contraseña incorrectos'
-          : authError.message,
-      )
+    try {
+      if (mode === 'login') {
+        const { error: authError } = await supabase.auth.signInWithPassword({ email, password })
+        if (authError) setError(authErrorMessage(authError, mode))
+        return
+      }
+
+      const { data, error: authError } = await supabase.auth.signUp({ email, password })
+      if (authError) {
+        setError(authErrorMessage(authError, mode))
+      } else if (!data.session) {
+        // El proyecto pide confirmar el email: la cuenta existe pero todavía no hay
+        // sesión, y sin este aviso el alta parecía no haber hecho nada. Se vuelve al
+        // ingreso con el email escrito, que es lo que sigue después del enlace.
+        setConfirmationSentTo(email.trim())
+        setMode('login')
+        setPassword('')
+      }
+      // Con sesión, AuthProvider ya la tomó y la app sale del login sola.
+    } catch {
+      // Lo que ni siquiera llegó a Auth (sin red): el mensaje genérico del modo.
+      setError(authErrorMessage({ code: undefined }, mode))
+    } finally {
+      setSubmitting(false)
     }
-    setSubmitting(false)
+  }
+
+  function switchMode() {
+    setMode(mode === 'login' ? 'signup' : 'login')
+    setError(null)
+    setConfirmationSentTo(null)
   }
 
   return (
@@ -40,6 +63,18 @@ export function LoginPage() {
           <p className="text-sm text-muted">
             {mode === 'login' ? 'Ingresá con tu cuenta' : 'Creá una cuenta para tu restaurante'}
           </p>
+        </div>
+        {/* Siempre montado: un lector de pantalla anuncia el aviso cuando aparece. */}
+        <div role="status">
+          {confirmationSentTo && (
+            <p className="mb-4 flex gap-2 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-800">
+              <MailCheck size={18} className="mt-0.5 shrink-0" aria-hidden="true" />
+              <span>
+                Te mandamos un email a <strong>{confirmationSentTo}</strong>. Abrí el enlace para confirmar la
+                cuenta y después ingresá acá.
+              </span>
+            </p>
+          )}
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <Field label="Email">
@@ -72,8 +107,9 @@ export function LoginPage() {
           </Button>
         </form>
         <button
+          type="button"
           className="mt-4 w-full cursor-pointer text-center text-sm text-primary hover:underline"
-          onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}
+          onClick={switchMode}
         >
           {mode === 'login' ? '¿No tenés cuenta? Registrate' : '¿Ya tenés cuenta? Ingresá'}
         </button>

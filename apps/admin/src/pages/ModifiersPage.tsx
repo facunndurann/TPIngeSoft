@@ -1,13 +1,15 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { Page } from '@/features/Page'
-import { formatPrice } from '@restaurant-platform/shared'
+import { formatPriceDelta, SOLD_OUT_LABEL } from '@restaurant-platform/shared'
 import {
   emptyGroupDraft,
   groupDraftFrom,
   newOptionDraft,
   parseGroupDraft,
+  type GroupField,
   type ModifierGroupDraft,
   type ModifierGroupPayload,
   type OptionDraft,
@@ -19,13 +21,28 @@ import {
   type ModifierGroupWithOptions,
 } from '@/queries/modifier-groups'
 import { useRestaurant } from '@/restaurant/restaurant-context'
-import { Badge, Button, ErrorText, Field, IconButton, Input, Modal, QueryView, Toggle, useSaveErrors } from '@restaurant-platform/ui'
+import {
+  Badge,
+  Button,
+  ErrorText,
+  Field,
+  IconButton,
+  Input,
+  Modal,
+  QueryView,
+  Toggle,
+  useConfirm,
+  useSaveErrors,
+  useToast,
+} from '@restaurant-platform/ui'
 
 export function ModifiersPage() {
   const restaurant = useRestaurant()
   const queryClient = useQueryClient()
   const [editing, setEditing] = useState<ModifierGroupWithOptions | 'new' | null>(null)
   const errors = useSaveErrors()
+  const toast = useToast()
+  const { confirm, dialog } = useConfirm()
 
   const groups = useQuery(modifierGroupsQuery(restaurant.id))
 
@@ -37,10 +54,13 @@ export function ModifiersPage() {
     onSuccess: invalidate,
   }, (id) => id))
 
-  function deleteGroup(group: ModifierGroupWithOptions) {
-    if (confirm(`¿Eliminar el grupo "${group.name}" y todas sus opciones?`)) {
-      deleteMutation.mutate(group.id)
-    }
+  async function deleteGroup(group: ModifierGroupWithOptions) {
+    const confirmed = await confirm({
+      title: `¿Eliminar el grupo "${group.name}"?`,
+      message: 'Se borran también sus opciones, y los productos que lo usaban dejan de ofrecerlo.',
+      confirmLabel: 'Eliminar grupo',
+    })
+    if (confirmed) deleteMutation.mutate(group.id)
   }
 
   return (
@@ -74,7 +94,7 @@ export function ModifiersPage() {
                     <IconButton label={`Editar ${group.name}`} onClick={() => setEditing(group)}>
                       <Pencil size={15} />
                     </IconButton>
-                    <IconButton label={`Eliminar ${group.name}`} tone="danger" onClick={() => deleteGroup(group)}>
+                    <IconButton label={`Eliminar ${group.name}`} tone="danger" onClick={() => void deleteGroup(group)}>
                       <Trash2 size={15} />
                     </IconButton>
                   </div>
@@ -86,14 +106,17 @@ export function ModifiersPage() {
                         {option.name}
                       </span>
                       <span className="text-muted">
-                        {option.price_delta > 0 ? `+${formatPrice(option.price_delta)}` : 'Gratis'}
+                        {/* Las mismas palabras que lee el comensal al elegir la opción. */}
+                        {option.is_available
+                          ? formatPriceDelta(option.price_delta)
+                          : `${SOLD_OUT_LABEL} · ${formatPriceDelta(option.price_delta)}`}
                       </span>
                     </li>
                   ))}
                 </ul>
                 {!group.is_available && (
                   <div className="mt-2">
-                    <Badge color="red">No disponible</Badge>
+                    <Badge color="red">{SOLD_OUT_LABEL}</Badge>
                   </div>
                 )}
                 {errors.messageFor(group.id) && (
@@ -113,12 +136,16 @@ export function ModifiersPage() {
           group={editing === 'new' ? null : editing}
           restaurantId={restaurant.id}
           onClose={() => setEditing(null)}
-          onSaved={() => {
+          // El modal se cierra al guardar: sin el aviso, no queda señal de que salió.
+          onSaved={(name) => {
+            toast(editing === 'new' ? `Creamos el grupo «${name}».` : `Guardamos el grupo «${name}».`)
             setEditing(null)
             invalidate()
           }}
         />
       )}
+
+      {dialog}
     </Page>
   )
 }
@@ -132,7 +159,8 @@ function GroupEditor({
   group: ModifierGroupWithOptions | null
   restaurantId: string
   onClose: () => void
-  onSaved: () => void
+  /** Guardado: recibe el nombre del grupo, para el aviso. */
+  onSaved: (name: string) => void
 }) {
   const errors = useSaveErrors()
 
@@ -148,17 +176,36 @@ function GroupEditor({
       options: draft.options.map((option) => (option.key === key ? { ...option, ...changes } : option)),
     })
 
+  // Como en el formulario de producto: los errores aparecen recién al intentar
+  // guardar, cada uno debajo de su campo, y desde ahí se recalculan con cada
+  // cambio, así lo que ya se corrigió deja de marcarse solo.
+  const formId = useId()
+  const fieldId = (field: GroupField) => `${formId}-${field}`
+  const errorId = (field: GroupField) => `${fieldId(field)}-error`
+  const [attempted, setAttempted] = useState(false)
+  const parsed = parseGroupDraft(draft)
+  const fieldErrors = attempted && !parsed.ok ? parsed.errors : []
+  const errorFor = (field: GroupField) => fieldErrors.find((error) => error.field === field)?.message
+
+  /** Lo que marca un control sin Field (las filas de opciones): inválido y descrito por su error. */
+  const invalidProps = (field: GroupField) =>
+    errorFor(field) ? { 'aria-invalid': true as const, 'aria-describedby': errorId(field) } : {}
+
   const save = useMutation(errors.saving('No pudimos guardar el grupo.', {
     mutationFn: (payload: ModifierGroupPayload) => saveModifierGroup({ restaurantId, groupId: group?.id, payload }),
-    onSuccess: onSaved,
+    onSuccess: (_saved, payload) => onSaved(payload.name.trim()),
   }))
 
-  // Un borrador inválido no llega a la mutación: su problema se muestra en el
-  // mismo lugar que un error al guardar, y lo que se guarda es lo que se validó.
+  // Lo que se guarda es lo que se validó: el payload sale del mismo parseo.
   function submit() {
-    const parsed = parseGroupDraft(draft)
-    if (parsed.ok) save.mutate(parsed.payload)
-    else errors.report(parsed.error)
+    if (parsed.ok) {
+      save.mutate(parsed.payload)
+      return
+    }
+    // El error tiene que estar en el DOM antes de mover el foco: así el lector
+    // de pantalla anuncia el campo junto con su error, y no solo el campo.
+    flushSync(() => setAttempted(true))
+    document.getElementById(fieldId(parsed.errors[0].field))?.focus()
   }
 
   return (
@@ -169,8 +216,9 @@ function GroupEditor({
       wide
     >
       <div className="space-y-4">
-        <Field label="Nombre del grupo">
+        <Field label="Nombre del grupo" error={errorFor('name')}>
           <Input
+            id={fieldId('name')}
             value={draft.name}
             onChange={(e) => patch({ name: e.target.value })}
             placeholder="Ej: Extras"
@@ -178,16 +226,18 @@ function GroupEditor({
         </Field>
 
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Mínimo de opciones (0 = opcional)">
+          <Field label="Mínimo de opciones (0 = opcional)" error={errorFor('minSelect')}>
             <Input
+              id={fieldId('minSelect')}
               type="number"
               min={0}
               value={draft.minSelect}
               onChange={(e) => patch({ minSelect: e.target.value })}
             />
           </Field>
-          <Field label="Máximo de opciones (1 = selección única)">
+          <Field label="Máximo de opciones (1 = selección única)" error={errorFor('maxSelect')}>
             <Input
+              id={fieldId('maxSelect')}
               type="number"
               min={1}
               value={draft.maxSelect}
@@ -209,54 +259,80 @@ function GroupEditor({
               // Los controles de la fila se nombran por su opción; una recién
               // agregada todavía no tiene nombre, así que va por su número.
               const optionName = option.name.trim() || `opción ${index + 1}`
+              const nameField = `option-name-${option.key}` as const
+              const priceField = `option-price-${option.key}` as const
               return (
-                <div key={option.key} className="flex items-center gap-2">
-                  <Input
-                    value={option.name}
-                    onChange={(e) => updateOption(option.key, { name: e.target.value })}
-                    placeholder="Nombre"
-                    aria-label={`Nombre de la opción ${index + 1}`}
-                    className="flex-1"
-                  />
-                  <div className="flex w-32 items-center gap-1">
-                    <span className="text-sm text-muted">+$</span>
+                <div key={option.key}>
+                  <div className="flex items-center gap-2">
                     <Input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      value={option.price}
-                      onChange={(e) => updateOption(option.key, { price: e.target.value })}
-                      aria-label={`Precio de ${optionName}`}
+                      id={fieldId(nameField)}
+                      value={option.name}
+                      onChange={(e) => updateOption(option.key, { name: e.target.value })}
+                      placeholder="Nombre"
+                      aria-label={`Nombre de la opción ${index + 1}`}
+                      className="flex-1"
+                      {...invalidProps(nameField)}
                     />
+                    <div className="flex w-32 items-center gap-1">
+                      <span className="text-sm text-muted">+$</span>
+                      <Input
+                        id={fieldId(priceField)}
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={option.price}
+                        onChange={(e) => updateOption(option.key, { price: e.target.value })}
+                        aria-label={`Precio de ${optionName}`}
+                        {...invalidProps(priceField)}
+                      />
+                    </div>
+                    <Toggle
+                      checked={option.isAvailable}
+                      onChange={(isAvailable) => updateOption(option.key, { isAvailable })}
+                      label={`Disponible: ${optionName}`}
+                      hideLabel
+                    />
+                    <IconButton
+                      label={`Quitar ${optionName}`}
+                      tone="danger"
+                      onClick={() =>
+                        patch({ options: draft.options.filter((other) => other.key !== option.key) })
+                      }
+                    >
+                      <Trash2 size={15} />
+                    </IconButton>
                   </div>
-                  <Toggle
-                    checked={option.isAvailable}
-                    onChange={(isAvailable) => updateOption(option.key, { isAvailable })}
-                    label={`Disponible: ${optionName}`}
-                    hideLabel
-                  />
-                  <IconButton
-                    label={`Quitar ${optionName}`}
-                    tone="danger"
-                    onClick={() =>
-                      patch({ options: draft.options.filter((other) => other.key !== option.key) })
-                    }
-                  >
-                    <Trash2 size={15} />
-                  </IconButton>
+                  {/* La fila no tiene rótulo visible (no va en un Field): sus errores van debajo. */}
+                  {[nameField, priceField].map(
+                    (field) =>
+                      errorFor(field) && (
+                        <p key={field} id={errorId(field)} className="mt-1 text-xs text-red-700">
+                          {errorFor(field)}
+                        </p>
+                      ),
+                  )}
                 </div>
               )
             })}
           </div>
+          {/* Sin opciones no hay campo que marcar: el error queda en el botón que las agrega. */}
+          {errorFor('options') && (
+            <p id={errorId('options')} className="mt-1 text-xs text-red-700">
+              {errorFor('options')}
+            </p>
+          )}
           <Button
+            id={fieldId('options')}
             variant="secondary"
             className="mt-2"
+            aria-describedby={errorFor('options') ? errorId('options') : undefined}
             onClick={() => patch({ options: [...draft.options, newOptionDraft()] })}
           >
             <Plus size={15} /> Agregar opción
           </Button>
         </div>
 
+        {/* Lo que rechaza la base al guardar; lo del borrador ya está en cada campo. */}
         <ErrorText error={errors.message} />
 
         <div className="flex justify-end gap-2">
