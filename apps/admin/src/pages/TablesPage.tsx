@@ -16,7 +16,7 @@ import {
   type FloorTable,
 } from '@/queries/floor'
 import { useRestaurant } from '@/restaurant/restaurant-context'
-import { Badge, Button, ErrorText, IconButton, Input, Modal, QueryView, Select, Toggle, useSaveErrors } from '@restaurant-platform/ui'
+import { Badge, Button, ErrorText, IconButton, Input, Modal, QueryView, Select, Toggle, useConfirm, useSaveErrors } from '@restaurant-platform/ui'
 
 function tableUrl(table: FloorTable) {
   return customerAppUrl(`/m/${table.qr_token}`)
@@ -76,6 +76,7 @@ function BranchTables({ branchId }: { branchId: string }) {
   const [newLabel, setNewLabel] = useState('')
   const [qrTable, setQrTable] = useState<FloorTable | null>(null)
   const errors = useSaveErrors()
+  const { confirm, dialog } = useConfirm()
 
   // Las mismas consultas que Salón: lo que se cambia en una pantalla ya está en la otra.
   const tables = useQuery(tablesQuery(branchId))
@@ -162,10 +163,13 @@ function BranchTables({ branchId }: { branchId: string }) {
                     <IconButton
                       label={`Eliminar ${table.label}`}
                       tone="danger"
-                      onClick={() => {
-                        if (confirm(`¿Eliminar "${table.label}"? Se pierde su QR.`)) {
-                          deleteMutation.mutate(table.id)
-                        }
+                      onClick={async () => {
+                        const confirmed = await confirm({
+                          title: `¿Eliminar "${table.label}"?`,
+                          message: 'Se pierde su QR: el que está impreso en la mesa deja de funcionar.',
+                          confirmLabel: 'Eliminar mesa',
+                        })
+                        if (confirmed) deleteMutation.mutate(table.id)
                       }}
                     >
                       <Trash2 size={15} />
@@ -180,6 +184,7 @@ function BranchTables({ branchId }: { branchId: string }) {
       </QueryView>
 
       {qrTable && <QrModal table={qrTable} restaurantName={restaurant.name} onClose={() => setQrTable(null)} />}
+      {dialog}
     </>
   )
 }

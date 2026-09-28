@@ -202,7 +202,7 @@ The customer app signs in anonymously when someone scans a table QR. Without thi
 
 ### 5.2 Turn off “Confirm email” for this academic demo
 
-Cloud default is often **Confirm email = on**. The admin `LoginPage` signs up and then expects an immediate session. If confirmation is required, signup appears to succeed but you stay on `/login` with no session.
+Cloud default is often **Confirm email = on**. If confirmation is required, the admin `LoginPage` tells the owner that a confirmation email was sent and goes back to log in: the account only works after clicking the link in that email. For a demo, skipping that step is simpler.
 
 1. **Authentication → Providers → Email**
 2. Disable **Confirm email**

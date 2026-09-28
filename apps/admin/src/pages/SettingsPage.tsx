@@ -8,7 +8,7 @@ import { useRestaurant } from '@/restaurant/restaurant-context'
 import { DesignPicker } from '@/features/DesignPicker'
 import { Page } from '@/features/Page'
 import { PaymentMethodsField } from '@/features/PaymentMethods'
-import { Badge, Button, ErrorText, Field, IconButton, Input, QueryView, Textarea, Toggle, useSaveErrors } from '@restaurant-platform/ui'
+import { Badge, Button, ErrorText, Field, IconButton, Input, QueryView, Textarea, Toggle, useConfirm, useSaveErrors } from '@restaurant-platform/ui'
 
 export function SettingsPage() {
   const restaurant = useRestaurant()
@@ -88,6 +88,7 @@ function BranchesSection({ restaurantId }: { restaurantId: string }) {
   const [newName, setNewName] = useState('')
   const [newAddress, setNewAddress] = useState('')
   const errors = useSaveErrors()
+  const { confirm, dialog } = useConfirm()
 
   const branches = useQuery(branchesQuery(restaurantId))
 
@@ -178,8 +179,13 @@ function BranchesSection({ restaurantId }: { restaurantId: string }) {
                   <IconButton
                     label={`Eliminar ${branch.name}`}
                     tone="danger"
-                    onClick={() => {
-                      if (confirm(`¿Eliminar la sucursal "${branch.name}"?`)) deleteMutation.mutate(branch.id)
+                    onClick={async () => {
+                      const confirmed = await confirm({
+                        title: `¿Eliminar la sucursal "${branch.name}"?`,
+                        message: 'Si todavía tiene mesas o cuentas, no se puede eliminar: desactivala.',
+                        confirmLabel: 'Eliminar sucursal',
+                      })
+                      if (confirmed) deleteMutation.mutate(branch.id)
                     }}
                   >
                     <Trash2 size={15} />
@@ -198,6 +204,7 @@ function BranchesSection({ restaurantId }: { restaurantId: string }) {
           </ul>
         )}
       </QueryView>
+      {dialog}
     </section>
   )
 }

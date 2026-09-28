@@ -1,7 +1,7 @@
 import { useId, useState, type ChangeEvent, type KeyboardEvent } from 'react'
 import { Trash2 } from 'lucide-react'
 import { FLOOR_GRID, TABLE_SPAN, tablePlacement, tableShapeLabels, tableShapes } from '@restaurant-platform/shared'
-import { Button, Field, Input, Select, Toggle } from '@restaurant-platform/ui'
+import { Button, Field, Input, Select, Toggle, useConfirm } from '@restaurant-platform/ui'
 import type { FloorSection, FloorTable, TablePatch } from '@/queries/floor'
 import { OVERLAP_MESSAGE, overlapsAt } from './placement'
 
@@ -138,6 +138,7 @@ function NumberField({
  * `key={table.id}`, así que un borrador nunca pasa de una mesa a otra.
  */
 export function TableInspector({ table, neighbors, sections, onIntent, onDelete, busy }: TableInspectorProps) {
+  const { confirm, dialog } = useConfirm()
   const label = useDraftField(
     table.label,
     (text) => text.trim() || null,
@@ -289,13 +290,19 @@ export function TableInspector({ table, neighbors, sections, onIntent, onDelete,
         variant="danger"
         className="w-full"
         disabled={busy}
-        onClick={() => {
-          if (confirm(`¿Eliminar "${table.label}"? Se pierde su QR.`)) onDelete()
+        onClick={async () => {
+          const confirmed = await confirm({
+            title: `¿Eliminar "${table.label}"?`,
+            message: 'Se pierde su QR: el que está impreso en la mesa deja de funcionar.',
+            confirmLabel: 'Eliminar mesa',
+          })
+          if (confirmed) onDelete()
         }}
       >
         <Trash2 size={15} />
         Eliminar mesa
       </Button>
+      {dialog}
     </aside>
   )
 }

@@ -70,38 +70,58 @@ function wholeNumber(text: string): number | null {
   return text.trim() !== '' && Number.isInteger(value) ? value : null
 }
 
-/** El borrador listo para guardar, o el primer problema que lo impide. */
-export type ParsedGroup = { ok: true; payload: ModifierGroupPayload } | { ok: false; error: string }
+/**
+ * Un campo del editor que puede tener un error: los fijos, cada opción por la
+ * `key` de su fila, y `options` para la lista vacía (se marca en «Agregar opción»).
+ */
+export type GroupField =
+  'name' | 'minSelect' | 'maxSelect' | 'options' | `option-name-${string}` | `option-price-${string}`
+
+export type GroupError = { field: GroupField; message: string }
+
+/** El borrador listo para guardar, o todo lo que lo impide. */
+export type ParsedGroup = { ok: true; payload: ModifierGroupPayload } | { ok: false; errors: GroupError[] }
 
 /**
  * Valida y convierte el borrador en una sola pasada: lo que se revisa es lo mismo
  * que se guarda, así que no hay un segundo chequeo que pueda discrepar con el
- * primero. Los problemas se nombran de a uno, en el orden del formulario, y las
- * `key` de las filas quedan afuera: solo sirven para dibujar la lista. La base
- * revalida igual.
+ * primero. Junta todos los problemas, en el orden del formulario y con su campo,
+ * como `parseProductDraft`: cada error se muestra debajo de lo que hay que
+ * corregir y el foco va al primero. Las `key` de las filas no llegan al payload:
+ * solo sirven para dibujar la lista. La base revalida igual.
  */
 export function parseGroupDraft(draft: ModifierGroupDraft): ParsedGroup {
-  const fail = (error: string): ParsedGroup => ({ ok: false, error })
-
-  if (!draft.name.trim()) return fail('El grupo necesita un nombre')
-  if (draft.options.some((option) => !option.name.trim())) return fail('Todas las opciones necesitan nombre')
+  const errors: GroupError[] = []
+  if (!draft.name.trim()) errors.push({ field: 'name', message: 'El grupo necesita un nombre.' })
 
   // Como la base lo acepta: mínimo desde 0, máximo desde 1, y nunca al revés.
   const min = wholeNumber(draft.minSelect)
   const max = wholeNumber(draft.maxSelect)
-  if (min === null || max === null || min < 0 || max < 1) {
-    return fail('El mínimo tiene que ser un entero desde 0, y el máximo desde 1')
+  if (min === null || min < 0) errors.push({ field: 'minSelect', message: 'Tiene que ser un número entero desde 0.' })
+  if (max === null || max < 1) errors.push({ field: 'maxSelect', message: 'Tiene que ser un número entero desde 1.' })
+  if (min !== null && max !== null && min >= 0 && max >= 1 && min > max) {
+    errors.push({ field: 'minSelect', message: 'El mínimo no puede superar al máximo.' })
   }
-  if (min > max) return fail('El mínimo no puede superar al máximo')
-  if (draft.options.length === 0) return fail('Agregá al menos una opción')
 
   const options: ModifierGroupPayload['options'] = []
   for (const option of draft.options) {
+    if (!option.name.trim()) {
+      errors.push({ field: `option-name-${option.key}`, message: 'Escribí el nombre de la opción o quitala.' })
+    }
     const price = parseAmount(option.price)
-    if (price === null) return fail('Cada opción necesita un precio de 0 o más, con hasta dos decimales')
-    options.push({ id: option.id, name: option.name, price_delta: price, is_available: option.isAvailable })
+    if (price === null) {
+      errors.push({
+        field: `option-price-${option.key}`,
+        message: 'Ingresá un precio de 0 o más, con hasta dos decimales.',
+      })
+    } else {
+      options.push({ id: option.id, name: option.name, price_delta: price, is_available: option.isAvailable })
+    }
   }
+  if (draft.options.length === 0) errors.push({ field: 'options', message: 'Agregá al menos una opción.' })
 
+  // `min` y `max` ya dejaron su error si faltaban; se miran de nuevo para que el payload los tenga como número.
+  if (min === null || max === null || errors.length > 0) return { ok: false, errors }
   return {
     ok: true,
     payload: { name: draft.name, minSelect: min, maxSelect: max, isAvailable: draft.isAvailable, options },

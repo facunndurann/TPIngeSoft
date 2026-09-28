@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Check, LayoutGrid, Pencil, Plus, Trash2, X } from 'lucide-react'
-import { Button, EmptyState, ErrorText, IconButton, Input, Toggle } from '@restaurant-platform/ui'
+import { Button, EmptyState, ErrorText, IconButton, Input, Toggle, useConfirm } from '@restaurant-platform/ui'
+import { countLabel } from '@restaurant-platform/shared'
 import type { FloorSection, FloorTable } from '@/queries/floor'
 import { FloorCanvas } from './FloorCanvas'
 import { TableInspector } from './TableInspector'
@@ -139,6 +140,7 @@ function SectionBar({
   onDelete: () => void
 }) {
   const [renaming, setRenaming] = useState(false)
+  const { confirm, dialog } = useConfirm()
 
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-xl border border-neutral-200 bg-white px-4 py-3">
@@ -162,19 +164,22 @@ function SectionBar({
         <IconButton
           label={`Eliminar el sector ${section.name}`}
           tone="danger"
-          onClick={() => {
-            if (
-              confirm(
-                `¿Eliminar el sector "${section.name}"? Sus ${tableCount} mesa(s) quedan sin sector, no se borran.`,
-              )
-            ) {
-              onDelete()
-            }
+          onClick={async () => {
+            const confirmed = await confirm({
+              title: `¿Eliminar el sector "${section.name}"?`,
+              message:
+                tableCount === 0
+                  ? 'El sector no tiene mesas.'
+                  : `${countLabel(tableCount, 'mesa queda', 'mesas quedan')} sin sector. No se borran.`,
+              confirmLabel: 'Eliminar sector',
+            })
+            if (confirmed) onDelete()
           }}
         >
           <Trash2 size={16} />
         </IconButton>
       </div>
+      {dialog}
     </div>
   )
 }

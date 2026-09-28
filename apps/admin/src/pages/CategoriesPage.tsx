@@ -13,7 +13,7 @@ import {
   type CategoryPatch,
 } from '@/queries/categories'
 import { useRestaurant } from '@/restaurant/restaurant-context'
-import { Badge, Button, ErrorText, IconButton, Input, QueryView, Toggle, useSaveErrors } from '@restaurant-platform/ui'
+import { Badge, Button, ErrorText, IconButton, Input, QueryView, Toggle, useConfirm, useSaveErrors } from '@restaurant-platform/ui'
 
 
 export function CategoriesPage() {
@@ -23,6 +23,7 @@ export function CategoriesPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
   const errors = useSaveErrors()
+  const { confirm, dialog } = useConfirm()
 
   const categories = useQuery(categoriesQuery(restaurant.id))
 
@@ -157,10 +158,13 @@ export function CategoriesPage() {
                   <IconButton
                     label={`Eliminar ${category.name}`}
                     tone="danger"
-                    onClick={() => {
-                      if (confirm(`¿Eliminar la categoría "${category.name}"?`)) {
-                        deleteMutation.mutate(category.id)
-                      }
+                    onClick={async () => {
+                      const confirmed = await confirm({
+                        title: `¿Eliminar la categoría "${category.name}"?`,
+                        message: 'Deja de aparecer en la carta. Si todavía tiene productos, no se puede eliminar.',
+                        confirmLabel: 'Eliminar categoría',
+                      })
+                      if (confirmed) deleteMutation.mutate(category.id)
                     }}
                   >
                     <Trash2 size={15} />
@@ -172,6 +176,7 @@ export function CategoriesPage() {
           </ul>
         )}
       </QueryView>
+      {dialog}
     </Page>
   )
 }

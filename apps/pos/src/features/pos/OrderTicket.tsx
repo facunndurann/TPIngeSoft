@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { Undo2, XCircle } from 'lucide-react'
 import { countLabel, formatPrice, type OrderStatus, orderAuthorName, posActions, type PosStep, sessionPlaceLabel } from '@restaurant-platform/shared'
-import { Button, Elapsed, ErrorText, Modal, useSaveErrors } from '@restaurant-platform/ui'
+import { Button, ConfirmDialog, Elapsed, ErrorText, useSaveErrors } from '@restaurant-platform/ui'
 import { useCan } from '@/context/pos-context'
 import { OrderItemLine } from './OrderItemLine'
 import { transitionPosOrder, type PosOrder } from './queries'
@@ -113,28 +113,23 @@ export function OrderTicket({ order }: { order: PosOrder }) {
       {/* Cancelar saca el pedido de la cuenta y no se puede deshacer: es la única
           transición que se confirma, con el mismo modal que el cierre de mesa. */}
       {confirmingCancel && cancel && (
-        <Modal title={`Cancelar el pedido de ${place}`} onClose={() => setConfirmingCancel(false)}>
-          <div className="space-y-3 text-sm text-neutral-700">
+        <ConfirmDialog
+          title={`Cancelar el pedido de ${place}`}
+          confirmLabel="Cancelar pedido"
+          busyLabel="Cancelando…"
+          cancelLabel="Mantener pedido"
+          busy={busy}
+          onConfirm={() => transition.mutate(cancel.to, { onSuccess: () => setConfirmingCancel(false) })}
+          onCancel={() => setConfirmingCancel(false)}
+        >
+          <div className="space-y-3">
             <p className="font-medium text-neutral-900">
               {submitter} · {countLabel(order.order_items.length, 'ítem', 'ítems')} · {formatPrice(order.total_amount)}
             </p>
             <p>Se saca de la cuenta de la mesa y deja de verse en el tablero. No se puede deshacer.</p>
             <ErrorText error={errors.message} />
-            <div className="flex gap-2">
-              <Button variant="secondary" className="flex-1" onClick={() => setConfirmingCancel(false)}>
-                Mantener pedido
-              </Button>
-              <Button
-                variant="danger"
-                className="flex-1"
-                disabled={busy}
-                onClick={() => transition.mutate(cancel.to, { onSuccess: () => setConfirmingCancel(false) })}
-              >
-                {busy ? 'Cancelando…' : 'Cancelar pedido'}
-              </Button>
-            </div>
           </div>
-        </Modal>
+        </ConfirmDialog>
       )}
     </article>
   )

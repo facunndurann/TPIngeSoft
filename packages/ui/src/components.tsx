@@ -83,16 +83,23 @@ const fieldSizes: Record<ControlSize, string> = {
   touch: 'min-h-11',
 }
 
-/** Lo que un Field le avisa a su control: tiene un error, y este es el id del mensaje. */
-const FieldContext = createContext<{ errorId: string } | null>(null)
+/**
+ * Lo que un Field le avisa a su control: si tiene un error, y los ids de los
+ * textos que lo describen (la pista y el error).
+ */
+const FieldContext = createContext<{ invalid: boolean; describedBy?: string } | null>(null)
 
 /**
- * `aria-invalid` y `aria-describedby` del Field que envuelve al control, si hay
- * error. Van antes de las props, así quien lo necesite puede pisarlas.
+ * `aria-invalid` y `aria-describedby` del Field que envuelve al control. Van
+ * antes de las props, así quien lo necesite puede pisarlas.
  */
 function useFieldError() {
   const field = useContext(FieldContext)
-  return field ? { 'aria-invalid': true as const, 'aria-describedby': field.errorId } : {}
+  if (!field) return {}
+  return {
+    ...(field.invalid ? { 'aria-invalid': true as const } : {}),
+    ...(field.describedBy ? { 'aria-describedby': field.describedBy } : {}),
+  }
 }
 
 export function Input({ className = '', size, ref, ...props }: Omit<ComponentProps<'input'>, 'size'> & { size?: ControlSize }) {
@@ -111,20 +118,39 @@ export function Select({ className = '', size, ...props }: Omit<SelectHTMLAttrib
 }
 
 /**
- * Rótulo, control y, si hay, el error de ese control. El error va fuera del
- * `<label>` (adentro se sumaría al nombre del campo en vez de describirlo) y se
- * enlaza por contexto: el Input, Select o Textarea de adentro queda marcado como
- * inválido y descrito por el mensaje sin que cada formulario lo repita.
+ * Rótulo, control y, si hay, la pista y el error de ese control. Los dos van
+ * fuera del `<label>` (adentro se sumarían al nombre del campo en vez de
+ * describirlo) y se enlazan por contexto: el Input, Select o Textarea de adentro
+ * queda descrito por ellos, y marcado como inválido si hay error, sin que cada
+ * formulario lo repita.
  */
-export function Field({ label, children, error }: { label: string; children: ReactNode; error?: string }) {
+export function Field({
+  label,
+  hint,
+  children,
+  error,
+}: {
+  label: string
+  /** La regla del campo, visible antes de equivocarse: «Mínimo 10 caracteres». */
+  hint?: string
+  children: ReactNode
+  error?: string
+}) {
+  const hintId = useId()
   const errorId = useId()
+  const describedBy = [hint && hintId, error && errorId].filter(Boolean).join(' ') || undefined
 
   return (
     <div>
       <label className="block">
         <span className="mb-1 block text-sm font-medium text-neutral-700">{label}</span>
-        <FieldContext value={error ? { errorId } : null}>{children}</FieldContext>
+        <FieldContext value={{ invalid: !!error, describedBy }}>{children}</FieldContext>
       </label>
+      {hint && (
+        <p id={hintId} className="mt-1 text-xs text-muted">
+          {hint}
+        </p>
+      )}
       {error && (
         <p id={errorId} className="mt-1 text-xs text-red-700">
           {error}
@@ -357,8 +383,11 @@ export function Modal({
     // diálogo sale del DOM al desmontarse, y ahí el navegador ya no lo devuelve.
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
     dialog.showModal()
-    // Sin campos (un QR, una vista previa), queda el foco que eligió el navegador.
-    dialog.querySelector<HTMLElement>(FIRST_FIELD)?.focus()
+    // Quien arma el contenido puede elegir dónde arranca el foco con `data-autofocus`
+    // (en una confirmación, la opción que no destruye nada); si no, el primer campo.
+    // Sin ninguno (un QR, una vista previa), queda el foco que eligió el navegador.
+    const initial = dialog.querySelector<HTMLElement>('[data-autofocus]') ?? dialog.querySelector<HTMLElement>(FIRST_FIELD)
+    initial?.focus()
     return () => {
       if (dialog.open) dialog.close()
       if (opener?.isConnected) opener.focus()

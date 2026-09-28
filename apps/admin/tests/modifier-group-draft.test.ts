@@ -8,10 +8,10 @@ import {
   type ModifierGroupDraft,
 } from '../src/features/modifier-group-draft'
 
-/** El primer problema del borrador, o `null` si ya se puede guardar. */
-const errorOf = (draft: ModifierGroupDraft) => {
+/** Los problemas del borrador por campo, o `null` si ya se puede guardar. */
+const errorsOf = (draft: ModifierGroupDraft): Record<string, string> | null => {
   const parsed = parseGroupDraft(draft)
-  return parsed.ok ? null : parsed.error
+  return parsed.ok ? null : Object.fromEntries(parsed.errors.map((error) => [error.field, error.message]))
 }
 
 const saved = {
@@ -54,18 +54,34 @@ test('cada opción nueva tiene su propia fila, aunque no tenga id', () => {
   assert.equal(a.price, '0')
 })
 
-test('el primer problema se nombra solo, y un campo vacío no vale 0', () => {
-  assert.equal(errorOf(valid), null)
-  assert.match(errorOf({ ...valid, name: ' ' })!, /nombre/)
-  assert.match(errorOf({ ...valid, options: [{ ...valid.options[0], name: '' }] })!, /opciones necesitan nombre/)
-  assert.match(errorOf({ ...valid, minSelect: '' })!, /mínimo/)
-  assert.match(errorOf({ ...valid, maxSelect: '0' })!, /máximo/)
-  assert.match(errorOf({ ...valid, minSelect: '1.5' })!, /entero/)
-  assert.match(errorOf({ ...valid, minSelect: '3', maxSelect: '2' })!, /superar/)
-  assert.match(errorOf({ ...valid, options: [] })!, /al menos una opción/)
+test('cada problema queda en su campo, y un campo vacío no vale 0', () => {
+  assert.equal(errorsOf(valid), null)
+  assert.match(errorsOf({ ...valid, name: ' ' })!.name, /nombre/)
+  assert.match(errorsOf({ ...valid, options: [{ ...valid.options[0], name: '' }] })!['option-name-k1'], /nombre de la opción/)
+  assert.match(errorsOf({ ...valid, minSelect: '' })!.minSelect, /entero desde 0/)
+  assert.match(errorsOf({ ...valid, maxSelect: '0' })!.maxSelect, /entero desde 1/)
+  assert.match(errorsOf({ ...valid, minSelect: '1.5' })!.minSelect, /entero/)
+  assert.match(errorsOf({ ...valid, minSelect: '3', maxSelect: '2' })!.minSelect, /superar/)
+  assert.match(errorsOf({ ...valid, options: [] })!.options, /al menos una opción/)
   for (const price of ['', '-1', 'gratis', '1.234']) {
-    assert.match(errorOf({ ...valid, options: [{ ...valid.options[0], price }] })!, /precio/)
+    assert.match(errorsOf({ ...valid, options: [{ ...valid.options[0], price }] })!['option-price-k1'], /precio/)
   }
+})
+
+test('los problemas llegan todos juntos, en el orden del formulario: el foco va al primero', () => {
+  const parsed = parseGroupDraft({
+    ...valid,
+    name: '',
+    maxSelect: '0',
+    options: [{ key: 'k1', name: '', price: 'gratis', isAvailable: true }],
+  })
+  assert.equal(parsed.ok, false)
+  assert.deepEqual(!parsed.ok && parsed.errors.map((error) => error.field), [
+    'name',
+    'maxSelect',
+    'option-name-k1',
+    'option-price-k1',
+  ])
 })
 
 test('el payload es el borrador convertido, sin la key de cada fila', () => {

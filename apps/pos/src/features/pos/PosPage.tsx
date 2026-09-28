@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase'
 import { alertSummary, posAlertCopy, usePosAlerts } from './alerts'
 import { subscribeToRestaurantPos } from './realtime'
 import { posSections } from './sections'
+import { SoundControl } from './SoundControl'
 
 export function PosPage({ multipleContexts }: { multipleContexts: boolean }) {
   const context = usePosContext()
@@ -34,7 +35,9 @@ export function PosPage({ multipleContexts }: { multipleContexts: boolean }) {
           </p>
           <p className="text-sm text-muted">{context.full_name}</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Suena para quien toma las comandas nuevas (ver usePosAlerts): solo ahí se controla. */}
+          {can('orders.prepare') && <SoundControl />}
           {multipleContexts && (
             <Link to="/select-context" className="inline-flex min-h-11 items-center text-sm text-indigo-700">
               Cambiar sucursal
