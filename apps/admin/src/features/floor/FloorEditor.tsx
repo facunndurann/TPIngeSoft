@@ -4,7 +4,7 @@ import { Button, EmptyState, ErrorText, IconButton, Input, Toggle } from '@resta
 import type { FloorSection, FloorTable } from '@/queries/floor'
 import { FloorCanvas } from './FloorCanvas'
 import { TableInspector } from './TableInspector'
-import type { Floor } from './useFloor'
+import type { Floor } from './floor'
 import { useFloorEditor, type FloorEditorActions } from './useFloorEditor'
 
 type FloorEditorProps = {

@@ -358,7 +358,7 @@ pnpm supabase functions deploy mobile-payment
 git add ... && git commit && git push   # keep GitHub in sync
 ```
 
-- Changing `_shared/` (used by `submit-order`) → redeploy `submit-order`.
+- Changing `_shared/` (used by all three functions) → redeploy all three.
 - Changing `packages/shared` schemas imported by a function → redeploy that function.
 - Changing `EMPLOYEE_EMAIL_DOMAIN` or `PAYMENT_SANDBOX_ENABLED` → `pnpm supabase secrets set …` and **redeploy** the function that reads the secret (`employee-accounts` / `mobile-payment`).
 

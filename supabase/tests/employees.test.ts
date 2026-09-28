@@ -1,24 +1,27 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
-import { normalizeUsername, employeeEmail, employeeRequestSchema, toggleRole, transitionPermission } from '../../packages/shared/src/employees.ts'
-import { appErrorBodySchema, appErrors } from '../../packages/shared/src/errors.ts'
+import { normalizeUsername, employeeEmail, employeeRequestSchema, toggleRole } from '../../packages/shared/src/employees.ts'
+import { appErrorBodySchema, appErrors, fromPostgres } from '../../packages/shared/src/errors.ts'
 import { createEmployeeHandler, type EmployeeGateway } from '../functions/employee-accounts/handler.ts'
 
 const restaurantId = '00000000-0000-4000-8000-000000000001'
 const userId = '00000000-0000-4000-8000-000000000002'
 const input = { action: 'create', restaurantId, username: ' Ana.Perez ', fullName: 'Ana Pérez', password: 'correct horse battery', roles: ['waiter'], branchIds: [restaurantId], active: true }
-function fixture(fail?: 'authorize' | 'save' | 'cleanup') {
+// Lo que devuelve Postgres cuando dos altas pelean por el mismo usuario.
+const duplicateUsername = 'duplicate key value violates unique constraint "profiles_username_normalized_key"'
+// El gateway real traduce con fromPostgres (vía unwrap): el falso tira lo mismo.
+function fixture(fail?: 'authorize' | 'save' | 'cleanup', saveError = duplicateUsername) {
   const calls: string[] = []
   const gateway: EmployeeGateway = {
-    async authorize() { calls.push('authorize'); if (fail === 'authorize') throw new Error('FORBIDDEN') },
+    async authorize() { calls.push('authorize'); if (fail === 'authorize') throw fromPostgres({ message: 'FORBIDDEN' }) },
     async createAuth(email) { calls.push(email); return userId },
-    async save() { calls.push('save'); if (fail === 'save' || fail === 'cleanup') throw new Error('duplicate key') },
+    async save() { calls.push('save'); if (fail === 'save' || fail === 'cleanup') throw fromPostgres({ message: saveError }) },
     async deleteAuth(id) { calls.push(`delete:${id}`); if (fail === 'cleanup') throw new Error('network') },
     async resetPassword() { calls.push('reset') }, async auditReset(_input, completed) { calls.push(completed ? 'audit:completed' : 'audit:requested') },
   }
   const handler = createEmployeeHandler(async () => gateway, 'employees.example.com')
   const request = (body: unknown = input) => handler(new Request('http://local/employee-accounts', {
-    method: 'POST', headers: { Authorization: 'Bearer verified-token' }, body: JSON.stringify(body),
+    method: 'POST', headers: { Authorization: 'Bearer verified-token', 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   }))
   return { calls, request, handler }
 }
@@ -58,7 +61,27 @@ test('authorization runs before any Auth mutation and answers with the catalog b
   assert.equal(response.status, appErrors.FORBIDDEN.status)
   assert.deepEqual(f.calls, ['authorize'])
   const body = appErrorBodySchema.parse(await response.json())
-  assert.equal(body.error.code, 'FORBIDDEN')
+  // El código es el del catálogo; el texto dice qué se rechazó en esta función.
+  assert.deepEqual(body.error, { code: 'FORBIDDEN', message: 'No tenés permiso para modificar esta cuenta o alguna de sus membresías.' })
+})
+test('database codes reach the panel instead of collapsing into INVALID_REQUEST', async () => {
+  for (const code of ['INVALID_LEGACY_EMPLOYEE', 'STALE_DATA'] as const) {
+    const f = fixture('save', `P0001: ${code}`)
+    const response = await f.request()
+    assert.equal(response.status, appErrors[code].status)
+    assert.deepEqual(appErrorBodySchema.parse(await response.json()).error, { code, message: appErrors[code].message })
+  }
+})
+test('the request contract matches the other functions: JSON body, bounded in bytes', async () => {
+  const f = fixture()
+  const plain = await f.handler(new Request('http://local', {
+    method: 'POST', headers: { Authorization: 'Bearer verified-token' }, body: JSON.stringify(input),
+  }))
+  assert.equal(plain.status, 400)
+  assert.equal(appErrorBodySchema.parse(await plain.json()).error.code, 'INVALID_REQUEST')
+  // 9000 «ñ» son 9000 caracteres pero 18000 bytes: el tope de 16 KiB cuenta bytes.
+  assert.equal((await f.request({ ...input, fullName: 'ñ'.repeat(9000) })).status, 413)
+  assert.deepEqual(f.calls, [])
 })
 test('a taken username keeps its own catalog code', async () => {
   const f = fixture('save')
@@ -97,11 +120,4 @@ test('missing bearer token fails before authentication/mutation', async () => {
   const response = await f.handler(new Request('http://local', { method: 'POST', body: '{}' }))
   assert.equal(response.status, 401)
   assert.deepEqual(f.calls, [])
-})
-test('UI transition permissions distinguish kitchen, delivery, exceptional actions', () => {
-  assert.equal(transitionPermission('accepted','in_preparation'), 'orders.prepare')
-  assert.equal(transitionPermission('in_preparation','ready'), 'orders.prepare')
-  assert.equal(transitionPermission('ready','delivered'), 'orders.deliver')
-  assert.equal(transitionPermission('ready','in_preparation'), 'orders.revert')
-  assert.equal(transitionPermission('ready','cancelled'), 'orders.cancel')
 })

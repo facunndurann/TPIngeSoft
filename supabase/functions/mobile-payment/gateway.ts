@@ -1,40 +1,48 @@
-import { createClient } from '@supabase/supabase-js';
-import type { Database } from '../../../packages/shared/src/database.types.ts';
-import { AppError, fromPostgres } from '../../../packages/shared/src/errors.ts';
-import type { MobilePaymentRequest, MobilePaymentResult, PaymentStatus } from '../../../packages/shared/src/payments.ts';
-import type { MobilePaymentGateway } from './handler.ts';
+import { AppError } from '../../../packages/shared/src/errors.ts'
+import type { MobilePaymentResult, PaymentStatus } from '../../../packages/shared/src/payments.ts'
+import { unwrap } from '../../../packages/shared/src/supabase-client.ts'
+import { adminClient, callerClient, verifiedUser } from '../_shared/clients.ts'
+import type { MobilePaymentGateway } from './handler.ts'
 
-type PaymentRow = { payment_id: string; amount: number; status: PaymentStatus };
-const result = (row: PaymentRow): MobilePaymentResult => ({
-  paymentId: row.payment_id, amount: Number(row.amount), status: row.status,
-});
+type PaymentRow = { payment_id: string; amount: number; status: PaymentStatus }
+
+/** Las dos RPCs devuelven el pago en una tabla de una fila. */
+const paymentResult = ([row]: PaymentRow[]): MobilePaymentResult => ({
+  paymentId: row.payment_id,
+  amount: Number(row.amount),
+  status: row.status,
+})
 
 export async function authenticateMobilePayment(
-  url: string, anonKey: string, serviceKey: string, jwt: string, sandbox: boolean,
+  url: string,
+  anonKey: string,
+  serviceKey: string,
+  jwt: string,
+  sandbox: boolean,
 ): Promise<MobilePaymentGateway> {
-  const caller=createClient<Database>(url,anonKey,{
-    global:{headers:{Authorization:`Bearer ${jwt}`}},
-    auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},
-  });
-  const {data,error}=await caller.auth.getUser(jwt);
-  if (error||!data.user||!data.user.is_anonymous) throw new AppError('AUTH_REQUIRED');
-  const admin=createClient<Database>(url,serviceKey,{auth:{persistSession:false,autoRefreshToken:false}});
+  const caller = callerClient(url, anonKey, jwt)
+  const user = await verifiedUser(caller, jwt)
+  // Paga el comensal que entró por el QR, que tiene una sesión anónima.
+  if (!user.is_anonymous) throw new AppError('AUTH_REQUIRED')
+  const admin = adminClient(url, serviceKey)
+
   return {
-    async execute(input: MobilePaymentRequest) {
-      if (input.action==='create') {
-        const {data:rows,error}=await caller.rpc('create_mobile_payment',{
-          p_session_id:input.sessionId,p_request_id:input.requestId,p_mode:input.mode,
-          p_item_ids:input.itemIds,
-        });
-        if (error) throw fromPostgres(error);
-        return result(rows[0] as PaymentRow);
+    async execute(input) {
+      if (input.action === 'create') {
+        return paymentResult(unwrap(await caller.rpc('create_mobile_payment', {
+          p_session_id: input.sessionId,
+          p_request_id: input.requestId,
+          p_mode: input.mode,
+          p_item_ids: input.itemIds,
+        })))
       }
-      if (!sandbox) throw new AppError('PAYMENT_PROVIDER_UNAVAILABLE');
-      const {data:rows,error}=await admin.rpc('resolve_mobile_payment',{
-        p_payment_id:input.paymentId,p_user_id:data.user.id,p_status:input.outcome,
-      });
-      if (error) throw fromPostgres(error);
-      return result(rows[0] as PaymentRow);
+      // Confirmar es cosa del proveedor; mientras no haya uno real, solo el simulador.
+      if (!sandbox) throw new AppError('PAYMENT_PROVIDER_UNAVAILABLE')
+      return paymentResult(unwrap(await admin.rpc('resolve_mobile_payment', {
+        p_payment_id: input.paymentId,
+        p_user_id: user.id,
+        p_status: input.outcome,
+      })))
     },
-  };
+  }
 }

@@ -1,5 +1,5 @@
 import { queryOptions, skipToken } from '@tanstack/react-query'
-import { AppError, fromPostgres } from '@restaurant-platform/shared'
+import { AppError, unwrap } from '@restaurant-platform/shared'
 import { supabase } from '@/lib/supabase'
 import { useCart } from '@/stores/cart'
 import { recoverPendingSession } from '@/features/session-recovery'
@@ -48,17 +48,17 @@ async function authenticatedUserId() {
 
 export async function connectSession(token: string, tableId: string) {
   const userId = await authenticatedUserId()
-  const id = await recoverPendingSession(userId, tableId, useCart.getState().submissions, async (ids) => {
-    const { data, error } = await supabase
-      .from('table_sessions')
-      .select('id, table_id, session_participants!inner(user_id)')
-      .in('id', ids)
-      .eq('table_id', tableId)
-      .eq('session_participants.user_id', userId)
-      .order('opened_at', { ascending: false })
-    if (error) throw fromPostgres(error)
-    return data
-  })
+  const id = await recoverPendingSession(userId, tableId, useCart.getState().submissions, async (ids) =>
+    unwrap(
+      await supabase
+        .from('table_sessions')
+        .select('id, table_id, session_participants!inner(user_id)')
+        .in('id', ids)
+        .eq('table_id', tableId)
+        .eq('session_participants.user_id', userId)
+        .order('opened_at', { ascending: false }),
+    ),
+  )
 
   if (id) return { id, userId }
   return joinSession(token)
@@ -66,11 +66,12 @@ export async function connectSession(token: string, tableId: string) {
 
 export async function joinSession(token: string, name?: string) {
   const userId = await authenticatedUserId()
-  const { data: id, error } = await supabase.rpc('join_table_session', {
-    qr: token,
-    ...(name ? { participant_name: name } : {}),
-  })
-  if (error) throw fromPostgres(error)
+  const id = unwrap(
+    await supabase.rpc('join_table_session', {
+      qr: token,
+      ...(name ? { participant_name: name } : {}),
+    }),
+  )
   return { id, userId }
 }
 
@@ -79,7 +80,5 @@ export async function loadSession(id: string) {
     supabase.from('table_sessions').select('*').eq('id', id).single(),
     supabase.from('session_participants').select('*').eq('session_id', id).order('joined_at'),
   ])
-  if (session.error) throw fromPostgres(session.error)
-  if (participants.error) throw fromPostgres(participants.error)
-  return { ...session.data, participants: participants.data }
+  return { ...unwrap(session), participants: unwrap(participants) }
 }

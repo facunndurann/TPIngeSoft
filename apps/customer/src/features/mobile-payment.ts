@@ -1,5 +1,5 @@
 import {
-  asAmount,
+  fromCents,
   isBilledStatus,
   type MobilePaymentRequest,
   type OrderStatus,
@@ -8,7 +8,9 @@ import {
   splitEqualAmounts,
   splitPercentageAmounts,
   type SplitParticipant,
+  sumCents,
   type Tables,
+  toCents,
 } from '@restaurant-platform/shared'
 
 /**
@@ -105,12 +107,6 @@ export type PaymentPlanInput = {
   selected: ReadonlySet<string>
 }
 
-// Los importes se suman y se comparan en centavos, como el resto de la plata de la
-// app: en float 0.1 + 0.2 supera a 0.3 y el plan diría que los ítems exceden el saldo.
-const cents = (value: number | string | null | undefined) => Math.round(asAmount(value) * 100)
-const sumCents = (values: readonly number[]) =>
-  values.reduce((total, value) => total + cents(value), 0)
-
 function isLive(status: PaymentStatus): status is LiveStatus {
   return status === 'pending' || status === 'approved'
 }
@@ -139,13 +135,15 @@ export function paymentPlan(input: PaymentPlanInput): PaymentPlan {
 
 function shareFor(input: PaymentPlanInput, chosen: PayableItem[]): PaymentShare {
   const { participantId, payments, split } = input
-  const pendingCents = cents(input.pending)
+  // En centavos, como toda la plata de la app: en float 0.1 + 0.2 supera a 0.3 y
+  // el plan diría que los ítems exceden el saldo.
+  const pendingCents = toCents(input.pending)
 
   if (chosen.length > 0) {
     return {
       mode: 'custom',
       itemIds: chosen.map((item) => item.id),
-      amount: sumCents(chosen.map((item) => item.total_price)) / 100,
+      amount: fromCents(sumCents(chosen.map((item) => item.total_price))),
     }
   }
 
@@ -159,7 +157,7 @@ function shareFor(input: PaymentPlanInput, chosen: PayableItem[]): PaymentShare 
       taken.filter((payment) => payment.status === 'pending').map((payment) => payment.amount),
     )
     const remainingParts = split.equalParts ? Math.max(1, split.equalParts - taken.length) : 1
-    const available = Math.max(0, pendingCents - reservedCents) / 100
+    const available = fromCents(Math.max(0, pendingCents - reservedCents))
     // Con una sola parte libre no hay nada que dividir (splitEqualAmounts pide dos o
     // más): esa parte es todo lo disponible.
     const amount = splitEqualAmounts({ pending_amount: available }, remainingParts)[0] ?? available
@@ -183,12 +181,12 @@ function shareFor(input: PaymentPlanInput, chosen: PayableItem[]): PaymentShare 
       mode: 'percentage_split',
       percentage: split.allocations[participantId] ?? 0,
       accountTotal: input.accountTotal,
-      shareOfTotal: shareCents / 100,
-      amount: Math.min(Math.max(shareCents - settledCents, 0), pendingCents) / 100,
+      shareOfTotal: fromCents(shareCents),
+      amount: fromCents(Math.min(Math.max(shareCents - settledCents, 0), pendingCents)),
     }
   }
 
-  return { mode: 'full', amount: pendingCents / 100 }
+  return { mode: 'full', amount: fromCents(pendingCents) }
 }
 
 function nextStep(input: PaymentPlanInput, share: PaymentShare): PaymentStep {
@@ -201,8 +199,8 @@ function nextStep(input: PaymentPlanInput, share: PaymentShare): PaymentStep {
   )
   if (own) return { kind: 'pending', payment: own }
 
-  const amountCents = cents(share.amount)
-  const pendingCents = cents(input.pending)
+  const amountCents = toCents(share.amount)
+  const pendingCents = toCents(input.pending)
   if (share.mode === 'custom' && amountCents > pendingCents) {
     return { kind: 'exceeds', balance: input.pending }
   }

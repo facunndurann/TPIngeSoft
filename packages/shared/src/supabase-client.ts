@@ -44,8 +44,12 @@ export function createSupabaseClient({
  * error ya traducido por el catálogo. Ninguna pantalla muestra texto crudo de
  * Postgres ni decide por su cuenta qué constraints traducir: un código nuevo en
  * el catálogo llega solo a todas las llamadas.
+ *
+ * `fallback` es para quien puede decir qué operación falló («No pudimos
+ * actualizar la cuenta»): reemplaza al mensaje genérico solo cuando el error no
+ * es del catálogo, así un rechazo conocido sigue diciendo lo suyo.
  */
-export function unwrap<T>(response: PostgrestSingleResponse<T>): T {
-  if (response.error) throw fromPostgres(response.error)
+export function unwrap<T>(response: PostgrestSingleResponse<T>, fallback?: string): T {
+  if (response.error) throw fromPostgres(response.error, fallback)
   return response.data
 }

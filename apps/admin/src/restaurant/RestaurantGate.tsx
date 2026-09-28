@@ -1,8 +1,8 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Store } from 'lucide-react'
-import { DEFAULT_MENU_DESIGN, unwrap } from '@restaurant-platform/shared'
-import { myRestaurantKey, myRestaurantQuery } from '@/queries/restaurant'
+import { DEFAULT_MENU_DESIGN } from '@restaurant-platform/shared'
+import { createRestaurant, myRestaurantKey, myRestaurantQuery } from '@/queries/restaurant'
 import { supabase } from '@/lib/supabase'
 import { Button, ErrorText, Field, Input, Spinner, Textarea } from '@restaurant-platform/ui'
 import { DesignPicker } from '@/features/DesignPicker'
@@ -32,45 +32,23 @@ export function RestaurantGate({ userId, children }: { userId: string; children:
   return <RestaurantContext value={data}>{children}</RestaurantContext>
 }
 
-/** "La Ñata Café" → "la-nata-cafe". */
-function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '')
-}
-
 function CreateRestaurantScreen() {
   const queryClient = useQueryClient()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [menuDesign, setMenuDesign] = useState(DEFAULT_MENU_DESIGN)
   const [branchName, setBranchName] = useState('Casa Central')
-  const [error, setError] = useState<unknown>(null)
-  const [submitting, setSubmitting] = useState(false)
 
-  async function handleSubmit(e: FormEvent) {
+  const create = useMutation({
+    mutationFn: () => createRestaurant({ name, description, menuDesign, branchName }),
+    // Se espera a releer la membresía: el «Creando…» sigue hasta que el gate
+    // encuentra el restaurante nuevo y monta el panel.
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: myRestaurantKey }),
+  })
+
+  function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    setError(null)
-    setSubmitting(true)
-    try {
-      unwrap(
-        await supabase.rpc('create_restaurant', {
-          p_name: name,
-          p_slug: slugify(name),
-          p_description: description,
-          p_menu_design: menuDesign,
-          p_branch_name: branchName,
-        }),
-      )
-      await queryClient.invalidateQueries({ queryKey: myRestaurantKey })
-    } catch (err) {
-      setError(err)
-    } finally {
-      setSubmitting(false)
-    }
+    create.mutate()
   }
 
   return (
@@ -106,9 +84,9 @@ function CreateRestaurantScreen() {
             onChange={setMenuDesign}
             hint="Podés cambiarlo después desde Restaurante."
           />
-          <ErrorText error={error} fallback="Error creando el restaurante" />
-          <Button type="submit" disabled={submitting} className="w-full">
-            {submitting ? 'Creando…' : 'Crear restaurante'}
+          <ErrorText error={create.error} fallback="No pudimos crear el restaurante." />
+          <Button type="submit" disabled={create.isPending} className="w-full">
+            {create.isPending ? 'Creando…' : 'Crear restaurante'}
           </Button>
         </form>
         <button

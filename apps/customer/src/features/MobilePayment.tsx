@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { formatPrice } from '@restaurant-platform/shared'
+import { countLabel, formatPrice } from '@restaurant-platform/shared'
 import { ErrorText } from '@restaurant-platform/ui'
 import {
   type PaymentPlanInput,
@@ -81,7 +81,7 @@ export function MobilePayment({ sessionId, ...account }: MobilePaymentProps) {
           ))}
           <p className="muted">
             {plan.share.mode === 'custom'
-              ? `${itemCount(plan.share.itemIds.length)} · Subtotal ${formatPrice(plan.share.amount)}`
+              ? `${countLabel(plan.share.itemIds.length, 'ítem')} · Subtotal ${formatPrice(plan.share.amount)}`
               : 'Seleccioná uno o más ítems, o pagá según la división de la cuenta.'}
           </p>
         </fieldset>
@@ -100,10 +100,6 @@ export function MobilePayment({ sessionId, ...account }: MobilePaymentProps) {
   )
 }
 
-function itemCount(count: number) {
-  return `${count} ${count === 1 ? 'ítem' : 'ítems'}`
-}
-
 /**
  * Lo que se dice de la parte a pagar: de dónde sale el importe, si hace falta
  * explicarlo, y el botón que la inicia. Que el servidor vuelva a validar el
@@ -115,7 +111,7 @@ function shareCopy(share: PaymentShare): { help?: string; pay: string } {
       return { pay: `Pagar ítems · ${formatPrice(share.amount)}` }
     case 'equal_split':
       return {
-        help: `Quedan ${share.remainingParts} ${share.remainingParts === 1 ? 'parte' : 'partes'} por pagar.`,
+        help: `Quedan ${countLabel(share.remainingParts, 'parte')} por pagar.`,
         pay: `Pagar mi parte · ${formatPrice(share.amount)}`,
       }
     case 'percentage_split':

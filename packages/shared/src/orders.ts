@@ -1,41 +1,49 @@
-import { z } from 'zod';
-import { Constants, type Database } from './database.types.ts';
+import { z } from 'zod'
+import { Constants, type Database } from './database.types.ts'
+import { hasAtMostTwoDecimals } from './money.ts'
+import { uuidSchema } from './schemas.ts'
 
-const uuid = z.string().uuid().transform(value => value.toLowerCase());
-const selectionIds = z.array(uuid).max(100).refine(
-  ids => new Set(ids).size === ids.length,
-  'No se puede elegir la misma opción o ingrediente más de una vez',
-);
+const uuid = uuidSchema.transform((value) => value.toLowerCase())
+const selectionIds = z
+  .array(uuid)
+  .max(100)
+  .refine((ids) => new Set(ids).size === ids.length, 'No se puede elegir la misma opción o ingrediente más de una vez')
 
 /** Unidades por línea: el mismo rango que ofrece el control de cantidad del comensal. */
-export const MIN_ITEM_QUANTITY = 1;
-export const MAX_ITEM_QUANTITY = 99;
+export const MIN_ITEM_QUANTITY = 1
+export const MAX_ITEM_QUANTITY = 99
 
 /** Líneas distintas por pedido: el tope que valida el servidor y que el carrito avisa antes de enviar. */
-export const MAX_ORDER_LINES = 50;
+export const MAX_ORDER_LINES = 50
 
-export const orderItemSchema = z.object({
-  productId: uuid,
-  quantity: z.number().int().min(MIN_ITEM_QUANTITY).max(MAX_ITEM_QUANTITY),
-  optionIds: selectionIds,
-  removedIds: selectionIds,
-  isShared: z.boolean(),
-}).strict();
+export const orderItemSchema = z
+  .object({
+    productId: uuid,
+    quantity: z.number().int().min(MIN_ITEM_QUANTITY).max(MAX_ITEM_QUANTITY),
+    optionIds: selectionIds,
+    removedIds: selectionIds,
+    isShared: z.boolean(),
+  })
+  .strict()
 
 /** Prices and participant identity are always resolved again in Postgres. */
-export const submitOrderSchema = z.object({
-  sessionId: uuid,
-  requestId: uuid,
-  items: z.array(orderItemSchema).min(1).max(MAX_ORDER_LINES),
-  expectedTotal: z.number().finite().min(0).max(99999999.99).refine(
-    amount => Math.abs(amount * 100 - Math.round(amount * 100)) < 0.000001,
-    'El importe debe tener como máximo dos decimales',
-  ),
-  notes: z.string().trim().max(500).optional(),
-}).strict();
+export const submitOrderSchema = z
+  .object({
+    sessionId: uuid,
+    requestId: uuid,
+    items: z.array(orderItemSchema).min(1).max(MAX_ORDER_LINES),
+    expectedTotal: z
+      .number()
+      .finite()
+      .min(0)
+      .max(99999999.99)
+      .refine(hasAtMostTwoDecimals, 'El importe debe tener como máximo dos decimales'),
+    notes: z.string().trim().max(500).optional(),
+  })
+  .strict()
 
-export type SubmitOrderInput = z.infer<typeof submitOrderSchema>;
-export type OrderStatus = Database['public']['Enums']['order_status'];
+export type SubmitOrderInput = z.infer<typeof submitOrderSchema>
+export type OrderStatus = Database['public']['Enums']['order_status']
 export const orderStatusLabels: Record<OrderStatus, string> = {
   submitted: 'Enviado',
   accepted: 'Recibido · en cuenta',
@@ -43,43 +51,42 @@ export const orderStatusLabels: Record<OrderStatus, string> = {
   ready: 'Listo para servir',
   delivered: 'Entregado',
   cancelled: 'Cancelado',
-};
+}
 
 /** Respuesta exitosa de submit-order: la función la arma y el comensal la valida. */
 export const submitOrderResultSchema = z.object({
   orderId: z.string().uuid(),
   status: z.enum(Constants.public.Enums.order_status),
   totalAmount: z.number().finite(),
-});
-export type SubmitOrderResult = z.infer<typeof submitOrderResultSchema>;
-
+})
+export type SubmitOrderResult = z.infer<typeof submitOrderResultSchema>
 
 /**
  * Estados que forman parte de la cuenta. Es el espejo exacto del
- * `filter (where status in (…))` de la vista `session_bills`
- * (supabase/migrations/20260919040000_employee_read_scope.sql): si cambia uno,
- * tienen que cambiar los dos, y supabase/tests/split.sql lo verifica.
+ * `filter (where status in (…))` de la vista `session_bills`: si cambia uno,
+ * tienen que cambiar los dos. Lo verifican supabase/tests/split.sql contra la
+ * base y packages/shared/tests/split.test.ts contra supabase/schema.generated.sql.
  */
 export const billedOrderStatuses = [
   'accepted',
   'in_preparation',
   'ready',
   'delivered',
-] as const satisfies readonly OrderStatus[];
+] as const satisfies readonly OrderStatus[]
 
 export function isBilledStatus(status: OrderStatus): boolean {
-  return (billedOrderStatuses as readonly OrderStatus[]).includes(status);
+  return (billedOrderStatuses as readonly OrderStatus[]).includes(status)
 }
 
 /** `table`: la cuenta de una mesa. `takeout`: una compra para llevar, sin mesa. */
-export type SessionKind = Database['public']['Enums']['session_kind'];
+export type SessionKind = Database['public']['Enums']['session_kind']
 /** Canal por el que entró un pedido. No cambia después de crearlo. */
-export type OrderOrigin = Database['public']['Enums']['order_origin'];
+export type OrderOrigin = Database['public']['Enums']['order_origin']
 
 export const orderOriginLabels: Record<OrderOrigin, string> = {
   qr: 'QR',
   pos: 'POS',
-};
+}
 
 /**
  * Contexto de una cuenta (contrato C1 de docs/sprint3-progress.md). La sucursal
@@ -87,32 +94,32 @@ export const orderOriginLabels: Record<OrderOrigin, string> = {
  * pago y tablero. `table` es null si y solo si `kind` es `takeout`.
  */
 export type SessionContext = {
-  sessionId: string;
-  restaurantId: string;
-  branchId: string;
-  kind: SessionKind;
-  table: { id: string; label: string } | null;
-  status: Database['public']['Enums']['session_status'];
-};
+  sessionId: string
+  restaurantId: string
+  branchId: string
+  kind: SessionKind
+  table: { id: string; label: string } | null
+  status: Database['public']['Enums']['session_status']
+}
 
 /** Lo mínimo para nombrar una cuenta: su tipo y, si tiene, su mesa. */
-export type SessionPlace = { kind: SessionKind; tables?: { label: string } | null };
+export type SessionPlace = { kind: SessionKind; tables?: { label: string } | null }
 
 /**
  * Cómo se nombra una cuenta en las pantallas del personal. Una cuenta de mesa
  * sin la mesa a la vista (RLS, o la consulta no la trajo) no inventa un nombre.
  */
 export function sessionPlaceLabel(session: SessionPlace): string {
-  if (session.kind === 'takeout') return 'Para llevar';
-  return session.tables?.label ?? 'Mesa';
+  if (session.kind === 'takeout') return 'Para llevar'
+  return session.tables?.label ?? 'Mesa'
 }
 
 /** Lo que el pedido guarda de quién lo creó (contrato C2). */
 export type OrderAuthorship = {
-  origin: OrderOrigin;
-  submitted_by: string | null;
-  staff_author_name: string | null;
-};
+  origin: OrderOrigin
+  submitted_by: string | null
+  staff_author_name: string | null
+}
 
 /**
  * Nombre de quien creó el pedido: el comensal que lo envió por QR o la cuenta
@@ -124,7 +131,6 @@ export function orderAuthorName(
   order: OrderAuthorship,
   participants: readonly { id: string; display_name: string }[],
 ): string {
-  if (order.origin === 'pos') return order.staff_author_name ?? 'Personal';
-  return participants.find((participant) => participant.id === order.submitted_by)?.display_name
-    ?? 'Comensal';
+  if (order.origin === 'pos') return order.staff_author_name ?? 'Personal'
+  return participants.find((participant) => participant.id === order.submitted_by)?.display_name ?? 'Comensal'
 }

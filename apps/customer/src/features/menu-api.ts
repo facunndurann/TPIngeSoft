@@ -1,15 +1,16 @@
-import { AppError, fromPostgres } from '@restaurant-platform/shared'
+import { AppError, unwrap } from '@restaurant-platform/shared'
 import { buildMenu, type Menu } from '@/features/menu'
 import { supabase } from '@/lib/supabase'
 
+/**
+ * La mesa del QR con su sucursal y su restaurante. Que alguna no esté (inactiva,
+ * o fuera de lo que deja ver la RLS) es una mesa que no atiende, y reintentar no
+ * lo cambia; una lectura que falla sí es reintentable y sale con su propio error.
+ */
 export async function loadTable(token: string) {
-  const { data: table, error } = await supabase
-    .from('tables')
-    .select('*')
-    .eq('qr_token', token)
-    .eq('is_active', true)
-    .maybeSingle()
-  if (error) throw fromPostgres(error)
+  const table = unwrap(
+    await supabase.from('tables').select('*').eq('qr_token', token).eq('is_active', true).maybeSingle(),
+  )
   if (!table) {
     throw new AppError(
       'TABLE_UNAVAILABLE',
@@ -17,23 +18,19 @@ export async function loadTable(token: string) {
     )
   }
 
-  const [branch, restaurant] = await Promise.all([
-    supabase
-      .from('branches')
-      .select('*')
-      .eq('id', table.branch_id)
-      .eq('is_active', true)
-      .single(),
-    supabase.from('restaurants').select('*').eq('id', table.restaurant_id).single(),
+  const [branchResponse, restaurantResponse] = await Promise.all([
+    supabase.from('branches').select('*').eq('id', table.branch_id).eq('is_active', true).maybeSingle(),
+    supabase.from('restaurants').select('*').eq('id', table.restaurant_id).maybeSingle(),
   ])
-  if (branch.error || restaurant.error) {
+  const branch = unwrap(branchResponse)
+  const restaurant = unwrap(restaurantResponse)
+  if (!branch || !restaurant) {
     throw new AppError(
       'TABLE_UNAVAILABLE',
       'El restaurante o la sucursal no están atendiendo. Pedí ayuda al personal.',
-      branch.error?.message ?? restaurant.error?.message,
     )
   }
-  return { table, branch: branch.data, restaurant: restaurant.data }
+  return { table, branch, restaurant }
 }
 
 export async function loadMenu(restaurantId: string): Promise<Menu> {
@@ -61,10 +58,5 @@ export async function loadMenu(restaurantId: string): Promise<Menu> {
       .eq('restaurant_id', restaurantId)
       .order('sort_order', { referencedTable: 'modifier_options' }),
   ])
-  // Uno por consulta: es lo que le prueba a TypeScript que cada `data` ya existe.
-  if (categories.error) throw fromPostgres(categories.error)
-  if (products.error) throw fromPostgres(products.error)
-  if (groups.error) throw fromPostgres(groups.error)
-
-  return buildMenu({ categories: categories.data, products: products.data, groups: groups.data })
+  return buildMenu({ categories: unwrap(categories), products: unwrap(products), groups: unwrap(groups) })
 }

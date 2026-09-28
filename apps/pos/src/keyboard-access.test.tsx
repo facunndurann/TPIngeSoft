@@ -6,7 +6,7 @@ import { MemoryRouter } from 'react-router'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { localDateKey } from '@restaurant-platform/shared'
 import { ControlSizeProvider } from '@restaurant-platform/ui'
-import { AccessContext, type PosContext } from './context/pos-context'
+import { AccessContext, scopeOf, type PosContext } from './context/pos-context'
 import { ActiveTables } from './features/pos/ActiveTables'
 import { FloorMap } from './features/pos/FloorMap'
 import { OrderHistory } from './features/pos/OrderHistory'
@@ -26,7 +26,7 @@ const cashier: PosContext = {
   full_name: 'Ana',
   permissions: ['orders.read', 'floor.read', 'history.read', 'sessions.close'],
 }
-const [r, b] = [cashier.restaurant_id, cashier.branch_id]
+const scope = scopeOf(cashier)
 
 const table = {
   id: 'table-1', label: 'Mesa 1', section_id: 'section-1', seats: 4, shape: 'square',
@@ -49,13 +49,13 @@ const order = {
 /** La pantalla con sus datos ya en la caché, como la ve el POS: táctil y con permisos de caja. */
 function render(screen: ReactNode) {
   const client = createPosQueryClient()
-  client.setQueryData(posTablesQuery(r, b).queryKey, [table] as never)
-  client.setQueryData(posOpenSessionsQuery(r, b).queryKey, [session] as never)
-  client.setQueryData(posFloorSectionsQuery(r, b).queryKey, [
+  client.setQueryData(posTablesQuery(scope).queryKey, [table] as never)
+  client.setQueryData(posOpenSessionsQuery(scope).queryKey, [session] as never)
+  client.setQueryData(posFloorSectionsQuery(scope).queryKey, [
     { id: 'section-1', name: 'Salón', sort_order: 0, is_active: true },
     { id: 'section-2', name: 'Terraza', sort_order: 1, is_active: true },
   ])
-  client.setQueryData(posHistoryQuery(r, b, localDateKey()).queryKey, [order] as never)
+  client.setQueryData(posHistoryQuery(scope, localDateKey()).queryKey, [order] as never)
   return renderToStaticMarkup(
     <QueryClientProvider client={client}>
       <ControlSizeProvider size="touch">

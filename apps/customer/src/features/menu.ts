@@ -1,5 +1,6 @@
 import {
-  calculateItemPrice,
+  fromCents,
+  itemPriceCents,
   MAX_ITEM_QUANTITY,
   MIN_ITEM_QUANTITY,
   type Tables,
@@ -219,18 +220,24 @@ export function selectionErrors(product: Product, selection: Selection): string[
   ]
 }
 
-export function price(product: Product, selection: Selection) {
+/** El precio de una selección en centavos: la unidad en la que se suma el carrito. */
+function priceCents(product: Product, selection: Selection) {
   const selected = productOptions(product)
     .filter((option) => selection.optionIds.includes(option.id))
     .map((option) => ({ optionId: option.id, priceDelta: option.price_delta }))
-  return calculateItemPrice(product.base_price, selected, selection.quantity)
+  return itemPriceCents(product.base_price, selected, selection.quantity)
 }
 
+export function price(product: Product, selection: Selection) {
+  return fromCents(priceCents(product, selection))
+}
+
+/** El total del carrito: se suma en centavos y se pasa a pesos una sola vez, al final. */
 export function cartPrice(menu: Menu, items: (Selection & { productId: string })[]) {
-  return (
+  return fromCents(
     items.reduce((cents, item) => {
       const product = menu.productsById.get(item.productId)
-      return cents + (product ? Math.round(price(product, item) * 100) : 0)
-    }, 0) / 100
+      return cents + (product ? priceCents(product, item) : 0)
+    }, 0),
   )
 }

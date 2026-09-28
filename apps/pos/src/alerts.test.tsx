@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { AccessContext, type PosContext } from './context/pos-context'
+import { AccessContext, scopeOf, type PosContext } from './context/pos-context'
 import { usePosAlerts } from './features/pos/alerts'
 import { playChime } from './features/pos/chime'
 import { posBoardQuery, type PosOrder } from './features/pos/queries'
@@ -21,7 +21,7 @@ const kitchen: PosContext = {
   full_name: 'Ana',
   permissions: ['orders.read', 'orders.prepare'],
 }
-const boardKey = posBoardQuery('restaurant-a', 'branch-a').queryKey
+const boardKey = posBoardQuery(scopeOf(kitchen)).queryKey
 const at = (id: string, status: PosOrder['status']) => ({ id, status }) as PosOrder
 
 const cleanups: (() => void)[] = []

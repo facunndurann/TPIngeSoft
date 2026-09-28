@@ -1156,59 +1156,89 @@ CREATE OR REPLACE FUNCTION "public"."pos_transition_order"("p_order_id" "uuid", 
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
     AS $$
-declare target public.orders; bid uuid; needed text; integration public.pos_integrations; reverting boolean;
+declare
+  target public.orders;
+  bid uuid;
+  step public.order_status_transitions;
+  integration public.pos_integrations;
 begin
   if auth.uid() is null then raise exception 'AUTH_REQUIRED'; end if;
   -- Filter authorization before returning existence/state information or locking.
-  select o.* into target from orders o where o.id=p_order_id
+  select o.* into target from orders o where o.id = p_order_id
     and public.can_read_session(o.session_id) for update;
   if not found then raise exception 'FORBIDDEN'; end if;
   select s.branch_id into bid from table_sessions s
-    where s.id=target.session_id and s.restaurant_id=target.restaurant_id;
-  needed := case
-    when p_status='cancelled' then 'orders.cancel'
-    when p_status < target.status then 'orders.revert'
-    when p_status='accepted' then 'orders.accept'
-    when p_status in ('in_preparation','ready') then 'orders.prepare'
-    when p_status='delivered' then 'orders.deliver'
-    else null end;
-  if needed is null or bid is null or not exists(select 1 from profiles where id=auth.uid())
-    or not public.has_permission(target.restaurant_id,needed,bid) then raise exception 'FORBIDDEN'; end if;
-  if target.status=p_status then return target.id; end if;
-  if (target.status,p_status) not in (values
-    ('submitted'::public.order_status,'accepted'::public.order_status),
-    ('accepted','in_preparation'),('in_preparation','ready'),('ready','delivered'),
-    ('in_preparation','accepted'),('ready','in_preparation'),('delivered','ready'),
-    ('submitted','cancelled'),('accepted','cancelled'),('in_preparation','cancelled'),('ready','cancelled')
-  ) then raise exception 'INVALID_TRANSITION'; end if;
-  if p_status='accepted' and target.status='submitted' then
-    select * into integration from pos_integrations where restaurant_id=target.restaurant_id for share;
+    where s.id = target.session_id and s.restaurant_id = target.restaurant_id;
+  -- El tablero es de empleados: la cuenta administrativa (que puede leer la
+  -- sesión) no mueve pedidos, ni se entera de si el par pedido era válido.
+  if bid is null or not exists(select 1 from profiles where id = auth.uid()) then
+    raise exception 'FORBIDDEN'; end if;
+
+  -- Repetir un cambio ya aplicado (doble toque, otro operador se adelantó) no
+  -- hace nada, pero solo lo puede pedir quien podía llevar el pedido ahí.
+  if target.status = p_status then
+    if not exists(select 1 from order_status_transitions tr where tr.to_status = p_status
+      and public.has_permission(target.restaurant_id, tr.permission, bid)) then
+      raise exception 'FORBIDDEN'; end if;
+    return target.id;
+  end if;
+
+  -- La tabla es la única lista de transiciones: la fila dice si el par es
+  -- válido, qué permiso exige y de qué tipo es.
+  select * into step from order_status_transitions
+    where from_status = target.status and to_status = p_status;
+  if not found then raise exception 'INVALID_TRANSITION'; end if;
+  if not public.has_permission(target.restaurant_id, step.permission, bid) then
+    raise exception 'FORBIDDEN'; end if;
+
+  if target.status = 'submitted' and p_status = 'accepted' then
+    select * into integration from pos_integrations where restaurant_id = target.restaurant_id for share;
     if found then
       if not integration.is_active then raise exception 'POS_UNAVAILABLE'; end if;
       if integration.type <> 'internal' then raise exception 'POS_UNSUPPORTED'; end if;
     end if;
   end if;
-  reverting := p_status < target.status;
-  update orders set status=p_status,
-    accepted_at=case when p_status='accepted' and not reverting then now() else accepted_at end,
-    preparing_at=case when reverting and p_status<'in_preparation' then null
-      when not reverting and p_status='in_preparation' then now() else preparing_at end,
-    ready_at=case when reverting and p_status<'ready' then null
-      when not reverting and p_status='ready' then now() else ready_at end,
-    delivered_at=case when reverting then null when p_status='delivered' then now() else delivered_at end,
-    cancelled_at=case when p_status='cancelled' then now() else cancelled_at end where id=target.id;
-  update table_sessions set assigned_user_id=auth.uid() where id=target.session_id;
-  perform public.record_pos_action(target.restaurant_id,bid,'order.transition',target.id,target.session_id,
-    jsonb_build_object('from',target.status,'to',p_status));
-  insert into integration_logs(restaurant_id,order_id,event,payload)
-    values(target.restaurant_id,target.id,'order.status_changed',
-      jsonb_build_object('from',target.status,'to',p_status,'actorId',auth.uid()));
+
+  -- Cada *_at registra cuándo el pedido entró a esa etapa en su recorrido actual:
+  --   advance: sella la etapa destino con now().
+  --   revert: borra las etapas posteriores al destino y conserva la del destino
+  --           (volver a «en preparación» no reinicia preparing_at).
+  --   cancel: sella cancelled_at y conserva hasta dónde llegó el pedido.
+  update orders set status = p_status,
+    accepted_at = case
+      when step.kind = 'advance' and p_status = 'accepted' then now()
+      else accepted_at end,
+    preparing_at = case
+      when step.kind = 'advance' and p_status = 'in_preparation' then now()
+      when step.kind = 'revert' and p_status = 'accepted' then null
+      else preparing_at end,
+    ready_at = case
+      when step.kind = 'advance' and p_status = 'ready' then now()
+      when step.kind = 'revert' and p_status in ('accepted', 'in_preparation') then null
+      else ready_at end,
+    delivered_at = case
+      when step.kind = 'advance' and p_status = 'delivered' then now()
+      when step.kind = 'revert' then null
+      else delivered_at end,
+    cancelled_at = case when step.kind = 'cancel' then now() else cancelled_at end
+  where id = target.id;
+
+  update table_sessions set assigned_user_id = auth.uid() where id = target.session_id;
+  perform public.record_pos_action(target.restaurant_id, bid, 'order.transition', target.id, target.session_id,
+    jsonb_build_object('from', target.status, 'to', p_status));
+  insert into integration_logs(restaurant_id, order_id, event, payload)
+    values(target.restaurant_id, target.id, 'order.status_changed',
+      jsonb_build_object('from', target.status, 'to', p_status, 'actorId', auth.uid()));
   return target.id;
 end;
 $$;
 
 
 ALTER FUNCTION "public"."pos_transition_order"("p_order_id" "uuid", "p_status" "public"."order_status") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."pos_transition_order"("p_order_id" "uuid", "p_status" "public"."order_status") IS 'POS employees only; applies a transition listed in order_status_transitions with the permission its row requires. Errors: AUTH_REQUIRED, FORBIDDEN, INVALID_TRANSITION, POS_UNAVAILABLE, POS_UNSUPPORTED.';
+
 
 
 CREATE OR REPLACE FUNCTION "public"."record_pos_action"("p_restaurant_id" "uuid", "p_branch_id" "uuid", "p_action" "text", "p_order_id" "uuid", "p_session_id" "uuid", "p_details" "jsonb" DEFAULT '{}'::"jsonb") RETURNS "void"
@@ -1922,7 +1952,7 @@ $$;
 ALTER FUNCTION "public"."transition_order"("p_order_id" "uuid", "p_status" "public"."order_status") OWNER TO "postgres";
 
 
-COMMENT ON FUNCTION "public"."transition_order"("p_order_id" "uuid", "p_status" "public"."order_status") IS 'Tenant members only; applies a transition listed in order_status_transitions. Errors: AUTH_REQUIRED, ORDER_NOT_FOUND, FORBIDDEN, INVALID_TRANSITION, POS_UNAVAILABLE, POS_UNSUPPORTED.';
+COMMENT ON FUNCTION "public"."transition_order"("p_order_id" "uuid", "p_status" "public"."order_status") IS 'Alias of pos_transition_order: POS employees only; applies a transition listed in order_status_transitions with the permission its row requires. Errors: AUTH_REQUIRED, FORBIDDEN, INVALID_TRANSITION, POS_UNAVAILABLE, POS_UNSUPPORTED.';
 
 
 
@@ -2266,11 +2296,16 @@ ALTER TABLE "public"."order_items" OWNER TO "postgres";
 CREATE TABLE IF NOT EXISTS "public"."order_status_transitions" (
     "from_status" "public"."order_status" NOT NULL,
     "to_status" "public"."order_status" NOT NULL,
-    "kind" "public"."order_transition_kind" NOT NULL
+    "kind" "public"."order_transition_kind" NOT NULL,
+    "permission" "text" NOT NULL
 );
 
 
 ALTER TABLE "public"."order_status_transitions" OWNER TO "postgres";
+
+
+COMMENT ON COLUMN "public"."order_status_transitions"."permission" IS 'Permiso de role_permissions que exige la transición en la sucursal de la cuenta.';
+
 
 
 CREATE TABLE IF NOT EXISTS "public"."payment_order_items" (

@@ -33,8 +33,10 @@ export default defineConfig({
         },
       },
       {
-        // La lógica que comparten las tres apps (plano, tablero del POS, fechas)
-        // se prueba acá, junto a su código, y no en la app que la usa primero.
+        // La lógica que comparten las tres apps (plano, tablero del POS, fechas,
+        // división de la cuenta) se prueba acá, junto a su código, y no en la app
+        // que la usa primero. Sus contratos con la base leen schema.generated.sql,
+        // que el CI mantiene al día: nunca una migración puntual.
         test: {
           name: 'shared',
           root: 'packages/shared',
@@ -42,11 +44,11 @@ export default defineConfig({
         },
       },
       {
-        // Contrato HTTP de submit-order, catálogo de errores, máquina de estados
-        // y cuentas de empleados. orders.integration.mjs queda afuera: necesita
-        // el stack local (`pnpm test:orders:integration`).
+        // Contrato HTTP de las Edge Functions (submit-order, mobile-payment y
+        // employee-accounts) con gateways falsos. Las pruebas *.integration.mjs
+        // quedan afuera: necesitan el stack local (`pnpm test:orders:integration`).
         test: {
-          name: 'orders',
+          name: 'edge-functions',
           root: 'supabase',
           include: ['tests/**/*.test.ts'],
         },

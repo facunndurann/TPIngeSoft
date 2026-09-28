@@ -3,7 +3,7 @@ import { isOperable } from '@restaurant-platform/shared'
 import { EmptyState } from '@restaurant-platform/ui'
 import type { FloorSection, FloorTable } from '@/queries/floor'
 import { FloorCanvas } from './FloorCanvas'
-import type { Floor } from './useFloor'
+import type { Floor } from './floor'
 
 type FloorViewProps = {
   floor: Floor

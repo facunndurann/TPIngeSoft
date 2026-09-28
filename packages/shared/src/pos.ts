@@ -4,6 +4,7 @@
  * conceptos de toda la plataforma y viven en sus propios módulos.
  */
 import { Constants, type Database } from './database.types.ts'
+import type { PosPermission } from './employees.ts'
 import type { OrderStatus } from './orders.ts'
 import { type SessionRequestSource, sessionRequestLabels } from './session-requests.ts'
 
@@ -16,7 +17,11 @@ export const posBoardColumns = [
 
 export type PosBoardColumnId = (typeof posBoardColumns)[number]['id']
 
-export type PosStep = { to: OrderStatus; label: string }
+/**
+ * Un botón del tablero: adónde lleva el pedido, cómo se llama y el permiso que
+ * la fila de `order_status_transitions` exige. Sin ese permiso no se muestra.
+ */
+export type PosStep = { to: OrderStatus; label: string; permission: PosPermission }
 
 /** Tipos de transición: los define el enum `order_transition_kind` de la base. */
 export type PosTransitionKind = Database['public']['Enums']['order_transition_kind']
@@ -24,35 +29,35 @@ export type PosTransitionKind = Database['public']['Enums']['order_transition_ki
 /** Botones del tablero para un estado, uno por tipo de transición. */
 export type PosOrderActions = Partial<Record<PosTransitionKind, PosStep>>
 
-const cancel: PosStep = { to: 'cancelled', label: 'Cancelar' }
+const cancel: PosStep = { to: 'cancelled', label: 'Cancelar', permission: 'orders.cancel' }
 
 /**
  * Acciones que ofrece el tablero en cada estado. La base es la fuente de verdad
- * (tabla `order_status_transitions`, que usa `transition_order`);
+ * (tabla `order_status_transitions`, que lee `pos_transition_order`);
  * supabase/tests/orders.integration.mjs falla si este mapa no coincide con ella
- * en pares y tipos.
+ * en pares, tipos y permisos.
  */
 export const posActions: Record<OrderStatus, PosOrderActions> = {
   submitted: {
-    advance: { to: 'accepted', label: 'Aceptar' },
+    advance: { to: 'accepted', label: 'Aceptar', permission: 'orders.accept' },
     cancel,
   },
   accepted: {
-    advance: { to: 'in_preparation', label: 'Preparar' },
+    advance: { to: 'in_preparation', label: 'Preparar', permission: 'orders.prepare' },
     cancel,
   },
   in_preparation: {
-    advance: { to: 'ready', label: 'Marcar listo' },
-    revert: { to: 'accepted', label: 'Volver a nuevo' },
+    advance: { to: 'ready', label: 'Marcar listo', permission: 'orders.prepare' },
+    revert: { to: 'accepted', label: 'Volver a nuevo', permission: 'orders.revert' },
     cancel,
   },
   ready: {
-    advance: { to: 'delivered', label: 'Entregar' },
-    revert: { to: 'in_preparation', label: 'Volver a preparar' },
+    advance: { to: 'delivered', label: 'Entregar', permission: 'orders.deliver' },
+    revert: { to: 'in_preparation', label: 'Volver a preparar', permission: 'orders.revert' },
     cancel,
   },
   delivered: {
-    revert: { to: 'ready', label: 'Volver a listo' },
+    revert: { to: 'ready', label: 'Volver a listo', permission: 'orders.revert' },
   },
   cancelled: {},
 }

@@ -102,6 +102,16 @@ select public.pos_transition_order(pg_temp.id('order'),'ready');
 select pg_temp.denied(format('select public.pos_transition_order(%L,''delivered'')',pg_temp.id('order')));
 select pg_temp.denied(format('select public.pos_transition_order(%L,''cancelled'')',pg_temp.id('order')));
 select pg_temp.denied(format('select public.pos_transition_order(%L,''in_preparation'')',pg_temp.id('order')));
+-- Los pares salen de order_status_transitions: uno que no existe es inválido
+-- aunque la cocina tampoco tenga permiso de revertir.
+do $$ begin
+  perform public.pos_transition_order(pg_temp.id('order'),'submitted');
+  raise exception 'Invalid transition accepted';
+exception when raise_exception then
+  if sqlerrm <> 'INVALID_TRANSITION' then raise; end if;
+end $$;
+-- Repetir el estado actual no hace nada, y lo puede pedir quien podía llegar ahí.
+select public.pos_transition_order(pg_temp.id('order'),'ready');
 select set_config('request.jwt.claim.sub',pg_temp.id('waiter')::text,true);
 select public.pos_transition_order(pg_temp.id('order'),'delivered');
 select set_config('request.jwt.claim.sub',pg_temp.id('kitchen')::text,true);

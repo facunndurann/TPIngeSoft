@@ -9,7 +9,7 @@ import {
   type EmployeeRequest,
   type EmployeeRole,
 } from '@restaurant-platform/shared'
-import { Badge, Button, ErrorText, Field, Input, Modal, Select, Spinner } from '@restaurant-platform/ui'
+import { Badge, Button, ErrorText, Field, Input, Modal, QueryView, Select } from '@restaurant-platform/ui'
 import { Page } from '@/features/Page'
 import { auditActionLabel, auditActorLabel } from '@/features/employees/audit'
 import { branchesQuery } from '@/queries/branches'
@@ -40,43 +40,42 @@ export function EmployeesPage() {
       description="Cuentas personales, permisos y sucursales de trabajo."
       actions={<Button onClick={() => setEditing('new')}>Agregar empleado</Button>}
     >
-      {employees.isError && <ErrorText error="No pudimos cargar los empleados." />}
-      {employees.isPending ? (
-        <Spinner />
-      ) : (
-        <ul className="divide-y divide-neutral-200 rounded-xl border border-neutral-200 bg-white">
-          {employees.data?.map((employee) => (
-            <li
-              key={employee.user_id}
-              className="flex flex-wrap items-center justify-between gap-3 p-4"
-            >
-              <div>
-                <p className="font-medium">
-                  {employee.full_name}{' '}
-                  <span className="text-muted">@{employee.username}</span>
-                </p>
-                <p className="text-sm text-muted">
-                  {employee.roles.map((memberRole) => memberRoleLabels[memberRole]).join(' · ')}
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Badge color={employee.is_active ? 'green' : 'neutral'}>
-                  {employee.is_active ? 'Habilitado' : 'Desactivado'}
-                </Badge>
-                <Button variant="secondary" onClick={() => setEditing(employee)}>
-                  Editar acceso
-                </Button>
-                <Button variant="secondary" onClick={() => setResetting(employee)}>
-                  Restablecer contraseña
-                </Button>
-              </div>
-            </li>
-          ))}
-          {!employees.data?.length && (
-            <li className="p-4 text-muted">Todavía no hay cuentas de empleados.</li>
-          )}
-        </ul>
-      )}
+      <QueryView query={employees} fallback="No pudimos cargar los empleados.">
+        {(employees) => (
+          <ul className="divide-y divide-neutral-200 rounded-xl border border-neutral-200 bg-white">
+            {employees.map((employee) => (
+              <li
+                key={employee.user_id}
+                className="flex flex-wrap items-center justify-between gap-3 p-4"
+              >
+                <div>
+                  <p className="font-medium">
+                    {employee.full_name}{' '}
+                    <span className="text-muted">@{employee.username}</span>
+                  </p>
+                  <p className="text-sm text-muted">
+                    {employee.roles.map((memberRole) => memberRoleLabels[memberRole]).join(' · ')}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge color={employee.is_active ? 'green' : 'neutral'}>
+                    {employee.is_active ? 'Habilitado' : 'Desactivado'}
+                  </Badge>
+                  <Button variant="secondary" onClick={() => setEditing(employee)}>
+                    Editar acceso
+                  </Button>
+                  <Button variant="secondary" onClick={() => setResetting(employee)}>
+                    Restablecer contraseña
+                  </Button>
+                </div>
+              </li>
+            ))}
+            {employees.length === 0 && (
+              <li className="p-4 text-muted">Todavía no hay cuentas de empleados.</li>
+            )}
+          </ul>
+        )}
+      </QueryView>
 
       <AuditLog restaurantId={restaurant.id} employees={employees.data ?? []} />
 
@@ -117,25 +116,28 @@ function AuditLog({ restaurantId, employees }: { restaurantId: string; employees
   return (
     <section className="space-y-3">
       <h2 className="font-semibold">Auditoría POS</h2>
-      {audit.isError && <ErrorText error="No pudimos cargar la auditoría." />}
-      <ul className="divide-y divide-neutral-200 rounded-xl border border-neutral-200 bg-white text-sm">
-        {audit.data?.map((entry) => {
-          // Una sucursal que ya no está (o que todavía no cargó) no se nombra:
-          // mejor nada que un pedazo de id.
-          const branch = entry.branch_id ? branchNames.get(entry.branch_id) : undefined
-          return (
-            <li key={entry.id} className="p-3">
-              <p>
-                {auditActorLabel(entry, employees)} · {auditActionLabel(entry, employees)}
-              </p>
-              <p className="text-xs text-muted">
-                {new Date(entry.created_at).toLocaleString('es-AR')}
-                {branch ? ` · ${branch}` : ''}
-              </p>
-            </li>
-          )
-        })}
-      </ul>
+      <QueryView query={audit} fallback="No pudimos cargar la auditoría.">
+        {(audit) => (
+          <ul className="divide-y divide-neutral-200 rounded-xl border border-neutral-200 bg-white text-sm">
+            {audit.map((entry) => {
+              // Una sucursal que ya no está (o que todavía no cargó) no se nombra:
+              // mejor nada que un pedazo de id.
+              const branch = entry.branch_id ? branchNames.get(entry.branch_id) : undefined
+              return (
+                <li key={entry.id} className="p-3">
+                  <p>
+                    {auditActorLabel(entry, employees)} · {auditActionLabel(entry, employees)}
+                  </p>
+                  <p className="text-xs text-muted">
+                    {new Date(entry.created_at).toLocaleString('es-AR')}
+                    {branch ? ` · ${branch}` : ''}
+                  </p>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </QueryView>
     </section>
   )
 }

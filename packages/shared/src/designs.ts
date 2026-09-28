@@ -9,7 +9,7 @@ export type MenuDesignId = Database['public']['Enums']['menu_design']
 /** Todos los diseños, en el orden en que se ofrecen. */
 export const MENU_DESIGN_IDS: readonly MenuDesignId[] = Constants.public.Enums.menu_design
 
-/** Espejado en el default de la columna `restaurants.menu_design` (verificado en edge.test.ts). */
+/** Espejado en el default de la columna `restaurants.menu_design` (verificado en packages/shared/tests/designs.test.ts). */
 export const DEFAULT_MENU_DESIGN: MenuDesignId = 'oliva'
 
 export type MenuDesignTokens = {

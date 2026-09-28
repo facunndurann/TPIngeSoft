@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter } from 'react-router'
 import { QueryClientProvider } from '@tanstack/react-query'
-import { AccessContext, type PosContext } from './context/pos-context'
+import { AccessContext, scopeOf, type PosContext } from './context/pos-context'
 import { FloorMap } from './features/pos/FloorMap'
 import { posFloorSectionsQuery, posOpenSessionsQuery, posTablesQuery } from './features/pos/queries'
 import { createPosQueryClient } from './lib/query-client'
@@ -57,10 +57,10 @@ function tileText(html: string, label: string) {
 
 test('a table shows only name, state and time; one cell high leaves just name and state', () => {
   const client = createPosQueryClient()
-  const [r, b] = [cashier.restaurant_id, cashier.branch_id]
-  client.setQueryData(posFloorSectionsQuery(r, b).queryKey, [{ id: 'section-1', name: 'Salón', sort_order: 0, is_active: true }])
-  client.setQueryData(posTablesQuery(r, b).queryKey, [tableAt('big', 'Mesa 1', 3), tableAt('small', 'Mesa 2', 1)] as never)
-  client.setQueryData(posOpenSessionsQuery(r, b).queryKey, [{
+  const scope = scopeOf(cashier)
+  client.setQueryData(posFloorSectionsQuery(scope).queryKey, [{ id: 'section-1', name: 'Salón', sort_order: 0, is_active: true }])
+  client.setQueryData(posTablesQuery(scope).queryKey, [tableAt('big', 'Mesa 1', 3), tableAt('small', 'Mesa 2', 1)] as never)
+  client.setQueryData(posOpenSessionsQuery(scope).queryKey, [{
     id: 'session-1', table_id: 'big', table_label: 'Mesa 1', participant_names: [],
     opened_at: new Date(Date.now() - 5 * 60_000).toISOString(), kitchen_tickets: 0, kitchen_statuses: [],
     has_pending_payment: false, submitted_amount: 0, total_amount: 1500, paid_amount: 0, pending_amount: 1500,

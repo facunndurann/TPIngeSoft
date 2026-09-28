@@ -4,13 +4,15 @@ import {
   asAmount,
   formatPrice,
   formatTableTime,
+  hasAtMostTwoDecimals,
   paymentMethodLabels,
   paymentModeLabels,
   paymentStatusLabels,
   type PaymentMethod,
+  toCents,
 } from '@restaurant-platform/shared'
-import { Button, ErrorText, Field, Input, Select, useNow, useSaveErrors } from '@restaurant-platform/ui'
-import { useCan, useRestaurant } from '@/context/pos-context'
+import { Button, ErrorText, Field, Input, QueryView, Select, useNow, useSaveErrors } from '@restaurant-platform/ui'
+import { useCan, usePosScope } from '@/context/pos-context'
 import { recordPosPayment, sessionPaymentsQuery, type PosOpenSession } from './queries'
 
 type PaymentPanelProps = {
@@ -28,14 +30,13 @@ function amountProblem(value: string, pending: number): string | null {
   if (value.trim() === '') return 'Ingresá el importe a registrar.'
   const amount = Number(value)
   if (!Number.isFinite(amount) || amount <= 0) return 'El importe tiene que ser mayor a cero.'
-  // Se mira el texto y no el número: 1.1 × 100 da 110.00000000000001.
-  if (!/^\d+(\.\d{1,2})?$/.test(value.trim())) return 'Usá hasta dos decimales.'
-  if (amount > pending) return `Supera el pendiente de ${formatPrice(pending)}.`
+  if (!hasAtMostTwoDecimals(amount)) return 'Usá hasta dos decimales.'
+  if (toCents(amount) > toCents(pending)) return `Supera el pendiente de ${formatPrice(pending)}.`
   return null
 }
 
 export function PaymentPanel({ sessionId, pendingAmount, enabledMethods }: PaymentPanelProps) {
-  const restaurant = useRestaurant()
+  const scope = usePosScope()
   const can = useCan()
   const now = useNow()
   const errors = useSaveErrors()
@@ -56,7 +57,7 @@ export function PaymentPanel({ sessionId, pendingAmount, enabledMethods }: Payme
   const method: PaymentMethod | undefined =
     methodChoice && recordable.includes(methodChoice) ? methodChoice : recordable[0]
 
-  const payments = useQuery(sessionPaymentsQuery(restaurant.id, restaurant.branchId, sessionId))
+  const payments = useQuery(sessionPaymentsQuery(scope, sessionId))
 
   const record = useMutation(errors.saving('No pudimos registrar el pago.', {
     mutationFn: (payment: { amount: number; method: PaymentMethod }) =>
@@ -139,28 +140,33 @@ export function PaymentPanel({ sessionId, pendingAmount, enabledMethods }: Payme
         <p className="text-sm text-amber-800">No hay un medio presencial o externo habilitado para registrar el cobro.</p>
       )}
 
-      {payments.isError && <ErrorText error={payments.error} fallback="No pudimos cargar el historial de pagos." />}
-      {payments.data?.length === 0 && <p className="text-sm text-neutral-500">Todavía no hay pagos registrados.</p>}
-      {(payments.data?.length ?? 0) > 0 && (
-        <ul className="divide-y divide-neutral-100 text-sm">
-          {payments.data?.map((payment) => (
-            <li key={payment.id} className="flex items-start justify-between gap-3 py-2">
-              <div>
-                <p className="font-medium text-neutral-900">
-                  {formatPrice(payment.amount)} · {paymentStatusLabels[payment.status]}
-                </p>
-                <p className="text-xs text-neutral-500">
-                  {paymentMethodLabels[payment.method]} · {paymentModeLabels[payment.mode]}
-                  {payment.external_reference ? ` · Ref. ${payment.external_reference}` : ''}
-                </p>
-              </div>
-              <time className="shrink-0 text-xs text-neutral-500" dateTime={payment.created_at}>
-                {formatTableTime(payment.created_at, now)}
-              </time>
-            </li>
-          ))}
-        </ul>
-      )}
+      <QueryView query={payments} fallback="No pudimos cargar el historial de pagos.">
+        {(payments) =>
+          // Una línea y no el recuadro de vacío: el historial es una parte chica del panel.
+          payments.length === 0 ? (
+            <p className="text-sm text-neutral-500">Todavía no hay pagos registrados.</p>
+          ) : (
+            <ul className="divide-y divide-neutral-100 text-sm">
+              {payments.map((payment) => (
+                <li key={payment.id} className="flex items-start justify-between gap-3 py-2">
+                  <div>
+                    <p className="font-medium text-neutral-900">
+                      {formatPrice(payment.amount)} · {paymentStatusLabels[payment.status]}
+                    </p>
+                    <p className="text-xs text-neutral-500">
+                      {paymentMethodLabels[payment.method]} · {paymentModeLabels[payment.mode]}
+                      {payment.external_reference ? ` · Ref. ${payment.external_reference}` : ''}
+                    </p>
+                  </div>
+                  <time className="shrink-0 text-xs text-neutral-500" dateTime={payment.created_at}>
+                    {formatTableTime(payment.created_at, now)}
+                  </time>
+                </li>
+              ))}
+            </ul>
+          )
+        }
+      </QueryView>
     </section>
   )
 }

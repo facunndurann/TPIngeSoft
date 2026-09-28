@@ -1,3 +1,4 @@
+import { type ChangeListener, subscribeToChanges } from '@restaurant-platform/ui'
 import { supabase } from '@/lib/supabase'
 
 /**
@@ -21,28 +22,14 @@ const WATCHED_TABLES = [
   { table: 'session_participants', scoped: false },
 ] as const
 
+/**
+ * Cualquier cambio del restaurante que el POS muestra. El canal se vuelve a
+ * levantar solo: la tablet de cocina queda abierta el turno entero, y un corte
+ * de wifi no puede dejar el tablero sin avisos hasta que alguien recargue.
+ */
 export function subscribeToRestaurantPos(restaurantId: string, onChange: () => void) {
-  const channel = WATCHED_TABLES.reduce(
-    (subscription, { table, scoped }) =>
-      subscription.on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table,
-          ...(scoped ? { filter: `restaurant_id=eq.${restaurantId}` } : {}),
-        },
-        onChange,
-      ),
-    supabase.channel(`pos-${restaurantId}`),
+  const listeners: ChangeListener[] = WATCHED_TABLES.map(({ table, scoped }) =>
+    scoped ? { table, filter: `restaurant_id=eq.${restaurantId}` } : { table },
   )
-
-  // El primer aviso llega al conectarse: la pantalla parte de datos frescos.
-  channel.subscribe((status) => {
-    if (status === 'SUBSCRIBED') onChange()
-  })
-
-  return () => {
-    void supabase.removeChannel(channel)
-  }
+  return subscribeToChanges(supabase, `pos-${restaurantId}`, listeners, onChange)
 }

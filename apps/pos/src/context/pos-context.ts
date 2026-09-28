@@ -21,7 +21,14 @@ export function useCan(): (permission: PosPermission) => boolean {
   return (permission) => permissions.includes(permission)
 }
 
-export function useRestaurant() {
-  const context = usePosContext()
-  return { id: context.restaurant_id, name: context.restaurant_name, branchId: context.branch_id }
+/** Dónde opera la cuenta: la sucursal, y su restaurante, de todas las lecturas del POS. */
+export type PosScope = { restaurantId: string; branchId: string }
+
+export function scopeOf(context: Pick<PosContext, 'restaurant_id' | 'branch_id'>): PosScope {
+  return { restaurantId: context.restaurant_id, branchId: context.branch_id }
+}
+
+/** El scope del contexto elegido: lo único que cada pantalla le pasa a sus queries. */
+export function usePosScope(): PosScope {
+  return scopeOf(usePosContext())
 }

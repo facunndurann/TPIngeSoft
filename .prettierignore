@@ -1,0 +1,12 @@
+# Generados: los reescribe su herramienta, no una persona.
+packages/shared/src/database.types.ts
+supabase/schema.generated.sql
+pnpm-lock.yaml
+dist
+# Historia y datos: una migración aplicada no se reformatea.
+supabase/migrations
+supabase/seed.sql
+# Skills de Claude y documentos.
+.claude
+*.md
+*.pdf

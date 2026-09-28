@@ -3,12 +3,12 @@ import { useQuery } from '@tanstack/react-query'
 import { Eye, SquarePen } from 'lucide-react'
 import { Page } from '@/features/Page'
 import { useRestaurant } from '@/restaurant/restaurant-context'
-import { Badge, ChoiceChip, EmptyState, Select, Spinner } from '@restaurant-platform/ui'
+import { Badge, ChoiceChip, QueryView, Select } from '@restaurant-platform/ui'
 import { FloorEditor } from '@/features/floor/FloorEditor'
 import { FloorView } from '@/features/floor/FloorView'
-import { useFloor, type Floor } from '@/features/floor/useFloor'
+import { floorOf, type Floor } from '@/features/floor/floor'
 import { branchesQuery } from '@/queries/branches'
-import type { FloorSection, FloorTable } from '@/queries/floor'
+import { sectionsQuery, tablesQuery, type FloorSection, type FloorTable } from '@/queries/floor'
 
 /** Lo que recibe la pantalla de cada modo. */
 type FloorScreenProps = { branchId: string; floor: Floor; section: FloorSection | null }
@@ -45,9 +45,7 @@ export function FloorPlanPage() {
   const [branchChoice, setBranchChoice] = useState<string | null>(null)
 
   const branches = useQuery(branchesQuery(restaurant.id))
-  const branchId = branchChoice ?? branches.data?.[0]?.id ?? null
-
-  if (branches.isLoading) return <Spinner />
+  const chosenBranch = (list: { id: string }[]) => branchChoice ?? list[0].id
 
   return (
     <Page
@@ -56,14 +54,15 @@ export function FloorPlanPage() {
       wide
       actions={
         <>
-          {(branches.data?.length ?? 0) > 1 && (
+          {/* Con una sola sucursal, o mientras cargan, no hay nada que elegir. */}
+          {branches.data && branches.data.length > 1 && (
             <Select
               className="w-56"
-              value={branchId ?? ''}
+              value={chosenBranch(branches.data)}
               onChange={(event) => setBranchChoice(event.target.value)}
               aria-label="Sucursal"
             >
-              {branches.data?.map((branch) => (
+              {branches.data.map((branch) => (
                 <option key={branch.id} value={branch.id}>
                   {branch.name}
                 </option>
@@ -74,41 +73,44 @@ export function FloorPlanPage() {
         </>
       }
     >
-      {branchId ? (
-        // Otra sucursal es otro plano: la key vuelve al primer sector y descarta
-        // la selección, sin resetear nada a mano.
-        <BranchFloor key={branchId} branchId={branchId} mode={mode} />
-      ) : (
-        <EmptyState message="Todavía no hay sucursales. Creá una en Restaurante." />
-      )}
+      <QueryView query={branches} empty="Todavía no hay sucursales. Creá una en Restaurante.">
+        {(branches) => {
+          const branchId = chosenBranch(branches)
+          // Otra sucursal es otro plano: la key vuelve al primer sector y descarta
+          // la selección, sin resetear nada a mano.
+          return <BranchFloor key={branchId} branchId={branchId} mode={mode} />
+        }}
+      </QueryView>
     </Page>
   )
 }
 
 function BranchFloor({ branchId, mode }: { branchId: string; mode: Mode }) {
-  const floor = useFloor(branchId)
+  const sections = useQuery(sectionsQuery(branchId))
+  const tables = useQuery(tablesQuery(branchId))
   const [sectionChoice, setSectionChoice] = useState<string | null>(null)
-  // Si el sector elegido deja de existir (se borró), se abre el primero.
-  const section =
-    floor.sections.find((entry) => entry.id === sectionChoice) ?? floor.sections[0] ?? null
   const { Screen } = MODES[mode]
 
   return (
-    <>
-      <SectionTabs
-        sections={floor.sections}
-        activeId={section?.id ?? null}
-        onChoose={setSectionChoice}
-        tables={floor.tables}
-      />
-      {floor.isLoading ? (
-        <Spinner />
-      ) : (
-        // Cambiar de modo o de sector remonta la pantalla: selección, formularios
-        // y errores arrancan de cero.
-        <Screen key={section?.id} branchId={branchId} floor={floor} section={section} />
-      )}
-    </>
+    <QueryView query={[sections, tables]}>
+      {([sections, tables]) => {
+        // Si el sector elegido deja de existir (se borró), se abre el primero.
+        const section = sections.find((entry) => entry.id === sectionChoice) ?? sections[0] ?? null
+        return (
+          <>
+            <SectionTabs
+              sections={sections}
+              activeId={section?.id ?? null}
+              onChoose={setSectionChoice}
+              tables={tables}
+            />
+            {/* Cambiar de modo o de sector remonta la pantalla: selección, formularios
+                y errores arrancan de cero. */}
+            <Screen key={section?.id} branchId={branchId} floor={floorOf(sections, tables)} section={section} />
+          </>
+        )
+      }}
+    </QueryView>
   )
 }
 

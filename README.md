@@ -121,6 +121,9 @@ pnpm test:sql         # aserciones SQL contra el stack local (cada archivo en BE
 pnpm test:employees:integration # Auth + Edge + RLS; requiere credenciales locales
 pnpm test:orders:integration # pruebas contra el stack local + Edge Functions (pedidos y cierre de sesión)
 pnpm build            # build de producción de todas las apps
+pnpm ci:local         # lo mismo que el job "check" del CI: install, test, typecheck, lint y build
+pnpm format           # Prettier con la convención del repo (sin punto y coma, comillas simples, 120 columnas)
+pnpm format:check     # qué archivos no la siguen, sin tocarlos
 pnpm db:types         # regenerar packages/shared/src/database.types.ts desde la DB local
 pnpm db:schema        # regenerar supabase/schema.generated.sql (el schema de hoy, de una sola lectura)
 pnpm supabase stop    # apagar el stack local

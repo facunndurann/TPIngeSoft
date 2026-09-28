@@ -6,13 +6,14 @@ import { Plus, Trash2 } from 'lucide-react'
 import { DIETARY_TAGS, PRODUCT_MEDIA_LIMIT, type Tables } from '@restaurant-platform/shared'
 import {
   Button,
+  buttonClass,
   ChoiceChip,
   ErrorText,
   IconButton,
   Field,
   Input,
+  QueryView,
   Select,
-  Spinner,
   Textarea,
   Toggle,
   useSaveErrors,
@@ -24,12 +25,13 @@ import { useRestaurant } from '@/restaurant/restaurant-context'
 import { MediaUploader } from '@/features/MediaUploader'
 import { Page } from '@/features/Page'
 import {
-  draftErrors,
   draftFrom,
   emptyDraft,
+  parseProductDraft,
   type DraftField,
   type IngredientDraft,
   type ProductDraft,
+  type ProductPayload,
 } from '@/features/product-draft'
 
 /**
@@ -37,6 +39,10 @@ import {
  * el patrón que el resto del proyecto usa para esto (TableApp, CartPanel,
  * ProductEditor): reemplaza al efecto de hidratación, a su flag `loadedProduct`
  * y al estado a medio llenar que había entre medio.
+ *
+ * El formulario se monta con todo lo que muestra, no solo con el producto: si
+ * no, mientras cargan, la categoría no tendría opciones y la personalización
+ * diría «Todavía no hay grupos». El producto se lee solo al editar.
  */
 export function ProductEditPage() {
   const { productId } = useParams()
@@ -46,42 +52,42 @@ export function ProductEditPage() {
   const groups = useQuery(modifierGroupsQuery(restaurant.id))
   const product = useQuery({ ...productQuery(productId ?? ''), enabled: !!productId })
 
-  // El formulario se monta con todo lo que muestra, no solo con el producto: si
-  // no, mientras cargan, la categoría no tendría opciones y la personalización
-  // diría «Todavía no hay grupos».
-  if (categories.isLoading || groups.isLoading || (productId && product.isLoading)) {
-    return <Spinner />
-  }
-  if (!categories.data || !groups.data || (productId && !product.data)) {
-    return (
-      <Page title="Producto" back={{ to: '/productos', label: 'Volver a productos' }}>
-        <ErrorText error="No pudimos cargar los datos del producto. Volvé a la lista e intentá de nuevo." />
-      </Page>
-    )
-  }
+  const title = !productId ? 'Nuevo producto' : product.data ? `Editar "${product.data.name}"` : 'Producto'
 
   return (
-    <ProductForm
-      key={productId ?? 'new'}
-      productId={productId}
-      title={product.data ? `Editar "${product.data.name}"` : 'Nuevo producto'}
-      initial={product.data ? draftFrom(product.data) : emptyDraft()}
-      categories={categories.data}
-      groups={groups.data}
-    />
+    <Page title={title} back={{ to: '/productos', label: 'Volver a productos' }}>
+      <QueryView query={[categories, groups]}>
+        {([categories, groups]) =>
+          productId ? (
+            <QueryView query={product}>
+              {(product) => (
+                <ProductForm
+                  key={productId}
+                  productId={productId}
+                  initial={draftFrom(product)}
+                  categories={categories}
+                  groups={groups}
+                />
+              )}
+            </QueryView>
+          ) : (
+            <ProductForm key="new" initial={emptyDraft()} categories={categories} groups={groups} />
+          )
+        }
+      </QueryView>
+    </Page>
   )
 }
 
 type ProductFormProps = {
   /** Ausente al crear: `saveProduct` pide el id nuevo a la RPC. */
   productId?: string
-  title: string
   initial: ProductDraft
   categories: Tables<'menu_categories'>[]
   groups: ModifierGroupWithOptions[]
 }
 
-function ProductForm({ productId, title, initial, categories, groups }: ProductFormProps) {
+function ProductForm({ productId, initial, categories, groups }: ProductFormProps) {
   const restaurant = useRestaurant()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -98,12 +104,13 @@ function ProductForm({ productId, title, initial, categories, groups }: ProductF
   const formId = useId()
   const fieldId = (field: DraftField) => `${formId}-${field}`
   const [attempted, setAttempted] = useState(false)
-  const fieldErrors = attempted ? draftErrors(draft) : []
+  const parsed = parseProductDraft(draft)
+  const fieldErrors = attempted && !parsed.ok ? parsed.errors : []
   const errorFor = (field: DraftField) =>
     fieldErrors.find((error) => error.field === field)?.message
 
   const save = useMutation(errors.saving('No pudimos guardar el producto.', {
-    mutationFn: () => saveProduct({ restaurantId: restaurant.id, productId, draft }),
+    mutationFn: (payload: ProductPayload) => saveProduct({ restaurantId: restaurant.id, productId, payload }),
     onSuccess: async (savedId) => {
       // Las dos cachés son independientes: no hay razón para encadenarlas.
       await Promise.all([
@@ -114,16 +121,16 @@ function ProductForm({ productId, title, initial, categories, groups }: ProductF
     },
   }))
 
+  // Lo que se guarda es lo que se validó: el payload sale del mismo parseo.
   function submit() {
-    const [first] = draftErrors(draft)
-    if (!first) {
-      save.mutate()
+    if (parsed.ok) {
+      save.mutate(parsed.payload)
       return
     }
     // El error tiene que estar en el DOM antes de mover el foco: así el lector
     // de pantalla anuncia el campo junto con su error, y no solo el campo.
     flushSync(() => setAttempted(true))
-    document.getElementById(fieldId(first.field))?.focus()
+    document.getElementById(fieldId(parsed.errors[0].field))?.focus()
   }
 
   const toggle = <T,>(list: T[], value: T) =>
@@ -137,7 +144,7 @@ function ProductForm({ productId, title, initial, categories, groups }: ProductF
     })
 
   return (
-    <Page title={title} back={{ to: '/productos', label: 'Volver a productos' }}>
+    <>
       <section className="space-y-4 rounded-xl border border-neutral-200 bg-white p-5">
         <h2 className="font-semibold text-neutral-900">Información básica</h2>
         <Field label="Nombre" error={errorFor('name')}>
@@ -325,13 +332,13 @@ function ProductForm({ productId, title, initial, categories, groups }: ProductF
       <ErrorText error={errors.message} />
 
       <div className="flex justify-end gap-2 pb-8">
-        <Link to="/productos">
-          <Button variant="secondary">Cancelar</Button>
+        <Link to="/productos" className={buttonClass('secondary')}>
+          Cancelar
         </Link>
         <Button onClick={submit} disabled={save.isPending}>
           {save.isPending ? 'Guardando…' : productId ? 'Guardar cambios' : 'Crear producto'}
         </Button>
       </div>
-    </Page>
+    </>
   )
 }

@@ -1,6 +1,12 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
-import { draftErrors, draftFrom, draftPrice, emptyDraft } from '../src/features/product-draft'
+import { draftFrom, emptyDraft, parseProductDraft, type ProductDraft } from '../src/features/product-draft'
+
+/** Los problemas del borrador, o ninguno si ya se puede guardar. */
+const errorsOf = (draft: ProductDraft) => {
+  const parsed = parseProductDraft(draft)
+  return parsed.ok ? [] : parsed.errors
+}
 
 const saved = {
   id: 'product-a',
@@ -40,29 +46,38 @@ test('emptyDraft es un producto nuevo disponible y sin nada cargado', () => {
   assert.deepEqual([draft.media, draft.ingredients, draft.groupIds], [[], [], []])
 })
 
-test('draftPrice solo acepta un precio real', () => {
-  const base = emptyDraft()
-  assert.equal(draftPrice({ ...base, basePrice: '0' }), 0)
-  assert.equal(draftPrice({ ...base, basePrice: '1250.50' }), 1250.5)
-  assert.equal(draftPrice({ ...base, basePrice: '' }), null)
-  assert.equal(draftPrice({ ...base, basePrice: '   ' }), null)
-  assert.equal(draftPrice({ ...base, basePrice: 'gratis' }), null)
-  assert.equal(draftPrice({ ...base, basePrice: '-5' }), null)
+test('el payload lleva el precio como número, y solo si es un precio real', () => {
+  const valid = { ...emptyDraft(), name: 'Papas', categoryId: 'c1' }
+  const price = (basePrice: string) => {
+    const parsed = parseProductDraft({ ...valid, basePrice })
+    return parsed.ok ? parsed.payload.basePrice : null
+  }
+  assert.equal(price('0'), 0)
+  assert.equal(price('1250.50'), 1250.5)
+  // Vacío, letras o negativo no son precios; un tercer decimal se redondearía en silencio al guardar.
+  for (const text of ['', '   ', 'gratis', '-5', '1250.555']) assert.equal(price(text), null, JSON.stringify(text))
 })
 
-test('draftErrors dice qué campo impide guardar y por qué', () => {
+test('el payload es el borrador validado, sin volver a pedir nada', () => {
+  const draft = { ...emptyDraft(), name: 'Papas', categoryId: 'c1', basePrice: '500', dietaryTags: ['vegano'] }
+  const parsed = parseProductDraft(draft)
+  assert.ok(parsed.ok)
+  assert.deepEqual(parsed.payload, { ...draft, basePrice: 500 })
+})
+
+test('los errores dicen qué campo impide guardar y por qué', () => {
   const valid = { ...emptyDraft(), name: 'Papas', categoryId: 'c1', basePrice: '500' }
-  const only = (draft: typeof valid) => draftErrors(draft).map((error) => error.field)
-  assert.deepEqual(draftErrors(valid), [])
+  const only = (draft: ProductDraft) => errorsOf(draft).map((error) => error.field)
+  assert.deepEqual(errorsOf(valid), [])
   assert.deepEqual(only({ ...valid, name: '  ' }), ['name'])
   assert.deepEqual(only({ ...valid, categoryId: '' }), ['categoryId'])
   assert.deepEqual(only({ ...valid, basePrice: 'x' }), ['basePrice'])
-  assert.match(draftErrors({ ...valid, basePrice: '' })[0].message, /precio/)
+  assert.match(errorsOf({ ...valid, basePrice: '' })[0].message, /precio/)
 })
 
-test('draftErrors junta todos los problemas en el orden del formulario', () => {
+test('los errores juntan todos los problemas en el orden del formulario', () => {
   const ingredient = (name: string) => ({ name, is_removable: true, is_available: true })
-  const errors = draftErrors({
+  const errors = errorsOf({
     ...emptyDraft(),
     ingredients: [ingredient('Pan'), ingredient(' '), ingredient('')],
   })
