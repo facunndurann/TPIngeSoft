@@ -26,7 +26,7 @@ function useControlSize(size: ControlSize | undefined): ControlSize {
   return size ?? appSize
 }
 
-type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost'
+type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'danger-ghost'
 
 const buttonStyles: Record<ButtonVariant, string> = {
   primary:
@@ -35,6 +35,9 @@ const buttonStyles: Record<ButtonVariant, string> = {
     'border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50 disabled:text-neutral-400',
   danger: 'bg-red-600 text-white hover:bg-red-700 disabled:bg-red-300',
   ghost: 'text-muted hover:bg-neutral-100 disabled:text-neutral-300',
+  // Una acción destructiva que no es la principal: se reconoce por el rojo, pero
+  // no compite con el botón de avanzar. El rojo lleno queda para confirmarla.
+  'danger-ghost': 'text-red-700 hover:bg-red-50 disabled:text-red-300',
 }
 
 // El padding horizontal va acá y no en la base: dos `px-*` en la misma clase

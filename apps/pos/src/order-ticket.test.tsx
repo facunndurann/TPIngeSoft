@@ -45,8 +45,6 @@ const cleanups: (() => void)[] = []
 afterEach(() => {
   cleanups.splice(0).forEach((cleanup) => cleanup())
   vi.mocked(transitionPosOrder).mockReset()
-  // happy-dom no trae window.confirm: cada prueba que cancela pone el suyo.
-  Reflect.deleteProperty(window, 'confirm')
 })
 
 /** Varios tickets en la misma pantalla, como en el tablero. */
@@ -112,21 +110,52 @@ test('a failed transition shows its error on that ticket and nowhere else', asyn
   assert.equal(invalidate.mock.calls.length, 0)
 })
 
-test('cancelling asks first and only runs once the staff confirms', async () => {
-  vi.mocked(transitionPosOrder).mockResolvedValue(undefined)
-  const confirm = vi.fn(() => false)
-  Object.defineProperty(window, 'confirm', { configurable: true, value: confirm })
-  const { container, invalidate } = await renderTickets(readyAt('order-a', 'Mesa 1'))
+/** El botón cuyo texto es exactamente `text`: en el ticket y en su modal hay más de un «Cancelar…». */
+const exactButtonIn = (root: Element, text: string) =>
+  [...root.querySelectorAll('button')].find((button) => button.textContent?.trim() === text)!
 
-  await act(async () => buttonIn(ticketOf(container, 'Mesa 1'), 'Cancelar').click())
-  assert.deepEqual(confirm.mock.calls, [['¿Cancelar el pedido de Mesa 1? Se saca de la cuenta.']])
+test('cancel sits apart from the advance button, in the secondary row', async () => {
+  const { container } = await renderTickets(readyAt('order-a', 'Mesa 1'))
+  const ticket = ticketOf(container, 'Mesa 1')
+
+  const advance = exactButtonIn(ticket, 'Entregar')
+  const cancel = exactButtonIn(ticket, 'Cancelar')
+  // No comparten fila, y la de cancelar va después, debajo de la de avanzar.
+  assert.notEqual(advance.parentElement, cancel.parentElement)
+  assert.ok(advance.compareDocumentPosition(cancel) & Node.DOCUMENT_POSITION_FOLLOWING)
+})
+
+test('cancelling asks in a modal first and only runs once the staff confirms', async () => {
+  vi.mocked(transitionPosOrder).mockResolvedValue(undefined)
+  const { container, invalidate } = await renderTickets(readyAt('order-a', 'Mesa 1'))
+  const dialog = () => container.querySelector('dialog')
+
+  // Abrir y arrepentirse no toca el pedido.
+  await act(async () => exactButtonIn(ticketOf(container, 'Mesa 1'), 'Cancelar').click())
+  assert.match(dialog()?.textContent ?? '', /Cancelar el pedido de Mesa 1/)
+  await act(async () => exactButtonIn(dialog()!, 'Mantener pedido').click())
+  assert.equal(dialog(), null)
   assert.equal(vi.mocked(transitionPosOrder).mock.calls.length, 0)
 
-  confirm.mockReturnValue(true)
-  await act(async () => buttonIn(ticketOf(container, 'Mesa 1'), 'Cancelar').click())
+  await act(async () => exactButtonIn(ticketOf(container, 'Mesa 1'), 'Cancelar').click())
+  await act(async () => exactButtonIn(dialog()!, 'Cancelar pedido').click())
   await settle()
 
   assert.deepEqual(vi.mocked(transitionPosOrder).mock.calls, [['order-a', 'cancelled']])
+  assert.equal(dialog(), null)
   // Guardado: el cliente del POS relee todo (tablero, mesas, comanda).
   assert.deepEqual(invalidate.mock.calls, [[{ queryKey: ['pos'] }]])
+})
+
+test('a failed cancel keeps the modal open with its error', async () => {
+  vi.mocked(transitionPosOrder).mockRejectedValue(new Error('El pedido ya cambió de estado.'))
+  const { container } = await renderTickets(readyAt('order-a', 'Mesa 1'))
+
+  await act(async () => exactButtonIn(ticketOf(container, 'Mesa 1'), 'Cancelar').click())
+  await act(async () => exactButtonIn(container.querySelector('dialog')!, 'Cancelar pedido').click())
+  await settle()
+
+  const dialog = container.querySelector('dialog')!
+  assert.match(dialog.textContent ?? '', /El pedido ya cambió de estado\./)
+  assert.equal(exactButtonIn(dialog, 'Cancelar pedido').disabled, false)
 })
