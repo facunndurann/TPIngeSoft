@@ -2,13 +2,13 @@
 begin;
 
 create function pg_temp.expect_payment_error(
-  sid uuid, amount numeric, method public.payment_method, mode public.payment_mode,
+  sid uuid, amount numeric, method public.payment_method,
   participant uuid, reference text, expected text
 ) returns void language plpgsql as $$
 declare actual text;
 begin
   begin
-    perform public.pos_record_payment(sid, amount, method, mode, participant, reference);
+    perform public.pos_record_payment(sid, amount, method, participant, reference);
   exception when others then actual := sqlerrm;
   end;
   if actual is distinct from expected then
@@ -56,22 +56,23 @@ begin
     where restaurant_id = restaurant and user_id = operator_id;
 
   perform set_config('request.jwt.claim.sub', '', true);
-  perform pg_temp.expect_payment_error(sid, 1, 'external', 'custom', null, null, 'AUTH_REQUIRED');
+  perform pg_temp.expect_payment_error(sid, 1, 'external', null, null, 'AUTH_REQUIRED');
   perform set_config('request.jwt.claim.sub', diner::text, true);
-  perform pg_temp.expect_payment_error(sid, 1, 'external', 'custom', participant, null, 'FORBIDDEN');
+  perform pg_temp.expect_payment_error(sid, 1, 'external', participant, null, 'FORBIDDEN');
   perform set_config('request.jwt.claim.sub', outsider::text, true);
-  perform pg_temp.expect_payment_error(sid, 1, 'external', 'custom', null, null, 'FORBIDDEN');
+  perform pg_temp.expect_payment_error(sid, 1, 'external', null, null, 'FORBIDDEN');
   perform set_config('request.jwt.claim.sub', operator_id::text, true);
 
-  perform pg_temp.expect_payment_error(sid, 0, 'external', 'custom', null, null, 'INVALID_PAYMENT_AMOUNT');
-  perform pg_temp.expect_payment_error(sid, 'NaN', 'external', 'custom', null, null, 'INVALID_PAYMENT_AMOUNT');
-  perform pg_temp.expect_payment_error(sid, 'Infinity', 'external', 'custom', null, null, 'INVALID_PAYMENT_AMOUNT');
-  perform pg_temp.expect_payment_error(sid, 1.001, 'external', 'custom', null, null, 'INVALID_PAYMENT_AMOUNT');
-  perform pg_temp.expect_payment_error(sid, 11, 'external', 'custom', null, null, 'PAYMENT_EXCEEDS_BALANCE');
-  perform pg_temp.expect_payment_error(sid, 1, 'mobile', 'custom', null, null, 'PAYMENT_METHOD_DISABLED');
-  perform pg_temp.expect_payment_error(sid, 1, 'external', 'custom', gen_random_uuid(), null, 'INVALID_PARTICIPANT');
+  perform pg_temp.expect_payment_error(sid, 0, 'external', null, null, 'INVALID_PAYMENT_AMOUNT');
+  perform pg_temp.expect_payment_error(sid, 'NaN', 'external', null, null, 'INVALID_PAYMENT_AMOUNT');
+  perform pg_temp.expect_payment_error(sid, 'Infinity', 'external', null, null, 'INVALID_PAYMENT_AMOUNT');
+  perform pg_temp.expect_payment_error(sid, 1.001, 'external', null, null, 'INVALID_PAYMENT_AMOUNT');
+  perform pg_temp.expect_payment_error(sid, 11, 'external', null, null, 'PAYMENT_EXCEEDS_BALANCE');
+  perform pg_temp.expect_payment_error(sid, 1, 'mobile', null, null, 'PAYMENT_METHOD_DISABLED');
+  perform pg_temp.expect_payment_error(sid, 1, 'external', gen_random_uuid(), null, 'INVALID_PARTICIPANT');
 
-  payment_id := public.pos_record_payment(sid, 4, 'in_person', 'custom', participant, 'receipt-1');
+  -- 4 de 10 pendientes: el servidor lo registra como importe parcial.
+  payment_id := public.pos_record_payment(sid, 4, 'in_person', participant, 'receipt-1');
   if not exists(
     select 1 from public.payments where id = payment_id and restaurant_id = restaurant
       and session_id = sid and participant_id = participant and amount = 4
@@ -98,30 +99,39 @@ begin
   if bill.paid_amount <> 4 or bill.pending_amount <> 6 or bill.is_settled
     then raise exception 'Pending/rejected payments changed the balance'; end if;
 
-  perform pg_temp.expect_payment_error(sid, 1, 'in_person', 'custom', null, 'receipt-1', 'PAYMENT_REFERENCE_CONFLICT');
+  perform pg_temp.expect_payment_error(sid, 1, 'in_person', null, 'receipt-1', 'PAYMENT_REFERENCE_CONFLICT');
   update public.branches set payment_methods = '{mobile,external}' where id = branch;
-  perform pg_temp.expect_payment_error(sid, 1, 'in_person', 'custom', null, null, 'PAYMENT_METHOD_DISABLED');
-  perform pg_temp.expect_payment_error(sid, 1, 'mobile', 'custom', null, null, 'PAYMENT_METHOD_UNAVAILABLE');
+  perform pg_temp.expect_payment_error(sid, 1, 'in_person', null, null, 'PAYMENT_METHOD_DISABLED');
+  perform pg_temp.expect_payment_error(sid, 1, 'mobile', null, null, 'PAYMENT_METHOD_UNAVAILABLE');
 
-  payment_id := public.pos_record_payment(sid, 6, 'external', 'full', null, 'cash-2');
+  -- 6 de 6 pendientes: salda la cuenta, así que el servidor lo registra como completa.
+  payment_id := public.pos_record_payment(sid, 6, 'external', null, 'cash-2');
+  if not exists(select 1 from public.payments where id = payment_id and mode = 'full')
+    then raise exception 'A payment that settles the bill was not recorded as full'; end if;
   select * into bill from public.session_bills where session_id = sid;
   if bill.paid_amount <> 10 or bill.pending_amount <> 0 or not bill.is_settled
     then raise exception 'Settled bill is incorrect: %', to_jsonb(bill); end if;
-  perform pg_temp.expect_payment_error(sid, 1, 'external', 'custom', null, null, 'NOTHING_TO_PAY');
+  perform pg_temp.expect_payment_error(sid, 1, 'external', null, null, 'NOTHING_TO_PAY');
 
   update public.table_sessions set status = 'closed', closed_at = now() where id = sid;
-  perform pg_temp.expect_payment_error(sid, 1, 'external', 'custom', null, null, 'SESSION_CLOSED');
+  perform pg_temp.expect_payment_error(sid, 1, 'external', null, null, 'SESSION_CLOSED');
 
   if has_table_privilege('authenticated', 'public.payments', 'INSERT')
     or has_table_privilege('authenticated', 'public.payments', 'UPDATE')
     or has_table_privilege('authenticated', 'public.payments', 'DELETE')
     or has_function_privilege('anon',
-      'public.pos_record_payment(uuid,numeric,public.payment_method,public.payment_mode,uuid,text)',
+      'public.pos_record_payment(uuid,numeric,public.payment_method,uuid,text)',
       'EXECUTE')
     or not has_function_privilege('authenticated',
-      'public.pos_record_payment(uuid,numeric,public.payment_method,public.payment_mode,uuid,text)',
+      'public.pos_record_payment(uuid,numeric,public.payment_method,uuid,text)',
       'EXECUTE') then
     raise exception 'Payment mutation privileges are unsafe';
+  end if;
+  -- La firma que dejaba al cliente elegir el modo no puede seguir existiendo.
+  if to_regprocedure(
+    'public.pos_record_payment(uuid,numeric,public.payment_method,public.payment_mode,uuid,text)'
+  ) is not null then
+    raise exception 'pos_record_payment still accepts a client-chosen mode';
   end if;
   raise notice 'Payment SQL assertions passed (ledger, RPC, permissions and approved-only balance)';
 end;

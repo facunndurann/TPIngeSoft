@@ -1594,7 +1594,6 @@ export type Database = {
           p_amount: number
           p_external_reference?: string
           p_method: Database["public"]["Enums"]["payment_method"]
-          p_mode?: Database["public"]["Enums"]["payment_mode"]
           p_participant_id?: string
           p_session_id: string
         }

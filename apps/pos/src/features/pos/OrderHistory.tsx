@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { formatPrice, localDateKey, type OrderStatus, orderStatusLabels, RESTAURANT_TIME_ZONE } from '@restaurant-platform/shared'
+import { formatClock, formatPrice, localDateKey, type OrderStatus, orderStatusLabels } from '@restaurant-platform/shared'
 import { useRestaurant } from '@/context/pos-context'
 import { Badge, EmptyState, ErrorText, Input, Modal, Select, Spinner } from '@restaurant-platform/ui'
 import { posHistoryQuery, type PosOrder } from './queries'
@@ -177,14 +177,6 @@ function HistoryDetail({ order }: { order: PosOrder }) {
       {order.notes && <p className="rounded-lg bg-amber-50 px-3 py-2 text-amber-950">Nota: {order.notes}</p>}
     </div>
   )
-}
-
-function formatClock(iso: string) {
-  return new Intl.DateTimeFormat('es-AR', {
-    timeZone: RESTAURANT_TIME_ZONE,
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(iso))
 }
 
 function formatLongDate(dateKey: string) {

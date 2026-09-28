@@ -9,7 +9,6 @@ import {
   unwrap,
   type OrderStatus,
   type PaymentMethod,
-  type PaymentMode,
   type SessionRequestKind,
   type Tables,
 } from '@restaurant-platform/shared'
@@ -242,11 +241,14 @@ export const sessionPaymentsQuery = (restaurantId: string, branchId: string, ses
 // Escrituras. Ninguna refresca la caché por su cuenta: de eso se encarga el
 // MutationCache de createPosQueryClient después de cada una que sale bien.
 
+/**
+ * Registra un cobro presencial o externo. Si es la cuenta completa o un importe
+ * parcial lo decide la RPC, con el pendiente real y la sesión bloqueada.
+ */
 export async function recordPosPayment(input: {
   sessionId: string
   amount: number
   method: PaymentMethod
-  mode: PaymentMode
   externalReference?: string
 }) {
   return unwrap(
@@ -254,7 +256,6 @@ export async function recordPosPayment(input: {
       p_session_id: input.sessionId,
       p_amount: input.amount,
       p_method: input.method,
-      p_mode: input.mode,
       p_external_reference: input.externalReference || undefined,
     }),
   )

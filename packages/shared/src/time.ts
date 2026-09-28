@@ -28,6 +28,11 @@ const dayAndMonth = new Intl.DateTimeFormat('es-AR', {
   month: 'numeric',
 });
 
+/** Solo la hora en la zona del restaurante, «22:52»: para listas que ya son de un solo día. */
+export function formatClock(at: string): string {
+  return clock.format(new Date(at));
+}
+
 /**
  * La hora de algo que pasó en la mesa, como la dice un mozo: «22:52». Una sesión casi
  * siempre empieza y termina el mismo día, así que la fecha aparece solo cuando no es
@@ -36,7 +41,7 @@ const dayAndMonth = new Intl.DateTimeFormat('es-AR', {
  */
 export function formatTableTime(at: string, now: number): string {
   const date = new Date(at);
-  const time = clock.format(date);
+  const time = formatClock(at);
   return localDateKey(date) === localDateKey(new Date(now)) ? time : `${dayAndMonth.format(date)} ${time}`;
 }
 

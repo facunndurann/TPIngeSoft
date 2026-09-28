@@ -945,7 +945,7 @@ $$;
 ALTER FUNCTION "public"."pos_open_table_session"("p_table_id" "uuid") OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "public"."pos_record_payment"("p_session_id" "uuid", "p_amount" numeric, "p_method" "public"."payment_method", "p_mode" "public"."payment_mode" DEFAULT 'full'::"public"."payment_mode", "p_participant_id" "uuid" DEFAULT NULL::"uuid", "p_external_reference" "text" DEFAULT NULL::"text") RETURNS "uuid"
+CREATE OR REPLACE FUNCTION "public"."pos_record_payment"("p_session_id" "uuid", "p_amount" numeric, "p_method" "public"."payment_method", "p_participant_id" "uuid" DEFAULT NULL::"uuid", "p_external_reference" "text" DEFAULT NULL::"text") RETURNS "uuid"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
     AS $$
@@ -956,11 +956,12 @@ declare
   account_total numeric := 0;
   approved_total numeric := 0;
   pending_total numeric := 0;
+  decided_mode public.payment_mode;
   payment_id uuid;
   normalized_reference text := nullif(btrim(p_external_reference), '');
 begin
   if auth.uid() is null then raise exception 'AUTH_REQUIRED'; end if;
-  if p_session_id is null or p_amount is null or p_method is null or p_mode is null
+  if p_session_id is null or p_amount is null or p_method is null
     then raise exception 'INVALID_REQUEST'; end if;
   if p_amount in ('NaN'::numeric, 'Infinity'::numeric, '-Infinity'::numeric)
     or p_amount <= 0 or p_amount <> round(p_amount, 2)
@@ -1005,12 +1006,16 @@ begin
   if pending_total = 0 then raise exception 'NOTHING_TO_PAY'; end if;
   if p_amount > pending_total then raise exception 'PAYMENT_EXCEEDS_BALANCE'; end if;
 
+  -- Con la sesión bloqueada el pendiente no puede cambiar hasta el commit: si
+  -- el cobro lo salda es la cuenta completa, y si no, un importe parcial.
+  decided_mode := case when p_amount = pending_total then 'full' else 'custom' end;
+
   begin
     insert into public.payments(
       restaurant_id, session_id, participant_id, amount, mode, method,
       status, external_reference
     ) values (
-      target.restaurant_id, target.id, p_participant_id, p_amount, p_mode,
+      target.restaurant_id, target.id, p_participant_id, p_amount, decided_mode,
       p_method, 'approved', normalized_reference
     ) returning id into payment_id;
   exception when unique_violation then
@@ -1023,7 +1028,7 @@ begin
       'paymentId', payment_id,
       'amount', p_amount,
       'method', p_method,
-      'mode', p_mode,
+      'mode', decided_mode,
       'participantId', p_participant_id
     )
   );
@@ -1032,7 +1037,7 @@ end;
 $$;
 
 
-ALTER FUNCTION "public"."pos_record_payment"("p_session_id" "uuid", "p_amount" numeric, "p_method" "public"."payment_method", "p_mode" "public"."payment_mode", "p_participant_id" "uuid", "p_external_reference" "text") OWNER TO "postgres";
+ALTER FUNCTION "public"."pos_record_payment"("p_session_id" "uuid", "p_amount" numeric, "p_method" "public"."payment_method", "p_participant_id" "uuid", "p_external_reference" "text") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."pos_resolve_session_request"("p_session_id" "uuid", "p_kind" "public"."session_request_kind") RETURNS timestamp with time zone
@@ -3703,9 +3708,9 @@ GRANT ALL ON FUNCTION "public"."pos_open_table_session"("p_table_id" "uuid") TO 
 
 
 
-REVOKE ALL ON FUNCTION "public"."pos_record_payment"("p_session_id" "uuid", "p_amount" numeric, "p_method" "public"."payment_method", "p_mode" "public"."payment_mode", "p_participant_id" "uuid", "p_external_reference" "text") FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."pos_record_payment"("p_session_id" "uuid", "p_amount" numeric, "p_method" "public"."payment_method", "p_mode" "public"."payment_mode", "p_participant_id" "uuid", "p_external_reference" "text") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."pos_record_payment"("p_session_id" "uuid", "p_amount" numeric, "p_method" "public"."payment_method", "p_mode" "public"."payment_mode", "p_participant_id" "uuid", "p_external_reference" "text") TO "service_role";
+REVOKE ALL ON FUNCTION "public"."pos_record_payment"("p_session_id" "uuid", "p_amount" numeric, "p_method" "public"."payment_method", "p_participant_id" "uuid", "p_external_reference" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."pos_record_payment"("p_session_id" "uuid", "p_amount" numeric, "p_method" "public"."payment_method", "p_participant_id" "uuid", "p_external_reference" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."pos_record_payment"("p_session_id" "uuid", "p_amount" numeric, "p_method" "public"."payment_method", "p_participant_id" "uuid", "p_external_reference" "text") TO "service_role";
 
 
 
