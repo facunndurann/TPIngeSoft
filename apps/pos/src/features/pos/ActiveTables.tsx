@@ -1,25 +1,15 @@
-import { useState } from 'react'
 import { Link } from 'react-router'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { asAmount, formatElapsed, formatPrice, sessionRequestsOf } from '@restaurant-platform/shared'
-import { useCan, useRestaurant } from '@/context/pos-context'
-import { Badge, Button, EmptyState, ErrorText, Modal, Spinner, useNow, useSaveErrors } from '@restaurant-platform/ui'
-import {
-  closePosSession,
-  loadRestaurantTables,
-  posOpenSessionsQuery,
-  posQueryKey,
-  type PosOpenSession,
-} from './api'
+import { useQuery } from '@tanstack/react-query'
+import { formatElapsed, formatPrice, sessionRequestsOf } from '@restaurant-platform/shared'
+import { useRestaurant } from '@/context/pos-context'
+import { Badge, Button, EmptyState, ErrorText, Spinner, useNow } from '@restaurant-platform/ui'
+import { loadRestaurantTables, posOpenSessionsQuery, posQueryKey } from './api'
+import { CloseSessionButton } from './CloseSessionButton'
 import { AttendRequestButtons, ChargedBadge, SessionRequestBadges } from './ServiceRequests'
 
 export function ActiveTables() {
   const restaurant = useRestaurant()
-  const can = useCan()
-  const queryClient = useQueryClient()
   const now = useNow()
-  const [closing, setClosing] = useState<PosOpenSession | null>(null)
-  const errors = useSaveErrors()
 
   const sessions = useQuery(posOpenSessionsQuery(restaurant.id, restaurant.branchId))
   const tables = useQuery({
@@ -38,14 +28,6 @@ export function ActiveTables() {
       return oldest ? [{ session, since: oldest.requestedAt }] : []
     })
     .sort((a, b) => a.since.localeCompare(b.since))
-
-  const closeMutation = useMutation(errors.saving('No pudimos cerrar la sesión.', {
-    mutationFn: (sessionId: string) => closePosSession(sessionId),
-    onSuccess: () => {
-      setClosing(null)
-      void queryClient.invalidateQueries({ queryKey: posQueryKey(restaurant.id, restaurant.branchId) })
-    },
-  }))
 
   return (
     <div className="space-y-6">
@@ -158,15 +140,7 @@ export function ActiveTables() {
                   <Link to={`/salon/${session.table_id}`} className="flex-1">
                     <Button className="w-full">Continuar comanda</Button>
                   </Link>
-                  {can('sessions.close') && (
-                    <Button
-                      variant="secondary"
-                      className="flex-1"
-                      onClick={() => { errors.clear(); setClosing(session) }}
-                    >
-                      Cerrar sesión
-                    </Button>
-                  )}
+                  <CloseSessionButton session={session} className="flex-1" />
                 </div>
               </article>
             )
@@ -190,48 +164,6 @@ export function ActiveTables() {
             ))}
           </ul>
         </section>
-      )}
-
-      {closing && (
-        <Modal title={`Cerrar ${closing.table_label}`} onClose={() => setClosing(null)}>
-          <div className="space-y-3 text-sm text-neutral-700">
-            <p>
-              Los comensales no podrán enviar más pedidos en esta cuenta. Si vuelven a escanear el QR se
-              abre una sesión nueva.
-            </p>
-            {asAmount(closing.pending_amount) > 0 && (
-              <p className="rounded-lg bg-amber-50 px-3 py-2 text-amber-950">
-                Queda {formatPrice(closing.pending_amount)} pendiente. Registrá el cobro desde la
-                comanda antes de cerrar si la mesa ya pagó.
-              </p>
-            )}
-            {closing.kitchen_tickets > 0 && (
-              <p className="rounded-lg bg-indigo-50 px-3 py-2 text-indigo-950">
-                Hay {closing.kitchen_tickets} comanda{closing.kitchen_tickets === 1 ? '' : 's'} todavía en cocina. Van a
-                seguir visibles en el tablero.
-              </p>
-            )}
-            {asAmount(closing.submitted_amount) > 0 && (
-              <p className="rounded-lg bg-red-50 px-3 py-2 text-red-800">
-                Hay pedidos enviados sin aceptar. Podés cancelarlos desde Comandas.
-              </p>
-            )}
-            <ErrorText error={errors.message} />
-            <div className="flex gap-2">
-              <Button variant="secondary" className="flex-1" onClick={() => setClosing(null)}>
-                Seguir abierta
-              </Button>
-              <Button
-                variant="danger"
-                className="flex-1"
-                disabled={closeMutation.isPending}
-                onClick={() => closeMutation.mutate(closing.id)}
-              >
-                {closeMutation.isPending ? 'Cerrando…' : 'Cerrar sesión'}
-              </Button>
-            </div>
-          </div>
-        </Modal>
       )}
     </div>
   )
