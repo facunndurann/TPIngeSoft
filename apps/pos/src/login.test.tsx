@@ -78,3 +78,34 @@ test('a malformed username is explained without reaching Auth', async () => {
   assert.match(text, /El usuario debe tener 3–32 caracteres/)
   assert.equal(vi.mocked(supabase.auth.signInWithPassword).mock.calls.length, 0)
 })
+
+test('the password can be shown to check what the tablet typed, and hides again after trying', async () => {
+  vi.mocked(supabase.auth.signInWithPassword).mockResolvedValue(rejected('invalid_credentials'))
+  const container = document.createElement('div')
+  document.body.append(container)
+  const root = createRoot(container)
+  cleanups.push(() => {
+    act(() => root.unmount())
+    container.remove()
+  })
+  await act(async () => root.render(<LoginPage />))
+
+  const secret = container.querySelectorAll('input')[1]
+  const toggle = container.querySelector<HTMLButtonElement>('button[aria-label="Mostrar contraseña"]')!
+  // Fuera del <label>: el nombre del campo sigue siendo solo «Contraseña».
+  assert.equal(secret.closest('label')!.querySelector('button'), null)
+  assert.equal(secret.type, 'password')
+  assert.equal(toggle.getAttribute('aria-pressed'), 'false')
+
+  await act(async () => toggle.click())
+  assert.equal(secret.type, 'text')
+  assert.equal(toggle.getAttribute('aria-pressed'), 'true')
+  // A la vista, el teclado no la corrige ni le pone mayúscula.
+  assert.equal(secret.getAttribute('autocapitalize'), 'none')
+  assert.equal(secret.getAttribute('spellcheck'), 'false')
+
+  await act(async () => {
+    container.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+  })
+  assert.equal(secret.type, 'password')
+})

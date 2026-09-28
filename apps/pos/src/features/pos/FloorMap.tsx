@@ -216,7 +216,16 @@ function FloorSurface({
                 {/* La mesa se lee de lejos: solo lo que entra en 12px y a contraste
                     pleno. El total y el responsable siguen en el aria-label y en el
                     resumen que abre el toque. */}
-                <span className="max-w-full truncate px-1 text-xs font-bold leading-tight">{table.label}</span>
+                {/* Con lugar, el nombre usa dos renglones antes de cortarse. Cortado,
+                    el title lo muestra entero con el mouse y el resumen, al tocarla. */}
+                <span
+                  title={table.label}
+                  className={`max-w-full px-1 text-xs font-bold leading-tight ${
+                    tile.footprint.h > 1 ? 'line-clamp-2 break-words' : 'truncate'
+                  }`}
+                >
+                  {table.label}
+                </span>
                 <span className={`mt-0.5 max-w-[90%] truncate rounded px-1 py-0.5 text-xs font-semibold leading-none ${tableStateStyles[state].tileLabel}`}>
                   {posTableStateLabels[state]}
                 </span>

@@ -80,4 +80,7 @@ test('a table shows only name, state and time; one cell high leaves just name an
   assert.equal(tileText(html, 'Mesa 1').text, 'Mesa 1 Ocupada hace 5 min')
   // Una celda de alto: los lugares no entran en 12px.
   assert.deepEqual(tileText(html, 'Mesa 2'), { text: 'Mesa 2 Libre', hasIcon: false })
+  // Con lugar, el nombre usa dos renglones; sin lugar se corta. Siempre con el nombre entero en title.
+  assert.match(html, /<span title="Mesa 1" class="[^"]*\bline-clamp-2\b/)
+  assert.match(html, /<span title="Mesa 2" class="[^"]*\btruncate\b/)
 })

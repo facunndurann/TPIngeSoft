@@ -36,14 +36,16 @@ export function OrderTicket({ order }: { order: PosOrder }) {
 
   return (
     <article className="rounded-xl border border-neutral-200 bg-white p-3 shadow-sm flex flex-col">
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex-1">
+      {/* Si el estado no entra al lado de la mesa, baja entero a la línea de
+          abajo: la base de 8rem fuerza el salto antes de partir el rótulo. */}
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0 flex-[1_1_8rem]">
           <p className="text-sm font-semibold text-neutral-900 break-words">{table.label}</p>
           <p className="text-xs text-neutral-500 break-words">
             {submitter} · <Elapsed since={order.created_at} precision="exact" />
           </p>
         </div>
-        <OrderStatusBadge status={order.status} className="max-w-[85px] shrink-0" />
+        <OrderStatusBadge status={order.status} className="shrink-0 whitespace-nowrap" />
       </div>
 
       {order.table_sessions.status === 'closed' && (

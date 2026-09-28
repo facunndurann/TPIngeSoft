@@ -159,3 +159,13 @@ test('a failed cancel keeps the modal open with its error', async () => {
   assert.match(dialog.textContent ?? '', /El pedido ya cambió de estado\./)
   assert.equal(exactButtonIn(dialog, 'Cancelar pedido').disabled, false)
 })
+
+test('the status label never breaks into lines: if it does not fit, it drops whole below the table', async () => {
+  const { container } = await renderTickets(readyAt('order-a', 'Mesa 1'))
+  const badge = [...ticketOf(container, 'Mesa 1').querySelectorAll('span')]
+    .find((span) => span.textContent === 'Listo para servir')!
+
+  assert.match(badge.className, /\bwhitespace-nowrap\b/)
+  assert.doesNotMatch(badge.className, /max-w-/)
+  assert.match(badge.parentElement!.className, /\bflex-wrap\b/)
+})
