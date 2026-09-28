@@ -1,10 +1,11 @@
 import { useEffect } from 'react'
 import { Link, NavLink, Outlet } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
-import { Button, ClockProvider } from '@restaurant-platform/ui'
+import { Badge, Button, ClockProvider } from '@restaurant-platform/ui'
 import { useCan, usePosContext } from '@/context/pos-context'
 import { refreshPos } from '@/lib/query-client'
 import { supabase } from '@/lib/supabase'
+import { alertSummary, posAlertCopy, usePosAlerts } from './alerts'
 import { subscribeToRestaurantPos } from './realtime'
 import { posSections } from './sections'
 
@@ -12,6 +13,7 @@ export function PosPage({ multipleContexts }: { multipleContexts: boolean }) {
   const context = usePosContext()
   const can = useCan()
   const queryClient = useQueryClient()
+  const alerts = usePosAlerts()
 
   useEffect(
     () =>
@@ -58,9 +60,25 @@ export function PosPage({ multipleContexts }: { multipleContexts: boolean }) {
               }
             >
               {section.label}
+              {/* El espacio separa el número del nombre también para el lector de
+                  pantalla: la pestaña se anuncia «Comandas 3 nuevas». */}
+              {section.alert && alerts[section.alert] > 0 && (
+                <>
+                  {' '}
+                  <Badge color={posAlertCopy[section.alert].tone} className="ml-2">
+                    {posAlertCopy[section.alert].short(alerts[section.alert])}
+                  </Badge>
+                </>
+              )}
             </NavLink>
           ))}
       </nav>
+
+      {/* Una sola región para todo lo nuevo, con la frase completa: el lector de
+          pantalla la lee cuando cambia, sin mover el foco de donde se está. */}
+      <p role="status" aria-atomic="true" className="sr-only">
+        {alertSummary(alerts)}
+      </p>
 
       {/* El salón mira el tablero por horas: un tic cada 30 s alcanza para que
           los «hace X» no queden viejos y no redibuja de más una pantalla llena. */}
