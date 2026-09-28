@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { formatPrice, formatTableTime, orderStatusLabels } from '@restaurant-platform/shared'
+import { formatPrice, formatPriceDelta, formatTableTime, orderStatusLabels } from '@restaurant-platform/shared'
 import { ErrorText, useNow } from '@restaurant-platform/ui'
 import { FreshnessNote } from '@/components/FreshnessNote'
 import { plateCount } from '@/features/cart'
@@ -123,7 +123,7 @@ function OrderLine({ item }: { item: OrderItem }) {
       </p>
       {item.order_item_modifiers.map((modifier) => (
         <p key={modifier.id}>
-          + {modifier.group_name}: {modifier.option_name} ({formatPrice(modifier.price_delta)} por unidad)
+          + {modifier.group_name}: {modifier.option_name} ({perUnit(modifier.price_delta)})
         </p>
       ))}
       {item.order_item_removed_ingredients.map((ingredient) => (
@@ -132,4 +132,9 @@ function OrderLine({ item }: { item: OrderItem }) {
       {item.notes && <p>{item.notes}</p>}
     </div>
   )
+}
+
+/** Lo que suma una opción a cada unidad del plato: «+$ 750 por unidad», o «Sin cargo». */
+function perUnit(delta: number) {
+  return delta === 0 ? formatPriceDelta(delta) : `${formatPriceDelta(delta)} por unidad`
 }

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
-import { formatPrice, productMedia, type Tables } from '@restaurant-platform/shared'
+import { formatPrice, productMedia, SOLD_OUT_LABEL, type Tables } from '@restaurant-platform/shared'
 import { Page } from '@/features/Page'
 import { MediaThumb } from '@/features/MediaThumb'
 import { optimistic } from '@/lib/optimistic'
@@ -159,7 +159,7 @@ function ProductRow({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <p className="truncate text-sm font-medium text-neutral-900">{product.name}</p>
-            {!product.is_available && <Badge color="red">Sin stock</Badge>}
+            {!product.is_available && <Badge color="red">{SOLD_OUT_LABEL}</Badge>}
           </div>
           <p className="text-xs text-muted">{formatPrice(product.base_price)}</p>
         </div>

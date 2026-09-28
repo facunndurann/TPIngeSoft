@@ -1,4 +1,4 @@
-import { formatPrice } from '@restaurant-platform/shared'
+import { formatPriceDelta } from '@restaurant-platform/shared'
 import { participantName, type PosOrder, type PosOrderItem } from './queries'
 
 /**
@@ -30,7 +30,7 @@ export function OrderItemLine({
       {item.order_item_modifiers.map((modifier) => (
         <p key={modifier.id} className="text-sm font-medium text-neutral-900">
           + {modifier.group_name}: {modifier.option_name}
-          {withPrices && ` (${formatPrice(modifier.price_delta)})`}
+          {withPrices && ` (${formatPriceDelta(modifier.price_delta)})`}
         </p>
       ))}
       {item.order_item_removed_ingredients.map((ingredient) => (

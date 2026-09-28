@@ -1,6 +1,8 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import {
+  formatPrice,
+  formatPriceDelta,
   fromCents,
   hasAtMostTwoDecimals,
   itemPriceCents,
@@ -44,4 +46,12 @@ test('a typed amount is a number from zero up with at most two decimals, or noth
   for (const text of ['', '   ', '-5', 'gratis', '1.234', 'Infinity']) {
     assert.equal(parseAmount(text), null, JSON.stringify(text))
   }
+})
+
+test('what an option adds to a dish is said one way in every app: a plus sign, or «Sin cargo»', () => {
+  assert.equal(formatPriceDelta(750), `+${formatPrice(750)}`)
+  assert.equal(formatPriceDelta('350.25'), `+${formatPrice(350.25)}`)
+  // Ni «Gratis» ni «$ 0»: la palabra que ya usaba la carta.
+  assert.equal(formatPriceDelta(0), 'Sin cargo')
+  assert.equal(formatPriceDelta('0.00'), 'Sin cargo')
 })

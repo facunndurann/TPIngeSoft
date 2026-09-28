@@ -18,9 +18,10 @@ export function ActiveTables() {
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-bold text-neutral-900">Mesas activas</h1>
+        {/* Para quien atiende el salón: qué hay que hacer, sin hablar de fases del proyecto. */}
         <p className="text-sm text-muted">
-          Mesas que llamaron, consumo acumulado, estado de pago y cierre manual de mesas. El cobro
-          digital corresponde a la siguiente fase; los cobros presenciales se registran desde la comanda.
+          Las mesas que llamaron, lo que lleva consumido cada una y su saldo. Los cobros que no se
+          pagan desde el celular se registran en la comanda de la mesa.
         </p>
       </div>
 

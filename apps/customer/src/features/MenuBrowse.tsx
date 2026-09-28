@@ -1,6 +1,6 @@
 import { Link, useLocation, useSearchParams } from 'react-router'
 import { CurrentLink } from '@/components/CurrentLink'
-import { dietaryTagsText, formatPrice, productMedia } from '@restaurant-platform/shared'
+import { dietaryTagsText, formatPrice, productMedia, SOLD_OUT_LABEL } from '@restaurant-platform/shared'
 import { MediaThumb } from '@/features/MediaCarousel'
 import { useMenuDesign } from '@/features/menu-design'
 import { matchesSearch } from '@/features/menu'
@@ -103,7 +103,7 @@ function ProductCard({ product, to }: { product: Product; to: string }) {
         <p>{product.description}</p>
         {product.dietary_tags.length > 0 && <small>{dietaryTagsText(product.dietary_tags)}</small>}
         <strong>{formatPrice(product.base_price)}</strong>
-        {!product.is_available && <span className="unavailable">Agotado</span>}
+        {!product.is_available && <span className="unavailable">{SOLD_OUT_LABEL}</span>}
       </div>
       <MediaThumb media={productMedia(product)} />
     </article>

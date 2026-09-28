@@ -6,13 +6,7 @@ import { usePosScope } from '@/context/pos-context'
 import { IconButton, QueryView } from '@restaurant-platform/ui'
 import { posBoardQuery } from './queries'
 import { OrderTicket } from './OrderTicket'
-
-const columnStyles: Record<PosBoardColumnId, string> = {
-  new: 'border-amber-200 bg-amber-50',
-  in_preparation: 'border-indigo-200 bg-indigo-50',
-  ready: 'border-green-200 bg-green-50',
-  delivered: 'border-neutral-200 bg-neutral-50',
-}
+import { boardColumnStyles } from './status-colors'
 
 /** La columna que se puede plegar: la que menos se consulta durante el servicio. */
 const COLLAPSIBLE: PosBoardColumnId = 'delivered'
@@ -74,7 +68,7 @@ export function CommandBoard() {
                   <section
                     key={column.id}
                     aria-label={column.label}
-                    className={`flex shrink-0 flex-col rounded-xl border ${columnStyles[column.id]} ${
+                    className={`flex shrink-0 flex-col rounded-xl border ${boardColumnStyles[column.id]} ${
                       collapsed ? 'w-16 items-center p-2' : 'w-72 p-3 lg:w-auto lg:min-w-0 lg:flex-1'
                     }`}
                   >

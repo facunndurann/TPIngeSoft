@@ -64,6 +64,16 @@ export function formatPrice(value: number | string | null | undefined): string {
   return priceFormatter.format(asAmount(value))
 }
 
+/**
+ * Lo que una opción le suma al plato, dicho igual en el panel, la carta y los
+ * pedidos: «+$ 750», o «Sin cargo» si no suma nada. Antes el panel decía
+ * «Gratis», la carta «Sin cargo» y el pedido «$ 0».
+ */
+export function formatPriceDelta(delta: number | string | null | undefined): string {
+  const amount = asAmount(delta)
+  return amount === 0 ? 'Sin cargo' : `+${formatPrice(amount)}`
+}
+
 export interface SelectedModifier {
   optionId: string
   priceDelta: number

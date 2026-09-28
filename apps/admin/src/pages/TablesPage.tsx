@@ -143,37 +143,45 @@ function BranchTables({ branchId }: { branchId: string }) {
                   key={table.id}
                   className="space-y-2 rounded-xl border border-neutral-200 bg-white px-4 py-3"
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="flex-1 text-sm font-medium text-neutral-900">{table.label}</span>
-                    <Badge color={sectionNames.has(table.section_id) ? 'neutral' : 'amber'}>
-                      {sectionNames.get(table.section_id) ?? 'Sin sector'}
-                    </Badge>
-                    {!table.is_visible && table.is_active && <Badge color="amber">Oculta</Badge>}
-                    {!table.is_active && <Badge color="red">Inactiva</Badge>}
-                    <Button variant="secondary" onClick={() => setQrTable(table)}>
-                      <QrCode size={15} /> Ver QR
-                    </Button>
-                    <Toggle
-                      checked={table.is_active}
-                      onChange={(value) => updateMutation.mutate({ id: table.id, is_active: value })}
-                      label={`En servicio: ${table.label}`}
-                      hideLabel
-                      busy={updateMutation.isPending && updateMutation.variables?.id === table.id}
-                    />
-                    <IconButton
-                      label={`Eliminar ${table.label}`}
-                      tone="danger"
-                      onClick={async () => {
-                        const confirmed = await confirm({
-                          title: `¿Eliminar "${table.label}"?`,
-                          message: 'Se pierde su QR: el que está impreso en la mesa deja de funcionar.',
-                          confirmLabel: 'Eliminar mesa',
-                        })
-                        if (confirmed) deleteMutation.mutate(table.id)
-                      }}
-                    >
-                      <Trash2 size={15} />
-                    </IconButton>
+                  {/* Dos grupos que se acomodan solos: en un celular (375px) no entraban en
+                      una fila y la página se desplazaba de costado. Lo que identifica a la
+                      mesa se parte en renglones; las acciones van siempre juntas y, si no
+                      entran al lado, bajan enteras a la derecha. */}
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                    <div className="flex min-w-0 flex-1 basis-40 flex-wrap items-center gap-2">
+                      <span className="text-sm font-medium break-words text-neutral-900">{table.label}</span>
+                      <Badge color={sectionNames.has(table.section_id) ? 'neutral' : 'amber'}>
+                        {sectionNames.get(table.section_id) ?? 'Sin sector'}
+                      </Badge>
+                      {!table.is_visible && table.is_active && <Badge color="amber">Oculta</Badge>}
+                      {!table.is_active && <Badge color="red">Inactiva</Badge>}
+                    </div>
+                    <div className="ml-auto flex shrink-0 items-center gap-3">
+                      <Button variant="secondary" onClick={() => setQrTable(table)}>
+                        <QrCode size={15} /> Ver QR
+                      </Button>
+                      <Toggle
+                        checked={table.is_active}
+                        onChange={(value) => updateMutation.mutate({ id: table.id, is_active: value })}
+                        label={`En servicio: ${table.label}`}
+                        hideLabel
+                        busy={updateMutation.isPending && updateMutation.variables?.id === table.id}
+                      />
+                      <IconButton
+                        label={`Eliminar ${table.label}`}
+                        tone="danger"
+                        onClick={async () => {
+                          const confirmed = await confirm({
+                            title: `¿Eliminar "${table.label}"?`,
+                            message: 'Se pierde su QR: el que está impreso en la mesa deja de funcionar.',
+                            confirmLabel: 'Eliminar mesa',
+                          })
+                          if (confirmed) deleteMutation.mutate(table.id)
+                        }}
+                      >
+                        <Trash2 size={15} />
+                      </IconButton>
+                    </div>
                   </div>
                   <ErrorText error={errors.messageFor(table.id)} />
                 </li>

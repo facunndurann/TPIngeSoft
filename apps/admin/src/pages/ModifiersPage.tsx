@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { Page } from '@/features/Page'
-import { formatPrice } from '@restaurant-platform/shared'
+import { formatPriceDelta, SOLD_OUT_LABEL } from '@restaurant-platform/shared'
 import {
   emptyGroupDraft,
   groupDraftFrom,
@@ -106,14 +106,17 @@ export function ModifiersPage() {
                         {option.name}
                       </span>
                       <span className="text-muted">
-                        {option.price_delta > 0 ? `+${formatPrice(option.price_delta)}` : 'Gratis'}
+                        {/* Las mismas palabras que lee el comensal al elegir la opción. */}
+                        {option.is_available
+                          ? formatPriceDelta(option.price_delta)
+                          : `${SOLD_OUT_LABEL} · ${formatPriceDelta(option.price_delta)}`}
                       </span>
                     </li>
                   ))}
                 </ul>
                 {!group.is_available && (
                   <div className="mt-2">
-                    <Badge color="red">No disponible</Badge>
+                    <Badge color="red">{SOLD_OUT_LABEL}</Badge>
                   </div>
                 )}
                 {errors.messageFor(group.id) && (

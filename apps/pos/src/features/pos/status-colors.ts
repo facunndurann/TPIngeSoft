@@ -1,19 +1,5 @@
-import type { OrderStatus, PosTableState } from '@restaurant-platform/shared'
+import type { OrderStatus, PosBoardColumnId, PosTableState } from '@restaurant-platform/shared'
 import type { BadgeColor } from '@restaurant-platform/ui'
-
-/**
- * Un color por estado de pedido, el mismo en el tablero, la fila del historial
- * y su detalle: ámbar lo que falta aceptar, índigo lo que está en curso, verde
- * lo entregado y rojo lo cancelado.
- */
-export const orderStatusTone: Record<OrderStatus, BadgeColor> = {
-  submitted: 'amber',
-  accepted: 'indigo',
-  in_preparation: 'indigo',
-  ready: 'indigo',
-  delivered: 'green',
-  cancelled: 'red',
-}
 
 type TableStateStyle = {
   /** La etiqueta del estado fuera del plano: comanda, resumen de la mesa y avisos. */
@@ -80,4 +66,32 @@ export const tableStateStyles: Record<PosTableState, TableStateStyle> = {
     tileLabel: 'bg-rose-200 text-rose-950',
     dot: 'bg-rose-600',
   },
+}
+
+/**
+ * Un color por estado de pedido, el mismo en el ticket, la fila del historial y
+ * su detalle. Mientras el pedido está en curso, es el color que le da a su mesa en
+ * el plano (ver `getPosTableState`): «Listo» es cian en el ticket y en la mesa, y
+ * no índigo en uno y cian en la otra.
+ */
+export const orderStatusTone: Record<OrderStatus, BadgeColor> = {
+  submitted: tableStateStyles.order_pending.tone,
+  accepted: tableStateStyles.order_pending.tone,
+  in_preparation: tableStateStyles.in_preparation.tone,
+  ready: tableStateStyles.ready.tone,
+  // Ya no dejan un estado en la mesa: entregado es lo terminado, y cancelado, lo que no se cobra.
+  delivered: 'green',
+  cancelled: 'red',
+}
+
+/**
+ * El fondo de cada columna del tablero, de la familia de color de los pedidos que
+ * junta: la columna «Listo» es cian como sus tickets. Lo entregado es lo que menos
+ * se consulta durante el servicio y va neutro (además, se puede plegar).
+ */
+export const boardColumnStyles: Record<PosBoardColumnId, string> = {
+  new: 'border-amber-200 bg-amber-50',
+  in_preparation: 'border-blue-200 bg-blue-50',
+  ready: 'border-cyan-200 bg-cyan-50',
+  delivered: 'border-neutral-200 bg-neutral-50',
 }

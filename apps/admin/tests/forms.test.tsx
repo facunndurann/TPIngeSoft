@@ -8,6 +8,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ToastProvider } from '@restaurant-platform/ui'
 import { EmployeesPage } from '../src/pages/EmployeesPage'
 import { ModifiersPage } from '../src/pages/ModifiersPage'
+import { ProductsPage } from '../src/pages/ProductsPage'
+import { TablesPage } from '../src/pages/TablesPage'
 import { branchesQuery } from '../src/queries/branches'
 import {
   changeEmployee,
@@ -16,7 +18,9 @@ import {
   legacyEmployeesQuery,
   linkableAccountsQuery,
 } from '../src/queries/employees'
+import { sectionsQuery, tablesQuery } from '../src/queries/floor'
 import { modifierGroupsQuery, saveModifierGroup } from '../src/queries/modifier-groups'
+import { productsByCategoryQuery } from '../src/queries/products'
 import { RestaurantContext, type Membership } from '../src/restaurant/restaurant-context'
 
 // Sin red: las páginas leen de una caché sembrada y las escrituras las decide cada prueba.
@@ -42,7 +46,8 @@ afterEach(() => {
   vi.mocked(saveModifierGroup).mockReset()
 })
 
-async function renderPage(page: ReactNode) {
+/** La página con la caché ya sembrada; `seed` agrega o pisa lo que cada prueba necesita ver. */
+async function renderPage(page: ReactNode, seed?: (client: QueryClient) => void) {
   const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } })
   client.setQueryData(employeesQuery(restaurantId).queryKey, [])
   client.setQueryData(employeeAuditQuery(restaurantId).queryKey, [])
@@ -52,6 +57,7 @@ async function renderPage(page: ReactNode) {
     { id: 'branch-1', name: 'Centro', is_active: true },
   ] as never)
   client.setQueryData(modifierGroupsQuery(restaurantId).queryKey, [])
+  seed?.(client)
 
   const container = document.createElement('div')
   document.body.append(container)
@@ -167,4 +173,56 @@ test('the modifier group editor marks each problem on its field, focuses the fir
 
   assert.equal(vi.mocked(saveModifierGroup).mock.calls.length, 1)
   assert.match(toastText(container), /Creamos el grupo «Extras»\./)
+})
+
+test('the panel names availability and add-on prices with the same words the diner reads', async () => {
+  const products = await renderPage(<ProductsPage />, (client) =>
+    client.setQueryData(productsByCategoryQuery(restaurantId).queryKey, [
+      {
+        id: 'c1',
+        name: 'Hamburguesas',
+        products: [{ id: 'p1', name: 'Clásica', base_price: 8900, is_available: false, media_urls: [] }],
+      },
+    ] as never),
+  )
+  assert.match(products.textContent ?? '', /Agotado/)
+  assert.doesNotMatch(products.textContent ?? '', /Sin stock/)
+
+  const groups = await renderPage(<ModifiersPage />, (client) =>
+    client.setQueryData(modifierGroupsQuery(restaurantId).queryKey, [
+      {
+        id: 'g1',
+        name: 'Extras',
+        min_select: 0,
+        max_select: 2,
+        is_available: false,
+        modifier_options: [
+          { id: 'o1', name: 'Papas', price_delta: 0, is_available: true },
+          { id: 'o2', name: 'Cheddar', price_delta: 750, is_available: false },
+        ],
+      },
+    ] as never),
+  )
+  const card = groups.textContent ?? ''
+  assert.match(card, /Sin cargo/)
+  assert.match(card, /Agotado · \+\$\s750/)
+  assert.doesNotMatch(card, /Gratis|No disponible/)
+})
+
+test('a table row in Mesas y QR wraps its label and badges and keeps its actions together', async () => {
+  const container = await renderPage(<TablesPage />, (client) => {
+    client.setQueryData(sectionsQuery('branch-1').queryKey, [])
+    client.setQueryData(tablesQuery('branch-1').queryKey, [
+      { id: 't1', label: 'Mesa 12', section_id: null, is_active: false, is_visible: true, qr_token: 't1' },
+    ] as never)
+  })
+  // Medido en Chrome a 375px: en una sola fila, nombre, dos insignias y tres acciones
+  // sumaban 347px para 309 y la página se desplazaba de costado.
+  const row = container.querySelector('li')!.firstElementChild!
+  const [identity, actions] = row.children
+  assert.match(row.className, /\bflex-wrap\b/)
+  assert.match(identity.className, /\bflex-wrap\b/)
+  assert.match(identity.className, /\bmin-w-0\b/)
+  assert.match(actions.className, /\bshrink-0\b/)
+  assert.ok(actions.querySelector('button[aria-label="Eliminar Mesa 12"]'))
 })
