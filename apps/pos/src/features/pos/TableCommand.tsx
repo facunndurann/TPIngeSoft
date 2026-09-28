@@ -214,7 +214,7 @@ function BackLink({ to }: { to: string }) {
   return (
     <Link
       to={to}
-      className="inline-flex items-center gap-1.5 text-sm font-medium text-neutral-600 hover:text-indigo-700"
+      className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-neutral-600 hover:text-indigo-700"
     >
       <ArrowLeft size={16} />
       Volver al plano

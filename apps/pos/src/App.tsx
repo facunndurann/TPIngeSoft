@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { Navigate, Route, Routes, useNavigate } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import type { PosPermission } from '@restaurant-platform/shared'
-import { Button, ErrorText, Spinner, useAuth } from '@restaurant-platform/ui'
+import { Button, ControlSizeProvider, ErrorText, Spinner, useAuth } from '@restaurant-platform/ui'
 import { supabase } from '@/lib/supabase'
 import { AccessContext, useCan, type PosContext } from '@/context/pos-context'
 import { posContextsQuery } from '@/features/pos/queries'
@@ -10,7 +10,19 @@ import { LoginPage } from '@/pages/LoginPage'
 import { PosPage } from '@/features/pos/PosPage'
 import { posSections } from '@/features/pos/sections'
 
+/**
+ * El POS se usa con el dedo y en movimiento, en el salón y en la cocina: todos
+ * sus controles tienen tamaño táctil, sin que cada pantalla tenga que pedirlo.
+ */
 export default function App() {
+  return (
+    <ControlSizeProvider size="touch">
+      <PosApp />
+    </ControlSizeProvider>
+  )
+}
+
+function PosApp() {
   const { session, loading } = useAuth()
 
   if (loading) return <Spinner />

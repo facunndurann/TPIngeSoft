@@ -32,7 +32,7 @@ export function PosPage({ multipleContexts }: { multipleContexts: boolean }) {
         </div>
         <div className="flex items-center gap-3">
           {multipleContexts && (
-            <Link to="/select-context" className="text-sm text-indigo-700">
+            <Link to="/select-context" className="inline-flex min-h-11 items-center text-sm text-indigo-700">
               Cambiar sucursal
             </Link>
           )}
@@ -52,7 +52,7 @@ export function PosPage({ multipleContexts }: { multipleContexts: boolean }) {
               // La portada es `/`, que es prefijo de todas: solo se marca exacta.
               end={section.path === ''}
               className={({ isActive }) =>
-                `rounded-lg px-4 py-2 text-sm ${
+                `inline-flex min-h-11 items-center rounded-lg px-4 py-2 text-sm ${
                   isActive ? 'bg-indigo-600 text-white' : 'bg-white text-neutral-700'
                 }`
               }

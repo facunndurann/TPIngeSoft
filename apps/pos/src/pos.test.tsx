@@ -63,6 +63,16 @@ test('single context resolves directly and kitchen navigation excludes cash and 
   assert.doesNotMatch(html, /Mesas activas|Historial|Cambiar sucursal|href="\/productos"/)
 })
 
+test('every POS control is touch-sized: buttons, fields and section tabs', () => {
+  // 44px de alto (`min-h-11`), lo que piden las guías para usar con el dedo.
+  const login = app(null, [], '/login')
+  assert.match(login, /<button[^>]*class="[^"]*\bmin-h-11\b/)
+  assert.match(login, /<input[^>]*class="[^"]*\bmin-h-11\b/)
+
+  const board = app(employee, [context], '/')
+  assert.match(board, /<a[^>]*class="[^"]*\bmin-h-11\b[^"]*"[^>]*>Comandas</)
+})
+
 test('selector lists only supplied authorized contexts', () => {
   const html = app(employee, twoContexts, '/select-context')
   assert.match(html, /Branch A/)

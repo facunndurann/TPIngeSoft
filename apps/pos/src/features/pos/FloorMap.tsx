@@ -92,7 +92,7 @@ export function FloorMap() {
                   role="tab"
                   aria-selected={selected}
                   onClick={() => chooseSection(section.id)}
-                  className={`shrink-0 cursor-pointer rounded-lg px-4 py-2 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none ${
+                  className={`min-h-11 shrink-0 cursor-pointer rounded-lg px-4 py-2 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none ${
                     selected
                       ? 'bg-indigo-600 text-white'
                       : 'border border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50'

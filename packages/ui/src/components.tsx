@@ -2,6 +2,30 @@ import { createContext, useContext, useId, useLayoutEffect, useRef } from 'react
 import type { ButtonHTMLAttributes, ComponentProps, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react'
 import { Check, X } from 'lucide-react'
 
+/**
+ * Tamaño de los controles. `touch` es para pantallas que se usan con el dedo y
+ * en movimiento, como el POS: 44px de alto, el mínimo de las guías táctiles.
+ */
+export type ControlSize = 'default' | 'touch'
+
+const ControlSizeContext = createContext<ControlSize>('default')
+
+/**
+ * Tamaño de todos los controles de `ui` que envuelve: Button, IconButton, los
+ * campos (Input, Select, Textarea) y ChoiceChip. Una app táctil lo pone una
+ * vez en la raíz en lugar de pasar `size` a cada control; la prop `size` de
+ * cada uno sigue ganando para un caso puntual.
+ */
+export function ControlSizeProvider({ size, children }: { size: ControlSize; children: ReactNode }) {
+  return <ControlSizeContext value={size}>{children}</ControlSizeContext>
+}
+
+/** El tamaño pedido, o el de la app si el control no dice nada. */
+function useControlSize(size: ControlSize | undefined): ControlSize {
+  const appSize = useContext(ControlSizeContext)
+  return size ?? appSize
+}
+
 type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost'
 
 const buttonStyles: Record<ButtonVariant, string> = {
@@ -13,14 +37,22 @@ const buttonStyles: Record<ButtonVariant, string> = {
   ghost: 'text-muted hover:bg-neutral-100 disabled:text-neutral-300',
 }
 
+// El padding horizontal va acá y no en la base: dos `px-*` en la misma clase
+// no se pisan por orden de escritura sino por el orden del CSS.
+const buttonSizes: Record<ControlSize, string> = {
+  default: 'px-3 py-2',
+  touch: 'min-h-11 px-4 py-2',
+}
+
 export function Button({
   variant = 'primary',
+  size,
   className = '',
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; size?: ControlSize }) {
   return (
     <button
-      className={`inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed ${buttonStyles[variant]} ${className}`}
+      className={`inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-lg text-sm font-medium transition-colors disabled:cursor-not-allowed ${buttonSizes[useControlSize(size)]} ${buttonStyles[variant]} ${className}`}
       {...props}
     />
   )
@@ -35,6 +67,12 @@ export function Button({
 const controlClass =
   'field-control rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-faint focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary aria-invalid:border-red-600 aria-invalid:ring-1 aria-invalid:ring-red-600'
 
+/** Alto de los campos táctiles; el resto del tamaño es el mismo en los dos. */
+const fieldSizes: Record<ControlSize, string> = {
+  default: '',
+  touch: 'min-h-11',
+}
+
 /** Lo que un Field le avisa a su control: tiene un error, y este es el id del mensaje. */
 const FieldContext = createContext<{ errorId: string } | null>(null)
 
@@ -47,16 +85,19 @@ function useFieldError() {
   return field ? { 'aria-invalid': true as const, 'aria-describedby': field.errorId } : {}
 }
 
-export function Input({ className = '', ref, ...props }: ComponentProps<'input'>) {
-  return <input ref={ref} {...useFieldError()} className={`${controlClass} ${className}`} {...props} />
+export function Input({ className = '', size, ref, ...props }: Omit<ComponentProps<'input'>, 'size'> & { size?: ControlSize }) {
+  const sizeClass = fieldSizes[useControlSize(size)]
+  return <input ref={ref} {...useFieldError()} className={`${controlClass} ${sizeClass} ${className}`} {...props} />
 }
 
-export function Textarea({ className = '', ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea {...useFieldError()} className={`${controlClass} ${className}`} {...props} />
+export function Textarea({ className = '', size, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement> & { size?: ControlSize }) {
+  const sizeClass = fieldSizes[useControlSize(size)]
+  return <textarea {...useFieldError()} className={`${controlClass} ${sizeClass} ${className}`} {...props} />
 }
 
-export function Select({ className = '', ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select {...useFieldError()} className={`${controlClass} ${className}`} {...props} />
+export function Select({ className = '', size, ...props }: Omit<SelectHTMLAttributes<HTMLSelectElement>, 'size'> & { size?: ControlSize }) {
+  const sizeClass = fieldSizes[useControlSize(size)]
+  return <select {...useFieldError()} className={`${controlClass} ${sizeClass} ${className}`} {...props} />
 }
 
 /**
@@ -138,12 +179,12 @@ type IconTone = 'neutral' | 'danger'
 
 /**
  * Clases de un control de solo ícono: 32×32 px, más que los 24 que pide WCAG 2.2
- * porque el panel también se usa con el dedo. El ícono va en `faint`, y el fondo
- * que aparece al pasar el mouse muestra el área que se puede tocar. Se exportan
- * para el mismo control hecho con un `<Link>`.
+ * porque el panel también se usa con el dedo, y 44×44 con tamaño táctil. El
+ * ícono va en `faint`, y el fondo que aparece al pasar el mouse muestra el área
+ * que se puede tocar. Se exportan para el mismo control hecho con un `<Link>`.
  */
-export function iconButtonClass(tone: IconTone = 'neutral') {
-  return `inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-faint transition-colors hover:bg-neutral-100 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent ${
+export function iconButtonClass(tone: IconTone = 'neutral', size: ControlSize = 'default') {
+  return `inline-flex ${size === 'touch' ? 'h-11 w-11' : 'h-8 w-8'} shrink-0 cursor-pointer items-center justify-center rounded-lg text-faint transition-colors hover:bg-neutral-100 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent ${
     tone === 'danger' ? 'hover:text-red-600' : 'hover:text-neutral-700'
   }`
 }
@@ -156,12 +197,15 @@ export function iconButtonClass(tone: IconTone = 'neutral') {
 export function IconButton({
   label,
   tone,
+  size,
   ...props
 }: Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'aria-label' | 'title' | 'type' | 'className'> & {
   label: string
   tone?: IconTone
+  size?: ControlSize
 }) {
-  return <button {...props} type="button" aria-label={label} title={label} className={iconButtonClass(tone)} />
+  const className = iconButtonClass(tone, useControlSize(size))
+  return <button {...props} type="button" aria-label={label} title={label} className={className} />
 }
 
 type ChipTone = 'pill' | 'outline'
@@ -197,13 +241,17 @@ export function ChoiceChip({
   onClick,
   children,
   tone = 'pill',
+  size,
   ...props
 }: Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'aria-pressed' | 'type' | 'className' | 'onClick'> & {
   pressed: boolean
   onClick: () => void
   tone?: ChipTone
+  size?: ControlSize
 }) {
   const { base, on, off } = chipTones[tone]
+  // El chip conserva su padding y su forma; el tamaño táctil solo le da alto.
+  const touch = useControlSize(size) === 'touch' ? 'min-h-11' : ''
 
   return (
     <button
@@ -211,7 +259,7 @@ export function ChoiceChip({
       type="button"
       aria-pressed={pressed}
       onClick={onClick}
-      className={`inline-flex cursor-pointer items-center gap-1.5 text-sm font-medium transition-colors disabled:cursor-default disabled:opacity-50 ${base} ${pressed ? on : off}`}
+      className={`inline-flex cursor-pointer items-center gap-1.5 text-sm font-medium transition-colors disabled:cursor-default disabled:opacity-50 ${base} ${touch} ${pressed ? on : off}`}
     >
       {pressed && <Check size={14} aria-hidden="true" />}
       {children}

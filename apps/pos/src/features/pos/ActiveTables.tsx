@@ -50,9 +50,9 @@ export function ActiveTables() {
                 key={session.id}
                 className="space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4"
               >
-                <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center justify-between gap-2">
                   <p className="font-semibold text-neutral-900">{session.table_label}</p>
-                  <Link to={`/salon/${session.table_id}`} className="text-sm text-indigo-700">
+                  <Link to={`/salon/${session.table_id}`} className="inline-flex min-h-11 items-center text-sm text-indigo-700">
                     Ver comanda
                   </Link>
                 </div>
@@ -151,7 +151,7 @@ export function ActiveTables() {
               <li key={table.id}>
                 <Link
                   to={`/salon/${table.id}`}
-                  className="block rounded-lg border border-dashed border-neutral-300 bg-white px-3 py-1.5 text-sm text-neutral-600 hover:border-indigo-400 hover:text-indigo-700"
+                  className="flex min-h-11 items-center rounded-lg border border-dashed border-neutral-300 bg-white px-3 text-sm text-neutral-600 hover:border-indigo-400 hover:text-indigo-700"
                 >
                   {table.label}
                 </Link>

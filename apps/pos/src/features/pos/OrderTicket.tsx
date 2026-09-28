@@ -95,13 +95,8 @@ export function OrderTicket({ order }: { order: PosOrder }) {
           )}
         </div>
         {revert && (
-          <Button
-            variant="ghost"
-            className="w-full text-xs opacity-75 hover:opacity-100"
-            disabled={busy}
-            onClick={() => move(revert.to)}
-          >
-            <Undo2 size={12} /> {revert.label}
+          <Button variant="ghost" className="w-full" disabled={busy} onClick={() => move(revert.to)}>
+            <Undo2 size={14} aria-hidden="true" /> {revert.label}
           </Button>
         )}
       </div>
