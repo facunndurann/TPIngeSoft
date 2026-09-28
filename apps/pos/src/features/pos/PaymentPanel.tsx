@@ -9,7 +9,7 @@ import {
   paymentStatusLabels,
   type PaymentMethod,
 } from '@restaurant-platform/shared'
-import { Button, ErrorText, Field, Input, Select, useNow, useSaveErrors } from '@restaurant-platform/ui'
+import { Button, ErrorText, Field, Input, QueryView, Select, useNow, useSaveErrors } from '@restaurant-platform/ui'
 import { useCan, useRestaurant } from '@/context/pos-context'
 import { recordPosPayment, sessionPaymentsQuery, type PosOpenSession } from './queries'
 
@@ -139,28 +139,33 @@ export function PaymentPanel({ sessionId, pendingAmount, enabledMethods }: Payme
         <p className="text-sm text-amber-800">No hay un medio presencial o externo habilitado para registrar el cobro.</p>
       )}
 
-      {payments.isError && <ErrorText error={payments.error} fallback="No pudimos cargar el historial de pagos." />}
-      {payments.data?.length === 0 && <p className="text-sm text-neutral-500">Todavía no hay pagos registrados.</p>}
-      {(payments.data?.length ?? 0) > 0 && (
-        <ul className="divide-y divide-neutral-100 text-sm">
-          {payments.data?.map((payment) => (
-            <li key={payment.id} className="flex items-start justify-between gap-3 py-2">
-              <div>
-                <p className="font-medium text-neutral-900">
-                  {formatPrice(payment.amount)} · {paymentStatusLabels[payment.status]}
-                </p>
-                <p className="text-xs text-neutral-500">
-                  {paymentMethodLabels[payment.method]} · {paymentModeLabels[payment.mode]}
-                  {payment.external_reference ? ` · Ref. ${payment.external_reference}` : ''}
-                </p>
-              </div>
-              <time className="shrink-0 text-xs text-neutral-500" dateTime={payment.created_at}>
-                {formatTableTime(payment.created_at, now)}
-              </time>
-            </li>
-          ))}
-        </ul>
-      )}
+      <QueryView query={payments} fallback="No pudimos cargar el historial de pagos.">
+        {(payments) =>
+          // Una línea y no el recuadro de vacío: el historial es una parte chica del panel.
+          payments.length === 0 ? (
+            <p className="text-sm text-neutral-500">Todavía no hay pagos registrados.</p>
+          ) : (
+            <ul className="divide-y divide-neutral-100 text-sm">
+              {payments.map((payment) => (
+                <li key={payment.id} className="flex items-start justify-between gap-3 py-2">
+                  <div>
+                    <p className="font-medium text-neutral-900">
+                      {formatPrice(payment.amount)} · {paymentStatusLabels[payment.status]}
+                    </p>
+                    <p className="text-xs text-neutral-500">
+                      {paymentMethodLabels[payment.method]} · {paymentModeLabels[payment.mode]}
+                      {payment.external_reference ? ` · Ref. ${payment.external_reference}` : ''}
+                    </p>
+                  </div>
+                  <time className="shrink-0 text-xs text-neutral-500" dateTime={payment.created_at}>
+                    {formatTableTime(payment.created_at, now)}
+                  </time>
+                </li>
+              ))}
+            </ul>
+          )
+        }
+      </QueryView>
     </section>
   )
 }

@@ -2,7 +2,7 @@ import { Link, useParams, useSearchParams } from 'react-router'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { formatPrice, getPosTableState, paymentMethodLabels, sessionRequestsOf, type PaymentMethod } from '@restaurant-platform/shared'
 import { ArrowLeft, Clock3, PlayCircle, UserRound, Users } from 'lucide-react'
-import { Button, Elapsed, EmptyState, ErrorText, Spinner, SummaryItem, useSaveErrors } from '@restaurant-platform/ui'
+import { Button, Elapsed, EmptyState, ErrorText, QueryView, SummaryItem, useSaveErrors } from '@restaurant-platform/ui'
 import { useCan, useRestaurant } from '@/context/pos-context'
 import { CloseSessionButton } from './CloseSessionButton'
 import { OrderTicket } from './OrderTicket'
@@ -37,63 +37,52 @@ export function TableCommand() {
   const sessions = useQuery(posOpenSessionsQuery(restaurant.id, restaurant.branchId))
   const paymentMethods = useQuery(posPaymentMethodsQuery(restaurant.id, restaurant.branchId))
 
-  if (tables.isLoading || sessions.isLoading || paymentMethods.isLoading) return <Spinner />
-
-  if (tables.isError || sessions.isError || paymentMethods.isError) {
-    return (
-      <div className="space-y-3">
-        <BackLink to={backToMap} />
-        <ErrorText
-          error={tables.error ?? sessions.error ?? paymentMethods.error}
-          fallback="No pudimos cargar la comanda de la mesa."
-        />
-      </div>
-    )
-  }
-
-  const table = tables.data?.find((entry) => entry.id === tableId)
-
-  if (!table) {
-    return (
-      <div className="space-y-3">
-        <BackLink to={backToMap} />
-        <EmptyState message="Esa mesa ya no está disponible para operar. Volvé al plano." />
-      </div>
-    )
-  }
-
-  const session = sessions.data?.find((entry) => entry.table_id === tableId)
-  const branchMethods = paymentMethods.data ?? []
-
   return (
     <div className="min-w-0 space-y-4">
       <BackLink to={backToMap} />
 
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-neutral-900">{table.label}</h1>
-          <p className="text-sm text-neutral-500">
-            {table.floor_sections?.name ?? 'Sin sector'} · {table.seats} lugares
-          </p>
-          {/* Lo que el admin habilitó para esta sucursal (MI-48): es lo que el
-              comensal ve como opción y lo único que se le puede cobrar acá. */}
-          <p className="text-xs text-neutral-500">
-            Medios de pago:{' '}
-            {branchMethods.length === 0
-              ? 'ninguno habilitado'
-              : branchMethods.map((method) => paymentMethodLabels[method]).join(' · ')}
-          </p>
-        </div>
-        <TableStateBadge state={getPosTableState(session)} />
-      </div>
+      <QueryView
+        query={[tables, sessions, paymentMethods]}
+        fallback="No pudimos cargar la comanda de la mesa."
+      >
+        {([tables, sessions, paymentMethods]) => {
+          const table = tables.find((entry) => entry.id === tableId)
+          if (!table) {
+            return <EmptyState message="Esa mesa ya no está disponible para operar. Volvé al plano." />
+          }
+          const session = sessions.find((entry) => entry.table_id === tableId)
 
-      {/* La key reinicia la pantalla si en la mesa se abre otra sesión: no se
-          arrastran pedidos, confirmaciones ni errores de la anterior. */}
-      {session ? (
-        <OccupiedTable key={session.id} session={session} paymentMethods={branchMethods} />
-      ) : (
-        <FreeTable tableId={table.id} />
-      )}
+          return (
+            <>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h1 className="text-xl font-bold text-neutral-900">{table.label}</h1>
+                  <p className="text-sm text-neutral-500">
+                    {table.floor_sections?.name ?? 'Sin sector'} · {table.seats} lugares
+                  </p>
+                  {/* Lo que el admin habilitó para esta sucursal (MI-48): es lo que el
+                      comensal ve como opción y lo único que se le puede cobrar acá. */}
+                  <p className="text-xs text-neutral-500">
+                    Medios de pago:{' '}
+                    {paymentMethods.length === 0
+                      ? 'ninguno habilitado'
+                      : paymentMethods.map((method) => paymentMethodLabels[method]).join(' · ')}
+                  </p>
+                </div>
+                <TableStateBadge state={getPosTableState(session)} />
+              </div>
+
+              {/* La key reinicia la pantalla si en la mesa se abre otra sesión: no se
+                  arrastran pedidos, confirmaciones ni errores de la anterior. */}
+              {session ? (
+                <OccupiedTable key={session.id} session={session} paymentMethods={paymentMethods} />
+              ) : (
+                <FreeTable tableId={table.id} />
+              )}
+            </>
+          )
+        }}
+      </QueryView>
     </div>
   )
 }
@@ -190,17 +179,19 @@ function OccupiedTable({ session, paymentMethods }: { session: PosOpenSession; p
           </div>
         </div>
 
-        {orders.isLoading ? (
-          <Spinner />
-        ) : (orders.data?.length ?? 0) === 0 ? (
-          <EmptyState message="Todavía no hay pedidos en esta mesa. Los comensales pueden pedir desde el QR." />
-        ) : (
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {orders.data?.map((order) => (
-              <OrderTicket key={order.id} order={order} />
-            ))}
-          </div>
-        )}
+        <QueryView
+          query={orders}
+          fallback="No pudimos cargar los pedidos de la mesa."
+          empty="Todavía no hay pedidos en esta mesa. Los comensales pueden pedir desde el QR."
+        >
+          {(orders) => (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {orders.map((order) => (
+                <OrderTicket key={order.id} order={order} />
+              ))}
+            </div>
+          )}
+        </QueryView>
       </section>
 
       {can('payments.read') && (

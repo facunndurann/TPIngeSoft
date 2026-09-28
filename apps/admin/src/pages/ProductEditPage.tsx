@@ -11,8 +11,8 @@ import {
   IconButton,
   Field,
   Input,
+  QueryView,
   Select,
-  Spinner,
   Textarea,
   Toggle,
   useSaveErrors,
@@ -37,6 +37,10 @@ import {
  * el patrón que el resto del proyecto usa para esto (TableApp, CartPanel,
  * ProductEditor): reemplaza al efecto de hidratación, a su flag `loadedProduct`
  * y al estado a medio llenar que había entre medio.
+ *
+ * El formulario se monta con todo lo que muestra, no solo con el producto: si
+ * no, mientras cargan, la categoría no tendría opciones y la personalización
+ * diría «Todavía no hay grupos». El producto se lee solo al editar.
  */
 export function ProductEditPage() {
   const { productId } = useParams()
@@ -46,42 +50,42 @@ export function ProductEditPage() {
   const groups = useQuery(modifierGroupsQuery(restaurant.id))
   const product = useQuery({ ...productQuery(productId ?? ''), enabled: !!productId })
 
-  // El formulario se monta con todo lo que muestra, no solo con el producto: si
-  // no, mientras cargan, la categoría no tendría opciones y la personalización
-  // diría «Todavía no hay grupos».
-  if (categories.isLoading || groups.isLoading || (productId && product.isLoading)) {
-    return <Spinner />
-  }
-  if (!categories.data || !groups.data || (productId && !product.data)) {
-    return (
-      <Page title="Producto" back={{ to: '/productos', label: 'Volver a productos' }}>
-        <ErrorText error="No pudimos cargar los datos del producto. Volvé a la lista e intentá de nuevo." />
-      </Page>
-    )
-  }
+  const title = !productId ? 'Nuevo producto' : product.data ? `Editar "${product.data.name}"` : 'Producto'
 
   return (
-    <ProductForm
-      key={productId ?? 'new'}
-      productId={productId}
-      title={product.data ? `Editar "${product.data.name}"` : 'Nuevo producto'}
-      initial={product.data ? draftFrom(product.data) : emptyDraft()}
-      categories={categories.data}
-      groups={groups.data}
-    />
+    <Page title={title} back={{ to: '/productos', label: 'Volver a productos' }}>
+      <QueryView query={[categories, groups]}>
+        {([categories, groups]) =>
+          productId ? (
+            <QueryView query={product}>
+              {(product) => (
+                <ProductForm
+                  key={productId}
+                  productId={productId}
+                  initial={draftFrom(product)}
+                  categories={categories}
+                  groups={groups}
+                />
+              )}
+            </QueryView>
+          ) : (
+            <ProductForm key="new" initial={emptyDraft()} categories={categories} groups={groups} />
+          )
+        }
+      </QueryView>
+    </Page>
   )
 }
 
 type ProductFormProps = {
   /** Ausente al crear: `saveProduct` pide el id nuevo a la RPC. */
   productId?: string
-  title: string
   initial: ProductDraft
   categories: Tables<'menu_categories'>[]
   groups: ModifierGroupWithOptions[]
 }
 
-function ProductForm({ productId, title, initial, categories, groups }: ProductFormProps) {
+function ProductForm({ productId, initial, categories, groups }: ProductFormProps) {
   const restaurant = useRestaurant()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -137,7 +141,7 @@ function ProductForm({ productId, title, initial, categories, groups }: ProductF
     })
 
   return (
-    <Page title={title} back={{ to: '/productos', label: 'Volver a productos' }}>
+    <>
       <section className="space-y-4 rounded-xl border border-neutral-200 bg-white p-5">
         <h2 className="font-semibold text-neutral-900">Información básica</h2>
         <Field label="Nombre" error={errorFor('name')}>
@@ -332,6 +336,6 @@ function ProductForm({ productId, title, initial, categories, groups }: ProductF
           {save.isPending ? 'Guardando…' : productId ? 'Guardar cambios' : 'Crear producto'}
         </Button>
       </div>
-    </Page>
+    </>
   )
 }

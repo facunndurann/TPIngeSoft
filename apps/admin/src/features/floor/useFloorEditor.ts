@@ -23,7 +23,7 @@ import {
 import { optimistic, patchRow } from '@/lib/optimistic'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import type { TableIntent } from './TableInspector'
-import type { Floor } from './useFloor'
+import type { Floor } from './floor'
 
 const SAVE_FAILED = 'No pudimos guardar el cambio.'
 

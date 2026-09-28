@@ -16,7 +16,7 @@ import {
   type FloorTable,
 } from '@/queries/floor'
 import { useRestaurant } from '@/restaurant/restaurant-context'
-import { Badge, Button, EmptyState, ErrorText, IconButton, Input, Modal, Select, Spinner, Toggle, useSaveErrors } from '@restaurant-platform/ui'
+import { Badge, Button, ErrorText, IconButton, Input, Modal, QueryView, Select, Toggle, useSaveErrors } from '@restaurant-platform/ui'
 
 function tableUrl(table: FloorTable) {
   return customerAppUrl(`/m/${table.qr_token}`)
@@ -24,53 +24,8 @@ function tableUrl(table: FloorTable) {
 
 export function TablesPage() {
   const restaurant = useRestaurant()
-  const queryClient = useQueryClient()
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null)
-  const [newLabel, setNewLabel] = useState('')
-  const [qrTable, setQrTable] = useState<FloorTable | null>(null)
-  const errors = useSaveErrors()
-
-  const { data: branches } = useQuery(branchesQuery(restaurant.id))
-
-  const branchId = selectedBranchId ?? branches?.[0]?.id ?? null
-
-  // Las mismas consultas que Salón: lo que se cambia en una pantalla ya está en la otra.
-  const branchTables = tablesQuery(branchId ?? '')
-  const tables = useQuery({ ...branchTables, enabled: !!branchId })
-  const sections = useQuery({ ...sectionsQuery(branchId ?? ''), enabled: !!branchId })
-  const sectionNames = new Map<string | null, string>(
-    sections.data?.map((section) => [section.id, section.name]),
-  )
-
-  // Acá solo cambian mesas, así que alcanza con invalidar las mesas.
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: branchTables.queryKey })
-
-  const createMutation = useMutation(errors.saving('No pudimos crear la mesa.', {
-    // Sin sector: existe y tiene QR, y se ubica después en Salón.
-    mutationFn: (label: string) =>
-      createTable({ restaurant_id: restaurant.id, branch_id: branchId!, label }),
-    onSuccess: () => {
-      setNewLabel('')
-      invalidate()
-    },
-  }))
-
-  const updateMutation = useMutation(errors.saving('No pudimos guardar la mesa.', {
-    mutationFn: ({ id, is_active }: { id: string; is_active: boolean }) =>
-      updateTable(id, { is_active }),
-    // La misma caché que Salón: el cambio también se ve ahí.
-    ...optimistic(queryClient, branchTables.queryKey, patchRow<FloorTable>),
-  }, ({ id }) => id))
-
-  const deleteMutation = useMutation(errors.saving('No pudimos eliminar la mesa.', {
-    mutationFn: (id: string) => deleteTable(id),
-    onSuccess: invalidate,
-  }, (id) => id))
-
-  function handleCreate(e: FormEvent) {
-    e.preventDefault()
-    if (newLabel.trim() && branchId) createMutation.mutate(newLabel.trim())
-  }
+  const branches = useQuery(branchesQuery(restaurant.id))
 
   return (
     <Page
@@ -86,20 +41,77 @@ export function TablesPage() {
         </>
       }
     >
-      {branches && branches.length > 1 && (
-        <Select
-          value={branchId ?? ''}
-          onChange={(e) => setSelectedBranchId(e.target.value)}
-          aria-label="Sucursal"
-        >
-          {branches.map((branch) => (
-            <option key={branch.id} value={branch.id}>
-              {branch.name}
-            </option>
-          ))}
-        </Select>
-      )}
+      <QueryView query={branches} empty="Todavía no hay sucursales. Creá una en Restaurante.">
+        {(branches) => {
+          const branchId = selectedBranchId ?? branches[0].id
+          return (
+            <>
+              {branches.length > 1 && (
+                <Select
+                  value={branchId}
+                  onChange={(e) => setSelectedBranchId(e.target.value)}
+                  aria-label="Sucursal"
+                >
+                  {branches.map((branch) => (
+                    <option key={branch.id} value={branch.id}>
+                      {branch.name}
+                    </option>
+                  ))}
+                </Select>
+              )}
+              {/* Otra sucursal es otra lista: la key descarta el borrador y los errores de la anterior. */}
+              <BranchTables key={branchId} branchId={branchId} />
+            </>
+          )
+        }}
+      </QueryView>
+    </Page>
+  )
+}
 
+/** Las mesas de una sucursal ya elegida: alta, lista, disponibilidad y QR. */
+function BranchTables({ branchId }: { branchId: string }) {
+  const restaurant = useRestaurant()
+  const queryClient = useQueryClient()
+  const [newLabel, setNewLabel] = useState('')
+  const [qrTable, setQrTable] = useState<FloorTable | null>(null)
+  const errors = useSaveErrors()
+
+  // Las mismas consultas que Salón: lo que se cambia en una pantalla ya está en la otra.
+  const tables = useQuery(tablesQuery(branchId))
+  const sections = useQuery(sectionsQuery(branchId))
+
+  // Acá solo cambian mesas, así que alcanza con invalidar las mesas.
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: tablesQuery(branchId).queryKey })
+
+  const createMutation = useMutation(errors.saving('No pudimos crear la mesa.', {
+    // Sin sector: existe y tiene QR, y se ubica después en Salón.
+    mutationFn: (label: string) => createTable({ restaurant_id: restaurant.id, branch_id: branchId, label }),
+    onSuccess: () => {
+      setNewLabel('')
+      invalidate()
+    },
+  }))
+
+  const updateMutation = useMutation(errors.saving('No pudimos guardar la mesa.', {
+    mutationFn: ({ id, is_active }: { id: string; is_active: boolean }) =>
+      updateTable(id, { is_active }),
+    // La misma caché que Salón: el cambio también se ve ahí.
+    ...optimistic(queryClient, tablesQuery(branchId).queryKey, patchRow<FloorTable>),
+  }, ({ id }) => id))
+
+  const deleteMutation = useMutation(errors.saving('No pudimos eliminar la mesa.', {
+    mutationFn: (id: string) => deleteTable(id),
+    onSuccess: invalidate,
+  }, (id) => id))
+
+  function handleCreate(e: FormEvent) {
+    e.preventDefault()
+    if (newLabel.trim()) createMutation.mutate(newLabel.trim())
+  }
+
+  return (
+    <>
       <form onSubmit={handleCreate} className="flex gap-2">
         <Input
           value={newLabel}
@@ -107,61 +119,68 @@ export function TablesPage() {
           placeholder="Nueva mesa (ej: Mesa 5)"
           aria-label="Identificador de la nueva mesa"
         />
-        <Button type="submit" disabled={createMutation.isPending || !branchId}>
+        <Button type="submit" disabled={createMutation.isPending}>
           <Plus size={16} /> Agregar
         </Button>
       </form>
 
       <ErrorText error={errors.message} />
 
-      {tables.isLoading || sections.isLoading ? (
-        <Spinner />
-      ) : !tables.data?.length ? (
-        <EmptyState message="No hay mesas en esta sucursal. Agregá la primera arriba." />
-      ) : (
-        <ul className="space-y-2">
-          {tables.data.map((table) => (
-            <li
-              key={table.id}
-              className="space-y-2 rounded-xl border border-neutral-200 bg-white px-4 py-3"
-            >
-              <div className="flex items-center gap-3">
-                <span className="flex-1 text-sm font-medium text-neutral-900">{table.label}</span>
-                <Badge color={sectionNames.has(table.section_id) ? 'neutral' : 'amber'}>
-                  {sectionNames.get(table.section_id) ?? 'Sin sector'}
-                </Badge>
-                {!table.is_visible && table.is_active && <Badge color="amber">Oculta</Badge>}
-                {!table.is_active && <Badge color="red">Inactiva</Badge>}
-                <Button variant="secondary" onClick={() => setQrTable(table)}>
-                  <QrCode size={15} /> Ver QR
-                </Button>
-                <Toggle
-                  checked={table.is_active}
-                  onChange={(value) => updateMutation.mutate({ id: table.id, is_active: value })}
-                  label={`En servicio: ${table.label}`}
-                  hideLabel
-                  busy={updateMutation.isPending && updateMutation.variables?.id === table.id}
-                />
-                <IconButton
-                  label={`Eliminar ${table.label}`}
-                  tone="danger"
-                  onClick={() => {
-                    if (confirm(`¿Eliminar "${table.label}"? Se pierde su QR.`)) {
-                      deleteMutation.mutate(table.id)
-                    }
-                  }}
+      <QueryView
+        query={[tables, sections]}
+        empty="No hay mesas en esta sucursal. Agregá la primera arriba."
+        isEmpty={([tables]) => tables.length === 0}
+      >
+        {([tables, sections]) => {
+          const sectionNames = new Map<string | null, string>(
+            sections.map((section) => [section.id, section.name]),
+          )
+          return (
+            <ul className="space-y-2">
+              {tables.map((table) => (
+                <li
+                  key={table.id}
+                  className="space-y-2 rounded-xl border border-neutral-200 bg-white px-4 py-3"
                 >
-                  <Trash2 size={15} />
-                </IconButton>
-              </div>
-              <ErrorText error={errors.messageFor(table.id)} />
-            </li>
-          ))}
-        </ul>
-      )}
+                  <div className="flex items-center gap-3">
+                    <span className="flex-1 text-sm font-medium text-neutral-900">{table.label}</span>
+                    <Badge color={sectionNames.has(table.section_id) ? 'neutral' : 'amber'}>
+                      {sectionNames.get(table.section_id) ?? 'Sin sector'}
+                    </Badge>
+                    {!table.is_visible && table.is_active && <Badge color="amber">Oculta</Badge>}
+                    {!table.is_active && <Badge color="red">Inactiva</Badge>}
+                    <Button variant="secondary" onClick={() => setQrTable(table)}>
+                      <QrCode size={15} /> Ver QR
+                    </Button>
+                    <Toggle
+                      checked={table.is_active}
+                      onChange={(value) => updateMutation.mutate({ id: table.id, is_active: value })}
+                      label={`En servicio: ${table.label}`}
+                      hideLabel
+                      busy={updateMutation.isPending && updateMutation.variables?.id === table.id}
+                    />
+                    <IconButton
+                      label={`Eliminar ${table.label}`}
+                      tone="danger"
+                      onClick={() => {
+                        if (confirm(`¿Eliminar "${table.label}"? Se pierde su QR.`)) {
+                          deleteMutation.mutate(table.id)
+                        }
+                      }}
+                    >
+                      <Trash2 size={15} />
+                    </IconButton>
+                  </div>
+                  <ErrorText error={errors.messageFor(table.id)} />
+                </li>
+              ))}
+            </ul>
+          )
+        }}
+      </QueryView>
 
       {qrTable && <QrModal table={qrTable} restaurantName={restaurant.name} onClose={() => setQrTable(null)} />}
-    </Page>
+    </>
   )
 }
 

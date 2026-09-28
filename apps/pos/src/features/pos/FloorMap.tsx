@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { countLabel, formatElapsed, formatPrice, getPosTableState, type PosTableState, posTableStateLabels, posTableStates } from '@restaurant-platform/shared'
 import { ClipboardList, Clock3, Move, UserRound, Users } from 'lucide-react'
-import { Button, ChoiceChip, Elapsed, EmptyState, ErrorText, FloorGrid, Spinner, SummaryItem, useNow } from '@restaurant-platform/ui'
+import { Button, ChoiceChip, Elapsed, FloorGrid, QueryView, SummaryItem, useNow } from '@restaurant-platform/ui'
 import { useCan, useRestaurant } from '@/context/pos-context'
 import { MoveTableSession } from './MoveTableSession'
 import {
@@ -11,6 +11,7 @@ import {
   posOpenSessionsQuery,
   posTablesQuery,
   type PosDiningTable,
+  type PosFloorSection,
   type PosOpenSession,
 } from './queries'
 import { AttendRequestButtons, SessionRequestBadges } from './ServiceRequests'
@@ -21,50 +22,15 @@ import { TableStateBadge } from './StatusBadges'
  * Plano operativo del salón (MI-62/MI-63/MI-64). El layout viene de la
  * configuración administrativa y el estado de pedidos/cuenta se compone desde
  * la sesión abierta. Tocar una mesa abre su comanda (MI-64).
- *
- * El sector vive en la query, no en estado local: así volver desde la comanda
- * deja el plano en el mismo sector, y recargar o compartir el link también.
  */
 export function FloorMap() {
   const restaurant = useRestaurant()
-  const [moving, setMoving] = useState<FloorMapEntry | null>(null)
-  const navigate = useNavigate()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const sectionChoice = searchParams.get('sector')
-
-  const chooseSection = (id: string) => setSearchParams({ sector: id }, { replace: true })
-
   const sections = useQuery(posFloorSectionsQuery(restaurant.id, restaurant.branchId))
   const tables = useQuery(posTablesQuery(restaurant.id, restaurant.branchId))
   const sessions = useQuery(posOpenSessionsQuery(restaurant.id, restaurant.branchId))
 
-  const floorSections = sections.data ?? []
-  const sectionId = floorSections.some((section) => section.id === sectionChoice)
-    ? sectionChoice
-    : (floorSections[0]?.id ?? null)
-  const sectionTables = (tables.data ?? []).filter((table) => table.section_id === sectionId)
-  const activeSection = floorSections.find((section) => section.id === sectionId)
-
-  const sessionByTable = useMemo(
-    () => new Map((sessions.data ?? []).map((session) => [session.table_id, session])),
-    [sessions.data],
-  )
-  const entries = sectionTables.map((table): FloorMapEntry => {
-    const session = sessionByTable.get(table.id)
-    return { ...table, session, state: getPosTableState(session) }
-  })
-  const occupied = entries.filter((entry) => entry.state !== 'free').length
-
-  if (sections.isLoading || tables.isLoading || sessions.isLoading) return <Spinner />
-  const queryFailed = sections.isError || tables.isError || sessions.isError
-  const queryError = sections.error ?? tables.error ?? sessions.error
-
   return (
     <div className="min-w-0 space-y-4">
-      {moving?.session && (
-        <MoveTableSession source={moving} sessionId={moving.session.id}
-          onClose={() => setMoving(null)} />
-      )}
       <div>
         <h1 className="text-xl font-bold text-neutral-900">Salón</h1>
         <p className="text-sm text-neutral-500">
@@ -72,62 +38,107 @@ export function FloorMap() {
         </p>
       </div>
 
-      {queryFailed ? (
-        <ErrorText error={queryError} fallback="No pudimos cargar el plano del salón." />
-      ) : floorSections.length === 0 ? (
-        <EmptyState message="Todavía no hay sectores activos configurados para operar." />
-      ) : (
-        <>
-          {/* Elegir sector es elegir una opción de un grupo, no cambiar de pestaña:
-              botones con aria-pressed, sin el contrato de teclado de un tablist.
-              `*:shrink-0` evita que un nombre largo se parta al desplazar la fila. */}
-          <div className="flex gap-2 overflow-x-auto pb-1 *:shrink-0" role="group" aria-label="Sectores del salón">
-            {floorSections.map((section) => (
-              <ChoiceChip
-                key={section.id}
-                tone="outline"
-                pressed={section.id === sectionId}
-                onClick={() => chooseSection(section.id)}
-              >
-                {section.name}
-              </ChoiceChip>
-            ))}
-          </div>
-
-          {activeSection && (
-            <section aria-labelledby="floor-map-heading" className="min-w-0 space-y-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <h2 id="floor-map-heading" className="text-sm font-semibold text-neutral-800">
-                    {activeSection.name}
-                  </h2>
-                  <p className="text-xs text-neutral-500">
-                    {countLabel(entries.length, 'mesa operativa', 'mesas operativas')} ·{' '}
-                    {countLabel(occupied, 'ocupada')}
-                  </p>
-                </div>
-                <p className="inline-flex items-center gap-1.5 text-xs text-neutral-500">
-                  <Move size={14} aria-hidden="true" />
-                  Deslizá para recorrer · tocá una mesa para ver su resumen
-                </p>
-              </div>
-              <StateLegend />
-              <FloorSurface
-                key={activeSection.id}
-                entries={entries}
-                onMoveTable={setMoving}
-                onOpenTable={(tableId) =>
-                  navigate({
-                    pathname: `/salon/${tableId}`,
-                    search: searchParams.toString(),
-                  })
-                }
-              />
-            </section>
-          )}
-        </>
-      )}
+      <QueryView
+        query={[sections, tables, sessions]}
+        fallback="No pudimos cargar el plano del salón."
+        empty="Todavía no hay sectores activos configurados para operar."
+        isEmpty={([sections]) => sections.length === 0}
+      >
+        {([sections, tables, sessions]) => (
+          <FloorSections sections={sections} tables={tables} sessions={sessions} />
+        )}
+      </QueryView>
     </div>
+  )
+}
+
+/**
+ * Los sectores del salón ya cargados. El sector vive en la query, no en estado
+ * local: así volver desde la comanda deja el plano en el mismo sector, y
+ * recargar o compartir el link también.
+ */
+function FloorSections({
+  sections,
+  tables,
+  sessions,
+}: {
+  sections: PosFloorSection[]
+  tables: PosDiningTable[]
+  sessions: PosOpenSession[]
+}) {
+  const [moving, setMoving] = useState<FloorMapEntry | null>(null)
+  const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const sectionChoice = searchParams.get('sector')
+
+  const chooseSection = (id: string) => setSearchParams({ sector: id }, { replace: true })
+
+  const activeSection = sections.find((section) => section.id === sectionChoice) ?? sections[0]
+  const sessionByTable = useMemo(
+    () => new Map(sessions.map((session) => [session.table_id, session])),
+    [sessions],
+  )
+  const entries = tables
+    .filter((table) => table.section_id === activeSection.id)
+    .map((table): FloorMapEntry => {
+      const session = sessionByTable.get(table.id)
+      return { ...table, session, state: getPosTableState(session) }
+    })
+  const occupied = entries.filter((entry) => entry.state !== 'free').length
+
+  return (
+    <>
+      {moving?.session && (
+        <MoveTableSession source={moving} sessionId={moving.session.id}
+          onClose={() => setMoving(null)} />
+      )}
+
+      {/* Elegir sector es elegir una opción de un grupo, no cambiar de pestaña:
+          botones con aria-pressed, sin el contrato de teclado de un tablist.
+          `*:shrink-0` evita que un nombre largo se parta al desplazar la fila. */}
+      <div className="flex gap-2 overflow-x-auto pb-1 *:shrink-0" role="group" aria-label="Sectores del salón">
+        {sections.map((section) => (
+          <ChoiceChip
+            key={section.id}
+            tone="outline"
+            pressed={section.id === activeSection.id}
+            onClick={() => chooseSection(section.id)}
+          >
+            {section.name}
+          </ChoiceChip>
+        ))}
+      </div>
+
+      <section aria-labelledby="floor-map-heading" className="min-w-0 space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 id="floor-map-heading" className="text-sm font-semibold text-neutral-800">
+              {activeSection.name}
+            </h2>
+            <p className="text-xs text-neutral-500">
+              {countLabel(entries.length, 'mesa operativa', 'mesas operativas')} ·{' '}
+              {countLabel(occupied, 'ocupada')}
+            </p>
+          </div>
+          <p className="inline-flex items-center gap-1.5 text-xs text-neutral-500">
+            <Move size={14} aria-hidden="true" />
+            Deslizá para recorrer · tocá una mesa para ver su resumen
+          </p>
+        </div>
+        <StateLegend />
+        <FloorSurface
+          key={activeSection.id}
+          entries={entries}
+          onMoveTable={setMoving}
+          onOpenTable={(tableId) =>
+            navigate({
+              pathname: `/salon/${tableId}`,
+              search: searchParams.toString(),
+            })
+          }
+        />
+      </section>
+    </>
   )
 }
 

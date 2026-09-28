@@ -16,7 +16,7 @@ import {
   EmptyState,
   ErrorText,
   IconButton,
-  Spinner,
+  QueryView,
   Toggle,
   iconButtonClass,
   useSaveErrors,
@@ -28,7 +28,7 @@ export function ProductsPage() {
   const [categoryFilter, setCategoryFilter] = useState<string | 'all'>('all')
   const errors = useSaveErrors()
 
-  const { data: categories, isLoading } = useQuery(productsByCategoryQuery(restaurant.id))
+  const categories = useQuery(productsByCategoryQuery(restaurant.id))
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: productsByCategoryQuery(restaurant.id).queryKey })
@@ -55,11 +55,6 @@ export function ProductsPage() {
     onSuccess: invalidate,
   }, (id) => id))
 
-  const groups = (categories ?? []).filter(
-    (category) =>
-      category.products.length > 0 && (categoryFilter === 'all' || category.id === categoryFilter),
-  )
-
   return (
     <Page
       title="Productos"
@@ -72,56 +67,68 @@ export function ProductsPage() {
         </Link>
       }
     >
-      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filtrar por categoría">
-        <ChoiceChip pressed={categoryFilter === 'all'} onClick={() => setCategoryFilter('all')}>
-          Todos
-        </ChoiceChip>
-        {categories?.map((category) => (
-          <ChoiceChip
-            key={category.id}
-            pressed={categoryFilter === category.id}
-            onClick={() => setCategoryFilter(category.id)}
-          >
-            {category.name}
-          </ChoiceChip>
-        ))}
-      </div>
-
-      <ErrorText error={errors.message} />
-
-      {isLoading ? (
-        <Spinner />
-      ) : groups.length === 0 ? (
-        <EmptyState message="No hay productos en esta vista. Creá uno con “Nuevo producto”." />
-      ) : (
-        <div className="space-y-8">
-          {groups.map((group) => (
-            <div key={group.id}>
-              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted">
-                {group.name}
-              </h2>
-              <ul className="space-y-2">
-                {group.products.map((product) => (
-                  <ProductRow
-                    key={product.id}
-                    product={product}
-                    error={errors.messageFor(product.id)}
-                    saving={
-                      availabilityMutation.isPending && availabilityMutation.variables?.id === product.id
-                    }
-                    onAvailabilityChange={(value) =>
-                      availabilityMutation.mutate({ id: product.id, is_available: value })
-                    }
-                    onDelete={() => {
-                      if (confirm(`¿Eliminar "${product.name}"?`)) deleteMutation.mutate(product.id)
-                    }}
-                  />
+      <QueryView query={categories}>
+        {(categories) => {
+          // Las categorías con productos que deja ver el filtro: una sin productos no tiene qué listar.
+          const groups = categories.filter(
+            (category) =>
+              category.products.length > 0 && (categoryFilter === 'all' || category.id === categoryFilter),
+          )
+          return (
+            <>
+              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filtrar por categoría">
+                <ChoiceChip pressed={categoryFilter === 'all'} onClick={() => setCategoryFilter('all')}>
+                  Todos
+                </ChoiceChip>
+                {categories.map((category) => (
+                  <ChoiceChip
+                    key={category.id}
+                    pressed={categoryFilter === category.id}
+                    onClick={() => setCategoryFilter(category.id)}
+                  >
+                    {category.name}
+                  </ChoiceChip>
                 ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-      )}
+              </div>
+
+              <ErrorText error={errors.message} />
+
+              {/* El vacío es de la vista filtrada, así que va debajo de los filtros y no los reemplaza. */}
+              {groups.length === 0 ? (
+                <EmptyState message="No hay productos en esta vista. Creá uno con “Nuevo producto”." />
+              ) : (
+                <div className="space-y-8">
+                  {groups.map((group) => (
+                    <div key={group.id}>
+                      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted">
+                        {group.name}
+                      </h2>
+                      <ul className="space-y-2">
+                        {group.products.map((product) => (
+                          <ProductRow
+                            key={product.id}
+                            product={product}
+                            error={errors.messageFor(product.id)}
+                            saving={
+                              availabilityMutation.isPending && availabilityMutation.variables?.id === product.id
+                            }
+                            onAvailabilityChange={(value) =>
+                              availabilityMutation.mutate({ id: product.id, is_available: value })
+                            }
+                            onDelete={() => {
+                              if (confirm(`¿Eliminar "${product.name}"?`)) deleteMutation.mutate(product.id)
+                            }}
+                          />
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )
+        }}
+      </QueryView>
     </Page>
   )
 }

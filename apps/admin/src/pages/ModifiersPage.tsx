@@ -18,7 +18,7 @@ import {
   type ModifierGroupWithOptions,
 } from '@/queries/modifier-groups'
 import { useRestaurant } from '@/restaurant/restaurant-context'
-import { Badge, Button, EmptyState, ErrorText, Field, IconButton, Input, Modal, Spinner, Toggle, useSaveErrors } from '@restaurant-platform/ui'
+import { Badge, Button, ErrorText, Field, IconButton, Input, Modal, QueryView, Toggle, useSaveErrors } from '@restaurant-platform/ui'
 
 export function ModifiersPage() {
   const restaurant = useRestaurant()
@@ -26,7 +26,7 @@ export function ModifiersPage() {
   const [editing, setEditing] = useState<ModifierGroupWithOptions | 'new' | null>(null)
   const errors = useSaveErrors()
 
-  const { data: groups, isLoading } = useQuery(modifierGroupsQuery(restaurant.id))
+  const groups = useQuery(modifierGroupsQuery(restaurant.id))
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: modifierGroupsQuery(restaurant.id).queryKey })
@@ -55,59 +55,57 @@ export function ModifiersPage() {
     >
       <ErrorText error={errors.message} />
 
-      {isLoading ? (
-        <Spinner />
-      ) : !groups?.length ? (
-        <EmptyState message="Todavía no hay grupos de modificadores." />
-      ) : (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {groups.map((group) => (
-            <div key={group.id} className="rounded-xl border border-neutral-200 bg-white p-4">
-              <div className="mb-2 flex items-start justify-between gap-2">
-                <div>
-                  <h2 className="font-semibold text-neutral-900">{group.name}</h2>
-                  <p className="text-xs text-muted">
-                    {group.min_select > 0 ? 'Obligatorio' : 'Opcional'} · elegir{' '}
-                    {group.min_select === group.max_select
-                      ? group.min_select
-                      : `${group.min_select} a ${group.max_select}`}
-                  </p>
+      <QueryView query={groups} empty="Todavía no hay grupos de modificadores.">
+        {(groups) => (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {groups.map((group) => (
+              <div key={group.id} className="rounded-xl border border-neutral-200 bg-white p-4">
+                <div className="mb-2 flex items-start justify-between gap-2">
+                  <div>
+                    <h2 className="font-semibold text-neutral-900">{group.name}</h2>
+                    <p className="text-xs text-muted">
+                      {group.min_select > 0 ? 'Obligatorio' : 'Opcional'} · elegir{' '}
+                      {group.min_select === group.max_select
+                        ? group.min_select
+                        : `${group.min_select} a ${group.max_select}`}
+                    </p>
+                  </div>
+                  <div className="flex gap-1">
+                    <IconButton label={`Editar ${group.name}`} onClick={() => setEditing(group)}>
+                      <Pencil size={15} />
+                    </IconButton>
+                    <IconButton label={`Eliminar ${group.name}`} tone="danger" onClick={() => deleteGroup(group)}>
+                      <Trash2 size={15} />
+                    </IconButton>
+                  </div>
                 </div>
-                <div className="flex gap-1">
-                  <IconButton label={`Editar ${group.name}`} onClick={() => setEditing(group)}>
-                    <Pencil size={15} />
-                  </IconButton>
-                  <IconButton label={`Eliminar ${group.name}`} tone="danger" onClick={() => deleteGroup(group)}>
-                    <Trash2 size={15} />
-                  </IconButton>
-                </div>
+                <ul className="space-y-1">
+                  {group.modifier_options.map((option) => (
+                    <li key={option.id} className="flex items-center justify-between text-sm">
+                      <span className={option.is_available ? 'text-neutral-700' : 'text-faint line-through'}>
+                        {option.name}
+                      </span>
+                      <span className="text-muted">
+                        {option.price_delta > 0 ? `+${formatPrice(option.price_delta)}` : 'Gratis'}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                {!group.is_available && (
+                  <div className="mt-2">
+                    <Badge color="red">No disponible</Badge>
+                  </div>
+                )}
+                {errors.messageFor(group.id) && (
+                  <div className="mt-2">
+                    <ErrorText error={errors.messageFor(group.id)} />
+                  </div>
+                )}
               </div>
-              <ul className="space-y-1">
-                {group.modifier_options.map((option) => (
-                  <li key={option.id} className="flex items-center justify-between text-sm">
-                    <span className={option.is_available ? 'text-neutral-700' : 'text-faint line-through'}>
-                      {option.name}
-                    </span>
-                    <span className="text-muted">
-                      {option.price_delta > 0 ? `+${formatPrice(option.price_delta)}` : 'Gratis'}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              {!group.is_available && (
-                <div className="mt-2">
-                  <Badge color="red">No disponible</Badge>
-                </div>
-              )}
-              {errors.messageFor(group.id) && (
-                <div className="mt-2">
-                  <ErrorText error={errors.messageFor(group.id)} />
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </QueryView>
 
       {editing && (
         <GroupEditor

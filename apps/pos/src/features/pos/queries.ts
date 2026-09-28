@@ -160,6 +160,12 @@ const tablesOf = (restaurantId: string, branchId: string) =>
 
 export type PosDiningTable = QueryData<ReturnType<typeof tablesOf>>[number]
 
+/** Mesas operables sin una cuenta abierta: las que se pueden abrir o recibir un traslado. */
+export function freeTables(tables: PosDiningTable[], sessions: PosOpenSession[]) {
+  const occupied = new Set(sessions.map((session) => session.table_id))
+  return tables.filter((table) => !occupied.has(table.id))
+}
+
 /**
  * Mesas que el POS puede operar en la sucursal. Quedan afuera las que están
  * fuera de servicio, las ocultas del plano y las de un sector dado de baja. La
@@ -175,21 +181,23 @@ export const posTablesQuery = (restaurantId: string, branchId: string) =>
       ),
   })
 
+const floorSectionsOf = (restaurantId: string, branchId: string) =>
+  supabase
+    .from('floor_sections')
+    .select('id, name, sort_order, is_active')
+    .eq('restaurant_id', restaurantId)
+    .eq('branch_id', branchId)
+    .eq('is_active', true)
+    .order('sort_order')
+    .order('name')
+
+export type PosFloorSection = QueryData<ReturnType<typeof floorSectionsOf>>[number]
+
 /** Sectores activos que el POS puede recorrer, incluso si todavía están vacíos. */
 export const posFloorSectionsQuery = (restaurantId: string, branchId: string) =>
   queryOptions({
     queryKey: [...posQueryKey(restaurantId, branchId), 'floor-sections'],
-    queryFn: async () =>
-      unwrap(
-        await supabase
-          .from('floor_sections')
-          .select('id, name, sort_order, is_active')
-          .eq('restaurant_id', restaurantId)
-          .eq('branch_id', branchId)
-          .eq('is_active', true)
-          .order('sort_order')
-          .order('name'),
-      ),
+    queryFn: async () => unwrap(await floorSectionsOf(restaurantId, branchId)),
   })
 
 /**

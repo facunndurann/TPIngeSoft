@@ -10,7 +10,7 @@ import { useRestaurant } from '@/restaurant/restaurant-context'
 import { DesignPicker } from '@/features/DesignPicker'
 import { Page } from '@/features/Page'
 import { PaymentMethodsField } from '@/features/PaymentMethods'
-import { Badge, Button, ErrorText, Field, IconButton, Input, Spinner, Textarea, Toggle, useSaveErrors } from '@restaurant-platform/ui'
+import { Badge, Button, ErrorText, Field, IconButton, Input, QueryView, Textarea, Toggle, useSaveErrors } from '@restaurant-platform/ui'
 import type { Tables } from '@restaurant-platform/shared'
 
 export function SettingsPage() {
@@ -93,7 +93,7 @@ function BranchesSection({ restaurantId }: { restaurantId: string }) {
   const [newAddress, setNewAddress] = useState('')
   const errors = useSaveErrors()
 
-  const { data: branches, isLoading } = useQuery(branchesQuery(restaurantId))
+  const branches = useQuery(branchesQuery(restaurantId))
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: branchesQuery(restaurantId).queryKey })
 
@@ -172,47 +172,47 @@ function BranchesSection({ restaurantId }: { restaurantId: string }) {
 
       <ErrorText error={errors.message} />
 
-      {isLoading ? (
-        <Spinner />
-      ) : (
-        <ul className="space-y-2">
-          {branches?.map((branch) => (
-            <li key={branch.id} className="space-y-3 rounded-lg border border-neutral-200 px-4 py-2.5">
-              <div className="flex items-center gap-3">
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-neutral-900">{branch.name}</p>
-                  {branch.address && <p className="text-xs text-muted">{branch.address}</p>}
+      <QueryView query={branches}>
+        {(branches) => (
+          <ul className="space-y-2">
+            {branches.map((branch) => (
+              <li key={branch.id} className="space-y-3 rounded-lg border border-neutral-200 px-4 py-2.5">
+                <div className="flex items-center gap-3">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-neutral-900">{branch.name}</p>
+                    {branch.address && <p className="text-xs text-muted">{branch.address}</p>}
+                  </div>
+                  {!branch.is_active && <Badge color="red">Inactiva</Badge>}
+                  <Toggle
+                    checked={branch.is_active}
+                    onChange={(value) => updateMutation.mutate({ id: branch.id, is_active: value })}
+                    label={`Activa: ${branch.name}`}
+                    hideLabel
+                    busy={savingBranch === branch.id}
+                  />
+                  <IconButton
+                    label={`Eliminar ${branch.name}`}
+                    tone="danger"
+                    onClick={() => {
+                      if (confirm(`¿Eliminar la sucursal "${branch.name}"?`)) deleteMutation.mutate(branch.id)
+                    }}
+                  >
+                    <Trash2 size={15} />
+                  </IconButton>
                 </div>
-                {!branch.is_active && <Badge color="red">Inactiva</Badge>}
-                <Toggle
-                  checked={branch.is_active}
-                  onChange={(value) => updateMutation.mutate({ id: branch.id, is_active: value })}
-                  label={`Activa: ${branch.name}`}
-                  hideLabel
+                <PaymentMethodsField
+                  value={branch.payment_methods}
                   busy={savingBranch === branch.id}
+                  onChange={(payment_methods) =>
+                    updateMutation.mutate({ id: branch.id, payment_methods })
+                  }
                 />
-                <IconButton
-                  label={`Eliminar ${branch.name}`}
-                  tone="danger"
-                  onClick={() => {
-                    if (confirm(`¿Eliminar la sucursal "${branch.name}"?`)) deleteMutation.mutate(branch.id)
-                  }}
-                >
-                  <Trash2 size={15} />
-                </IconButton>
-              </div>
-              <PaymentMethodsField
-                value={branch.payment_methods}
-                busy={savingBranch === branch.id}
-                onChange={(payment_methods) =>
-                  updateMutation.mutate({ id: branch.id, payment_methods })
-                }
-              />
-              <ErrorText error={errors.messageFor(branch.id)} />
-            </li>
-          ))}
-        </ul>
-      )}
+                <ErrorText error={errors.messageFor(branch.id)} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </QueryView>
     </section>
   )
 }
