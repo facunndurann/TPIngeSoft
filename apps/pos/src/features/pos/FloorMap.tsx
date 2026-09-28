@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { countLabel, formatElapsed, formatPrice, getPosTableState, type PosTableState, posTableStateLabels, posTableStates } from '@restaurant-platform/shared'
 import { ClipboardList, Clock3, Move, UserRound, Users } from 'lucide-react'
-import { Button, Elapsed, EmptyState, ErrorText, FloorGrid, Spinner, SummaryItem, useNow } from '@restaurant-platform/ui'
+import { Button, ChoiceChip, Elapsed, EmptyState, ErrorText, FloorGrid, Spinner, SummaryItem, useNow } from '@restaurant-platform/ui'
 import { useCan, useRestaurant } from '@/context/pos-context'
 import { MoveTableSession } from './MoveTableSession'
 import {
@@ -78,30 +78,20 @@ export function FloorMap() {
         <EmptyState message="Todavía no hay sectores activos configurados para operar." />
       ) : (
         <>
-          <div
-            className="flex gap-2 overflow-x-auto pb-1"
-            role="tablist"
-            aria-label="Sectores del salón"
-          >
-            {floorSections.map((section) => {
-              const selected = section.id === sectionId
-              return (
-                <button
-                  key={section.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={selected}
-                  onClick={() => chooseSection(section.id)}
-                  className={`min-h-11 shrink-0 cursor-pointer rounded-lg px-4 py-2 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none ${
-                    selected
-                      ? 'bg-indigo-600 text-white'
-                      : 'border border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50'
-                  }`}
-                >
-                  {section.name}
-                </button>
-              )
-            })}
+          {/* Elegir sector es elegir una opción de un grupo, no cambiar de pestaña:
+              botones con aria-pressed, sin el contrato de teclado de un tablist.
+              `*:shrink-0` evita que un nombre largo se parta al desplazar la fila. */}
+          <div className="flex gap-2 overflow-x-auto pb-1 *:shrink-0" role="group" aria-label="Sectores del salón">
+            {floorSections.map((section) => (
+              <ChoiceChip
+                key={section.id}
+                tone="outline"
+                pressed={section.id === sectionId}
+                onClick={() => chooseSection(section.id)}
+              >
+                {section.name}
+              </ChoiceChip>
+            ))}
           </div>
 
           {activeSection && (

@@ -2,13 +2,14 @@ import { Link } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { countLabel, formatPrice, sessionRequestsOf } from '@restaurant-platform/shared'
 import { useRestaurant } from '@/context/pos-context'
-import { Badge, Button, Elapsed, EmptyState, ErrorText, Spinner } from '@restaurant-platform/ui'
+import { Badge, buttonClass, Elapsed, EmptyState, ErrorText, Spinner, useControlSize } from '@restaurant-platform/ui'
 import { posOpenSessionsQuery, posTablesQuery } from './queries'
 import { CloseSessionButton } from './CloseSessionButton'
 import { AttendRequestButtons, ChargedBadge, SessionRequestBadges } from './ServiceRequests'
 
 export function ActiveTables() {
   const restaurant = useRestaurant()
+  const controlSize = useControlSize()
 
   const sessions = useQuery(posOpenSessionsQuery(restaurant.id, restaurant.branchId))
   const tables = useQuery(posTablesQuery(restaurant.id, restaurant.branchId))
@@ -132,8 +133,9 @@ export function ActiveTables() {
                   </p>
                 )}
                 <div className="flex gap-2">
-                  <Link to={`/salon/${session.table_id}`} className="flex-1">
-                    <Button className="w-full">Continuar comanda</Button>
+                  {/* Navega, así que es un link; se ve como el botón de al lado. */}
+                  <Link to={`/salon/${session.table_id}`} className={`${buttonClass('primary', controlSize)} flex-1`}>
+                    Continuar comanda
                   </Link>
                   <CloseSessionButton session={session} className="flex-1" />
                 </div>

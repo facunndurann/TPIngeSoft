@@ -118,8 +118,20 @@ export function OrderHistory() {
                   onClick={() => setSelected(order)}
                 >
                   <td className="px-4 py-3 text-neutral-700">{formatClock(order.created_at)}</td>
-                  <td className="px-4 py-3 font-medium text-neutral-900">
-                    {order.table_sessions.tables.label}
+                  {/* La fila entera abre el detalle con el mouse o el dedo; este botón
+                      es la misma puerta para el teclado y el lector de pantalla. Sin
+                      padding vertical: su alto táctil ya es el de la fila. */}
+                  <td className="px-4 py-0">
+                    <button
+                      type="button"
+                      aria-haspopup="dialog"
+                      onClick={() => setSelected(order)}
+                      className="inline-flex min-h-11 cursor-pointer items-center rounded font-medium text-neutral-900 underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-indigo-600 focus-visible:outline-none"
+                    >
+                      {order.table_sessions.tables.label}
+                      {/* Varias filas pueden ser de la misma mesa: la hora dice cuál se abre. */}
+                      <span className="sr-only">, pedido de las {formatClock(order.created_at)}</span>
+                    </button>
                   </td>
                   <td className="px-4 py-3 text-neutral-600">
                     {order.order_items

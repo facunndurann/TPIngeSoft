@@ -20,13 +20,16 @@ export function ControlSizeProvider({ size, children }: { size: ControlSize; chi
   return <ControlSizeContext value={size}>{children}</ControlSizeContext>
 }
 
-/** El tamaño pedido, o el de la app si el control no dice nada. */
-function useControlSize(size: ControlSize | undefined): ControlSize {
+/**
+ * El tamaño pedido, o el de la app si el control no dice nada. Se exporta para
+ * los controles que no son de `ui`, como un `<Link>` con forma de botón.
+ */
+export function useControlSize(size?: ControlSize): ControlSize {
   const appSize = useContext(ControlSizeContext)
   return size ?? appSize
 }
 
-type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'danger-ghost'
+export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'danger-ghost'
 
 const buttonStyles: Record<ButtonVariant, string> = {
   primary:
@@ -47,18 +50,22 @@ const buttonSizes: Record<ControlSize, string> = {
   touch: 'min-h-11 px-4 py-2',
 }
 
+/**
+ * Clases de `Button`. Se exportan para una navegación que tiene que verse como
+ * botón: un `<Link>` con estas clases, no un `<Button>` adentro de un `<Link>`,
+ * que es un control dentro de otro y dos paradas de tabulación para lo mismo.
+ */
+export function buttonClass(variant: ButtonVariant = 'primary', size: ControlSize = 'default') {
+  return `inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-lg text-sm font-medium transition-colors disabled:cursor-not-allowed ${buttonSizes[size]} ${buttonStyles[variant]}`
+}
+
 export function Button({
   variant = 'primary',
   size,
   className = '',
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; size?: ControlSize }) {
-  return (
-    <button
-      className={`inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-lg text-sm font-medium transition-colors disabled:cursor-not-allowed ${buttonSizes[useControlSize(size)]} ${buttonStyles[variant]} ${className}`}
-      {...props}
-    />
-  )
+  return <button className={`${buttonClass(variant, useControlSize(size))} ${className}`} {...props} />
 }
 
 /**
