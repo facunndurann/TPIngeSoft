@@ -1,24 +1,22 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { countLabel, formatClock, formatPrice, localDateKey, type OrderStatus, orderStatusLabels, sessionPlaceLabel } from '@restaurant-platform/shared'
+import { Constants, countLabel, formatClock, formatPrice, localDateKey, type OrderStatus, orderStatusLabels, sessionPlaceLabel } from '@restaurant-platform/shared'
 import { useRestaurant } from '@/context/pos-context'
 import { EmptyState, Input, Modal, QueryView, Select } from '@restaurant-platform/ui'
 import { OrderItemLine } from './OrderItemLine'
 import { posHistoryQuery, type PosOrder } from './queries'
 import { OrderStatusBadge } from './StatusBadges'
 
-const statusFilterOptions: Array<{ value: 'all' | OrderStatus; label: string }> = [
+type StatusFilter = 'all' | OrderStatus
+
+/** Todos los estados del enum de la base, en su orden: uno nuevo aparece solo. */
+const statusFilterOptions: { value: StatusFilter; label: string }[] = [
   { value: 'all', label: 'Todos los estados' },
-  { value: 'submitted', label: orderStatusLabels.submitted },
-  { value: 'accepted', label: orderStatusLabels.accepted },
-  { value: 'in_preparation', label: orderStatusLabels.in_preparation },
-  { value: 'ready', label: orderStatusLabels.ready },
-  { value: 'delivered', label: orderStatusLabels.delivered },
-  { value: 'cancelled', label: orderStatusLabels.cancelled },
+  ...Constants.public.Enums.order_status.map((status) => ({ value: status, label: orderStatusLabels[status] })),
 ]
 
 /** Los pedidos que dejan ver el estado elegido y la búsqueda por mesa, producto, comensal o id. */
-function filterOrders(orders: PosOrder[], status: 'all' | OrderStatus, search: string) {
+function filterOrders(orders: PosOrder[], status: StatusFilter, search: string) {
   const query = search.trim().toLocaleLowerCase()
   return orders.filter((order) => {
     if (status !== 'all' && order.status !== status) return false
@@ -47,7 +45,7 @@ function totalsOf(orders: PosOrder[]) {
 export function OrderHistory() {
   const restaurant = useRestaurant()
   const [dateKey, setDateKey] = useState(() => localDateKey())
-  const [status, setStatus] = useState<'all' | OrderStatus>('all')
+  const [status, setStatus] = useState<StatusFilter>('all')
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<PosOrder | null>(null)
 
@@ -73,7 +71,9 @@ export function OrderHistory() {
         <Select
           className="w-56"
           value={status}
-          onChange={(event) => setStatus(event.target.value as 'all' | OrderStatus)}
+          onChange={(event) =>
+            setStatus(statusFilterOptions.find((option) => option.value === event.target.value)?.value ?? 'all')
+          }
           aria-label="Estado"
         >
           {statusFilterOptions.map((option) => (

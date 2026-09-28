@@ -1,3 +1,4 @@
+import { isUuid } from '@restaurant-platform/shared'
 import { cartKeyFor } from './cart'
 import type { PendingSubmission } from './cart'
 
@@ -7,8 +8,6 @@ type RecoverableSession = {
   table_id: string | null
   session_participants: { user_id: string | null }[]
 }
-
-const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /** Local drafts provide candidates; the database must prove table and membership. */
 export async function recoverPendingSession(
@@ -20,7 +19,7 @@ export async function recoverPendingSession(
   const ids = Object.entries(submissions).flatMap(([key, submission]) => {
     const id = submission?.input.sessionId
     // La clave es la que prueba que el envío es de este comensal: el input solo trae la sesión.
-    const matchesKey = id && key === cartKeyFor(id, userId) && SESSION_ID.test(id)
+    const matchesKey = id && key === cartKeyFor(id, userId) && isUuid(id)
     return matchesKey ? [id] : []
   })
   if (!ids.length) return undefined

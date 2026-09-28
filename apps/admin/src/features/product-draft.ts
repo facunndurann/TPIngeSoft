@@ -15,7 +15,7 @@ export type IngredientDraft = {
  * no existe el estado "a medio hidratar" que antes cubría un flag y un efecto.
  *
  * `basePrice` es string porque es lo que hay en el input mientras se escribe;
- * `draftErrors` decide si ese texto es un precio.
+ * `parseProductDraft` decide si ese texto es un precio.
  */
 export type ProductDraft = {
   name: string
@@ -68,26 +68,28 @@ export function draftFrom(product: SavedProduct): ProductDraft {
   }
 }
 
-/** Precio válido del borrador, o `null` si el texto todavía no lo es. */
-export function draftPrice(draft: ProductDraft): number | null {
-  return parseAmount(draft.basePrice)
-}
+/** Lo que recibe `save_product`: el borrador con el precio ya convertido a número. */
+export type ProductPayload = Omit<ProductDraft, 'basePrice'> & { basePrice: number }
 
 /** Un campo del formulario que puede tener un error: los fijos y cada ingrediente. */
 export type DraftField = 'name' | 'categoryId' | 'basePrice' | `ingredient-${number}`
 
 export type DraftError = { field: DraftField; message: string }
 
+/** El borrador listo para guardar, o todo lo que lo impide. */
+export type ParsedProduct = { ok: true; payload: ProductPayload } | { ok: false; errors: DraftError[] }
+
 /**
- * Todo lo que impide guardar, en el orden del formulario y con el campo de cada
- * problema: así cada error se muestra debajo de su campo y el foco va al primero.
- * La base revalida igual.
+ * Valida y convierte el borrador en una sola pasada. Junta todo lo que impide
+ * guardar, en el orden del formulario y con el campo de cada problema: así cada
+ * error se muestra debajo de su campo y el foco va al primero. La base revalida igual.
  */
-export function draftErrors(draft: ProductDraft): DraftError[] {
+export function parseProductDraft(draft: ProductDraft): ParsedProduct {
   const errors: DraftError[] = []
   if (!draft.name.trim()) errors.push({ field: 'name', message: 'El producto necesita un nombre.' })
   if (!draft.categoryId) errors.push({ field: 'categoryId', message: 'Elegí una categoría.' })
-  if (draftPrice(draft) === null) {
+  const basePrice = parseAmount(draft.basePrice)
+  if (basePrice === null) {
     errors.push({ field: 'basePrice', message: 'Ingresá un precio de 0 o más, con hasta dos decimales.' })
   }
   draft.ingredients.forEach((ingredient, index) => {
@@ -95,5 +97,8 @@ export function draftErrors(draft: ProductDraft): DraftError[] {
       errors.push({ field: `ingredient-${index}`, message: 'Escribí el ingrediente o quitalo.' })
     }
   })
-  return errors
+
+  // `basePrice === null` ya dejó su error; se mira de nuevo para que el payload lo tenga como número.
+  if (basePrice === null || errors.length > 0) return { ok: false, errors }
+  return { ok: true, payload: { ...draft, basePrice } }
 }

@@ -6,10 +6,11 @@ import { supabase } from '@/lib/supabase'
 import { formatPrice, unwrap } from '@restaurant-platform/shared'
 import {
   emptyGroupDraft,
-  groupDraftErrors,
   groupDraftFrom,
   newOptionDraft,
+  parseGroupDraft,
   type ModifierGroupDraft,
+  type ModifierGroupPayload,
   type OptionDraft,
 } from '@/features/modifier-group-draft'
 import {
@@ -149,13 +150,17 @@ function GroupEditor({
     })
 
   const save = useMutation(errors.saving('No pudimos guardar el grupo.', {
-    mutationFn: async () => {
-      const invalid = groupDraftErrors(draft)
-      if (invalid) throw new Error(invalid)
-      await saveModifierGroup({ restaurantId, groupId: group?.id, draft })
-    },
+    mutationFn: (payload: ModifierGroupPayload) => saveModifierGroup({ restaurantId, groupId: group?.id, payload }),
     onSuccess: onSaved,
   }))
+
+  // Un borrador inválido no llega a la mutación: su problema se muestra en el
+  // mismo lugar que un error al guardar, y lo que se guarda es lo que se validó.
+  function submit() {
+    const parsed = parseGroupDraft(draft)
+    if (parsed.ok) save.mutate(parsed.payload)
+    else errors.report(parsed.error)
+  }
 
   return (
     <Modal
@@ -259,7 +264,7 @@ function GroupEditor({
           <Button variant="secondary" onClick={onClose}>
             Cancelar
           </Button>
-          <Button onClick={() => save.mutate()} disabled={save.isPending}>
+          <Button onClick={submit} disabled={save.isPending}>
             {save.isPending ? 'Guardando…' : 'Guardar grupo'}
           </Button>
         </div>

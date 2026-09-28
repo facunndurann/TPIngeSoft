@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query'
-import { draftPrice, type ProductDraft } from '@/features/product-draft'
+import type { ProductPayload } from '@/features/product-draft'
 import type { MediaDraft } from '@/features/product-media'
 import { unwrap } from '@restaurant-platform/shared'
 import { supabase } from '@/lib/supabase'
@@ -49,29 +49,27 @@ export async function saveProduct(input: {
   restaurantId: string
   /** Ausente al crear: la RPC devuelve el id nuevo. */
   productId?: string
-  draft: ProductDraft
+  /** El borrador ya validado por `parseProductDraft`. */
+  payload: ProductPayload
 }): Promise<string> {
-  const { restaurantId, productId, draft } = input
-  const price = draftPrice(draft)
-  if (price === null) throw new Error('El precio no es válido')
-
-  const { urls: mediaUrls, discardUploads } = await uploadMediaDrafts(restaurantId, draft.media)
+  const { restaurantId, productId, payload } = input
+  const { urls: mediaUrls, discardUploads } = await uploadMediaDrafts(restaurantId, payload.media)
 
   try {
     return unwrap(
       await supabase.rpc('save_product', {
         p_restaurant_id: restaurantId,
         p_product_id: productId,
-        p_category_id: draft.categoryId,
-        p_name: draft.name,
-        p_description: draft.description,
-        p_base_price: price,
-        p_food_info: draft.foodInfo,
-        p_dietary_tags: draft.dietaryTags,
-        p_is_available: draft.isAvailable,
+        p_category_id: payload.categoryId,
+        p_name: payload.name,
+        p_description: payload.description,
+        p_base_price: payload.basePrice,
+        p_food_info: payload.foodInfo,
+        p_dietary_tags: payload.dietaryTags,
+        p_is_available: payload.isAvailable,
         p_media_urls: mediaUrls,
-        p_ingredients: draft.ingredients,
-        p_group_ids: draft.groupIds,
+        p_ingredients: payload.ingredients,
+        p_group_ids: payload.groupIds,
       }),
     )
   } catch (error) {

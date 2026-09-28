@@ -1,6 +1,6 @@
 import { queryOptions } from '@tanstack/react-query'
 import type { QueryData } from '@supabase/supabase-js'
-import { groupPayload, type ModifierGroupDraft } from '@/features/modifier-group-draft'
+import type { ModifierGroupPayload } from '@/features/modifier-group-draft'
 import { unwrap } from '@restaurant-platform/shared'
 import { supabase } from '@/lib/supabase'
 
@@ -29,11 +29,10 @@ export async function saveModifierGroup(input: {
   restaurantId: string
   /** Ausente al crear. */
   groupId?: string
-  draft: ModifierGroupDraft
+  /** El borrador ya validado por `parseGroupDraft`. */
+  payload: ModifierGroupPayload
 }) {
-  const payload = groupPayload(input.draft)
-  if (!payload) throw new Error('El grupo no es válido')
-
+  const { payload } = input
   unwrap(
     await supabase.rpc('save_modifier_group', {
       p_restaurant_id: input.restaurantId,

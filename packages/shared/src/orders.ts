@@ -1,8 +1,9 @@
 import { z } from 'zod';
 import { Constants, type Database } from './database.types.ts';
 import { hasAtMostTwoDecimals } from './money.ts';
+import { uuidSchema } from './schemas.ts';
 
-const uuid = z.string().uuid().transform(value => value.toLowerCase());
+const uuid = uuidSchema.transform(value => value.toLowerCase());
 const selectionIds = z.array(uuid).max(100).refine(
   ids => new Set(ids).size === ids.length,
   'No se puede elegir la misma opción o ingrediente más de una vez',

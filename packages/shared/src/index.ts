@@ -15,4 +15,5 @@ export * from './product-media';
 export * from './errors';
 export * from './supabase-client';
 export * from './employees';
+export * from './audit';
 export * from './functions';

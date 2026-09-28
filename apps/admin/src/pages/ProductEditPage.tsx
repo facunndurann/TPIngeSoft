@@ -24,12 +24,13 @@ import { useRestaurant } from '@/restaurant/restaurant-context'
 import { MediaUploader } from '@/features/MediaUploader'
 import { Page } from '@/features/Page'
 import {
-  draftErrors,
   draftFrom,
   emptyDraft,
+  parseProductDraft,
   type DraftField,
   type IngredientDraft,
   type ProductDraft,
+  type ProductPayload,
 } from '@/features/product-draft'
 
 /**
@@ -102,12 +103,13 @@ function ProductForm({ productId, initial, categories, groups }: ProductFormProp
   const formId = useId()
   const fieldId = (field: DraftField) => `${formId}-${field}`
   const [attempted, setAttempted] = useState(false)
-  const fieldErrors = attempted ? draftErrors(draft) : []
+  const parsed = parseProductDraft(draft)
+  const fieldErrors = attempted && !parsed.ok ? parsed.errors : []
   const errorFor = (field: DraftField) =>
     fieldErrors.find((error) => error.field === field)?.message
 
   const save = useMutation(errors.saving('No pudimos guardar el producto.', {
-    mutationFn: () => saveProduct({ restaurantId: restaurant.id, productId, draft }),
+    mutationFn: (payload: ProductPayload) => saveProduct({ restaurantId: restaurant.id, productId, payload }),
     onSuccess: async (savedId) => {
       // Las dos cachés son independientes: no hay razón para encadenarlas.
       await Promise.all([
@@ -118,16 +120,16 @@ function ProductForm({ productId, initial, categories, groups }: ProductFormProp
     },
   }))
 
+  // Lo que se guarda es lo que se validó: el payload sale del mismo parseo.
   function submit() {
-    const [first] = draftErrors(draft)
-    if (!first) {
-      save.mutate()
+    if (parsed.ok) {
+      save.mutate(parsed.payload)
       return
     }
     // El error tiene que estar en el DOM antes de mover el foco: así el lector
     // de pantalla anuncia el campo junto con su error, y no solo el campo.
     flushSync(() => setAttempted(true))
-    document.getElementById(fieldId(first.field))?.focus()
+    document.getElementById(fieldId(parsed.errors[0].field))?.focus()
   }
 
   const toggle = <T,>(list: T[], value: T) =>

@@ -9,8 +9,9 @@
  * que no cambie nada de lo que ve la mesa no va acá.
  */
 
-import type { Database } from './database.types.ts';
+import { Constants, type Database } from './database.types.ts';
 import { z } from 'zod';
+import { uuidSchema as uuid } from './schemas.ts';
 
 /** Los define el enum `payment_method` de la base, que es lo que acepta la columna. */
 export type PaymentMethod = Database['public']['Enums']['payment_method'];
@@ -71,7 +72,6 @@ export function acceptsPaymentMethod(
   return (branch?.payment_methods ?? []).includes(method);
 }
 
-const uuid = z.string().uuid();
 export const mobilePaymentRequestSchema = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('create'),
@@ -99,6 +99,6 @@ export type MobilePaymentRequest = z.infer<typeof mobilePaymentRequestSchema>;
 export const mobilePaymentResultSchema = z.object({
   paymentId: uuid,
   amount: z.number().finite().positive(),
-  status: z.enum(['pending', 'approved', 'rejected', 'cancelled']),
+  status: z.enum(Constants.public.Enums.payment_status),
 });
 export type MobilePaymentResult = z.infer<typeof mobilePaymentResultSchema>;

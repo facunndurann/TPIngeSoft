@@ -70,47 +70,40 @@ function wholeNumber(text: string): number | null {
   return text.trim() !== '' && Number.isInteger(value) ? value : null
 }
 
-/** Cuántas opciones se eligen, como la base lo acepta (mínimo 0, máximo 1 o más), o `null`. */
-function selectionRange(draft: ModifierGroupDraft): { min: number; max: number } | null {
-  const min = wholeNumber(draft.minSelect)
-  const max = wholeNumber(draft.maxSelect)
-  return min !== null && max !== null && min >= 0 && max >= 1 ? { min, max } : null
-}
-
-/** Primer problema que impide guardar, o `null`. La base revalida igual. */
-export function groupDraftErrors(draft: ModifierGroupDraft): string | null {
-  if (!draft.name.trim()) return 'El grupo necesita un nombre'
-  if (draft.options.some((option) => !option.name.trim())) return 'Todas las opciones necesitan nombre'
-  const range = selectionRange(draft)
-  if (!range) return 'El mínimo tiene que ser un entero desde 0, y el máximo desde 1'
-  if (range.min > range.max) return 'El mínimo no puede superar al máximo'
-  if (draft.options.length === 0) return 'Agregá al menos una opción'
-  if (draft.options.some((option) => parseAmount(option.price) === null)) {
-    return 'Cada opción necesita un precio de 0 o más, con hasta dos decimales'
-  }
-  return null
-}
+/** El borrador listo para guardar, o el primer problema que lo impide. */
+export type ParsedGroup = { ok: true; payload: ModifierGroupPayload } | { ok: false; error: string }
 
 /**
- * El borrador ya convertido a lo que se guarda, o `null` si todavía no es válido.
- * Las `key` de las filas quedan afuera: solo sirven para dibujar la lista.
+ * Valida y convierte el borrador en una sola pasada: lo que se revisa es lo mismo
+ * que se guarda, así que no hay un segundo chequeo que pueda discrepar con el
+ * primero. Los problemas se nombran de a uno, en el orden del formulario, y las
+ * `key` de las filas quedan afuera: solo sirven para dibujar la lista. La base
+ * revalida igual.
  */
-export function groupPayload(draft: ModifierGroupDraft): ModifierGroupPayload | null {
-  const range = selectionRange(draft)
-  if (!range || groupDraftErrors(draft)) return null
+export function parseGroupDraft(draft: ModifierGroupDraft): ParsedGroup {
+  const fail = (error: string): ParsedGroup => ({ ok: false, error })
+
+  if (!draft.name.trim()) return fail('El grupo necesita un nombre')
+  if (draft.options.some((option) => !option.name.trim())) return fail('Todas las opciones necesitan nombre')
+
+  // Como la base lo acepta: mínimo desde 0, máximo desde 1, y nunca al revés.
+  const min = wholeNumber(draft.minSelect)
+  const max = wholeNumber(draft.maxSelect)
+  if (min === null || max === null || min < 0 || max < 1) {
+    return fail('El mínimo tiene que ser un entero desde 0, y el máximo desde 1')
+  }
+  if (min > max) return fail('El mínimo no puede superar al máximo')
+  if (draft.options.length === 0) return fail('Agregá al menos una opción')
 
   const options: ModifierGroupPayload['options'] = []
   for (const option of draft.options) {
     const price = parseAmount(option.price)
-    if (price === null) return null
+    if (price === null) return fail('Cada opción necesita un precio de 0 o más, con hasta dos decimales')
     options.push({ id: option.id, name: option.name, price_delta: price, is_available: option.isAvailable })
   }
 
   return {
-    name: draft.name,
-    minSelect: range.min,
-    maxSelect: range.max,
-    isAvailable: draft.isAvailable,
-    options,
+    ok: true,
+    payload: { name: draft.name, minSelect: min, maxSelect: max, isAvailable: draft.isAvailable, options },
   }
 }

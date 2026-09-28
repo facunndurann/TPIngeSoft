@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import type { Enums } from './database.types.ts'
+import { uuidSchema as uuid } from './schemas.ts'
 
 export const employeeRoles = ['manager', 'supervisor', 'waiter', 'cashier', 'kitchen'] as const
 export type EmployeeRole = typeof employeeRoles[number]
@@ -39,7 +40,6 @@ export function normalizeUsername(value: string): string {
   return username
 }
 
-const uuid = z.string().uuid()
 const password = z.string().min(10).max(128)
 
 /** Lo que se decide de una cuenta en un restaurante: nombre, roles, sucursales y acceso. */

@@ -2,12 +2,17 @@ import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import {
   emptyGroupDraft,
-  groupDraftErrors,
   groupDraftFrom,
-  groupPayload,
   newOptionDraft,
+  parseGroupDraft,
   type ModifierGroupDraft,
 } from '../src/features/modifier-group-draft'
+
+/** El primer problema del borrador, o `null` si ya se puede guardar. */
+const errorOf = (draft: ModifierGroupDraft) => {
+  const parsed = parseGroupDraft(draft)
+  return parsed.ok ? null : parsed.error
+}
 
 const saved = {
   id: 'group-a',
@@ -49,37 +54,40 @@ test('cada opción nueva tiene su propia fila, aunque no tenga id', () => {
   assert.equal(a.price, '0')
 })
 
-test('groupDraftErrors nombra el primer problema, y un campo vacío no vale 0', () => {
-  assert.equal(groupDraftErrors(valid), null)
-  assert.match(groupDraftErrors({ ...valid, name: ' ' })!, /nombre/)
-  assert.match(groupDraftErrors({ ...valid, options: [{ ...valid.options[0], name: '' }] })!, /opciones necesitan nombre/)
-  assert.match(groupDraftErrors({ ...valid, minSelect: '' })!, /mínimo/)
-  assert.match(groupDraftErrors({ ...valid, maxSelect: '0' })!, /máximo/)
-  assert.match(groupDraftErrors({ ...valid, minSelect: '1.5' })!, /entero/)
-  assert.match(groupDraftErrors({ ...valid, minSelect: '3', maxSelect: '2' })!, /superar/)
-  assert.match(groupDraftErrors({ ...valid, options: [] })!, /al menos una opción/)
+test('el primer problema se nombra solo, y un campo vacío no vale 0', () => {
+  assert.equal(errorOf(valid), null)
+  assert.match(errorOf({ ...valid, name: ' ' })!, /nombre/)
+  assert.match(errorOf({ ...valid, options: [{ ...valid.options[0], name: '' }] })!, /opciones necesitan nombre/)
+  assert.match(errorOf({ ...valid, minSelect: '' })!, /mínimo/)
+  assert.match(errorOf({ ...valid, maxSelect: '0' })!, /máximo/)
+  assert.match(errorOf({ ...valid, minSelect: '1.5' })!, /entero/)
+  assert.match(errorOf({ ...valid, minSelect: '3', maxSelect: '2' })!, /superar/)
+  assert.match(errorOf({ ...valid, options: [] })!, /al menos una opción/)
   for (const price of ['', '-1', 'gratis', '1.234']) {
-    assert.match(groupDraftErrors({ ...valid, options: [{ ...valid.options[0], price }] })!, /precio/)
+    assert.match(errorOf({ ...valid, options: [{ ...valid.options[0], price }] })!, /precio/)
   }
 })
 
-test('groupPayload convierte el borrador y deja afuera la key de cada fila', () => {
-  const payload = groupPayload({
+test('el payload es el borrador convertido, sin la key de cada fila', () => {
+  const parsed = parseGroupDraft({
     ...valid,
     options: [
       { key: 'o1', id: 'o1', name: 'Papas', price: '0', isAvailable: true },
       { key: 'nueva', name: 'Batatas', price: '350.25', isAvailable: false },
     ],
   })
-  assert.deepEqual(payload, {
-    name: 'Guarnición',
-    minSelect: 1,
-    maxSelect: 1,
-    isAvailable: true,
-    options: [
-      { id: 'o1', name: 'Papas', price_delta: 0, is_available: true },
-      { id: undefined, name: 'Batatas', price_delta: 350.25, is_available: false },
-    ],
+  assert.deepEqual(parsed, {
+    ok: true,
+    payload: {
+      name: 'Guarnición',
+      minSelect: 1,
+      maxSelect: 1,
+      isAvailable: true,
+      options: [
+        { id: 'o1', name: 'Papas', price_delta: 0, is_available: true },
+        { id: undefined, name: 'Batatas', price_delta: 350.25, is_available: false },
+      ],
+    },
   })
-  assert.equal(groupPayload({ ...valid, options: [{ ...valid.options[0], price: '' }] }), null)
+  assert.equal(parseGroupDraft({ ...valid, options: [{ ...valid.options[0], price: '' }] }).ok, false)
 })
