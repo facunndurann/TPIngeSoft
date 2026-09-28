@@ -19,6 +19,21 @@ type PaymentPanelProps = {
   enabledMethods: PaymentMethod[]
 }
 
+/**
+ * Por qué no se puede registrar el importe escrito, o `null` si se puede. Son
+ * las mismas reglas que aplica `pos_record_payment`, en el mismo orden: el
+ * motivo aparece junto al campo antes de que la base lo rechace.
+ */
+function amountProblem(value: string, pending: number): string | null {
+  if (value.trim() === '') return 'Ingresá el importe a registrar.'
+  const amount = Number(value)
+  if (!Number.isFinite(amount) || amount <= 0) return 'El importe tiene que ser mayor a cero.'
+  // Se mira el texto y no el número: 1.1 × 100 da 110.00000000000001.
+  if (!/^\d+(\.\d{1,2})?$/.test(value.trim())) return 'Usá hasta dos decimales.'
+  if (amount > pending) return `Supera el pendiente de ${formatPrice(pending)}.`
+  return null
+}
+
 export function PaymentPanel({ sessionId, pendingAmount, enabledMethods }: PaymentPanelProps) {
   const restaurant = useRestaurant()
   const can = useCan()
@@ -35,6 +50,7 @@ export function PaymentPanel({ sessionId, pendingAmount, enabledMethods }: Payme
   const [amountDraft, setAmountDraft] = useState<string | null>(null)
   const [methodChoice, setMethodChoice] = useState<PaymentMethod | null>(null)
   const [reference, setReference] = useState('')
+  const [amountLeft, setAmountLeft] = useState(false)
 
   const amount = amountDraft ?? pending.toFixed(2)
   const method: PaymentMethod | undefined =
@@ -49,12 +65,16 @@ export function PaymentPanel({ sessionId, pendingAmount, enabledMethods }: Payme
     // pendiente nuevo.
     onSuccess: () => {
       setAmountDraft(null)
+      setAmountLeft(false)
       setReference('')
     },
   }))
 
   const numericAmount = Number(amount)
-  const invalidAmount = !Number.isFinite(numericAmount) || numericAmount <= 0 || numericAmount > pending
+  const amountError = amountProblem(amount, pending)
+  // Un campo vacío puede ser alguien que borró para escribir otro importe: ese
+  // aviso espera a que deje el campo. Los demás hablan de un número ya escrito.
+  const shownAmountError = amountError && (amount.trim() !== '' || amountLeft) ? amountError : undefined
 
   return (
     <section className="space-y-3 rounded-xl border border-neutral-200 bg-white p-4" aria-label="Pagos de la cuenta">
@@ -68,19 +88,22 @@ export function PaymentPanel({ sessionId, pendingAmount, enabledMethods }: Payme
           className="grid gap-3 sm:grid-cols-2"
           onSubmit={(event) => {
             event.preventDefault()
-            if (!method || invalidAmount) return
+            if (!method || amountError) return
             errors.clear()
             record.mutate({ amount: numericAmount, method })
           }}
         >
-          <Field label="Importe">
+          {/* Field marca el campo como inválido y lo describe con el motivo. */}
+          <Field label="Importe" error={shownAmountError}>
             <Input
               type="number"
+              inputMode="decimal"
               min="0.01"
               max={pending}
               step="0.01"
               value={amount}
               onChange={(event) => setAmountDraft(event.target.value)}
+              onBlur={() => setAmountLeft(true)}
             />
           </Field>
           <Field label="Medio">
@@ -105,7 +128,7 @@ export function PaymentPanel({ sessionId, pendingAmount, enabledMethods }: Payme
           </div>
           <div className="sm:col-span-2">
             <ErrorText error={errors.message} />
-            <Button disabled={record.isPending || invalidAmount || !method}>
+            <Button disabled={record.isPending || amountError !== null || !method}>
               {record.isPending ? 'Registrando…' : `Registrar ${formatPrice(numericAmount || 0)}`}
             </Button>
           </div>

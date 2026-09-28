@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { QueryClientProvider } from '@tanstack/react-query'
-import type { PaymentMethod } from '@restaurant-platform/shared'
+import { formatPrice, type PaymentMethod } from '@restaurant-platform/shared'
 import { AccessContext, type PosContext } from './context/pos-context'
 import { PaymentPanel } from './features/pos/PaymentPanel'
 import { recordPosPayment } from './features/pos/queries'
@@ -132,4 +132,47 @@ test('recording sends amount and method but no mode, then suggests the new balan
   // La relectura trae el pendiente nuevo, y el borrador ya no lo tapa.
   await redraw(6, ['in_person', 'external'])
   assert.equal(amountIn(container).value, '6.00')
+})
+
+/** El motivo que describe al campo del importe, siguiendo su aria-describedby. */
+function amountMessage(container: HTMLElement) {
+  const input = amountIn(container)
+  const id = input.getAttribute('aria-describedby')
+  return {
+    invalid: input.getAttribute('aria-invalid') === 'true',
+    message: id ? container.querySelector(`[id="${id}"]`)?.textContent ?? null : null,
+  }
+}
+
+const registerIn = (container: HTMLElement) =>
+  [...container.querySelectorAll('button')].find((button) => button.textContent?.startsWith('Registrar'))!
+
+test('the amount says why it cannot be recorded, next to the field, and the button waits', async () => {
+  const { container } = await renderPanel(6000, ['in_person'])
+
+  await typeInto(amountIn(container), '7000')
+  assert.deepEqual(amountMessage(container), { invalid: true, message: `Supera el pendiente de ${formatPrice(6000)}.` })
+  assert.equal(registerIn(container).disabled, true)
+
+  await typeInto(amountIn(container), '0')
+  assert.equal(amountMessage(container).message, 'El importe tiene que ser mayor a cero.')
+
+  // La base rechaza más de dos decimales: el campo lo dice antes.
+  await typeInto(amountIn(container), '10.005')
+  assert.equal(amountMessage(container).message, 'Usá hasta dos decimales.')
+
+  await typeInto(amountIn(container), '2500.50')
+  assert.deepEqual(amountMessage(container), { invalid: false, message: null })
+  assert.equal(registerIn(container).disabled, false)
+})
+
+test('an emptied amount only complains once the cashier leaves the field', async () => {
+  const { container } = await renderPanel(6000, ['in_person'])
+
+  await typeInto(amountIn(container), '')
+  assert.deepEqual(amountMessage(container), { invalid: false, message: null })
+  assert.equal(registerIn(container).disabled, true)
+
+  await act(async () => { amountIn(container).dispatchEvent(new FocusEvent('focusout', { bubbles: true })) })
+  assert.equal(amountMessage(container).message, 'Ingresá el importe a registrar.')
 })
