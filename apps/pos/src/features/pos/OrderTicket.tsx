@@ -47,7 +47,7 @@ export function OrderTicket({ order }: { order: PosOrder }) {
       </div>
 
       {order.table_sessions.status === 'closed' && (
-        <p className="mt-2 text-xs font-medium text-amber-800">Sesión cerrada</p>
+        <p className="mt-2 text-xs font-medium text-amber-800">Mesa cerrada</p>
       )}
 
       <ul className="mt-3 space-y-2">

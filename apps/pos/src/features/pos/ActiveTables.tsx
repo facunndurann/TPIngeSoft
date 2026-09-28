@@ -31,7 +31,7 @@ export function ActiveTables() {
       <div>
         <h1 className="text-xl font-bold text-neutral-900">Mesas activas</h1>
         <p className="text-sm text-neutral-500">
-          Mesas que llamaron, consumo acumulado, estado de pago y cierre manual de sesión. El cobro
+          Mesas que llamaron, consumo acumulado, estado de pago y cierre manual de mesas. El cobro
           digital corresponde a la siguiente fase; los cobros presenciales se registran desde la comanda.
         </p>
       </div>

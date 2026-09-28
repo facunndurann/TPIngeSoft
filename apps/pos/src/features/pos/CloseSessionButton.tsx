@@ -6,7 +6,9 @@ import { useCan } from '@/context/pos-context'
 import { closePosSession, type PosOpenSession } from './queries'
 
 /**
- * Cierre manual de una mesa: el botón, la confirmación y la mutación. Los avisos
+ * Cierre manual de una mesa: el botón, la confirmación y la mutación. En
+ * pantalla dice «Cerrar mesa»: «Cerrar sesión» es salir del POS, y un mozo no
+ * tiene que dudar cuál de las dos está tocando. Los avisos
  * salen de la misma fila de `pos_open_sessions` en Mesas activas y en la comanda,
  * así las dos pantallas advierten lo mismo antes de cerrar. Sin `sessions.close`
  * no se muestra nada.
@@ -16,7 +18,7 @@ export function CloseSessionButton({ session, className }: { session: PosOpenSes
   const errors = useSaveErrors()
   const [confirming, setConfirming] = useState(false)
 
-  const close = useMutation(errors.saving('No pudimos cerrar la sesión.', {
+  const close = useMutation(errors.saving('No pudimos cerrar la mesa.', {
     mutationFn: () => closePosSession(session.id),
     // El cliente del POS ya releyó todo: el «Cerrando…» siguió hasta que la mesa
     // salió de las abiertas, y recién ahí se suelta el modal.
@@ -35,7 +37,7 @@ export function CloseSessionButton({ session, className }: { session: PosOpenSes
         // El error de un intento anterior no se arrastra a la próxima confirmación.
         onClick={() => { errors.clear(); setConfirming(true) }}
       >
-        Cerrar sesión
+        Cerrar mesa
       </Button>
 
       {confirming && (
@@ -43,7 +45,7 @@ export function CloseSessionButton({ session, className }: { session: PosOpenSes
           <div className="space-y-3 text-sm text-neutral-700">
             <p>
               Los comensales no podrán enviar más pedidos en esta cuenta. Si vuelven a escanear el QR se
-              abre una sesión nueva.
+              abre una cuenta nueva.
             </p>
             {asAmount(session.pending_amount) > 0 && (
               <p className="rounded-lg bg-amber-50 px-3 py-2 text-amber-950">
@@ -73,7 +75,7 @@ export function CloseSessionButton({ session, className }: { session: PosOpenSes
                 disabled={close.isPending}
                 onClick={() => close.mutate()}
               >
-                {close.isPending ? 'Cerrando…' : 'Cerrar sesión'}
+                {close.isPending ? 'Cerrando mesa…' : 'Cerrar mesa'}
               </Button>
             </div>
           </div>

@@ -88,7 +88,7 @@ test('without sessions.close there is nothing to press', async () => {
 test('the confirmation warns with what the session row says is still open', async () => {
   const { container } = await renderButton(openAt({ pending_amount: 1500, kitchen_tickets: 2, submitted_amount: 300 }))
 
-  await act(async () => buttonIn(container, 'Cerrar sesión')!.click())
+  await act(async () => buttonIn(container, 'Cerrar mesa')!.click())
 
   const text = dialogIn(container)?.textContent ?? ''
   assert.match(text, /Cerrar Mesa 1/)
@@ -96,14 +96,16 @@ test('the confirmation warns with what the session row says is still open', asyn
   assert.match(text, /Hay 2 comandas todavía en cocina/)
   assert.match(text, /pedidos enviados sin aceptar/)
   assert.equal(vi.mocked(closePosSession).mock.calls.length, 0)
+  // «Cerrar sesión» es salir del POS: cerrar una mesa nunca lo dice.
+  assert.doesNotMatch(container.textContent ?? '', /sesión/i)
 })
 
 test('confirming closes that session and refreshes the POS', async () => {
   vi.mocked(closePosSession).mockResolvedValue(undefined)
   const { container, invalidate } = await renderButton(openAt())
 
-  await act(async () => buttonIn(container, 'Cerrar sesión')!.click())
-  await act(async () => buttonIn(dialogIn(container)!, 'Cerrar sesión')!.click())
+  await act(async () => buttonIn(container, 'Cerrar mesa')!.click())
+  await act(async () => buttonIn(dialogIn(container)!, 'Cerrar mesa')!.click())
   await settle()
 
   assert.deepEqual(vi.mocked(closePosSession).mock.calls, [['session-a']])
@@ -115,16 +117,16 @@ test('a failed close keeps the dialog with its error, and reopening starts clean
   vi.mocked(closePosSession).mockRejectedValue(new Error('La sesión ya estaba cerrada.'))
   const { container, invalidate } = await renderButton(openAt())
 
-  await act(async () => buttonIn(container, 'Cerrar sesión')!.click())
-  await act(async () => buttonIn(dialogIn(container)!, 'Cerrar sesión')!.click())
+  await act(async () => buttonIn(container, 'Cerrar mesa')!.click())
+  await act(async () => buttonIn(dialogIn(container)!, 'Cerrar mesa')!.click())
   await settle()
 
   assert.match(dialogIn(container)?.textContent ?? '', /La sesión ya estaba cerrada\./)
-  assert.equal(buttonIn(dialogIn(container)!, 'Cerrar sesión')!.disabled, false)
+  assert.equal(buttonIn(dialogIn(container)!, 'Cerrar mesa')!.disabled, false)
   assert.equal(invalidate.mock.calls.length, 0)
 
   await act(async () => buttonIn(dialogIn(container)!, 'Seguir abierta')!.click())
-  await act(async () => buttonIn(container, 'Cerrar sesión')!.click())
+  await act(async () => buttonIn(container, 'Cerrar mesa')!.click())
 
   assert.doesNotMatch(dialogIn(container)?.textContent ?? '', /La sesión ya estaba cerrada\./)
 })
