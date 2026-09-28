@@ -492,16 +492,19 @@ export type Database = {
         Row: {
           from_status: Database["public"]["Enums"]["order_status"]
           kind: Database["public"]["Enums"]["order_transition_kind"]
+          permission: string
           to_status: Database["public"]["Enums"]["order_status"]
         }
         Insert: {
           from_status: Database["public"]["Enums"]["order_status"]
           kind: Database["public"]["Enums"]["order_transition_kind"]
+          permission: string
           to_status: Database["public"]["Enums"]["order_status"]
         }
         Update: {
           from_status?: Database["public"]["Enums"]["order_status"]
           kind?: Database["public"]["Enums"]["order_transition_kind"]
+          permission?: string
           to_status?: Database["public"]["Enums"]["order_status"]
         }
         Relationships: []

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { Undo2, XCircle } from 'lucide-react'
-import { countLabel, formatPrice, type OrderStatus, orderAuthorName, posActions, sessionPlaceLabel, transitionPermission } from '@restaurant-platform/shared'
+import { countLabel, formatPrice, type OrderStatus, orderAuthorName, posActions, type PosStep, sessionPlaceLabel } from '@restaurant-platform/shared'
 import { Button, Elapsed, ErrorText, Modal, useSaveErrors } from '@restaurant-platform/ui'
 import { useCan } from '@/context/pos-context'
 import { OrderItemLine } from './OrderItemLine'
@@ -24,8 +24,8 @@ export function OrderTicket({ order }: { order: PosOrder }) {
     mutationFn: (to: OrderStatus) => transitionPosOrder(order.id, to),
   }))
 
-  const allowed = (step: { to: OrderStatus; label: string } | undefined) =>
-    step && can(transitionPermission(order.status, step.to)) ? step : undefined
+  // Cada paso trae el permiso que su fila de la base exige: sin él, no hay botón.
+  const allowed = (step: PosStep | undefined) => (step && can(step.permission) ? step : undefined)
   const actions = posActions[order.status]
   const advance = allowed(actions.advance)
   const revert = allowed(actions.revert)

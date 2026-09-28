@@ -1,6 +1,5 @@
 import { z } from 'zod'
 import type { Enums } from './database.types.ts'
-import type { OrderStatus } from './orders.ts'
 
 export const employeeRoles = ['manager', 'supervisor', 'waiter', 'cashier', 'kitchen'] as const
 export type EmployeeRole = typeof employeeRoles[number]
@@ -124,14 +123,4 @@ export type PosPermission = (typeof posPermissions)[number]
 
 export function isPosPermission(value: string): value is PosPermission {
   return (posPermissions as readonly string[]).includes(value)
-}
-
-/** Permiso que habilita una transición concreta del tablero. */
-export function transitionPermission(from: OrderStatus, to: OrderStatus): PosPermission {
-  if (to === 'cancelled') return 'orders.cancel'
-  const sequence: OrderStatus[] = ['submitted', 'accepted', 'in_preparation', 'ready', 'delivered']
-  if (sequence.indexOf(to) < sequence.indexOf(from)) return 'orders.revert'
-  if (to === 'accepted') return 'orders.accept'
-  if (to === 'delivered') return 'orders.deliver'
-  return 'orders.prepare'
 }

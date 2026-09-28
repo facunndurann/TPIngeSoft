@@ -486,11 +486,19 @@ try {
     const logs = await rows(admin, 'integration_logs', 'order_id', peerOrderId)
     assert.equal(logs.filter((row) => row.event === 'pos.internal.accepted').length, 1)
   })
-  await check('order_status_transitions holds exactly the actions the POS board offers', async () => {
-    const transitions = unwrap(await admin.from('order_status_transitions').select('from_status,to_status,kind'), 'Read order transitions')
-    const allowed = transitions.map((row) => `${row.from_status} -${row.kind}-> ${row.to_status}`).sort()
+  await check('order_status_transitions holds exactly the actions and permissions the POS board offers', async () => {
+    // pos_transition_order lee estas filas: si coinciden con posActions, el botón
+    // que ve cada rol es exactamente la transición que la base le deja hacer.
+    const transitions = unwrap(
+      await admin.from('order_status_transitions').select('from_status,to_status,kind,permission'),
+      'Read order transitions',
+    )
+    const allowed = transitions
+      .map((row) => `${row.from_status} -${row.kind}-> ${row.to_status} [${row.permission}]`)
+      .sort()
     const offered = Object.entries(posActions)
-      .flatMap(([from, actions]) => Object.entries(actions).map(([kind, step]) => `${from} -${kind}-> ${step.to}`))
+      .flatMap(([from, actions]) =>
+        Object.entries(actions).map(([kind, step]) => `${from} -${kind}-> ${step.to} [${step.permission}]`))
       .sort()
     assert.deepEqual(allowed, offered)
   })

@@ -1,6 +1,6 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
-import { normalizeUsername, employeeEmail, employeeRequestSchema, toggleRole, transitionPermission } from '../../packages/shared/src/employees.ts'
+import { normalizeUsername, employeeEmail, employeeRequestSchema, toggleRole } from '../../packages/shared/src/employees.ts'
 import { appErrorBodySchema, appErrors } from '../../packages/shared/src/errors.ts'
 import { createEmployeeHandler, type EmployeeGateway } from '../functions/employee-accounts/handler.ts'
 
@@ -97,11 +97,4 @@ test('missing bearer token fails before authentication/mutation', async () => {
   const response = await f.handler(new Request('http://local', { method: 'POST', body: '{}' }))
   assert.equal(response.status, 401)
   assert.deepEqual(f.calls, [])
-})
-test('UI transition permissions distinguish kitchen, delivery, exceptional actions', () => {
-  assert.equal(transitionPermission('accepted','in_preparation'), 'orders.prepare')
-  assert.equal(transitionPermission('in_preparation','ready'), 'orders.prepare')
-  assert.equal(transitionPermission('ready','delivered'), 'orders.deliver')
-  assert.equal(transitionPermission('ready','in_preparation'), 'orders.revert')
-  assert.equal(transitionPermission('ready','cancelled'), 'orders.cancel')
 })

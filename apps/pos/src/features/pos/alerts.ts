@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { countLabel, posColumnFor, sessionRequestsOf, transitionPermission } from '@restaurant-platform/shared'
+import { countLabel, posColumnFor, sessionRequestsOf } from '@restaurant-platform/shared'
 import type { BadgeColor } from '@restaurant-platform/ui'
 import { useCan, useRestaurant } from '@/context/pos-context'
 import { playChime } from './chime'
@@ -54,7 +54,7 @@ export function usePosAlerts(): Record<PosAlert, number> {
   }).data
 
   // Suena para quien las toma: la cocina, que es quien las pasa a preparación.
-  useChimeOnArrival(fresh, can(transitionPermission('accepted', 'in_preparation')))
+  useChimeOnArrival(fresh, can('orders.prepare'))
 
   return { 'new-orders': fresh?.length ?? 0, 'calling-tables': calling ?? 0 }
 }
