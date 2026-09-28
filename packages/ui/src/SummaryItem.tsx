@@ -15,7 +15,7 @@ export function SummaryItem({ icon: Icon, label, value, as = 'div' }: SummaryIte
 
   return (
     <div className="min-w-28">
-      <Label className="flex items-center gap-1 text-[10px] font-medium tracking-wide text-muted uppercase">
+      <Label className="flex items-center gap-1 text-xs font-medium tracking-wide text-muted uppercase">
         {Icon && <Icon size={12} aria-hidden="true" />}
         {label}
       </Label>

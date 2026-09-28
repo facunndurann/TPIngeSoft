@@ -303,7 +303,7 @@ export function Badge({
   className?: string
 }) {
   return (
-    <span className={`inline-flex items-center justify-center text-center rounded-xl px-2 py-1 text-[11px] leading-tight font-medium ${badgeColors[color]} ${className}`}>
+    <span className={`inline-flex items-center justify-center text-center rounded-xl px-2 py-1 text-xs leading-tight font-medium ${badgeColors[color]} ${className}`}>
       {children}
     </span>
   )

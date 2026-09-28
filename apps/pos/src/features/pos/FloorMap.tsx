@@ -152,7 +152,7 @@ function visibleTotal(session: PosOpenSession | undefined): string | null {
 
 function StateLegend() {
   return (
-    <ul className="flex gap-x-4 gap-y-1 overflow-x-auto rounded-lg border border-neutral-200 bg-white px-3 py-2 text-[11px] text-neutral-600">
+    <ul className="flex gap-x-4 gap-y-1 overflow-x-auto rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs text-neutral-600">
       {posTableStates.map((state) => (
         <li key={state} className="flex shrink-0 items-center gap-1.5">
           <span className={`h-2.5 w-2.5 rounded-full ${tableStateStyles[state].dot}`} aria-hidden="true" />
@@ -213,29 +213,24 @@ function FloorSurface({
                 } ${table.shape === 'round' ? 'rounded-full' : 'rounded-xl'}`}
                 style={tile.box}
               >
+                {/* La mesa se lee de lejos: solo lo que entra en 12px y a contraste
+                    pleno. El total y el responsable siguen en el aria-label y en el
+                    resumen que abre el toque. */}
                 <span className="max-w-full truncate px-1 text-xs font-bold leading-tight">{table.label}</span>
-                <span className={`mt-0.5 max-w-[90%] truncate rounded px-1 py-0.5 text-[9px] font-semibold leading-none ${tableStateStyles[state].tileLabel}`}>
+                <span className={`mt-0.5 max-w-[90%] truncate rounded px-1 py-0.5 text-xs font-semibold leading-none ${tableStateStyles[state].tileLabel}`}>
                   {posTableStateLabels[state]}
                 </span>
-                {session ? (
-                  <>
-                    <span className="mt-1 max-w-[90%] truncate text-[10px] font-medium leading-none">
-                      {elapsed}
+                {/* Una mesa de una sola celda de alto (38px) tiene lugar para dos
+                    líneas de 12px, no para tres. */}
+                {tile.footprint.h > 1 && (
+                  session ? (
+                    <span className="mt-1 max-w-[90%] truncate text-xs font-medium leading-none">{elapsed}</span>
+                  ) : (
+                    <span className="mt-1 inline-flex items-center gap-1 text-xs leading-none">
+                      <Users size={12} aria-hidden="true" />
+                      {table.seats}
                     </span>
-                    {total !== null && (
-                      <span className="mt-1 max-w-[90%] truncate text-[10px] font-semibold leading-none">
-                        {total}
-                      </span>
-                    )}
-                    <span className="mt-1 max-w-[90%] truncate text-[9px] leading-none opacity-75">
-                      {operator}
-                    </span>
-                  </>
-                ) : (
-                  <span className="mt-1 inline-flex items-center gap-1 text-[10px] leading-none opacity-70">
-                    <Users size={11} aria-hidden="true" />
-                    {table.seats}
-                  </span>
+                  )
                 )}
               </button>
             )
