@@ -2,8 +2,10 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { formatClock, formatPrice, localDateKey, type OrderStatus, orderStatusLabels } from '@restaurant-platform/shared'
 import { useRestaurant } from '@/context/pos-context'
-import { Badge, EmptyState, ErrorText, Input, Modal, Select, Spinner } from '@restaurant-platform/ui'
+import { EmptyState, ErrorText, Input, Modal, Select, Spinner } from '@restaurant-platform/ui'
+import { OrderItemLine } from './OrderItemLine'
 import { posHistoryQuery, type PosOrder } from './queries'
+import { OrderStatusBadge } from './StatusBadges'
 
 const statusFilterOptions: Array<{ value: 'all' | OrderStatus; label: string }> = [
   { value: 'all', label: 'Todos los estados' },
@@ -125,9 +127,7 @@ export function OrderHistory() {
                       .join(', ')}
                   </td>
                   <td className="px-4 py-3">
-                    <Badge color={order.status === 'cancelled' ? 'red' : order.status === 'delivered' ? 'green' : 'indigo'}>
-                      {orderStatusLabels[order.status]}
-                    </Badge>
+                    <OrderStatusBadge status={order.status} />
                   </td>
                   <td className="px-4 py-3 text-right font-medium text-neutral-900">
                     {formatPrice(order.total_amount)}
@@ -152,26 +152,13 @@ function HistoryDetail({ order }: { order: PosOrder }) {
   return (
     <div className="space-y-3 text-sm">
       <div className="flex items-center justify-between">
-        <Badge color={order.status === 'cancelled' ? 'red' : 'indigo'}>{orderStatusLabels[order.status]}</Badge>
+        <OrderStatusBadge status={order.status} />
         <span className="font-semibold">{formatPrice(order.total_amount)}</span>
       </div>
       <p className="text-xs text-neutral-500">#{order.id.slice(0, 8)}</p>
       {order.order_items.map((item) => (
         <div key={item.id} className="rounded-lg border border-neutral-200 px-3 py-2">
-          <p className="font-medium text-neutral-900">
-            {item.quantity} × {item.product_name}
-          </p>
-          {item.is_shared && <p className="text-xs text-neutral-500">Para compartir</p>}
-          {item.order_item_modifiers.map((modifier) => (
-            <p key={modifier.id} className="text-xs text-neutral-600">
-              + {modifier.group_name}: {modifier.option_name} ({formatPrice(modifier.price_delta)})
-            </p>
-          ))}
-          {item.order_item_removed_ingredients.map((ingredient) => (
-            <p key={ingredient.id} className="text-xs text-neutral-600">
-              Sin {ingredient.ingredient_name}
-            </p>
-          ))}
+          <OrderItemLine order={order} item={item} withPrices />
         </div>
       ))}
       {order.notes && <p className="rounded-lg bg-amber-50 px-3 py-2 text-amber-950">Nota: {order.notes}</p>}

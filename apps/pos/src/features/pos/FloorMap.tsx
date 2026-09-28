@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
-import { formatElapsed, formatPrice, getPosTableState, type PosTableState, posTableStateLabels } from '@restaurant-platform/shared'
+import { formatElapsed, formatPrice, getPosTableState, type PosTableState, posTableStateLabels, posTableStates } from '@restaurant-platform/shared'
 import { ClipboardList, Clock3, Move, UserRound, Users } from 'lucide-react'
 import { Button, EmptyState, ErrorText, FloorGrid, Spinner, SummaryItem, useNow } from '@restaurant-platform/ui'
 import { useCan, useRestaurant } from '@/context/pos-context'
@@ -14,6 +14,8 @@ import {
   type PosOpenSession,
 } from './queries'
 import { AttendRequestButtons, SessionRequestBadges } from './ServiceRequests'
+import { tableStateStyles } from './status-colors'
+import { TableStateBadge } from './StatusBadges'
 
 /**
  * Plano operativo del salón (MI-62/MI-63/MI-64). El layout viene de la
@@ -158,66 +160,12 @@ function visibleTotal(session: PosOpenSession | undefined): string | null {
   return formatPrice(session.total_amount)
 }
 
-const stateStyles: Record<PosTableState, { table: string; badge: string; dot: string }> = {
-  free: {
-    table: 'border-emerald-400 bg-emerald-50 text-emerald-950',
-    badge: 'bg-emerald-100 text-emerald-800',
-    dot: 'bg-emerald-500',
-  },
-  occupied: {
-    table: 'border-neutral-400 bg-neutral-100 text-neutral-900',
-    badge: 'bg-neutral-200 text-neutral-700',
-    dot: 'bg-neutral-500',
-  },
-  order_pending: {
-    table: 'border-amber-500 bg-amber-50 text-amber-950',
-    badge: 'bg-amber-200 text-amber-900',
-    dot: 'bg-amber-500',
-  },
-  in_preparation: {
-    table: 'border-blue-500 bg-blue-50 text-blue-950',
-    badge: 'bg-blue-200 text-blue-900',
-    dot: 'bg-blue-500',
-  },
-  ready: {
-    table: 'border-cyan-600 bg-cyan-50 text-cyan-950',
-    badge: 'bg-cyan-200 text-cyan-950',
-    dot: 'bg-cyan-600',
-  },
-  bill_requested: {
-    table: 'border-violet-600 bg-violet-50 text-violet-950',
-    badge: 'bg-violet-200 text-violet-950',
-    dot: 'bg-violet-600',
-  },
-  in_person_payment: {
-    table: 'border-red-600 bg-red-50 text-red-950',
-    badge: 'bg-red-200 text-red-950',
-    dot: 'bg-red-600',
-  },
-  payment_pending: {
-    table: 'border-rose-600 bg-rose-50 text-rose-950',
-    badge: 'bg-rose-200 text-rose-950',
-    dot: 'bg-rose-600',
-  },
-}
-
-const legendStates: PosTableState[] = [
-  'free',
-  'occupied',
-  'order_pending',
-  'in_preparation',
-  'ready',
-  'bill_requested',
-  'in_person_payment',
-  'payment_pending',
-]
-
 function StateLegend() {
   return (
     <ul className="flex gap-x-4 gap-y-1 overflow-x-auto rounded-lg border border-neutral-200 bg-white px-3 py-2 text-[11px] text-neutral-600">
-      {legendStates.map((state) => (
+      {posTableStates.map((state) => (
         <li key={state} className="flex shrink-0 items-center gap-1.5">
-          <span className={`h-2.5 w-2.5 rounded-full ${stateStyles[state].dot}`} aria-hidden="true" />
+          <span className={`h-2.5 w-2.5 rounded-full ${tableStateStyles[state].dot}`} aria-hidden="true" />
           {posTableStateLabels[state]}
         </li>
       ))}
@@ -268,13 +216,13 @@ function FloorSurface({
                 onDoubleClick={() => onOpenTable(table.id)}
                 aria-pressed={selectedTable}
                 aria-label={`${table.label}, ${posTableStateLabels[state]}, ${summary}`}
-                className={`absolute flex cursor-pointer flex-col items-center justify-center overflow-hidden border-2 text-center shadow-sm transition hover:brightness-95 focus-visible:ring-2 focus-visible:ring-indigo-600 focus-visible:ring-offset-2 focus-visible:outline-none ${stateStyles[state].table} ${
+                className={`absolute flex cursor-pointer flex-col items-center justify-center overflow-hidden border-2 text-center shadow-sm transition hover:brightness-95 focus-visible:ring-2 focus-visible:ring-indigo-600 focus-visible:ring-offset-2 focus-visible:outline-none ${tableStateStyles[state].tile} ${
                   selectedTable ? 'ring-2 ring-indigo-600 ring-offset-2' : ''
                 } ${table.shape === 'round' ? 'rounded-full' : 'rounded-xl'}`}
                 style={tile.box}
               >
                 <span className="max-w-full truncate px-1 text-xs font-bold leading-tight">{table.label}</span>
-                <span className={`mt-0.5 max-w-[90%] truncate rounded px-1 py-0.5 text-[9px] font-semibold leading-none ${stateStyles[state].badge}`}>
+                <span className={`mt-0.5 max-w-[90%] truncate rounded px-1 py-0.5 text-[9px] font-semibold leading-none ${tableStateStyles[state].tileLabel}`}>
                   {posTableStateLabels[state]}
                 </span>
                 {session ? (
@@ -325,9 +273,7 @@ function TableSummary({
     <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm shadow-sm">
       <div className="mr-auto space-y-1">
         <p className="font-semibold text-neutral-900">{table.label}</p>
-        <span className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-semibold ${stateStyles[state].badge}`}>
-          {posTableStateLabels[state]}
-        </span>
+        <TableStateBadge state={state} />
         {session && <SessionRequestBadges session={session} now={now} />}
       </div>
       {session ? (

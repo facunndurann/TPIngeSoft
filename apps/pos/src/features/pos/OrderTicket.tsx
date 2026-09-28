@@ -1,14 +1,11 @@
 import { useMutation } from '@tanstack/react-query'
 import { Undo2 } from 'lucide-react'
-import { formatElapsed, formatPrice, type OrderStatus, orderStatusLabels, posActions, transitionPermission } from '@restaurant-platform/shared'
-import { Badge, Button, useSaveErrors } from '@restaurant-platform/ui'
+import { formatElapsed, formatPrice, type OrderStatus, posActions, transitionPermission } from '@restaurant-platform/shared'
+import { Button, useSaveErrors } from '@restaurant-platform/ui'
 import { useCan } from '@/context/pos-context'
-import { transitionPosOrder, type PosOrder, type PosOrderItem } from './queries'
-
-function participantName(order: PosOrder, participantId: string | null) {
-  return order.table_sessions.session_participants.find((entry) => entry.id === participantId)
-    ?.display_name ?? 'Comensal'
-}
+import { OrderItemLine } from './OrderItemLine'
+import { participantName, transitionPosOrder, type PosOrder } from './queries'
+import { OrderStatusBadge } from './StatusBadges'
 
 /**
  * Una comanda con sus botones. Es dueña de su transición: el «Actualizando…»,
@@ -51,9 +48,7 @@ export function OrderTicket({ order, now }: { order: PosOrder; now: number }) {
             {submitter} · {formatElapsed(order.created_at, now, 'exact')}
           </p>
         </div>
-        <Badge color={order.status === 'submitted' ? 'amber' : 'indigo'} className="max-w-[85px] shrink-0">
-          {orderStatusLabels[order.status]}
-        </Badge>
+        <OrderStatusBadge status={order.status} className="max-w-[85px] shrink-0" />
       </div>
 
       {order.table_sessions.status === 'closed' && (
@@ -63,7 +58,7 @@ export function OrderTicket({ order, now }: { order: PosOrder; now: number }) {
       <ul className="mt-3 space-y-2">
         {order.order_items.map((item) => (
           <li key={item.id}>
-            <TicketLine item={item} owner={item.is_shared ? 'Para compartir' : participantName(order, item.participant_id)} />
+            <OrderItemLine order={order} item={item} />
           </li>
         ))}
       </ul>
@@ -111,26 +106,5 @@ export function OrderTicket({ order, now }: { order: PosOrder; now: number }) {
         )}
       </div>
     </article>
-  )
-}
-
-function TicketLine({ item, owner }: { item: PosOrderItem; owner: string }) {
-  return (
-    <div>
-      <p className="text-sm font-medium text-neutral-900">
-        {item.quantity} × {item.product_name}
-      </p>
-      <p className="text-xs text-neutral-500">{owner}</p>
-      {item.order_item_modifiers.map((modifier) => (
-        <p key={modifier.id} className="text-xs text-neutral-600">
-          + {modifier.group_name}: {modifier.option_name}
-        </p>
-      ))}
-      {item.order_item_removed_ingredients.map((ingredient) => (
-        <p key={ingredient.id} className="text-xs text-neutral-600">
-          Sin {ingredient.ingredient_name}
-        </p>
-      ))}
-    </div>
   )
 }

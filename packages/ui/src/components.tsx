@@ -219,24 +219,33 @@ export function ChoiceChip({
   )
 }
 
+const badgeColors = {
+  neutral: 'bg-neutral-100 text-neutral-700',
+  green: 'bg-green-100 text-green-800',
+  red: 'bg-red-100 text-red-700',
+  indigo: 'bg-indigo-100 text-indigo-700',
+  amber: 'bg-amber-100 text-amber-800',
+  // Los que siguen existen por el plano del POS, que distingue ocho estados de
+  // mesa: la etiqueta de un estado tiene que ser del mismo color que la mesa.
+  blue: 'bg-blue-100 text-blue-800',
+  cyan: 'bg-cyan-100 text-cyan-900',
+  violet: 'bg-violet-100 text-violet-800',
+  rose: 'bg-rose-100 text-rose-800',
+}
+
+export type BadgeColor = keyof typeof badgeColors
+
 export function Badge({
   children,
   color = 'neutral',
   className = '',
 }: {
   children: ReactNode
-  color?: 'neutral' | 'green' | 'red' | 'indigo' | 'amber'
+  color?: BadgeColor
   className?: string
 }) {
-  const colors = {
-    neutral: 'bg-neutral-100 text-neutral-700',
-    green: 'bg-green-100 text-green-800',
-    red: 'bg-red-100 text-red-700',
-    indigo: 'bg-indigo-100 text-indigo-700',
-    amber: 'bg-amber-100 text-amber-800',
-  }
   return (
-    <span className={`inline-flex items-center justify-center text-center rounded-xl px-2 py-1 text-[11px] leading-tight font-medium ${colors[color]} ${className}`}>
+    <span className={`inline-flex items-center justify-center text-center rounded-xl px-2 py-1 text-[11px] leading-tight font-medium ${badgeColors[color]} ${className}`}>
       {children}
     </span>
   )

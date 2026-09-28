@@ -66,6 +66,12 @@ const ordersOf = () => supabase.from('orders').select(posOrderSelect)
 export type PosOrder = QueryData<ReturnType<typeof ordersOf>>[number]
 export type PosOrderItem = PosOrder['order_items'][number]
 
+/** Nombre del comensal que figura en el pedido, o «Comensal» si ya no está en la sesión. */
+export function participantName(order: PosOrder, participantId: string | null) {
+  return order.table_sessions.session_participants.find((entry) => entry.id === participantId)
+    ?.display_name ?? 'Comensal'
+}
+
 const branchOrdersOf = (restaurantId: string, branchId: string) =>
   ordersOf()
     .eq('restaurant_id', restaurantId)

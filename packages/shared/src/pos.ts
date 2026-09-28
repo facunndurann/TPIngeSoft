@@ -69,15 +69,23 @@ export function isKitchenTicket(status: OrderStatus): boolean {
 export const kitchenTicketStatuses: readonly OrderStatus[] =
   Constants.public.Enums.order_status.filter(isKitchenTicket)
 
-export type PosTableState =
-  | 'free'
-  | 'occupied'
-  | 'order_pending'
-  | 'in_preparation'
-  | 'ready'
-  | 'bill_requested'
-  | 'in_person_payment'
-  | 'payment_pending'
+/**
+ * Estados de una mesa, en el orden de la leyenda del plano: de libre a lo que
+ * más urge cobrar. Es la lista de la que sale el tipo, así un estado nuevo
+ * aparece solo en la leyenda.
+ */
+export const posTableStates = [
+  'free',
+  'occupied',
+  'order_pending',
+  'in_preparation',
+  'ready',
+  'bill_requested',
+  'in_person_payment',
+  'payment_pending',
+] as const
+
+export type PosTableState = (typeof posTableStates)[number]
 
 export const posTableStateLabels: Record<PosTableState, string> = {
   free: 'Libre',

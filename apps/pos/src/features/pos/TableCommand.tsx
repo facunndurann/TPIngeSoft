@@ -1,8 +1,8 @@
 import { Link, useParams, useSearchParams } from 'react-router'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { formatElapsed, formatPrice, getPosTableState, paymentMethodLabels, posTableStateLabels, sessionRequestsOf, type PaymentMethod } from '@restaurant-platform/shared'
+import { formatElapsed, formatPrice, getPosTableState, paymentMethodLabels, sessionRequestsOf, type PaymentMethod } from '@restaurant-platform/shared'
 import { ArrowLeft, Clock3, PlayCircle, UserRound, Users } from 'lucide-react'
-import { Badge, Button, EmptyState, ErrorText, Spinner, SummaryItem, useNow, useSaveErrors } from '@restaurant-platform/ui'
+import { Button, EmptyState, ErrorText, Spinner, SummaryItem, useNow, useSaveErrors } from '@restaurant-platform/ui'
 import { useCan, useRestaurant } from '@/context/pos-context'
 import { CloseSessionButton } from './CloseSessionButton'
 import { OrderTicket } from './OrderTicket'
@@ -16,6 +16,7 @@ import {
   type PosOpenSession,
 } from './queries'
 import { AttendRequestButtons, ChargedBadge, SessionRequestBadges } from './ServiceRequests'
+import { TableStateBadge } from './StatusBadges'
 
 /**
  * Comanda de una mesa abierta desde el plano (MI-64). Resuelve la mesa y su
@@ -83,7 +84,7 @@ export function TableCommand() {
               : branchMethods.map((method) => paymentMethodLabels[method]).join(' · ')}
           </p>
         </div>
-        <Badge color={session ? 'indigo' : 'green'}>{posTableStateLabels[getPosTableState(session)]}</Badge>
+        <TableStateBadge state={getPosTableState(session)} />
       </div>
 
       {/* La key reinicia la pantalla si en la mesa se abre otra sesión: no se

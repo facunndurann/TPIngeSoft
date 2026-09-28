@@ -1,6 +1,7 @@
 import { useMutation } from '@tanstack/react-query'
 import {
   formatElapsed,
+  type PosTableState,
   type SessionRequestKind,
   sessionRequestLabels,
   sessionRequestsOf,
@@ -11,11 +12,15 @@ import { BadgeCheck, BellRing, Check } from 'lucide-react'
 import { Badge, Button, ErrorText, useSaveErrors } from '@restaurant-platform/ui'
 import { useCan } from '@/context/pos-context'
 import { resolvePosSessionRequest } from './queries'
+import { tableStateStyles } from './status-colors'
 
-/** El color es el mismo que pinta la mesa en el plano para ese estado. */
-const requestColors: Record<SessionRequestKind, 'indigo' | 'red'> = {
-  bill: 'indigo',
-  in_person_payment: 'red',
+/**
+ * El estado en que cada solicitud pone a la mesa (ver `getPosTableState`): el
+ * aviso toma su color, así se ve igual que la mesa en el plano.
+ */
+const requestTableState: Record<SessionRequestKind, PosTableState> = {
+  bill: 'bill_requested',
+  in_person_payment: 'in_person_payment',
 }
 
 /** Lo que el mozo acaba de hacer, que es lo que cierra la solicitud. */
@@ -42,7 +47,7 @@ export function SessionRequestBadges({
     <ul className="flex flex-wrap gap-1.5" aria-label="Solicitudes de la mesa">
       {requests.map((request) => (
         <li key={request.kind}>
-          <Badge color={requestColors[request.kind]}>
+          <Badge color={tableStateStyles[requestTableState[request.kind]].tone}>
             <BellRing size={11} className="mr-1" aria-hidden="true" />
             {sessionRequestLabels[request.kind]} · {formatElapsed(request.requestedAt, now, 'exact')}
           </Badge>
