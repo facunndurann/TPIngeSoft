@@ -1,6 +1,6 @@
 import { Link } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
-import { formatPrice, sessionRequestsOf } from '@restaurant-platform/shared'
+import { countLabel, formatPrice, sessionRequestsOf } from '@restaurant-platform/shared'
 import { useRestaurant } from '@/context/pos-context'
 import { Badge, Button, Elapsed, EmptyState, ErrorText, Spinner } from '@restaurant-platform/ui'
 import { posOpenSessionsQuery, posTablesQuery } from './queries'
@@ -81,8 +81,7 @@ export function ActiveTables() {
                   <div>
                     <p className="font-semibold text-neutral-900">{session.table_label}</p>
                     <p className="text-xs text-neutral-500">
-                      {session.participant_names.length} comensal
-                      {session.participant_names.length === 1 ? '' : 'es'} ·{' '}
+                      {countLabel(session.participant_names.length, 'comensal', 'comensales')} ·{' '}
                       <Elapsed since={session.opened_at} precision="exact" />
                     </p>
                   </div>
@@ -129,7 +128,7 @@ export function ActiveTables() {
                 )}
                 {kitchen > 0 && (
                   <p className="text-xs text-indigo-700">
-                    {kitchen} comanda{kitchen === 1 ? '' : 's'} en cocina
+                    {countLabel(kitchen, 'comanda')} en cocina
                   </p>
                 )}
                 <div className="flex gap-2">

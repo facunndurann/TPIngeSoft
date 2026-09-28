@@ -1,5 +1,6 @@
 export * from './money';
 export * from './time';
+export * from './text';
 export * from './schemas';
 export * from './database.types';
 export * from './orders';

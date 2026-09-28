@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
-import { formatElapsed, formatPrice, getPosTableState, type PosTableState, posTableStateLabels, posTableStates } from '@restaurant-platform/shared'
+import { countLabel, formatElapsed, formatPrice, getPosTableState, type PosTableState, posTableStateLabels, posTableStates } from '@restaurant-platform/shared'
 import { ClipboardList, Clock3, Move, UserRound, Users } from 'lucide-react'
 import { Button, Elapsed, EmptyState, ErrorText, FloorGrid, Spinner, SummaryItem, useNow } from '@restaurant-platform/ui'
 import { useCan, useRestaurant } from '@/context/pos-context'
@@ -53,6 +53,7 @@ export function FloorMap() {
     const session = sessionByTable.get(table.id)
     return { ...table, session, state: getPosTableState(session) }
   })
+  const occupied = entries.filter((entry) => entry.state !== 'free').length
 
   if (sections.isLoading || tables.isLoading || sessions.isLoading) return <Spinner />
   const queryFailed = sections.isError || tables.isError || sessions.isError
@@ -111,10 +112,8 @@ export function FloorMap() {
                     {activeSection.name}
                   </h2>
                   <p className="text-xs text-neutral-500">
-                    {entries.length} mesa{entries.length === 1 ? '' : 's'} operativa
-                    {entries.length === 1 ? '' : 's'} ·{' '}
-                    {entries.filter((entry) => entry.state !== 'free').length} ocupada
-                    {entries.filter((entry) => entry.state !== 'free').length === 1 ? '' : 's'}
+                    {countLabel(entries.length, 'mesa operativa', 'mesas operativas')} ·{' '}
+                    {countLabel(occupied, 'ocupada')}
                   </p>
                 </div>
                 <p className="inline-flex items-center gap-1.5 text-xs text-neutral-500">

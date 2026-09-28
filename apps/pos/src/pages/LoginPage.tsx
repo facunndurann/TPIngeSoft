@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { employeeEmail } from '@restaurant-platform/shared'
 import { Button, ErrorText, Field, Input } from '@restaurant-platform/ui'
-import { supabase } from '@/lib/supabase'
+import { employeeEmailDomain, supabase } from '@/lib/supabase'
 
 export function LoginPage() {
   const [username, setUsername] = useState('')
@@ -14,17 +14,19 @@ export function LoginPage() {
     setBusy(true)
     setError(null)
     try {
-      const email = employeeEmail(username, import.meta.env.VITE_EMPLOYEE_EMAIL_DOMAIN ?? '')
+      const email = employeeEmail(username, employeeEmailDomain)
       const { error: authError } = await supabase.auth.signInWithPassword({ email, password })
+      // El detalle del rechazo no se muestra: solo si las credenciales no sirven.
       if (authError) {
-        // El detalle del rechazo no se muestra: solo si las credenciales no sirven.
-        throw new Error(
-          authError.message === 'Invalid login credentials'
+        setError(
+          authError.code === 'invalid_credentials'
             ? 'Usuario o contraseña incorrectos.'
             : 'No pudimos iniciar sesión. Intentá de nuevo o pedí ayuda a tu administrador.',
         )
       }
     } catch (err) {
+      // Lo que se rechaza antes de llegar a Auth: un usuario mal escrito trae su
+      // propio mensaje desde employeeEmail.
       setError(err)
     } finally {
       setBusy(false)

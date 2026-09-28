@@ -1,12 +1,12 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { groupOrdersByColumn, posBoardColumns } from '@restaurant-platform/shared'
+import { groupOrdersByColumn, posBoardColumns, type PosBoardColumnId } from '@restaurant-platform/shared'
 import { useRestaurant } from '@/context/pos-context'
 import { ErrorText, Spinner } from '@restaurant-platform/ui'
 import { posBoardQuery } from './queries'
 import { OrderTicket } from './OrderTicket'
 
-const columnStyles: Record<string, string> = {
+const columnStyles: Record<PosBoardColumnId, string> = {
   new: 'border-amber-200 bg-amber-50',
   in_preparation: 'border-indigo-200 bg-indigo-50',
   ready: 'border-green-200 bg-green-50',

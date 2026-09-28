@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { asAmount, formatPrice } from '@restaurant-platform/shared'
+import { asAmount, countLabel, formatPrice } from '@restaurant-platform/shared'
 import { Button, ErrorText, Modal, useSaveErrors } from '@restaurant-platform/ui'
 import { useCan } from '@/context/pos-context'
 import { closePosSession, type PosOpenSession } from './queries'
@@ -53,7 +53,7 @@ export function CloseSessionButton({ session, className }: { session: PosOpenSes
             )}
             {kitchen > 0 && (
               <p className="rounded-lg bg-indigo-50 px-3 py-2 text-indigo-950">
-                Hay {kitchen} comanda{kitchen === 1 ? '' : 's'} todavía en cocina. Van a seguir visibles
+                Hay {countLabel(kitchen, 'comanda')} todavía en cocina. Van a seguir visibles
                 en el tablero.
               </p>
             )}

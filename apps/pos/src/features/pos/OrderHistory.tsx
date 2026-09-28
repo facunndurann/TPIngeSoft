@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { formatClock, formatPrice, localDateKey, type OrderStatus, orderStatusLabels } from '@restaurant-platform/shared'
+import { countLabel, formatClock, formatPrice, localDateKey, type OrderStatus, orderStatusLabels } from '@restaurant-platform/shared'
 import { useRestaurant } from '@/context/pos-context'
 import { EmptyState, ErrorText, Input, Modal, Select, Spinner } from '@restaurant-platform/ui'
 import { OrderItemLine } from './OrderItemLine'
@@ -87,7 +87,7 @@ export function OrderHistory() {
       </div>
 
       <p className="text-sm text-neutral-600">
-        {totals.count} pedido{totals.count === 1 ? '' : 's'} · {formatPrice(totals.amount)} en cuenta (sin
+        {countLabel(totals.count, 'pedido')} · {formatPrice(totals.amount)} en cuenta (sin
         cancelados)
       </p>
 

@@ -76,8 +76,16 @@ export type EmployeeRequest = z.infer<typeof employeeRequestSchema>
 
 export const employeeResultSchema = z.object({ userId: uuid })
 
+/**
+ * Si `domain` sirve para armar las cuentas de empleados. Se exporta para que el
+ * POS lo revise al arrancar, con la misma regla que aplica `employeeEmail`.
+ */
+export function isEmployeeEmailDomain(domain: string): boolean {
+  return /^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$/i.test(domain)
+}
+
 export function employeeEmail(username: string, domain: string): string {
-  if (!/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$/i.test(domain)) {
+  if (!isEmployeeEmailDomain(domain)) {
     throw new Error('Falta configurar el dominio de cuentas de empleados.')
   }
   return `${normalizeUsername(username)}@${domain.toLowerCase()}`
