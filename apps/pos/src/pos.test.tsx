@@ -82,7 +82,7 @@ test('kitchen cannot deliver, revert or cancel from ticket buttons', () => {
     renderToStaticMarkup(
       <QueryClientProvider client={new QueryClient()}>
         <AccessContext value={context}>
-          <OrderTicket order={{ ...order, status }} now={Date.now()} />
+          <OrderTicket order={{ ...order, status }} />
         </AccessContext>
       </QueryClientProvider>,
     )

@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { formatElapsed, formatPrice, getPosTableState, type PosTableState, posTableStateLabels, posTableStates } from '@restaurant-platform/shared'
 import { ClipboardList, Clock3, Move, UserRound, Users } from 'lucide-react'
-import { Button, EmptyState, ErrorText, FloorGrid, Spinner, SummaryItem, useNow } from '@restaurant-platform/ui'
+import { Button, Elapsed, EmptyState, ErrorText, FloorGrid, Spinner, SummaryItem, useNow } from '@restaurant-platform/ui'
 import { useCan, useRestaurant } from '@/context/pos-context'
 import { MoveTableSession } from './MoveTableSession'
 import {
@@ -27,7 +27,6 @@ import { TableStateBadge } from './StatusBadges'
  */
 export function FloorMap() {
   const restaurant = useRestaurant()
-  const now = useNow()
   const [moving, setMoving] = useState<FloorMapEntry | null>(null)
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -52,7 +51,7 @@ export function FloorMap() {
   )
   const entries = sectionTables.map((table): FloorMapEntry => {
     const session = sessionByTable.get(table.id)
-    return { table, session, state: getPosTableState(session) }
+    return { ...table, session, state: getPosTableState(session) }
   })
 
   if (sections.isLoading || tables.isLoading || sessions.isLoading) return <Spinner />
@@ -62,7 +61,7 @@ export function FloorMap() {
   return (
     <div className="min-w-0 space-y-4">
       {moving?.session && (
-        <MoveTableSession source={moving.table} sessionId={moving.session.id}
+        <MoveTableSession source={moving} sessionId={moving.session.id}
           onClose={() => setMoving(null)} />
       )}
       <div>
@@ -127,7 +126,6 @@ export function FloorMap() {
               <FloorSurface
                 key={activeSection.id}
                 entries={entries}
-                now={now}
                 onMoveTable={setMoving}
                 onOpenTable={(tableId) =>
                   navigate({
@@ -144,8 +142,11 @@ export function FloorMap() {
   )
 }
 
-type FloorMapEntry = {
-  table: PosDiningTable
+/**
+ * Una mesa del plano con lo que el POS sabe de ella. Tiene la forma de una mesa,
+ * así `FloorGrid` la recibe tal cual y cada mesa se dibuja con su sesión a mano.
+ */
+type FloorMapEntry = PosDiningTable & {
   session?: PosOpenSession
   state: PosTableState
 }
@@ -175,37 +176,39 @@ function StateLegend() {
 
 function FloorSurface({
   entries,
-  now,
   onOpenTable,
   onMoveTable,
 }: {
   entries: FloorMapEntry[]
-  now: number
   onOpenTable: (tableId: string) => void
   onMoveTable: (entry: FloorMapEntry) => void
 }) {
+  // Las mesas muestran cuánto hace que se abrieron: el plano es lo que el reloj
+  // tiene que redibujar, no la pantalla con sus pestañas y su leyenda.
+  const now = useNow()
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const selected = entries.find((entry) => entry.table.id === selectedId)
+  const selected = entries.find((entry) => entry.id === selectedId)
 
   return (
     <div className="min-w-0 space-y-2">
-      {selected && <TableSummary entry={selected} now={now} onOpen={onOpenTable} onMove={onMoveTable} />}
+      {selected && <TableSummary entry={selected} onOpen={onOpenTable} onMove={onMoveTable} />}
       <div
         className="max-h-[calc(100dvh-18rem)] min-h-80 overflow-auto overscroll-contain rounded-xl border border-neutral-200 bg-white p-3 shadow-sm"
         tabIndex={0}
         aria-label="Plano desplazable del sector"
       >
         <FloorGrid
-          tables={entries.map((entry) => entry.table)}
+          tables={entries}
           ariaLabel="Mesas del sector"
           emptyMessage="Este sector todavía no tiene mesas operativas."
           renderTable={(table, tile) => {
-            const { session, state } = entries.find((entry) => entry.table.id === table.id)!
+            const { session, state } = table
             const selectedTable = selectedId === table.id
             const operator = session?.assigned_employee_name ?? 'Sin asignar'
             const total = visibleTotal(session)
+            const elapsed = session && formatElapsed(session.opened_at, now, 'exact')
             const summary = session
-              ? `${formatElapsed(session.opened_at, now, 'exact')}${total === null ? '' : `, ${total}`}, ${operator}`
+              ? `${elapsed}${total === null ? '' : `, ${total}`}, ${operator}`
               : `${table.seats} lugares`
 
             return (
@@ -228,7 +231,7 @@ function FloorSurface({
                 {session ? (
                   <>
                     <span className="mt-1 max-w-[90%] truncate text-[10px] font-medium leading-none">
-                      {formatElapsed(session.opened_at, now, 'exact')}
+                      {elapsed}
                     </span>
                     {total !== null && (
                       <span className="mt-1 max-w-[90%] truncate text-[10px] font-semibold leading-none">
@@ -256,29 +259,27 @@ function FloorSurface({
 
 function TableSummary({
   entry,
-  now,
   onOpen,
   onMove,
 }: {
   entry: FloorMapEntry
-  now: number
   onOpen: (tableId: string) => void
   onMove: (entry: FloorMapEntry) => void
 }) {
   const can = useCan()
-  const { table, session, state } = entry
+  const { session, state } = entry
   const total = visibleTotal(session)
 
   return (
     <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm shadow-sm">
       <div className="mr-auto space-y-1">
-        <p className="font-semibold text-neutral-900">{table.label}</p>
+        <p className="font-semibold text-neutral-900">{entry.label}</p>
         <TableStateBadge state={state} />
-        {session && <SessionRequestBadges session={session} now={now} />}
+        {session && <SessionRequestBadges session={session} />}
       </div>
       {session ? (
         <>
-          <SummaryItem icon={Clock3} label="Abierta" value={formatElapsed(session.opened_at, now, 'exact')} />
+          <SummaryItem icon={Clock3} label="Abierta" value={<Elapsed since={session.opened_at} precision="exact" />} />
           {total !== null && <SummaryItem label="Total acumulado" value={total} />}
           <SummaryItem label="Pedidos activos" value={String(session.kitchen_tickets)} />
           <SummaryItem
@@ -288,15 +289,15 @@ function TableSummary({
           />
         </>
       ) : (
-        <SummaryItem icon={Users} label="Capacidad" value={`${table.seats} lugares`} />
+        <SummaryItem icon={Users} label="Capacidad" value={`${entry.seats} lugares`} />
       )}
-      {session && <AttendRequestButtons sessionId={session.id} session={session} />}
+      {session && <AttendRequestButtons session={session} />}
       {session && can('sessions.move') && (
         <Button variant="secondary" onClick={() => onMove(entry)}>
           <Move size={15} /> Mover comanda
         </Button>
       )}
-      <Button onClick={() => onOpen(table.id)}>
+      <Button onClick={() => onOpen(entry.id)}>
         <ClipboardList size={15} />
         {session ? 'Continuar comanda' : 'Abrir comanda'}
       </Button>

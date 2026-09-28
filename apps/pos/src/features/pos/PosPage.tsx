@@ -1,19 +1,12 @@
 import { useEffect } from 'react'
 import { Link, NavLink, Outlet } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
-import type { PosPermission } from '@restaurant-platform/shared'
 import { Button, ClockProvider } from '@restaurant-platform/ui'
 import { useCan, usePosContext } from '@/context/pos-context'
 import { refreshPos } from '@/lib/query-client'
 import { supabase } from '@/lib/supabase'
 import { subscribeToRestaurantPos } from './realtime'
-
-const tabs: { to: string; label: string; permission: PosPermission }[] = [
-  { to: '/', label: 'Comandas', permission: 'orders.read' },
-  { to: '/salon', label: 'Salón', permission: 'floor.read' },
-  { to: '/mesas', label: 'Mesas activas', permission: 'floor.read' },
-  { to: '/historial', label: 'Historial', permission: 'history.read' },
-]
+import { posSections } from './sections'
 
 export function PosPage({ multipleContexts }: { multipleContexts: boolean }) {
   const context = usePosContext()
@@ -50,20 +43,21 @@ export function PosPage({ multipleContexts }: { multipleContexts: boolean }) {
       </header>
 
       <nav className="flex flex-wrap gap-2" aria-label="Secciones del POS">
-        {tabs
-          .filter((tab) => can(tab.permission))
-          .map((tab) => (
+        {posSections
+          .filter((section) => can(section.permission))
+          .map((section) => (
             <NavLink
-              key={tab.to}
-              to={tab.to}
-              end={tab.to === '/'}
+              key={section.path}
+              to={`/${section.path}`}
+              // La portada es `/`, que es prefijo de todas: solo se marca exacta.
+              end={section.path === ''}
               className={({ isActive }) =>
                 `rounded-lg px-4 py-2 text-sm ${
                   isActive ? 'bg-indigo-600 text-white' : 'bg-white text-neutral-700'
                 }`
               }
             >
-              {tab.label}
+              {section.label}
             </NavLink>
           ))}
       </nav>

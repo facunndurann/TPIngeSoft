@@ -1,15 +1,14 @@
 import { Link } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
-import { formatElapsed, formatPrice, sessionRequestsOf } from '@restaurant-platform/shared'
+import { formatPrice, sessionRequestsOf } from '@restaurant-platform/shared'
 import { useRestaurant } from '@/context/pos-context'
-import { Badge, Button, EmptyState, ErrorText, Spinner, useNow } from '@restaurant-platform/ui'
+import { Badge, Button, Elapsed, EmptyState, ErrorText, Spinner } from '@restaurant-platform/ui'
 import { posOpenSessionsQuery, posTablesQuery } from './queries'
 import { CloseSessionButton } from './CloseSessionButton'
 import { AttendRequestButtons, ChargedBadge, SessionRequestBadges } from './ServiceRequests'
 
 export function ActiveTables() {
   const restaurant = useRestaurant()
-  const now = useNow()
 
   const sessions = useQuery(posOpenSessionsQuery(restaurant.id, restaurant.branchId))
   const tables = useQuery(posTablesQuery(restaurant.id, restaurant.branchId))
@@ -57,8 +56,8 @@ export function ActiveTables() {
                     Ver comanda
                   </Link>
                 </div>
-                <SessionRequestBadges session={session} now={now} />
-                <AttendRequestButtons sessionId={session.id} session={session} />
+                <SessionRequestBadges session={session} />
+                <AttendRequestButtons session={session} />
               </li>
             ))}
           </ul>
@@ -84,7 +83,7 @@ export function ActiveTables() {
                     <p className="text-xs text-neutral-500">
                       {session.participant_names.length} comensal
                       {session.participant_names.length === 1 ? '' : 'es'} ·{' '}
-                      {formatElapsed(session.opened_at, now, 'exact')}
+                      <Elapsed since={session.opened_at} precision="exact" />
                     </p>
                   </div>
                   {/* Sin payments.read la vista trae los importes en null: no hay saldo que mostrar. */}
@@ -97,9 +96,9 @@ export function ActiveTables() {
                 <p className="text-xs text-neutral-500 break-words">
                   {session.participant_names.join(' · ') || 'Sin nombres'}
                 </p>
-                <SessionRequestBadges session={session} now={now} />
+                <SessionRequestBadges session={session} />
                 {/* Cobrada y todavía abierta: es la mesa que hay que liberar. */}
-                <ChargedBadge session={session} now={now} />
+                <ChargedBadge session={session} />
                 {session.total_amount !== null && (
                   <dl className="grid grid-cols-2 gap-2 text-xs">
                     <div>

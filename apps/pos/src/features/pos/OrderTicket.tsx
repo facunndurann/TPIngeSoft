@@ -1,7 +1,7 @@
 import { useMutation } from '@tanstack/react-query'
 import { Undo2 } from 'lucide-react'
-import { formatElapsed, formatPrice, type OrderStatus, posActions, transitionPermission } from '@restaurant-platform/shared'
-import { Button, useSaveErrors } from '@restaurant-platform/ui'
+import { formatPrice, type OrderStatus, posActions, transitionPermission } from '@restaurant-platform/shared'
+import { Button, Elapsed, useSaveErrors } from '@restaurant-platform/ui'
 import { useCan } from '@/context/pos-context'
 import { OrderItemLine } from './OrderItemLine'
 import { participantName, transitionPosOrder, type PosOrder } from './queries'
@@ -12,7 +12,7 @@ import { OrderStatusBadge } from './StatusBadges'
  * la confirmación al cancelar y el error son de este pedido, en el tablero y en
  * la comanda de la mesa por igual, sin que la pantalla que la muestra lleve la cuenta.
  */
-export function OrderTicket({ order, now }: { order: PosOrder; now: number }) {
+export function OrderTicket({ order }: { order: PosOrder }) {
   const can = useCan()
   const errors = useSaveErrors()
 
@@ -45,7 +45,7 @@ export function OrderTicket({ order, now }: { order: PosOrder; now: number }) {
         <div className="flex-1">
           <p className="text-sm font-semibold text-neutral-900 break-words">{table.label}</p>
           <p className="text-xs text-neutral-500 break-words">
-            {submitter} · {formatElapsed(order.created_at, now, 'exact')}
+            {submitter} · <Elapsed since={order.created_at} precision="exact" />
           </p>
         </div>
         <OrderStatusBadge status={order.status} className="max-w-[85px] shrink-0" />

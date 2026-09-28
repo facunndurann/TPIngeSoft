@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { groupOrdersByColumn, posBoardColumns } from '@restaurant-platform/shared'
 import { useRestaurant } from '@/context/pos-context'
-import { ErrorText, Spinner, useNow } from '@restaurant-platform/ui'
+import { ErrorText, Spinner } from '@restaurant-platform/ui'
 import { posBoardQuery } from './queries'
 import { OrderTicket } from './OrderTicket'
 
@@ -15,7 +15,6 @@ const columnStyles: Record<string, string> = {
 
 export function CommandBoard() {
   const restaurant = useRestaurant()
-  const now = useNow()
 
   const board = useQuery(posBoardQuery(restaurant.id, restaurant.branchId))
   const grouped = useMemo(() => groupOrdersByColumn(board.data ?? []), [board.data])
@@ -57,7 +56,7 @@ export function CommandBoard() {
                     </p>
                   )}
                   {orders.map((order) => (
-                    <OrderTicket key={order.id} order={order} now={now} />
+                    <OrderTicket key={order.id} order={order} />
                   ))}
                 </div>
               </section>

@@ -64,7 +64,7 @@ async function renderTickets(...orders: PosOrder[]) {
     root.render(
       <QueryClientProvider client={client}>
         <AccessContext value={context}>
-          {orders.map((order) => <OrderTicket key={order.id} order={order} now={Date.now()} />)}
+          {orders.map((order) => <OrderTicket key={order.id} order={order} />)}
         </AccessContext>
       </QueryClientProvider>,
     )

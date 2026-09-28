@@ -1,8 +1,8 @@
 import { Link, useParams, useSearchParams } from 'react-router'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { formatElapsed, formatPrice, getPosTableState, paymentMethodLabels, sessionRequestsOf, type PaymentMethod } from '@restaurant-platform/shared'
+import { formatPrice, getPosTableState, paymentMethodLabels, sessionRequestsOf, type PaymentMethod } from '@restaurant-platform/shared'
 import { ArrowLeft, Clock3, PlayCircle, UserRound, Users } from 'lucide-react'
-import { Button, EmptyState, ErrorText, Spinner, SummaryItem, useNow, useSaveErrors } from '@restaurant-platform/ui'
+import { Button, Elapsed, EmptyState, ErrorText, Spinner, SummaryItem, useSaveErrors } from '@restaurant-platform/ui'
 import { useCan, useRestaurant } from '@/context/pos-context'
 import { CloseSessionButton } from './CloseSessionButton'
 import { OrderTicket } from './OrderTicket'
@@ -136,7 +136,6 @@ function FreeTable({ tableId }: { tableId: string }) {
 function OccupiedTable({ session, paymentMethods }: { session: PosOpenSession; paymentMethods: PaymentMethod[] }) {
   const restaurant = useRestaurant()
   const can = useCan()
-  const now = useNow()
 
   const orders = useQuery(sessionOrdersQuery(restaurant.id, restaurant.branchId, session.id))
 
@@ -145,7 +144,7 @@ function OccupiedTable({ session, paymentMethods }: { session: PosOpenSession; p
   return (
     <>
       <dl className="flex flex-wrap gap-x-8 gap-y-3 rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm">
-        <SummaryItem as="dl-pair" icon={Clock3} label="Abierta" value={formatElapsed(session.opened_at, now, 'exact')} />
+        <SummaryItem as="dl-pair" icon={Clock3} label="Abierta" value={<Elapsed since={session.opened_at} precision="exact" />} />
         {/* Los importes vienen juntos o no vienen: sin payments.read la vista los trae en null. */}
         {session.total_amount !== null && <>
           <SummaryItem as="dl-pair" label="En cuenta" value={formatPrice(session.total_amount)} />
@@ -169,8 +168,8 @@ function OccupiedTable({ session, paymentMethods }: { session: PosOpenSession; p
       {/* La mesa llamó: se atiende desde la misma comanda, sin volver al plano. */}
       {sessionRequestsOf(session).length > 0 && (
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3">
-          <SessionRequestBadges session={session} now={now} />
-          <AttendRequestButtons sessionId={session.id} session={session} />
+          <SessionRequestBadges session={session} />
+          <AttendRequestButtons session={session} />
         </div>
       )}
 
@@ -186,7 +185,7 @@ function OccupiedTable({ session, paymentMethods }: { session: PosOpenSession; p
           </h2>
           <div className="flex flex-wrap items-center gap-2">
             {/* Cobrada y abierta: el mozo que cobró no cierra, avisa a quien sí. */}
-            <ChargedBadge session={session} now={now} />
+            <ChargedBadge session={session} />
             <CloseSessionButton session={session} />
           </div>
         </div>
@@ -198,7 +197,7 @@ function OccupiedTable({ session, paymentMethods }: { session: PosOpenSession; p
         ) : (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {orders.data?.map((order) => (
-              <OrderTicket key={order.id} order={order} now={now} />
+              <OrderTicket key={order.id} order={order} />
             ))}
           </div>
         )}
