@@ -999,7 +999,7 @@ $$;
 ALTER FUNCTION "public"."pos_open_table_session"("p_table_id" "uuid") OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "public"."pos_record_payment"("p_session_id" "uuid", "p_amount" numeric, "p_method" "public"."payment_method", "p_mode" "public"."payment_mode" DEFAULT 'full'::"public"."payment_mode", "p_participant_id" "uuid" DEFAULT NULL::"uuid", "p_external_reference" "text" DEFAULT NULL::"text") RETURNS "uuid"
+CREATE OR REPLACE FUNCTION "public"."pos_record_payment"("p_session_id" "uuid", "p_amount" numeric, "p_method" "public"."payment_method", "p_participant_id" "uuid" DEFAULT NULL::"uuid", "p_external_reference" "text" DEFAULT NULL::"text") RETURNS "uuid"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
     AS $$
@@ -1010,11 +1010,12 @@ declare
   account_total numeric := 0;
   approved_total numeric := 0;
   pending_total numeric := 0;
+  decided_mode public.payment_mode;
   payment_id uuid;
   normalized_reference text := nullif(btrim(p_external_reference), '');
 begin
   if auth.uid() is null then raise exception 'AUTH_REQUIRED'; end if;
-  if p_session_id is null or p_amount is null or p_method is null or p_mode is null
+  if p_session_id is null or p_amount is null or p_method is null
     then raise exception 'INVALID_REQUEST'; end if;
   if p_amount in ('NaN'::numeric, 'Infinity'::numeric, '-Infinity'::numeric)
     or p_amount <= 0 or p_amount <> round(p_amount, 2)
@@ -1058,12 +1059,16 @@ begin
   if pending_total = 0 then raise exception 'NOTHING_TO_PAY'; end if;
   if p_amount > pending_total then raise exception 'PAYMENT_EXCEEDS_BALANCE'; end if;
 
+  -- Con la sesión bloqueada el pendiente no puede cambiar hasta el commit: si
+  -- el cobro lo salda es la cuenta completa, y si no, un importe parcial.
+  decided_mode := case when p_amount = pending_total then 'full' else 'custom' end;
+
   begin
     insert into public.payments(
       restaurant_id, session_id, participant_id, amount, mode, method,
       status, external_reference
     ) values (
-      target.restaurant_id, target.id, p_participant_id, p_amount, p_mode,
+      target.restaurant_id, target.id, p_participant_id, p_amount, decided_mode,
       p_method, 'approved', normalized_reference
     ) returning id into payment_id;
   exception when unique_violation then
@@ -1076,7 +1081,7 @@ begin
       'paymentId', payment_id,
       'amount', p_amount,
       'method', p_method,
-      'mode', p_mode,
+      'mode', decided_mode,
       'participantId', p_participant_id
     )
   );
@@ -1085,7 +1090,7 @@ end;
 $$;
 
 
-ALTER FUNCTION "public"."pos_record_payment"("p_session_id" "uuid", "p_amount" numeric, "p_method" "public"."payment_method", "p_mode" "public"."payment_mode", "p_participant_id" "uuid", "p_external_reference" "text") OWNER TO "postgres";
+ALTER FUNCTION "public"."pos_record_payment"("p_session_id" "uuid", "p_amount" numeric, "p_method" "public"."payment_method", "p_participant_id" "uuid", "p_external_reference" "text") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."pos_resolve_session_request"("p_session_id" "uuid", "p_kind" "public"."session_request_kind") RETURNS timestamp with time zone
@@ -2358,6 +2363,20 @@ CREATE TABLE IF NOT EXISTS "public"."pos_integrations" (
 ALTER TABLE "public"."pos_integrations" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."profiles" (
+    "id" "uuid" NOT NULL,
+    "username_normalized" "text" NOT NULL,
+    "full_name" "text" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "profiles_full_name_check" CHECK ((("length"("btrim"("full_name")) >= 1) AND ("length"("btrim"("full_name")) <= 100))),
+    CONSTRAINT "valid_username" CHECK ((("username_normalized" = "lower"("btrim"("username_normalized"))) AND ("username_normalized" ~ '^[a-z0-9][a-z0-9._-]{1,30}[a-z0-9]$'::"text")))
+);
+
+
+ALTER TABLE "public"."profiles" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."table_sessions" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "restaurant_id" "uuid" NOT NULL,
@@ -2516,25 +2535,32 @@ CREATE OR REPLACE VIEW "public"."pos_open_sessions" WITH ("security_invoker"='tr
     "t"."label" AS "table_label",
     "s"."branch_id",
     "b"."name" AS "branch_name",
+    "s"."kind",
     COALESCE("p"."names", '{}'::"text"[]) AS "participant_names",
-    COALESCE("bill"."submitted_amount", (0)::numeric) AS "submitted_amount",
-    COALESCE("bill"."total_amount", (0)::numeric) AS "total_amount",
-    COALESCE("bill"."paid_amount", (0)::numeric) AS "paid_amount",
-    COALESCE("bill"."pending_amount", (0)::numeric) AS "pending_amount",
+    "bill"."submitted_amount",
+    "bill"."total_amount",
+    "bill"."paid_amount",
+    "bill"."pending_amount",
     "s"."bill_requested_at",
     "s"."bill_attended_at",
     "s"."in_person_payment_requested_at",
     "s"."in_person_payment_attended_at",
     "k"."tickets" AS "kitchen_tickets",
-    "s"."kind"
-   FROM ((((("public"."table_sessions" "s"
+    COALESCE("k"."statuses", '{}'::"public"."order_status"[]) AS "kitchen_statuses",
+    "e"."full_name" AS "assigned_employee_name",
+    (EXISTS ( SELECT 1
+           FROM "public"."payments" "pay"
+          WHERE (("pay"."session_id" = "s"."id") AND ("pay"."restaurant_id" = "s"."restaurant_id") AND ("pay"."status" = 'pending'::"public"."payment_status")))) AS "has_pending_payment"
+   FROM (((((("public"."table_sessions" "s"
      LEFT JOIN "public"."tables" "t" ON (("t"."id" = "s"."table_id")))
      JOIN "public"."branches" "b" ON (("b"."id" = "s"."branch_id")))
      LEFT JOIN "public"."session_bills" "bill" ON (("bill"."session_id" = "s"."id")))
+     LEFT JOIN "public"."profiles" "e" ON (("e"."id" = "s"."assigned_user_id")))
      LEFT JOIN LATERAL ( SELECT "array_agg"("sp"."display_name" ORDER BY "sp"."joined_at") AS "names"
            FROM "public"."session_participants" "sp"
           WHERE ("sp"."session_id" = "s"."id")) "p" ON (true))
-     LEFT JOIN LATERAL ( SELECT ("count"(*))::integer AS "tickets"
+     LEFT JOIN LATERAL ( SELECT ("count"(*))::integer AS "tickets",
+            "array_agg"("o"."status" ORDER BY "o"."created_at") AS "statuses"
            FROM "public"."orders" "o"
           WHERE (("o"."session_id" = "s"."id") AND (EXISTS ( SELECT 1
                    FROM "public"."order_status_transitions" "tr"
@@ -2601,20 +2627,6 @@ CREATE TABLE IF NOT EXISTS "public"."products" (
 
 
 ALTER TABLE "public"."products" OWNER TO "postgres";
-
-
-CREATE TABLE IF NOT EXISTS "public"."profiles" (
-    "id" "uuid" NOT NULL,
-    "username_normalized" "text" NOT NULL,
-    "full_name" "text" NOT NULL,
-    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    CONSTRAINT "profiles_full_name_check" CHECK ((("length"("btrim"("full_name")) >= 1) AND ("length"("btrim"("full_name")) <= 100))),
-    CONSTRAINT "valid_username" CHECK ((("username_normalized" = "lower"("btrim"("username_normalized"))) AND ("username_normalized" ~ '^[a-z0-9][a-z0-9._-]{1,30}[a-z0-9]$'::"text")))
-);
-
-
-ALTER TABLE "public"."profiles" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."restaurant_members" (
@@ -3828,9 +3840,9 @@ GRANT ALL ON FUNCTION "public"."pos_open_table_session"("p_table_id" "uuid") TO 
 
 
 
-REVOKE ALL ON FUNCTION "public"."pos_record_payment"("p_session_id" "uuid", "p_amount" numeric, "p_method" "public"."payment_method", "p_mode" "public"."payment_mode", "p_participant_id" "uuid", "p_external_reference" "text") FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."pos_record_payment"("p_session_id" "uuid", "p_amount" numeric, "p_method" "public"."payment_method", "p_mode" "public"."payment_mode", "p_participant_id" "uuid", "p_external_reference" "text") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."pos_record_payment"("p_session_id" "uuid", "p_amount" numeric, "p_method" "public"."payment_method", "p_mode" "public"."payment_mode", "p_participant_id" "uuid", "p_external_reference" "text") TO "service_role";
+REVOKE ALL ON FUNCTION "public"."pos_record_payment"("p_session_id" "uuid", "p_amount" numeric, "p_method" "public"."payment_method", "p_participant_id" "uuid", "p_external_reference" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."pos_record_payment"("p_session_id" "uuid", "p_amount" numeric, "p_method" "public"."payment_method", "p_participant_id" "uuid", "p_external_reference" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."pos_record_payment"("p_session_id" "uuid", "p_amount" numeric, "p_method" "public"."payment_method", "p_participant_id" "uuid", "p_external_reference" "text") TO "service_role";
 
 
 
@@ -4051,6 +4063,11 @@ GRANT ALL ON TABLE "public"."pos_integrations" TO "service_role";
 
 
 
+GRANT ALL ON TABLE "public"."profiles" TO "service_role";
+GRANT SELECT ON TABLE "public"."profiles" TO "authenticated";
+
+
+
 GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."table_sessions" TO "anon";
 GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."table_sessions" TO "authenticated";
 GRANT ALL ON TABLE "public"."table_sessions" TO "service_role";
@@ -4100,11 +4117,6 @@ GRANT ALL ON TABLE "public"."product_modifier_groups" TO "service_role";
 GRANT ALL ON TABLE "public"."products" TO "anon";
 GRANT ALL ON TABLE "public"."products" TO "authenticated";
 GRANT ALL ON TABLE "public"."products" TO "service_role";
-
-
-
-GRANT ALL ON TABLE "public"."profiles" TO "service_role";
-GRANT SELECT ON TABLE "public"."profiles" TO "authenticated";
 
 
 

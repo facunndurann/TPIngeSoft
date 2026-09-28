@@ -1,5 +1,6 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { createClient, type PostgrestSingleResponse, type SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from './database.types.ts'
+import { fromPostgres } from './errors.ts'
 
 export type AppSupabaseClient = SupabaseClient<Database>
 
@@ -36,4 +37,15 @@ export function createSupabaseClient({
   return createClient<Database>(projectUrl(url), anonKey, {
     auth: { storageKey, ...(detectSessionInUrl === undefined ? {} : { detectSessionInUrl }) },
   })
+}
+
+/**
+ * Única salida de una respuesta de PostgREST (`from` o `rpc`): el dato, o el
+ * error ya traducido por el catálogo. Ninguna pantalla muestra texto crudo de
+ * Postgres ni decide por su cuenta qué constraints traducir: un código nuevo en
+ * el catálogo llega solo a todas las llamadas.
+ */
+export function unwrap<T>(response: PostgrestSingleResponse<T>): T {
+  if (response.error) throw fromPostgres(response.error)
+  return response.data
 }

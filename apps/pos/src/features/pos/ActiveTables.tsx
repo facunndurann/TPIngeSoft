@@ -1,32 +1,18 @@
-import { useState } from 'react'
 import { Link } from 'react-router'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { formatElapsed, formatPrice, sessionRequestsOf } from '@restaurant-platform/shared'
-import { useCan, useRestaurant } from '@/context/pos-context'
-import { Badge, Button, EmptyState, ErrorText, Modal, Spinner, useNow, useSaveErrors } from '@restaurant-platform/ui'
-import {
-  closePosSession,
-  loadRestaurantTables,
-  posOpenSessionsQuery,
-  posQueryKey,
-  type PosOpenSessionCard,
-} from './api'
+import { useQuery } from '@tanstack/react-query'
+import { countLabel, formatPrice, sessionRequestsOf } from '@restaurant-platform/shared'
+import { useRestaurant } from '@/context/pos-context'
+import { Badge, buttonClass, Elapsed, EmptyState, ErrorText, Spinner, useControlSize } from '@restaurant-platform/ui'
+import { posOpenSessionsQuery, posTablesQuery } from './queries'
+import { CloseSessionButton } from './CloseSessionButton'
 import { AttendRequestButtons, ChargedBadge, SessionRequestBadges } from './ServiceRequests'
 
 export function ActiveTables() {
   const restaurant = useRestaurant()
-  const can = useCan()
-  const canPay = can('payments.read')
-  const queryClient = useQueryClient()
-  const now = useNow()
-  const [closing, setClosing] = useState<PosOpenSessionCard | null>(null)
-  const errors = useSaveErrors()
+  const controlSize = useControlSize()
 
   const sessions = useQuery(posOpenSessionsQuery(restaurant.id, restaurant.branchId))
-  const tables = useQuery({
-    queryKey: [...posQueryKey(restaurant.id, restaurant.branchId), 'tables'],
-    queryFn: () => loadRestaurantTables(restaurant.id, restaurant.branchId),
-  })
+  const tables = useQuery(posTablesQuery(restaurant.id, restaurant.branchId))
 
   const occupiedIds = new Set((sessions.data ?? []).map((session) => session.table_id))
   const freeTables = (tables.data ?? []).filter((table) => !occupiedIds.has(table.id))
@@ -40,20 +26,12 @@ export function ActiveTables() {
     })
     .sort((a, b) => a.since.localeCompare(b.since))
 
-  const closeMutation = useMutation(errors.saving('No pudimos cerrar la sesión.', {
-    mutationFn: (sessionId: string) => closePosSession(sessionId),
-    onSuccess: () => {
-      setClosing(null)
-      void queryClient.invalidateQueries({ queryKey: posQueryKey(restaurant.id, restaurant.branchId) })
-    },
-  }))
-
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-bold text-neutral-900">Mesas activas</h1>
         <p className="text-sm text-neutral-500">
-          Mesas que llamaron, consumo acumulado, estado de pago y cierre manual de sesión. El cobro
+          Mesas que llamaron, consumo acumulado, estado de pago y cierre manual de mesas. El cobro
           digital corresponde a la siguiente fase; los cobros presenciales se registran desde la comanda.
         </p>
       </div>
@@ -73,14 +51,14 @@ export function ActiveTables() {
                 key={session.id}
                 className="space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4"
               >
-                <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center justify-between gap-2">
                   <p className="font-semibold text-neutral-900">{session.table_label}</p>
-                  <Link to={`/salon/${session.table_id}`} className="text-sm text-indigo-700">
+                  <Link to={`/salon/${session.table_id}`} className="inline-flex min-h-11 items-center text-sm text-indigo-700">
                     Ver comanda
                   </Link>
                 </div>
-                <SessionRequestBadges session={session} now={now} />
-                <AttendRequestButtons sessionId={session.id} session={session} />
+                <SessionRequestBadges session={session} />
+                <AttendRequestButtons session={session} />
               </li>
             ))}
           </ul>
@@ -104,12 +82,12 @@ export function ActiveTables() {
                   <div>
                     <p className="font-semibold text-neutral-900">{session.table_label}</p>
                     <p className="text-xs text-neutral-500">
-                      {session.participant_names.length} comensal
-                      {session.participant_names.length === 1 ? '' : 'es'} ·{' '}
-                      {formatElapsed(session.opened_at, now, 'exact')}
+                      {countLabel(session.participant_names.length, 'comensal', 'comensales')} ·{' '}
+                      <Elapsed since={session.opened_at} precision="exact" />
                     </p>
                   </div>
-                  {canPay && (
+                  {/* Sin payments.read la vista trae los importes en null: no hay saldo que mostrar. */}
+                  {session.pending_amount !== null && (
                     <Badge color={session.pending_amount > 0 ? 'amber' : 'green'}>
                       {session.pending_amount > 0 ? 'Pendiente' : 'Sin saldo'}
                     </Badge>
@@ -118,10 +96,10 @@ export function ActiveTables() {
                 <p className="text-xs text-neutral-500 break-words">
                   {session.participant_names.join(' · ') || 'Sin nombres'}
                 </p>
-                <SessionRequestBadges session={session} now={now} />
+                <SessionRequestBadges session={session} />
                 {/* Cobrada y todavía abierta: es la mesa que hay que liberar. */}
-                <ChargedBadge session={session} now={now} />
-                {canPay && (
+                <ChargedBadge session={session} />
+                {session.total_amount !== null && (
                   <dl className="grid grid-cols-2 gap-2 text-xs">
                     <div>
                       <dt className="text-neutral-500">Por confirmar</dt>
@@ -151,22 +129,15 @@ export function ActiveTables() {
                 )}
                 {kitchen > 0 && (
                   <p className="text-xs text-indigo-700">
-                    {kitchen} comanda{kitchen === 1 ? '' : 's'} en cocina
+                    {countLabel(kitchen, 'comanda')} en cocina
                   </p>
                 )}
                 <div className="flex gap-2">
-                  <Link to={`/salon/${session.table_id}`} className="flex-1">
-                    <Button className="w-full">Continuar comanda</Button>
+                  {/* Navega, así que es un link; se ve como el botón de al lado. */}
+                  <Link to={`/salon/${session.table_id}`} className={`${buttonClass('primary', controlSize)} flex-1`}>
+                    Continuar comanda
                   </Link>
-                  {can('sessions.close') && (
-                    <Button
-                      variant="secondary"
-                      className="flex-1"
-                      onClick={() => { errors.clear(); setClosing(session) }}
-                    >
-                      Cerrar sesión
-                    </Button>
-                  )}
+                  <CloseSessionButton session={session} className="flex-1" />
                 </div>
               </article>
             )
@@ -182,7 +153,7 @@ export function ActiveTables() {
               <li key={table.id}>
                 <Link
                   to={`/salon/${table.id}`}
-                  className="block rounded-lg border border-dashed border-neutral-300 bg-white px-3 py-1.5 text-sm text-neutral-600 hover:border-indigo-400 hover:text-indigo-700"
+                  className="flex min-h-11 items-center rounded-lg border border-dashed border-neutral-300 bg-white px-3 text-sm text-neutral-600 hover:border-indigo-400 hover:text-indigo-700"
                 >
                   {table.label}
                 </Link>
@@ -190,48 +161,6 @@ export function ActiveTables() {
             ))}
           </ul>
         </section>
-      )}
-
-      {closing && (
-        <Modal title={`Cerrar ${closing.table_label}`} onClose={() => setClosing(null)}>
-          <div className="space-y-3 text-sm text-neutral-700">
-            <p>
-              Los comensales no podrán enviar más pedidos en esta cuenta. Si vuelven a escanear el QR se
-              abre una sesión nueva.
-            </p>
-            {canPay && closing.pending_amount > 0 && (
-              <p className="rounded-lg bg-amber-50 px-3 py-2 text-amber-950">
-                Queda {formatPrice(closing.pending_amount)} pendiente. Registrá el cobro desde la
-                comanda antes de cerrar si la mesa ya pagó.
-              </p>
-            )}
-            {closing.kitchen_tickets > 0 && (
-              <p className="rounded-lg bg-indigo-50 px-3 py-2 text-indigo-950">
-                Hay {closing.kitchen_tickets} comanda{closing.kitchen_tickets === 1 ? '' : 's'} todavía en cocina. Van a
-                seguir visibles en el tablero.
-              </p>
-            )}
-            {closing.submitted_amount > 0 && (
-              <p className="rounded-lg bg-red-50 px-3 py-2 text-red-800">
-                Hay pedidos enviados sin aceptar. Podés cancelarlos desde Comandas.
-              </p>
-            )}
-            <ErrorText error={errors.message} />
-            <div className="flex gap-2">
-              <Button variant="secondary" className="flex-1" onClick={() => setClosing(null)}>
-                Seguir abierta
-              </Button>
-              <Button
-                variant="danger"
-                className="flex-1"
-                disabled={closeMutation.isPending}
-                onClick={() => closeMutation.mutate(closing.id)}
-              >
-                {closeMutation.isPending ? 'Cerrando…' : 'Cerrar sesión'}
-              </Button>
-            </div>
-          </div>
-        </Modal>
       )}
     </div>
   )

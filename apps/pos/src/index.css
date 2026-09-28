@@ -5,22 +5,3 @@
 /* Tailwind v4 solo escanea la raíz del proyecto: sin esto, las clases que solo
    viven en el paquete de UI (Spinner, SummaryItem) no llegan al CSS. */
 @source "../../../packages/ui/src";
-
-/* Al imprimir un QR, mostrar únicamente el contenido del modal */
-@media print {
-  body * {
-    visibility: hidden;
-  }
-  #qr-print-area,
-  #qr-print-area * {
-    visibility: visible;
-  }
-  #qr-print-area {
-    position: fixed;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-  }
-}

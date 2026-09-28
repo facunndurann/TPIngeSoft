@@ -157,6 +157,18 @@ begin
   insert into public.payments(restaurant_id, session_id, participant_id, amount, mode, method, status)
     values(restaurant, sid, participant, 3, 'custom', 'external', 'approved'),
           (restaurant, sid, participant, 2, 'custom', 'mobile', 'pending');
+
+  -- El plano y la comanda deciden el estado de la mesa con esta misma fila:
+  -- responsable, pago electrónico sin confirmar y estados de cocina.
+  perform set_config('role', 'authenticated', true);
+  select * into open_row from public.pos_open_sessions where id = sid;
+  if open_row.assigned_employee_name is distinct from 'POS test operator'
+    or open_row.has_pending_payment is distinct from true
+    or open_row.kitchen_statuses <> array[(select status from public.orders where id = v_order_id)]
+    or cardinality(open_row.kitchen_statuses) <> open_row.kitchen_tickets then
+    raise exception 'pos_open_sessions does not expose the floor state: %', to_jsonb(open_row); end if;
+  perform set_config('role', 'postgres', true);
+
   select jsonb_agg(to_jsonb(p) order by id) into before_payments from public.payments p where session_id = sid;
   select jsonb_agg(to_jsonb(i) order by id) into before_items from public.order_items i where order_id = v_order_id;
   select to_jsonb(s) - 'table_id' into before_session from public.table_sessions s where id = sid;

@@ -1,5 +1,6 @@
 import { queryOptions } from '@tanstack/react-query'
-import { supabase, unwrap } from '@/lib/supabase'
+import { unwrap } from '@restaurant-platform/shared'
+import { supabase } from '@/lib/supabase'
 
 /**
  * Sucursales completas, activas e inactivas. Es la única consulta con esta key:

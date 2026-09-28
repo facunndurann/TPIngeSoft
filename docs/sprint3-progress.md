@@ -60,7 +60,7 @@ El simulador **no es Mercado Pago**: `mobile-payment` resuelve con `confirm` sol
 ### Diferencias con lo que describe `sprint3.md`
 
 - **`reassign_order_items` ya no existe:** `20261001010000_atomic_guest_participant.sql` la eliminó. Ahora `add_guest_participant(p_session_id, p_display_name, p_item_ids)` reasigna en la misma transacción **cualquier** ítem de cualquier pedido de la sesión, sin importar quién lo pidió ni el origen del pedido. La restricción de MI-69 (el comensal no modifica consumo cargado por el restaurante) debe aplicarse sobre esta función en la fase 8.
-- **Orden de migraciones:** ya hay dos migraciones con fecha `20261001…`. Toda migración nueva del sprint debe llevar un timestamp **posterior a `20261001010000`** (por ejemplo `20261001020000_…`), aunque la fecha real sea anterior.
+- **Orden de migraciones:** ya hay varias migraciones con fecha `20261001…`. Toda migración nueva del sprint debe llevar un timestamp **posterior a la última de `supabase/migrations`** (hoy `20261001040000`), aunque la fecha real sea anterior. Dos ramas que toman el mismo número chocan al mergear: conviene mirar la carpeta de `dev` justo antes de crearla.
 - **Dependencia de mesa confirmada.** Leen la sucursal a través de `tables`:
   - funciones y vistas: `can_read_session`, `submit_order`, `create_mobile_payment`, `pos_record_payment`, `pos_transition_order`, `pos_close_table_session`, `pos_resolve_session_request`, `request_session_service` y la vista `pos_open_sessions`;
   - corregido en la fase 2: `abandon_order_request` solo bloquea la mesa para ordenar locks (sin mesa, no bloquea nada), y la política de `payment_order_items` no usa `tables`; las dos figuraban acá por error;

@@ -1429,14 +1429,17 @@ export type Database = {
     Views: {
       pos_open_sessions: {
         Row: {
+          assigned_employee_name: string | null
           bill_attended_at: string | null
           bill_requested_at: string | null
           branch_id: string | null
           branch_name: string | null
+          has_pending_payment: boolean | null
           id: string | null
           in_person_payment_attended_at: string | null
           in_person_payment_requested_at: string | null
           kind: Database["public"]["Enums"]["session_kind"] | null
+          kitchen_statuses: Database["public"]["Enums"]["order_status"][] | null
           kitchen_tickets: number | null
           opened_at: string | null
           paid_amount: number | null
@@ -1628,7 +1631,6 @@ export type Database = {
           p_amount: number
           p_external_reference?: string
           p_method: Database["public"]["Enums"]["payment_method"]
-          p_mode?: Database["public"]["Enums"]["payment_mode"]
           p_participant_id?: string
           p_session_id: string
         }

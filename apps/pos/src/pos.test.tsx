@@ -8,7 +8,7 @@ import App from './App'
 import { AuthContext } from '@restaurant-platform/ui'
 import { AccessContext, type PosContext } from './context/pos-context'
 import { OrderTicket } from './features/pos/OrderTicket'
-import type { PosOrder } from './features/pos/types'
+import { posBoardQuery, posOpenSessionsQuery, type PosOrder } from './features/pos/queries'
 
 const context: PosContext = {
   restaurant_id: 'restaurant-a',
@@ -28,14 +28,15 @@ const order = {
   table_sessions: {
     status: 'open',
     session_participants: [],
-    tables: { label: 'Mesa 1', branch: { name: 'Central' } },
+    tables: { label: 'Mesa 1' },
   },
 } as unknown as PosOrder
 
 /** Renderiza la app entera con una sesión y unos contextos ya resueltos. */
-function app(session: Session | null, contexts: PosContext[], route: string) {
+function app(session: Session | null, contexts: PosContext[], route: string, seed?: (client: QueryClient) => void) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   if (session) client.setQueryData(['pos-contexts', session.user.id], contexts)
+  seed?.(client)
   return renderToStaticMarkup(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[route]}>
@@ -63,6 +64,35 @@ test('single context resolves directly and kitchen navigation excludes cash and 
   assert.doesNotMatch(html, /Mesas activas|Historial|Cambiar sucursal|href="\/productos"/)
 })
 
+test('every POS control is touch-sized: buttons, fields and section tabs', () => {
+  // 44px de alto (`min-h-11`), lo que piden las guías para usar con el dedo.
+  const login = app(null, [], '/login')
+  assert.match(login, /<button[^>]*class="[^"]*\bmin-h-11\b/)
+  assert.match(login, /<input[^>]*class="[^"]*\bmin-h-11\b/)
+
+  const board = app(employee, [context], '/')
+  assert.match(board, /<a[^>]*class="[^"]*\bmin-h-11\b[^"]*"[^>]*>Comandas</)
+})
+
+test('tabs count what is new elsewhere, and one status region says it in full', () => {
+  const waiter = { ...context, permissions: ['orders.read', 'floor.read'] }
+  const html = app(employee, [waiter], '/', (client) => {
+    client.setQueryData(posBoardQuery('restaurant-a', 'branch-a').queryKey, [
+      { ...order, id: 'o1', status: 'submitted' },
+      { ...order, id: 'o2', status: 'accepted' },
+      { ...order, id: 'o3', status: 'in_preparation' },
+    ])
+    client.setQueryData(posOpenSessionsQuery('restaurant-a', 'branch-a').queryKey, [
+      { id: 's1', bill_requested_at: new Date().toISOString() },
+      { id: 's2' },
+    ] as never)
+  })
+
+  assert.match(html, /<a[^>]*>Comandas <span[^>]*>2 nuevas<\/span><\/a>/)
+  assert.match(html, /<a[^>]*>Mesas activas <span[^>]*>1 llama<\/span><\/a>/)
+  assert.match(html, /<p role="status" aria-atomic="true" class="sr-only">2 comandas nuevas\. 1 mesa llama\.<\/p>/)
+})
+
 test('selector lists only supplied authorized contexts', () => {
   const html = app(employee, twoContexts, '/select-context')
   assert.match(html, /Branch A/)
@@ -77,17 +107,14 @@ test('account without active context is denied', () => {
 })
 
 test('kitchen cannot deliver, revert or cancel from ticket buttons', () => {
+  // El ticket es dueño de su mutación: necesita un QueryClient como en la app.
   const ticket = (status: PosOrder['status']) =>
     renderToStaticMarkup(
-      <AccessContext value={context}>
-        <OrderTicket
-          order={{ ...order, status }}
-          now={Date.now()}
-          busy={false}
-          error={null}
-          onTransition={() => {}}
-        />
-      </AccessContext>,
+      <QueryClientProvider client={new QueryClient()}>
+        <AccessContext value={context}>
+          <OrderTicket order={{ ...order, status }} />
+        </AccessContext>
+      </QueryClientProvider>,
     )
 
   // 'ready' solo avanza a 'delivered', y cocina no tiene orders.deliver.

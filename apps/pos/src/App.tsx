@@ -2,18 +2,27 @@ import { useState, type ReactNode } from 'react'
 import { Navigate, Route, Routes, useNavigate } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import type { PosPermission } from '@restaurant-platform/shared'
-import { Button, ErrorText, Spinner, useAuth } from '@restaurant-platform/ui'
+import { Button, ControlSizeProvider, ErrorText, Spinner, useAuth } from '@restaurant-platform/ui'
 import { supabase } from '@/lib/supabase'
 import { AccessContext, useCan, type PosContext } from '@/context/pos-context'
+import { posContextsQuery } from '@/features/pos/queries'
 import { LoginPage } from '@/pages/LoginPage'
 import { PosPage } from '@/features/pos/PosPage'
-import { CommandBoard } from '@/features/pos/CommandBoard'
-import { FloorMap } from '@/features/pos/FloorMap'
-import { TableCommand } from '@/features/pos/TableCommand'
-import { ActiveTables } from '@/features/pos/ActiveTables'
-import { OrderHistory } from '@/features/pos/OrderHistory'
+import { posSections } from '@/features/pos/sections'
 
+/**
+ * El POS se usa con el dedo y en movimiento, en el salón y en la cocina: todos
+ * sus controles tienen tamaño táctil, sin que cada pantalla tenga que pedirlo.
+ */
 export default function App() {
+  return (
+    <ControlSizeProvider size="touch">
+      <PosApp />
+    </ControlSizeProvider>
+  )
+}
+
+function PosApp() {
   const { session, loading } = useAuth()
 
   if (loading) return <Spinner />
@@ -57,16 +66,7 @@ function AuthenticatedPos({ userId }: { userId: string }) {
   const navigate = useNavigate()
   const [selected, setSelected] = useState<string | null>(() => readStoredContext(userId))
 
-  const contexts = useQuery({
-    queryKey: ['pos-contexts', userId],
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc('get_pos_contexts')
-      if (error) throw error
-      return data
-    },
-    refetchInterval: 15_000,
-    refetchOnWindowFocus: 'always',
-  })
+  const contexts = useQuery(posContextsQuery(userId))
 
   if (contexts.isPending) return <Spinner />
 
@@ -135,39 +135,19 @@ function AuthenticatedPos({ userId }: { userId: string }) {
           element={multipleContexts ? selector : <Navigate to="/" replace />}
         />
         <Route path="/" element={<PosPage multipleContexts={multipleContexts} />}>
-          <Route index element={<CommandBoard />} />
-          <Route
-            path="salon"
-            element={
-              <Permission name="floor.read">
-                <FloorMap />
-              </Permission>
-            }
-          />
-          <Route
-            path="salon/:tableId"
-            element={
-              <Permission name="floor.read">
-                <TableCommand />
-              </Permission>
-            }
-          />
-          <Route
-            path="mesas"
-            element={
-              <Permission name="floor.read">
-                <ActiveTables />
-              </Permission>
-            }
-          />
-          <Route
-            path="historial"
-            element={
-              <Permission name="history.read">
-                <OrderHistory />
-              </Permission>
-            }
-          />
+          {/* Cada sección y sus subrutas, con el permiso de la sección. */}
+          {posSections.flatMap(({ path, permission, screen, subroutes = [] }) =>
+            [{ path, screen }, ...subroutes].map(({ path, screen: Screen }) => {
+              const element = (
+                <Permission name={permission}>
+                  <Screen />
+                </Permission>
+              )
+              return path === ''
+                ? <Route key="index" index element={element} />
+                : <Route key={path} path={path} element={element} />
+            }),
+          )}
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
@@ -175,6 +155,14 @@ function AuthenticatedPos({ userId }: { userId: string }) {
   )
 }
 
+/**
+ * Una sección que la cuenta no puede abrir manda a la primera que sí. Nunca a
+ * sí misma: si la que falta es la portada, el destino es otra, y no hay un
+ * redirect en círculo.
+ */
 function Permission({ name, children }: { name: PosPermission; children: ReactNode }) {
-  return useCan()(name) ? children : <Navigate to="/" replace />
+  const can = useCan()
+  if (can(name)) return children
+  const fallback = posSections.find((section) => can(section.permission))
+  return fallback ? <Navigate to={`/${fallback.path}`} replace /> : null
 }

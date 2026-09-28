@@ -2,7 +2,34 @@ import { createContext, useContext, useId, useLayoutEffect, useRef } from 'react
 import type { ButtonHTMLAttributes, ComponentProps, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react'
 import { Check, X } from 'lucide-react'
 
-type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost'
+/**
+ * Tamaño de los controles. `touch` es para pantallas que se usan con el dedo y
+ * en movimiento, como el POS: 44px de alto, el mínimo de las guías táctiles.
+ */
+export type ControlSize = 'default' | 'touch'
+
+const ControlSizeContext = createContext<ControlSize>('default')
+
+/**
+ * Tamaño de todos los controles de `ui` que envuelve: Button, IconButton, los
+ * campos (Input, Select, Textarea) y ChoiceChip. Una app táctil lo pone una
+ * vez en la raíz en lugar de pasar `size` a cada control; la prop `size` de
+ * cada uno sigue ganando para un caso puntual.
+ */
+export function ControlSizeProvider({ size, children }: { size: ControlSize; children: ReactNode }) {
+  return <ControlSizeContext value={size}>{children}</ControlSizeContext>
+}
+
+/**
+ * El tamaño pedido, o el de la app si el control no dice nada. Se exporta para
+ * los controles que no son de `ui`, como un `<Link>` con forma de botón.
+ */
+export function useControlSize(size?: ControlSize): ControlSize {
+  const appSize = useContext(ControlSizeContext)
+  return size ?? appSize
+}
+
+export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'danger-ghost'
 
 const buttonStyles: Record<ButtonVariant, string> = {
   primary:
@@ -11,19 +38,34 @@ const buttonStyles: Record<ButtonVariant, string> = {
     'border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50 disabled:text-neutral-400',
   danger: 'bg-red-600 text-white hover:bg-red-700 disabled:bg-red-300',
   ghost: 'text-muted hover:bg-neutral-100 disabled:text-neutral-300',
+  // Una acción destructiva que no es la principal: se reconoce por el rojo, pero
+  // no compite con el botón de avanzar. El rojo lleno queda para confirmarla.
+  'danger-ghost': 'text-red-700 hover:bg-red-50 disabled:text-red-300',
+}
+
+// El padding horizontal va acá y no en la base: dos `px-*` en la misma clase
+// no se pisan por orden de escritura sino por el orden del CSS.
+const buttonSizes: Record<ControlSize, string> = {
+  default: 'px-3 py-2',
+  touch: 'min-h-11 px-4 py-2',
+}
+
+/**
+ * Clases de `Button`. Se exportan para una navegación que tiene que verse como
+ * botón: un `<Link>` con estas clases, no un `<Button>` adentro de un `<Link>`,
+ * que es un control dentro de otro y dos paradas de tabulación para lo mismo.
+ */
+export function buttonClass(variant: ButtonVariant = 'primary', size: ControlSize = 'default') {
+  return `inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-lg text-sm font-medium transition-colors disabled:cursor-not-allowed ${buttonSizes[size]} ${buttonStyles[variant]}`
 }
 
 export function Button({
   variant = 'primary',
+  size,
   className = '',
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }) {
-  return (
-    <button
-      className={`inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed ${buttonStyles[variant]} ${className}`}
-      {...props}
-    />
-  )
+}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; size?: ControlSize }) {
+  return <button className={`${buttonClass(variant, useControlSize(size))} ${className}`} {...props} />
 }
 
 /**
@@ -34,6 +76,12 @@ export function Button({
  */
 const controlClass =
   'field-control rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-faint focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary aria-invalid:border-red-600 aria-invalid:ring-1 aria-invalid:ring-red-600'
+
+/** Alto de los campos táctiles; el resto del tamaño es el mismo en los dos. */
+const fieldSizes: Record<ControlSize, string> = {
+  default: '',
+  touch: 'min-h-11',
+}
 
 /** Lo que un Field le avisa a su control: tiene un error, y este es el id del mensaje. */
 const FieldContext = createContext<{ errorId: string } | null>(null)
@@ -47,16 +95,19 @@ function useFieldError() {
   return field ? { 'aria-invalid': true as const, 'aria-describedby': field.errorId } : {}
 }
 
-export function Input({ className = '', ref, ...props }: ComponentProps<'input'>) {
-  return <input ref={ref} {...useFieldError()} className={`${controlClass} ${className}`} {...props} />
+export function Input({ className = '', size, ref, ...props }: Omit<ComponentProps<'input'>, 'size'> & { size?: ControlSize }) {
+  const sizeClass = fieldSizes[useControlSize(size)]
+  return <input ref={ref} {...useFieldError()} className={`${controlClass} ${sizeClass} ${className}`} {...props} />
 }
 
-export function Textarea({ className = '', ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea {...useFieldError()} className={`${controlClass} ${className}`} {...props} />
+export function Textarea({ className = '', size, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement> & { size?: ControlSize }) {
+  const sizeClass = fieldSizes[useControlSize(size)]
+  return <textarea {...useFieldError()} className={`${controlClass} ${sizeClass} ${className}`} {...props} />
 }
 
-export function Select({ className = '', ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select {...useFieldError()} className={`${controlClass} ${className}`} {...props} />
+export function Select({ className = '', size, ...props }: Omit<SelectHTMLAttributes<HTMLSelectElement>, 'size'> & { size?: ControlSize }) {
+  const sizeClass = fieldSizes[useControlSize(size)]
+  return <select {...useFieldError()} className={`${controlClass} ${sizeClass} ${className}`} {...props} />
 }
 
 /**
@@ -138,12 +189,12 @@ type IconTone = 'neutral' | 'danger'
 
 /**
  * Clases de un control de solo ícono: 32×32 px, más que los 24 que pide WCAG 2.2
- * porque el panel también se usa con el dedo. El ícono va en `faint`, y el fondo
- * que aparece al pasar el mouse muestra el área que se puede tocar. Se exportan
- * para el mismo control hecho con un `<Link>`.
+ * porque el panel también se usa con el dedo, y 44×44 con tamaño táctil. El
+ * ícono va en `faint`, y el fondo que aparece al pasar el mouse muestra el área
+ * que se puede tocar. Se exportan para el mismo control hecho con un `<Link>`.
  */
-export function iconButtonClass(tone: IconTone = 'neutral') {
-  return `inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-faint transition-colors hover:bg-neutral-100 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent ${
+export function iconButtonClass(tone: IconTone = 'neutral', size: ControlSize = 'default') {
+  return `inline-flex ${size === 'touch' ? 'h-11 w-11' : 'h-8 w-8'} shrink-0 cursor-pointer items-center justify-center rounded-lg text-faint transition-colors hover:bg-neutral-100 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent ${
     tone === 'danger' ? 'hover:text-red-600' : 'hover:text-neutral-700'
   }`
 }
@@ -156,12 +207,15 @@ export function iconButtonClass(tone: IconTone = 'neutral') {
 export function IconButton({
   label,
   tone,
+  size,
   ...props
 }: Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'aria-label' | 'title' | 'type' | 'className'> & {
   label: string
   tone?: IconTone
+  size?: ControlSize
 }) {
-  return <button {...props} type="button" aria-label={label} title={label} className={iconButtonClass(tone)} />
+  const className = iconButtonClass(tone, useControlSize(size))
+  return <button {...props} type="button" aria-label={label} title={label} className={className} />
 }
 
 type ChipTone = 'pill' | 'outline'
@@ -197,13 +251,17 @@ export function ChoiceChip({
   onClick,
   children,
   tone = 'pill',
+  size,
   ...props
 }: Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'aria-pressed' | 'type' | 'className' | 'onClick'> & {
   pressed: boolean
   onClick: () => void
   tone?: ChipTone
+  size?: ControlSize
 }) {
   const { base, on, off } = chipTones[tone]
+  // El chip conserva su padding y su forma; el tamaño táctil solo le da alto.
+  const touch = useControlSize(size) === 'touch' ? 'min-h-11' : ''
 
   return (
     <button
@@ -211,7 +269,7 @@ export function ChoiceChip({
       type="button"
       aria-pressed={pressed}
       onClick={onClick}
-      className={`inline-flex cursor-pointer items-center gap-1.5 text-sm font-medium transition-colors disabled:cursor-default disabled:opacity-50 ${base} ${pressed ? on : off}`}
+      className={`inline-flex cursor-pointer items-center gap-1.5 text-sm font-medium transition-colors disabled:cursor-default disabled:opacity-50 ${base} ${touch} ${pressed ? on : off}`}
     >
       {pressed && <Check size={14} aria-hidden="true" />}
       {children}
@@ -219,24 +277,33 @@ export function ChoiceChip({
   )
 }
 
+const badgeColors = {
+  neutral: 'bg-neutral-100 text-neutral-700',
+  green: 'bg-green-100 text-green-800',
+  red: 'bg-red-100 text-red-700',
+  indigo: 'bg-indigo-100 text-indigo-700',
+  amber: 'bg-amber-100 text-amber-800',
+  // Los que siguen existen por el plano del POS, que distingue ocho estados de
+  // mesa: la etiqueta de un estado tiene que ser del mismo color que la mesa.
+  blue: 'bg-blue-100 text-blue-800',
+  cyan: 'bg-cyan-100 text-cyan-900',
+  violet: 'bg-violet-100 text-violet-800',
+  rose: 'bg-rose-100 text-rose-800',
+}
+
+export type BadgeColor = keyof typeof badgeColors
+
 export function Badge({
   children,
   color = 'neutral',
   className = '',
 }: {
   children: ReactNode
-  color?: 'neutral' | 'green' | 'red' | 'indigo' | 'amber'
+  color?: BadgeColor
   className?: string
 }) {
-  const colors = {
-    neutral: 'bg-neutral-100 text-neutral-700',
-    green: 'bg-green-100 text-green-800',
-    red: 'bg-red-100 text-red-700',
-    indigo: 'bg-indigo-100 text-indigo-700',
-    amber: 'bg-amber-100 text-amber-800',
-  }
   return (
-    <span className={`inline-flex items-center justify-center text-center rounded-xl px-2 py-1 text-[11px] leading-tight font-medium ${colors[color]} ${className}`}>
+    <span className={`inline-flex items-center justify-center text-center rounded-xl px-2 py-1 text-xs leading-tight font-medium ${badgeColors[color]} ${className}`}>
       {children}
     </span>
   )

@@ -1,4 +1,4 @@
-import { MAX_ORDER_LINES, type SubmitOrderInput } from '@restaurant-platform/shared'
+import { countLabel, MAX_ORDER_LINES, type SubmitOrderInput } from '@restaurant-platform/shared'
 import { selectionErrors } from './menu'
 import type { Menu, Selection } from './menu'
 
@@ -10,7 +10,7 @@ export type PendingSubmission = { input: SubmitOrderInput; snapshot: CartItem[] 
 
 /** "3 platos" / "1 plato": el plural aparece en los avisos del carrito. */
 export function plateCount(count: number) {
-  return `${count} ${count === 1 ? 'plato' : 'platos'}`
+  return countLabel(count, 'plato')
 }
 
 /**

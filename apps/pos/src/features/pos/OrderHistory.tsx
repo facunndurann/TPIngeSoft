@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { formatPrice, localDateKey, type OrderStatus, orderStatusLabels, RESTAURANT_TIME_ZONE, sessionPlaceLabel } from '@restaurant-platform/shared'
+import { countLabel, formatClock, formatPrice, localDateKey, type OrderStatus, orderStatusLabels, sessionPlaceLabel } from '@restaurant-platform/shared'
 import { useRestaurant } from '@/context/pos-context'
-import { Badge, EmptyState, ErrorText, Input, Modal, Select, Spinner } from '@restaurant-platform/ui'
-import { posHistoryQuery, type PosOrder } from './api'
+import { EmptyState, ErrorText, Input, Modal, Select, Spinner } from '@restaurant-platform/ui'
+import { OrderItemLine } from './OrderItemLine'
+import { posHistoryQuery, type PosOrder } from './queries'
+import { OrderStatusBadge } from './StatusBadges'
 
 const statusFilterOptions: Array<{ value: 'all' | OrderStatus; label: string }> = [
   { value: 'all', label: 'Todos los estados' },
@@ -85,7 +87,7 @@ export function OrderHistory() {
       </div>
 
       <p className="text-sm text-neutral-600">
-        {totals.count} pedido{totals.count === 1 ? '' : 's'} · {formatPrice(totals.amount)} en cuenta (sin
+        {countLabel(totals.count, 'pedido')} · {formatPrice(totals.amount)} en cuenta (sin
         cancelados)
       </p>
 
@@ -116,11 +118,20 @@ export function OrderHistory() {
                   onClick={() => setSelected(order)}
                 >
                   <td className="px-4 py-3 text-neutral-700">{formatClock(order.created_at)}</td>
-                  <td className="px-4 py-3 font-medium text-neutral-900">
-                    {sessionPlaceLabel(order.table_sessions)}
-                    <span className="block text-xs font-normal text-neutral-500">
-                      {order.table_sessions.branch?.name}
-                    </span>
+                  {/* La fila entera abre el detalle con el mouse o el dedo; este botón
+                      es la misma puerta para el teclado y el lector de pantalla. Sin
+                      padding vertical: su alto táctil ya es el de la fila. */}
+                  <td className="px-4 py-0">
+                    <button
+                      type="button"
+                      aria-haspopup="dialog"
+                      onClick={() => setSelected(order)}
+                      className="inline-flex min-h-11 cursor-pointer items-center rounded font-medium text-neutral-900 underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-indigo-600 focus-visible:outline-none"
+                    >
+                      {sessionPlaceLabel(order.table_sessions)}
+                      {/* Varias filas pueden ser de la misma mesa: la hora dice cuál se abre. */}
+                      <span className="sr-only">, pedido de las {formatClock(order.created_at)}</span>
+                    </button>
                   </td>
                   <td className="px-4 py-3 text-neutral-600">
                     {order.order_items
@@ -128,9 +139,7 @@ export function OrderHistory() {
                       .join(', ')}
                   </td>
                   <td className="px-4 py-3">
-                    <Badge color={order.status === 'cancelled' ? 'red' : order.status === 'delivered' ? 'green' : 'indigo'}>
-                      {orderStatusLabels[order.status]}
-                    </Badge>
+                    <OrderStatusBadge status={order.status} />
                   </td>
                   <td className="px-4 py-3 text-right font-medium text-neutral-900">
                     {formatPrice(order.total_amount)}
@@ -155,39 +164,18 @@ function HistoryDetail({ order }: { order: PosOrder }) {
   return (
     <div className="space-y-3 text-sm">
       <div className="flex items-center justify-between">
-        <Badge color={order.status === 'cancelled' ? 'red' : 'indigo'}>{orderStatusLabels[order.status]}</Badge>
+        <OrderStatusBadge status={order.status} />
         <span className="font-semibold">{formatPrice(order.total_amount)}</span>
       </div>
       <p className="text-xs text-neutral-500">#{order.id.slice(0, 8)}</p>
       {order.order_items.map((item) => (
         <div key={item.id} className="rounded-lg border border-neutral-200 px-3 py-2">
-          <p className="font-medium text-neutral-900">
-            {item.quantity} × {item.product_name}
-          </p>
-          {item.is_shared && <p className="text-xs text-neutral-500">Para compartir</p>}
-          {item.order_item_modifiers.map((modifier) => (
-            <p key={modifier.id} className="text-xs text-neutral-600">
-              + {modifier.group_name}: {modifier.option_name} ({formatPrice(modifier.price_delta)})
-            </p>
-          ))}
-          {item.order_item_removed_ingredients.map((ingredient) => (
-            <p key={ingredient.id} className="text-xs text-neutral-600">
-              Sin {ingredient.ingredient_name}
-            </p>
-          ))}
+          <OrderItemLine order={order} item={item} withPrices />
         </div>
       ))}
       {order.notes && <p className="rounded-lg bg-amber-50 px-3 py-2 text-amber-950">Nota: {order.notes}</p>}
     </div>
   )
-}
-
-function formatClock(iso: string) {
-  return new Intl.DateTimeFormat('es-AR', {
-    timeZone: RESTAURANT_TIME_ZONE,
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(iso))
 }
 
 function formatLongDate(dateKey: string) {

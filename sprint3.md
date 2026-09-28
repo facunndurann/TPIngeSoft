@@ -238,7 +238,7 @@ Resolver en fase 1; estas propuestas permiten avanzar sin inventar que Jira ya l
 
 **Depende de:** 7. **Jira:** cierre MI-67, MI-68, MI-69 y cobertura MI-70.
 
-**Tocar:** funciones de envío, migración/RPC, `apps/pos/src/features/pos/api.ts`, `apps/pos/src/features/pos/{OrderTicket,OrderHistory,TableCommand}.tsx`, `apps/customer/src/features/SessionOrders.tsx`, `packages/shared/src/{orders,errors,employees}.ts`.
+**Tocar:** funciones de envío, migración/RPC, `apps/pos/src/features/pos/queries.ts`, `apps/pos/src/features/pos/{OrderTicket,OrderHistory,TableCommand}.tsx`, `apps/customer/src/features/SessionOrders.tsx`, `packages/shared/src/{orders,errors,employees}.ts`.
 
 **Trabajo:**
 

@@ -1,67 +1,80 @@
-import { useEffect, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import {
   asAmount,
   formatPrice,
+  formatTableTime,
   paymentMethodLabels,
   paymentModeLabels,
   paymentStatusLabels,
   type PaymentMethod,
 } from '@restaurant-platform/shared'
-import { Button, ErrorText, useSaveErrors } from '@restaurant-platform/ui'
+import { Button, ErrorText, Field, Input, Select, useNow, useSaveErrors } from '@restaurant-platform/ui'
 import { useCan, useRestaurant } from '@/context/pos-context'
-import { loadSessionPayments, posQueryKey, recordPosPayment, type PosBill } from './api'
+import { recordPosPayment, sessionPaymentsQuery, type PosOpenSession } from './queries'
 
 type PaymentPanelProps = {
   sessionId: string
-  bill?: PosBill
+  pendingAmount: PosOpenSession['pending_amount']
   enabledMethods: PaymentMethod[]
 }
 
-export function PaymentPanel({ sessionId, bill, enabledMethods }: PaymentPanelProps) {
+/**
+ * Por qué no se puede registrar el importe escrito, o `null` si se puede. Son
+ * las mismas reglas que aplica `pos_record_payment`, en el mismo orden: el
+ * motivo aparece junto al campo antes de que la base lo rechace.
+ */
+function amountProblem(value: string, pending: number): string | null {
+  if (value.trim() === '') return 'Ingresá el importe a registrar.'
+  const amount = Number(value)
+  if (!Number.isFinite(amount) || amount <= 0) return 'El importe tiene que ser mayor a cero.'
+  // Se mira el texto y no el número: 1.1 × 100 da 110.00000000000001.
+  if (!/^\d+(\.\d{1,2})?$/.test(value.trim())) return 'Usá hasta dos decimales.'
+  if (amount > pending) return `Supera el pendiente de ${formatPrice(pending)}.`
+  return null
+}
+
+export function PaymentPanel({ sessionId, pendingAmount, enabledMethods }: PaymentPanelProps) {
   const restaurant = useRestaurant()
   const can = useCan()
-  const queryClient = useQueryClient()
+  const now = useNow()
   const errors = useSaveErrors()
-  const pending = asAmount(bill?.pending_amount)
+  const pending = asAmount(pendingAmount)
+  // Mobile lo confirma el proveedor, no la caja.
   const recordable: PaymentMethod[] = enabledMethods.filter((method) => method !== 'mobile')
-  const [amount, setAmount] = useState('')
-  const [method, setMethod] = useState<PaymentMethod | ''>(recordable[0] ?? '')
+
+  // Lo que eligió o escribió la caja; null es «no lo tocó». Lo que se muestra
+  // se calcula en cada render: si otra caja cobra, el importe sugerido pasa al
+  // pendiente nuevo sin pisar uno escrito a mano, y si el admin deshabilita el
+  // medio elegido, se cae al primero que siga habilitado.
+  const [amountDraft, setAmountDraft] = useState<string | null>(null)
+  const [methodChoice, setMethodChoice] = useState<PaymentMethod | null>(null)
   const [reference, setReference] = useState('')
+  const [amountLeft, setAmountLeft] = useState(false)
 
-  useEffect(() => {
-    setAmount(pending > 0 ? pending.toFixed(2) : '')
-  }, [pending])
+  const amount = amountDraft ?? pending.toFixed(2)
+  const method: PaymentMethod | undefined =
+    methodChoice && recordable.includes(methodChoice) ? methodChoice : recordable[0]
 
-  useEffect(() => {
-    if (!method || !recordable.includes(method)) setMethod(recordable[0] ?? '')
-  }, [method, recordable])
-
-  const payments = useQuery({
-    queryKey: [...posQueryKey(restaurant.id, restaurant.branchId), 'payments', sessionId],
-    queryFn: () => loadSessionPayments(sessionId),
-    refetchInterval: 15000,
-  })
+  const payments = useQuery(sessionPaymentsQuery(restaurant.id, restaurant.branchId, sessionId))
 
   const record = useMutation(errors.saving('No pudimos registrar el pago.', {
-    mutationFn: () => {
-      const numericAmount = Number(amount)
-      return recordPosPayment({
-        sessionId,
-        amount: numericAmount,
-        method: method as PaymentMethod,
-        mode: numericAmount === pending ? 'full' : 'custom',
-        externalReference: reference.trim() || undefined,
-      })
-    },
-    onSuccess: async () => {
+    mutationFn: (payment: { amount: number; method: PaymentMethod }) =>
+      recordPosPayment({ sessionId, ...payment, externalReference: reference.trim() || undefined }),
+    // El cliente del POS ya releyó la cuenta: el importe vuelve a sugerir el
+    // pendiente nuevo.
+    onSuccess: () => {
+      setAmountDraft(null)
+      setAmountLeft(false)
       setReference('')
-      await queryClient.invalidateQueries({ queryKey: posQueryKey(restaurant.id, restaurant.branchId) })
     },
   }))
 
   const numericAmount = Number(amount)
-  const invalidAmount = !Number.isFinite(numericAmount) || numericAmount <= 0 || numericAmount > pending
+  const amountError = amountProblem(amount, pending)
+  // Un campo vacío puede ser alguien que borró para escribir otro importe: ese
+  // aviso espera a que deje el campo. Los demás hablan de un número ya escrito.
+  const shownAmountError = amountError && (amount.trim() !== '' || amountLeft) ? amountError : undefined
 
   return (
     <section className="space-y-3 rounded-xl border border-neutral-200 bg-white p-4" aria-label="Pagos de la cuenta">
@@ -73,43 +86,49 @@ export function PaymentPanel({ sessionId, bill, enabledMethods }: PaymentPanelPr
       {can('payments.write') && pending > 0 && recordable.length > 0 && (
         <form
           className="grid gap-3 sm:grid-cols-2"
-          onSubmit={(event) => { event.preventDefault(); errors.clear(); record.mutate() }}
+          onSubmit={(event) => {
+            event.preventDefault()
+            if (!method || amountError) return
+            errors.clear()
+            record.mutate({ amount: numericAmount, method })
+          }}
         >
-          <label className="space-y-1 text-sm">
-            <span className="font-medium text-neutral-700">Importe</span>
-            <input
-              className="w-full rounded-lg border border-neutral-300 px-3 py-2"
+          {/* Field marca el campo como inválido y lo describe con el motivo. */}
+          <Field label="Importe" error={shownAmountError}>
+            <Input
               type="number"
+              inputMode="decimal"
               min="0.01"
               max={pending}
               step="0.01"
               value={amount}
-              onChange={(event) => setAmount(event.target.value)}
+              onChange={(event) => setAmountDraft(event.target.value)}
+              onBlur={() => setAmountLeft(true)}
             />
-          </label>
-          <label className="space-y-1 text-sm">
-            <span className="font-medium text-neutral-700">Medio</span>
-            <select
-              className="w-full rounded-lg border border-neutral-300 px-3 py-2"
+          </Field>
+          <Field label="Medio">
+            <Select
               value={method}
-              onChange={(event) => setMethod(event.target.value as PaymentMethod)}
+              onChange={(event) =>
+                setMethodChoice(recordable.find((entry) => entry === event.target.value) ?? null)
+              }
             >
               {recordable.map((entry) => <option key={entry} value={entry}>{paymentMethodLabels[entry]}</option>)}
-            </select>
-          </label>
-          <label className="space-y-1 text-sm sm:col-span-2">
-            <span className="font-medium text-neutral-700">Referencia (opcional)</span>
-            <input
-              className="w-full rounded-lg border border-neutral-300 px-3 py-2"
-              maxLength={200}
-              value={reference}
-              onChange={(event) => setReference(event.target.value)}
-              placeholder="Recibo, transferencia o terminal"
-            />
-          </label>
+            </Select>
+          </Field>
+          <div className="sm:col-span-2">
+            <Field label="Referencia (opcional)">
+              <Input
+                maxLength={200}
+                value={reference}
+                onChange={(event) => setReference(event.target.value)}
+                placeholder="Recibo, transferencia o terminal"
+              />
+            </Field>
+          </div>
           <div className="sm:col-span-2">
             <ErrorText error={errors.message} />
-            <Button disabled={record.isPending || invalidAmount || !method}>
+            <Button disabled={record.isPending || amountError !== null || !method}>
               {record.isPending ? 'Registrando…' : `Registrar ${formatPrice(numericAmount || 0)}`}
             </Button>
           </div>
@@ -135,10 +154,8 @@ export function PaymentPanel({ sessionId, bill, enabledMethods }: PaymentPanelPr
                   {payment.external_reference ? ` · Ref. ${payment.external_reference}` : ''}
                 </p>
               </div>
-              <time className="text-xs text-neutral-500" dateTime={payment.created_at}>
-                {new Intl.DateTimeFormat('es-AR', {
-                  day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
-                }).format(new Date(payment.created_at))}
+              <time className="shrink-0 text-xs text-neutral-500" dateTime={payment.created_at}>
+                {formatTableTime(payment.created_at, now)}
               </time>
             </li>
           ))}

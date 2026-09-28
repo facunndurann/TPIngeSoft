@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { Page } from '@/features/Page'
-import { supabase, unwrap } from '@/lib/supabase'
-import { formatPrice } from '@restaurant-platform/shared'
+import { supabase } from '@/lib/supabase'
+import { formatPrice, unwrap } from '@restaurant-platform/shared'
 import {
   emptyGroupDraft,
   groupDraftErrors,

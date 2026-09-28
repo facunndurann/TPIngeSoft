@@ -48,7 +48,7 @@ La **app del comensal** incluye las Fases 3 y 4. Aplicá las migraciones con `pn
 
 - Envío del carrito en un toque, con el total en el botón; validación transaccional de disponibilidad, personalización y precios reales. Si cambian los precios, el servidor rechaza el total anterior y hay que actualizar la carta y volver a enviar.
 - Envíos persistidos con identificador de reintento: una respuesta perdida o dos solicitudes simultáneas no duplican el pedido.
-- Recepción del POS interno en la misma transacción de `submit_order`, con estados y registro de transiciones. El personal avanza las comandas desde el **POS independiente** (`http://localhost:5175`): tablero kanban, mesas activas y historial del día. El cierre de sesión es manual; el cobro digital corresponde a la Fase 7.
+- Recepción del POS interno en la misma transacción de `submit_order`, con estados y registro de transiciones. El personal avanza las comandas desde el **POS independiente** (`http://localhost:5175`): tablero kanban, mesas activas y historial del día. El cierre de mesa es manual; el cobro digital corresponde a la Fase 7.
 - Pedidos de toda la mesa con nombres, modificaciones y precios conservados, junto con una cuenta que distingue enviado por confirmar, en cuenta, pendiente y pagado. Realtime con respaldo por polling cada 15 segundos.
 
 El menú se actualiza cada minuto y al volver a la ventana. La cuenta incluye pedidos aceptados y descuenta únicamente pagos aprobados; la integración de pagos corresponde a la Fase 7. Ver el recorrido de prueba y las verificaciones ejecutadas en [docs/SETUP.md](docs/SETUP.md#6-probar-pedidos-y-cuenta-fase-4) y el POS en [docs/SETUP.md](docs/SETUP.md#7-probar-el-pos-propio-fase-5).

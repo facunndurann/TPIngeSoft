@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { formatElapsed, type ElapsedPrecision } from '@restaurant-platform/shared'
 
 /** Cada cuánto reescribir un "hace X" para que no quede viejo en pantalla. */
 export const CLOCK_TICK_MS = 15_000
@@ -12,6 +13,14 @@ const ClockContext = createContext<number | undefined>(undefined)
  */
 export function useNow(): number {
   return useContext(ClockContext) ?? Date.now()
+}
+
+/**
+ * Un «hace X» que se reescribe solo con el tic. Es lo único que lee la hora, así
+ * que el reloj redibuja este texto y no la tarjeta o la pantalla que lo contiene.
+ */
+export function Elapsed({ since, precision }: { since: string | number; precision?: ElapsedPrecision }) {
+  return formatElapsed(since, useNow(), precision)
 }
 
 /**

@@ -1,100 +1,57 @@
-import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { asAmount, enabledPaymentMethods, formatElapsed, formatPrice, getPosTableState, isKitchenTicket, type OrderStatus, paymentMethodLabels, posTableStateLabels, sessionRequestsOf } from '@restaurant-platform/shared'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { formatPrice, getPosTableState, paymentMethodLabels, sessionRequestsOf, type PaymentMethod } from '@restaurant-platform/shared'
 import { ArrowLeft, Clock3, PlayCircle, UserRound, Users } from 'lucide-react'
-import { Badge, Button, EmptyState, ErrorText, Modal, Spinner, SummaryItem, useNow, useSaveErrors } from '@restaurant-platform/ui'
+import { Button, Elapsed, EmptyState, ErrorText, Spinner, SummaryItem, useSaveErrors } from '@restaurant-platform/ui'
 import { useCan, useRestaurant } from '@/context/pos-context'
-import {
-  closePosSession,
-  loadRestaurantTables,
-  loadSessionBills,
-  loadSessionOrders,
-  loadTableSession,
-  openPosTableSession,
-  transitionPosOrder,
-} from './api'
+import { CloseSessionButton } from './CloseSessionButton'
 import { OrderTicket } from './OrderTicket'
 import { PaymentPanel } from './PaymentPanel'
+import {
+  openPosTableSession,
+  posOpenSessionsQuery,
+  posPaymentMethodsQuery,
+  posTablesQuery,
+  sessionOrdersQuery,
+  type PosOpenSession,
+} from './queries'
 import { AttendRequestButtons, ChargedBadge, SessionRequestBadges } from './ServiceRequests'
+import { TableStateBadge } from './StatusBadges'
 
 /**
- * Comanda de una mesa abierta desde el plano (MI-64). La misma pantalla sirve
- * para abrir una mesa libre y para continuar una ocupada; el sector desde el
- * que se llegó viaja en la query para poder volver al mismo lugar del plano.
+ * Comanda de una mesa abierta desde el plano (MI-64). Resuelve la mesa y su
+ * sesión, muestra la cabecera común y deriva en `FreeTable` u `OccupiedTable`;
+ * el sector desde el que se llegó viaja en la query para poder volver al mismo
+ * lugar del plano.
  */
 export function TableCommand() {
   const { tableId = '' } = useParams()
   const [searchParams] = useSearchParams()
   const restaurant = useRestaurant()
-  const can = useCan()
-  const queryClient = useQueryClient()
-  const now = useNow()
-  const [closing, setClosing] = useState(false)
-  const errors = useSaveErrors()
-  const [pendingOrderId, setPendingOrderId] = useState<string | null>(null)
 
   const backToMap = `/salon${searchParams.toString() ? `?${searchParams}` : ''}`
 
-  const tables = useQuery({
-    queryKey: ['pos', restaurant.id, restaurant.branchId, 'tables'],
-    queryFn: () => loadRestaurantTables(restaurant.id, restaurant.branchId),
-  })
-  const session = useQuery({
-    queryKey: ['pos', restaurant.id, restaurant.branchId, 'table-session', tableId],
-    queryFn: () => loadTableSession(tableId),
-    refetchInterval: 15000,
-  })
-  const sessionId = session.data?.id
-  const orders = useQuery({
-    queryKey: ['pos', restaurant.id, restaurant.branchId, 'session-orders', sessionId],
-    queryFn: () => loadSessionOrders(sessionId!),
-    enabled: !!sessionId,
-    refetchInterval: 15000,
-  })
-  const bills = useQuery({
-    queryKey: ['pos', restaurant.id, restaurant.branchId, 'bills', sessionId ?? ''],
-    queryFn: () => loadSessionBills(sessionId ? [sessionId] : []),
-    enabled: !!sessionId,
-    refetchInterval: 15000,
-  })
+  const tables = useQuery(posTablesQuery(restaurant.id, restaurant.branchId))
+  // La misma lectura que el plano y Mesas activas: la mesa está ocupada si su
+  // sesión figura entre las abiertas de la sucursal.
+  const sessions = useQuery(posOpenSessionsQuery(restaurant.id, restaurant.branchId))
+  const paymentMethods = useQuery(posPaymentMethodsQuery(restaurant.id, restaurant.branchId))
 
-  const table = tables.data?.find((entry) => entry.id === tableId)
-  const bill = bills.data?.[0]
+  if (tables.isLoading || sessions.isLoading || paymentMethods.isLoading) return <Spinner />
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ['pos', restaurant.id] })
-
-  const openSession = useMutation(errors.saving('No pudimos abrir la comanda.', {
-    mutationFn: () => openPosTableSession(tableId),
-    onSuccess: refresh,
-  }))
-
-  const transition = useMutation(errors.saving('No pudimos actualizar el pedido.', {
-    mutationFn: ({ orderId, status }: { orderId: string; status: OrderStatus }) =>
-      transitionPosOrder(orderId, status),
-    onMutate: ({ orderId }) => setPendingOrderId(orderId),
-    onSuccess: refresh,
-    onSettled: () => setPendingOrderId(null),
-  }))
-
-  const close = useMutation(errors.saving('No pudimos cerrar la sesión.', {
-    mutationFn: () => closePosSession(sessionId!),
-    onSuccess: () => {
-      setClosing(false)
-      refresh()
-    },
-  }))
-
-  if (tables.isLoading || session.isLoading) return <Spinner />
-
-  if (tables.isError || session.isError) {
+  if (tables.isError || sessions.isError || paymentMethods.isError) {
     return (
       <div className="space-y-3">
         <BackLink to={backToMap} />
-        <ErrorText error={tables.error ?? session.error} fallback="No pudimos cargar la comanda de la mesa." />
+        <ErrorText
+          error={tables.error ?? sessions.error ?? paymentMethods.error}
+          fallback="No pudimos cargar la comanda de la mesa."
+        />
       </div>
     )
   }
+
+  const table = tables.data?.find((entry) => entry.id === tableId)
 
   if (!table) {
     return (
@@ -105,10 +62,8 @@ export function TableCommand() {
     )
   }
 
-  const open = session.data
-  const state = getPosTableState(open)
-  const branchMethods = enabledPaymentMethods(table.branches)
-  const kitchenOrders = (orders.data ?? []).filter((order) => isKitchenTicket(order.status)).length
+  const session = sessions.data?.find((entry) => entry.table_id === tableId)
+  const branchMethods = paymentMethods.data ?? []
 
   return (
     <div className="min-w-0 space-y-4">
@@ -118,8 +73,7 @@ export function TableCommand() {
         <div>
           <h1 className="text-xl font-bold text-neutral-900">{table.label}</h1>
           <p className="text-sm text-neutral-500">
-            {table.floor_sections?.name ?? 'Sin sector'}
-            {table.branches ? ` · ${table.branches.name}` : ''} · {table.seats} lugares
+            {table.floor_sections?.name ?? 'Sin sector'} · {table.seats} lugares
           </p>
           {/* Lo que el admin habilitó para esta sucursal (MI-48): es lo que el
               comensal ve como opción y lo único que se le puede cobrar acá. */}
@@ -130,147 +84,129 @@ export function TableCommand() {
               : branchMethods.map((method) => paymentMethodLabels[method]).join(' · ')}
           </p>
         </div>
-        <Badge color={open ? 'indigo' : 'green'}>{posTableStateLabels[state]}</Badge>
+        <TableStateBadge state={getPosTableState(session)} />
       </div>
 
-      <ErrorText error={errors.message} />
-
-      {!open ? (
-        <div className="space-y-3 rounded-xl border border-neutral-200 bg-white p-6 text-center">
-          <p className="text-sm text-neutral-600">
-            La mesa está libre. Al abrir la comanda queda ocupada en el plano y los comensales pueden
-            sumarse escaneando el QR.
-          </p>
-          {can('sessions.open') ? (
-            <Button
-              className="mx-auto"
-              disabled={openSession.isPending}
-              onClick={() => openSession.mutate()}
-            >
-              <PlayCircle size={16} />
-              {openSession.isPending ? 'Abriendo…' : 'Abrir comanda'}
-            </Button>
-          ) : (
-            <p className="text-sm text-neutral-500">Tu rol no abre comandas. Pedíselo a un mozo o supervisor.</p>
-          )}
-        </div>
+      {/* La key reinicia la pantalla si en la mesa se abre otra sesión: no se
+          arrastran pedidos, confirmaciones ni errores de la anterior. */}
+      {session ? (
+        <OccupiedTable key={session.id} session={session} paymentMethods={branchMethods} />
       ) : (
-        <>
-          <dl className="flex flex-wrap gap-x-8 gap-y-3 rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm">
-            <SummaryItem as="dl-pair" icon={Clock3} label="Abierta" value={formatElapsed(open.opened_at, now, 'exact')} />
-            {can('payments.read') && <>
-              <SummaryItem as="dl-pair" label="En cuenta" value={formatPrice(bill?.total_amount)} />
-              <SummaryItem as="dl-pair" label="Pagado" value={formatPrice(bill?.paid_amount)} />
-              <SummaryItem as="dl-pair" label="Pendiente" value={formatPrice(bill?.pending_amount)} />
-            </>}
-            <SummaryItem
-              as="dl-pair"
-              icon={UserRound}
-              label="Responsable"
-              value={open.assigned_employee?.full_name ?? 'Sin asignar'}
-            />
-            <SummaryItem
-              as="dl-pair"
-              icon={Users}
-              label="Comensales"
-              value={String(open.session_participants.length)}
-            />
-          </dl>
-
-          {/* La mesa llamó: se atiende desde la misma comanda, sin volver al plano. */}
-          {sessionRequestsOf(open).length > 0 && (
-            <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3">
-              <SessionRequestBadges session={open} now={now} />
-              <AttendRequestButtons sessionId={open.id} session={open} />
-            </div>
-          )}
-
-          <section className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold text-neutral-800">
-                Pedidos de la mesa
-                {kitchenOrders > 0 && (
-                  <span className="ml-2 text-xs font-normal text-indigo-700">
-                    {kitchenOrders} en cocina
-                  </span>
-                )}
-              </h2>
-              <div className="flex flex-wrap items-center gap-2">
-                {/* Cobrada y abierta: el mozo que cobró no cierra, avisa a quien sí. */}
-                <ChargedBadge session={open} now={now} />
-                {can('sessions.close') && <Button variant="secondary" onClick={() => setClosing(true)}>
-                  Cerrar sesión
-                </Button>}
-              </div>
-            </div>
-
-            {orders.isLoading ? (
-              <Spinner />
-            ) : (orders.data?.length ?? 0) === 0 ? (
-              <EmptyState message="Todavía no hay pedidos en esta mesa. Los comensales pueden pedir desde el QR." />
-            ) : (
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {orders.data?.map((order) => (
-                  <OrderTicket
-                    key={order.id}
-                    order={order}
-                    now={now}
-                    busy={pendingOrderId === order.id}
-                    error={null}
-                    onTransition={(to) => {
-                      const confirmed =
-                        to !== 'cancelled' ||
-                        window.confirm(`¿Cancelar este pedido de ${table.label}? Se saca de la cuenta.`)
-                      if (confirmed) transition.mutate({ orderId: order.id, status: to })
-                    }}
-                  />
-                ))}
-              </div>
-            )}
-          </section>
-
-          {can('payments.read') && (
-            <PaymentPanel sessionId={open.id} bill={bill} enabledMethods={branchMethods} />
-          )}
-        </>
-      )}
-
-      {closing && open && (
-        <Modal title={`Cerrar ${table.label}`} onClose={() => setClosing(false)}>
-          <div className="space-y-3 text-sm text-neutral-700">
-            <p>
-              Los comensales no podrán enviar más pedidos en esta cuenta. Si vuelven a escanear el QR
-              se abre una sesión nueva.
-            </p>
-            {can('payments.read') && asAmount(bill?.pending_amount) > 0 && (
-              <p className="rounded-lg bg-amber-50 px-3 py-2 text-amber-950">
-                Queda {formatPrice(bill?.pending_amount)} pendiente.
-              </p>
-            )}
-            {kitchenOrders > 0 && (
-              <p className="rounded-lg bg-indigo-50 px-3 py-2 text-indigo-950">
-                Hay {kitchenOrders} comanda{kitchenOrders === 1 ? '' : 's'} todavía en cocina. Van a
-                seguir visibles en el tablero.
-              </p>
-            )}
-            <ErrorText error={errors.message} />
-            <div className="flex gap-2">
-              <Button variant="secondary" className="flex-1" onClick={() => setClosing(false)}>
-                Seguir abierta
-              </Button>
-              <Button
-                variant="danger"
-                className="flex-1"
-                disabled={close.isPending}
-                onClick={() => close.mutate()}
-              >
-                {close.isPending ? 'Cerrando…' : 'Cerrar sesión'}
-              </Button>
-            </div>
-          </div>
-        </Modal>
+        <FreeTable tableId={table.id} />
       )}
     </div>
+  )
+}
+
+/** Mesa sin sesión: lo único que se puede hacer es abrir la comanda. */
+function FreeTable({ tableId }: { tableId: string }) {
+  const can = useCan()
+  const errors = useSaveErrors()
+
+  // El «Abriendo…» sigue hasta que el cliente del POS relee las mesas abiertas
+  // y la pantalla pasa a la de mesa ocupada.
+  const openSession = useMutation(errors.saving('No pudimos abrir la comanda.', {
+    mutationFn: () => openPosTableSession(tableId),
+  }))
+
+  return (
+    <div className="space-y-3 rounded-xl border border-neutral-200 bg-white p-6 text-center">
+      <p className="text-sm text-neutral-600">
+        La mesa está libre. Al abrir la comanda queda ocupada en el plano y los comensales pueden
+        sumarse escaneando el QR.
+      </p>
+      <ErrorText error={errors.message} />
+      {can('sessions.open') ? (
+        <Button
+          className="mx-auto"
+          disabled={openSession.isPending}
+          onClick={() => openSession.mutate()}
+        >
+          <PlayCircle size={16} />
+          {openSession.isPending ? 'Abriendo…' : 'Abrir comanda'}
+        </Button>
+      ) : (
+        <p className="text-sm text-neutral-500">Tu rol no abre comandas. Pedíselo a un mozo o supervisor.</p>
+      )}
+    </div>
+  )
+}
+
+/** Mesa con sesión abierta: resumen de la cuenta, llamados, pedidos, cobro y cierre. */
+function OccupiedTable({ session, paymentMethods }: { session: PosOpenSession; paymentMethods: PaymentMethod[] }) {
+  const restaurant = useRestaurant()
+  const can = useCan()
+
+  const orders = useQuery(sessionOrdersQuery(restaurant.id, restaurant.branchId, session.id))
+
+  const kitchen = session.kitchen_tickets
+
+  return (
+    <>
+      <dl className="flex flex-wrap gap-x-8 gap-y-3 rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm">
+        <SummaryItem as="dl-pair" icon={Clock3} label="Abierta" value={<Elapsed since={session.opened_at} precision="exact" />} />
+        {/* Los importes vienen juntos o no vienen: sin payments.read la vista los trae en null. */}
+        {session.total_amount !== null && <>
+          <SummaryItem as="dl-pair" label="En cuenta" value={formatPrice(session.total_amount)} />
+          <SummaryItem as="dl-pair" label="Pagado" value={formatPrice(session.paid_amount)} />
+          <SummaryItem as="dl-pair" label="Pendiente" value={formatPrice(session.pending_amount)} />
+        </>}
+        <SummaryItem
+          as="dl-pair"
+          icon={UserRound}
+          label="Responsable"
+          value={session.assigned_employee_name ?? 'Sin asignar'}
+        />
+        <SummaryItem
+          as="dl-pair"
+          icon={Users}
+          label="Comensales"
+          value={String(session.participant_names.length)}
+        />
+      </dl>
+
+      {/* La mesa llamó: se atiende desde la misma comanda, sin volver al plano. */}
+      {sessionRequestsOf(session).length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3">
+          <SessionRequestBadges session={session} />
+          <AttendRequestButtons session={session} />
+        </div>
+      )}
+
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-neutral-800">
+            Pedidos de la mesa
+            {kitchen > 0 && (
+              <span className="ml-2 text-xs font-normal text-indigo-700">
+                {kitchen} en cocina
+              </span>
+            )}
+          </h2>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Cobrada y abierta: el mozo que cobró no cierra, avisa a quien sí. */}
+            <ChargedBadge session={session} />
+            <CloseSessionButton session={session} />
+          </div>
+        </div>
+
+        {orders.isLoading ? (
+          <Spinner />
+        ) : (orders.data?.length ?? 0) === 0 ? (
+          <EmptyState message="Todavía no hay pedidos en esta mesa. Los comensales pueden pedir desde el QR." />
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {orders.data?.map((order) => (
+              <OrderTicket key={order.id} order={order} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {can('payments.read') && (
+        <PaymentPanel sessionId={session.id} pendingAmount={session.pending_amount} enabledMethods={paymentMethods} />
+      )}
+    </>
   )
 }
 
@@ -278,7 +214,7 @@ function BackLink({ to }: { to: string }) {
   return (
     <Link
       to={to}
-      className="inline-flex items-center gap-1.5 text-sm font-medium text-neutral-600 hover:text-indigo-700"
+      className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-neutral-600 hover:text-indigo-700"
     >
       <ArrowLeft size={16} />
       Volver al plano

@@ -11,7 +11,7 @@ import { posActions } from '../../packages/shared/src/pos.ts'
 import { posPermissions } from '../../packages/shared/src/employees.ts'
 // La misma consulta que usa el tablero del POS: si PostgREST no puede resolver
 // algún embed, falla acá y no recién en la app.
-import { posOrderSelect } from '../../apps/pos/src/features/pos/types.ts'
+import { posOrderSelect } from '../../apps/pos/src/features/pos/order-select.ts'
 
 const require = createRequire(new URL('../../apps/customer/package.json', import.meta.url))
 const { createClient } = require('@supabase/supabase-js')
@@ -361,8 +361,9 @@ try {
     assert.equal(ticket.origin, 'qr')
     assert.equal(ticket.table_sessions.kind, 'table')
     assert.equal(ticket.table_sessions.tables.label, title)
+    // El ticket no repite el nombre de la sucursal (es la del encabezado del POS):
+    // alcanza con que la cuenta sea de ella. El nombre sale de pos_open_sessions.
     assert.equal(ticket.table_sessions.branch_id, branch.id)
-    assert.equal(ticket.table_sessions.branch.name, branch.name)
     assert.equal(ticket.table_sessions.status, 'open')
     assert.ok(ticket.table_sessions.session_participants.length >= 2)
     assert.equal(ticket.order_items[0].product_name, product.name)
@@ -402,7 +403,7 @@ try {
     assert.equal(ticket.table_sessions.kind, 'takeout')
     assert.equal(ticket.table_sessions.table_id, null)
     assert.equal(ticket.table_sessions.tables, null)
-    assert.equal(ticket.table_sessions.branch.name, branch.name)
+    assert.equal(ticket.table_sessions.branch_id, branch.id)
     const card = unwrap(await operator.from('pos_open_sessions').select('*').eq('id', takeout.id).single(), 'Takeout card')
     assert.equal(card.kind, 'takeout')
     assert.equal(card.table_label, null)

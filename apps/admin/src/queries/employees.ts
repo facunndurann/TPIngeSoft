@@ -5,8 +5,9 @@ import {
   invokeFunction,
   type Database,
   type EmployeeRequest,
+  unwrap,
 } from '@restaurant-platform/shared'
-import { supabase, unwrap } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase'
 
 export type Employee = Database['public']['Functions']['list_employee_accounts']['Returns'][number]
 

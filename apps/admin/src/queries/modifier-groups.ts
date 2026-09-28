@@ -1,7 +1,8 @@
 import { queryOptions } from '@tanstack/react-query'
 import type { QueryData } from '@supabase/supabase-js'
 import { groupPayload, type ModifierGroupDraft } from '@/features/modifier-group-draft'
-import { supabase, unwrap } from '@/lib/supabase'
+import { unwrap } from '@restaurant-platform/shared'
+import { supabase } from '@/lib/supabase'
 
 const modifierGroupsOf = (restaurantId: string) =>
   supabase

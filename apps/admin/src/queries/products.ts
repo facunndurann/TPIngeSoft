@@ -1,7 +1,8 @@
 import { queryOptions } from '@tanstack/react-query'
 import { draftPrice, type ProductDraft } from '@/features/product-draft'
 import type { MediaDraft } from '@/features/product-media'
-import { supabase, unwrap } from '@/lib/supabase'
+import { unwrap } from '@restaurant-platform/shared'
+import { supabase } from '@/lib/supabase'
 
 const MEDIA_BUCKET = 'product-images'
 

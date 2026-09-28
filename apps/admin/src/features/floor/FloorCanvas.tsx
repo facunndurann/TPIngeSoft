@@ -185,6 +185,7 @@ export function FloorCanvas({
         ariaLabel="Plano del sector"
         emptyMessage="Este sector todavía no tiene mesas."
         preview={previewOf}
+        editable={editable}
         renderTable={(table, tile) => {
           const active = gesture?.tableId === table.id
           const invalid = active && !gesture.valid
