@@ -1,16 +1,20 @@
 import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowDown, ArrowUp, Check, Pencil, Plus, Trash2 } from 'lucide-react'
-import type { Tables } from '@restaurant-platform/shared'
 import { Page } from '@/features/Page'
 import { optimistic, patchRow } from '@/lib/optimistic'
-import { unwrap } from '@restaurant-platform/shared'
-import { supabase } from '@/lib/supabase'
-import { categoriesQuery } from '@/queries/categories'
+import {
+  categoriesQuery,
+  createCategory,
+  deleteCategory,
+  reorderCategories,
+  updateCategory,
+  type Category,
+  type CategoryPatch,
+} from '@/queries/categories'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { Badge, Button, ErrorText, IconButton, Input, QueryView, Toggle, useSaveErrors } from '@restaurant-platform/ui'
 
-type Category = Tables<'menu_categories'>
 
 export function CategoriesPage() {
   const restaurant = useRestaurant()
@@ -25,14 +29,8 @@ export function CategoriesPage() {
   const invalidate = () => queryClient.invalidateQueries({ queryKey: categoriesQuery(restaurant.id).queryKey })
 
   const createMutation = useMutation(errors.saving('No pudimos crear la categoría.', {
-    mutationFn: async (name: string) =>
-      unwrap(
-        await supabase.from('menu_categories').insert({
-          restaurant_id: restaurant.id,
-          name,
-          sort_order: categories.data?.length ?? 0,
-        }),
-      ),
+    mutationFn: (name: string) =>
+      createCategory({ restaurant_id: restaurant.id, name, sort_order: categories.data?.length ?? 0 }),
     onSuccess: () => {
       setNewName('')
       invalidate()
@@ -40,29 +38,19 @@ export function CategoriesPage() {
   }))
 
   const updateMutation = useMutation(errors.saving('No pudimos guardar la categoría.', {
-    mutationFn: async ({ id, ...rest }: Partial<Category> & { id: string }) =>
-      unwrap(await supabase.from('menu_categories').update(rest).eq('id', id)),
+    mutationFn: ({ id, ...patch }: CategoryPatch & { id: string }) => updateCategory(id, patch),
     // Activar o renombrar se ve al instante; si falla, vuelve lo anterior.
     ...optimistic(queryClient, categoriesQuery(restaurant.id).queryKey, patchRow<Category>),
     onSuccess: () => setEditingId(null),
   }, ({ id }) => id))
 
   const deleteMutation = useMutation(errors.saving('No pudimos eliminar la categoría.', {
-    mutationFn: async (id: string) =>
-      unwrap(await supabase.from('menu_categories').delete().eq('id', id)),
+    mutationFn: deleteCategory,
     onSuccess: invalidate,
   }, (id) => id))
 
-  // Se envía la lista completa en el orden nuevo: la base la aplica de una vez y
-  // rechaza la operación si la lista quedó desactualizada.
   const reorderMutation = useMutation(errors.saving('No pudimos reordenar las categorías.', {
-    mutationFn: async (categoryIds: string[]) =>
-      unwrap(
-        await supabase.rpc('reorder_categories', {
-          p_restaurant_id: restaurant.id,
-          p_category_ids: categoryIds,
-        }),
-      ),
+    mutationFn: (categoryIds: string[]) => reorderCategories(restaurant.id, categoryIds),
     onSettled: invalidate,
   }))
 

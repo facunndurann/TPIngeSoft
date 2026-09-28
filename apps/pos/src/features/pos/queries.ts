@@ -12,6 +12,7 @@ import {
   type SessionRequestKind,
   type Tables,
 } from '@restaurant-platform/shared'
+import type { PosScope } from '@/context/pos-context'
 import { posRootKey } from '@/lib/query-client'
 import { posOrderSelect } from './order-select'
 import { supabase } from '@/lib/supabase'
@@ -23,8 +24,8 @@ import { supabase } from '@/lib/supabase'
 export const POS_REFETCH_INTERVAL = 15_000
 
 /** Raíz de las queries del POS en una sucursal. */
-const posQueryKey = (restaurantId: string, branchId: string) =>
-  [...posRootKey, restaurantId, branchId] as const
+const posQueryKey = (scope: PosScope) =>
+  [...posRootKey, scope.restaurantId, scope.branchId] as const
 
 /**
  * Restaurantes y sucursales en los que la cuenta puede operar. Queda fuera de
@@ -51,30 +52,30 @@ export function participantName(order: PosOrder, participantId: string | null) {
     ?.display_name ?? 'Comensal'
 }
 
-const branchOrdersOf = (restaurantId: string, branchId: string) =>
+const branchOrdersOf = (scope: PosScope) =>
   ordersOf()
-    .eq('restaurant_id', restaurantId)
-    .eq('table_sessions.branch_id', branchId)
+    .eq('restaurant_id', scope.restaurantId)
+    .eq('table_sessions.branch_id', scope.branchId)
 
 /** Comandas activas y las entregadas hoy (día del restaurante, columna local_date). */
-export const posBoardQuery = (restaurantId: string, branchId: string) =>
+export const posBoardQuery = (scope: PosScope) =>
   queryOptions({
-    queryKey: [...posQueryKey(restaurantId, branchId), 'board'],
+    queryKey: [...posQueryKey(scope), 'board'],
     queryFn: async () =>
       unwrap(
-        await branchOrdersOf(restaurantId, branchId)
+        await branchOrdersOf(scope)
           .or(`status.in.(${kitchenTicketStatuses.join(',')}),and(status.eq.delivered,local_date.eq.${localDateKey()})`)
           .order('created_at', { ascending: false }),
       ),
     refetchInterval: POS_REFETCH_INTERVAL,
   })
 
-export const posHistoryQuery = (restaurantId: string, branchId: string, dateKey: string) =>
+export const posHistoryQuery = (scope: PosScope, dateKey: string) =>
   queryOptions({
-    queryKey: [...posQueryKey(restaurantId, branchId), 'history', dateKey],
+    queryKey: [...posQueryKey(scope), 'history', dateKey],
     queryFn: async () =>
       unwrap(
-        await branchOrdersOf(restaurantId, branchId)
+        await branchOrdersOf(scope)
           .eq('local_date', dateKey)
           .order('created_at', { ascending: false }),
       ),
@@ -82,9 +83,9 @@ export const posHistoryQuery = (restaurantId: string, branchId: string, dateKey:
   })
 
 /** Pedidos de una sesión, para la comanda de la mesa. */
-export const sessionOrdersQuery = (restaurantId: string, branchId: string, sessionId: string) =>
+export const sessionOrdersQuery = (scope: PosScope, sessionId: string) =>
   queryOptions({
-    queryKey: [...posQueryKey(restaurantId, branchId), 'session-orders', sessionId],
+    queryKey: [...posQueryKey(scope), 'session-orders', sessionId],
     queryFn: async () =>
       unwrap(await ordersOf().eq('session_id', sessionId).order('created_at', { ascending: false })),
     refetchInterval: POS_REFETCH_INTERVAL,
@@ -124,12 +125,12 @@ export type PosOpenSession = {
   [Column in Exclude<keyof OpenSessionRow, NullableOpenSessionColumn>]-?: NonNullable<OpenSessionRow[Column]>
 } & { [Column in NullableOpenSessionColumn]: NonNullable<OpenSessionRow[Column]> | null }
 
-const openSessionsOf = (restaurantId: string, branchId: string) =>
+const openSessionsOf = (scope: PosScope) =>
   supabase
     .from('pos_open_sessions')
     .select('*')
-    .eq('restaurant_id', restaurantId)
-    .eq('branch_id', branchId)
+    .eq('restaurant_id', scope.restaurantId)
+    .eq('branch_id', scope.branchId)
     // Las mesas abiertas: una cuenta para llevar no ocupa mesa ni va a /salon.
     .eq('kind', 'table')
     .order('opened_at', { ascending: true })
@@ -139,21 +140,21 @@ const openSessionsOf = (restaurantId: string, branchId: string) =>
  * Mesas abiertas de la sucursal: la única lectura de sesiones del POS. Todas
  * las pantallas comparten esta key, así que un cambio refresca a todas juntas.
  */
-export const posOpenSessionsQuery = (restaurantId: string, branchId: string) =>
+export const posOpenSessionsQuery = (scope: PosScope) =>
   queryOptions({
-    queryKey: [...posQueryKey(restaurantId, branchId), 'open-sessions'],
-    queryFn: async () => unwrap(await openSessionsOf(restaurantId, branchId)),
+    queryKey: [...posQueryKey(scope), 'open-sessions'],
+    queryFn: async () => unwrap(await openSessionsOf(scope)),
     refetchInterval: POS_REFETCH_INTERVAL,
   })
 
-const tablesOf = (restaurantId: string, branchId: string) =>
+const tablesOf = (scope: PosScope) =>
   supabase
     .from('tables')
     .select(
       'id, label, is_active, is_visible, section_id, position_x, position_y, seats, shape, width, height, floor_sections (id, name, sort_order, is_active)',
     )
-    .eq('restaurant_id', restaurantId)
-    .eq('branch_id', branchId)
+    .eq('restaurant_id', scope.restaurantId)
+    .eq('branch_id', scope.branchId)
     .eq('is_active', true)
     .eq('is_visible', true)
     .order('label')
@@ -172,21 +173,21 @@ export function freeTables(tables: PosDiningTable[], sessions: PosOpenSession[])
  * sucursal no se revisa: `get_pos_contexts` solo devuelve contextos de
  * sucursales activas.
  */
-export const posTablesQuery = (restaurantId: string, branchId: string) =>
+export const posTablesQuery = (scope: PosScope) =>
   queryOptions({
-    queryKey: [...posQueryKey(restaurantId, branchId), 'tables'],
+    queryKey: [...posQueryKey(scope), 'tables'],
     queryFn: async () =>
-      unwrap(await tablesOf(restaurantId, branchId)).filter((table) =>
+      unwrap(await tablesOf(scope)).filter((table) =>
         isOperable(table, table.floor_sections),
       ),
   })
 
-const floorSectionsOf = (restaurantId: string, branchId: string) =>
+const floorSectionsOf = (scope: PosScope) =>
   supabase
     .from('floor_sections')
     .select('id, name, sort_order, is_active')
-    .eq('restaurant_id', restaurantId)
-    .eq('branch_id', branchId)
+    .eq('restaurant_id', scope.restaurantId)
+    .eq('branch_id', scope.branchId)
     .eq('is_active', true)
     .order('sort_order')
     .order('name')
@@ -194,36 +195,36 @@ const floorSectionsOf = (restaurantId: string, branchId: string) =>
 export type PosFloorSection = QueryData<ReturnType<typeof floorSectionsOf>>[number]
 
 /** Sectores activos que el POS puede recorrer, incluso si todavía están vacíos. */
-export const posFloorSectionsQuery = (restaurantId: string, branchId: string) =>
+export const posFloorSectionsQuery = (scope: PosScope) =>
   queryOptions({
-    queryKey: [...posQueryKey(restaurantId, branchId), 'floor-sections'],
-    queryFn: async () => unwrap(await floorSectionsOf(restaurantId, branchId)),
+    queryKey: [...posQueryKey(scope), 'floor-sections'],
+    queryFn: async () => unwrap(await floorSectionsOf(scope)),
   })
 
 /**
  * Medios de pago que el admin habilitó en la sucursal (MI-48). Son de la
  * sucursal y no de cada mesa: se leen una vez y los comparte toda comanda.
  */
-export const posPaymentMethodsQuery = (restaurantId: string, branchId: string) =>
+export const posPaymentMethodsQuery = (scope: PosScope) =>
   queryOptions({
-    queryKey: [...posQueryKey(restaurantId, branchId), 'payment-methods'],
+    queryKey: [...posQueryKey(scope), 'payment-methods'],
     queryFn: async () =>
       enabledPaymentMethods(
         unwrap(
           await supabase
             .from('branches')
             .select('payment_methods')
-            .eq('restaurant_id', restaurantId)
-            .eq('id', branchId)
+            .eq('restaurant_id', scope.restaurantId)
+            .eq('id', scope.branchId)
             .maybeSingle(),
         ),
       ),
   })
 
 /** Pagos de una sesión, del más reciente al más viejo. */
-export const sessionPaymentsQuery = (restaurantId: string, branchId: string, sessionId: string) =>
+export const sessionPaymentsQuery = (scope: PosScope, sessionId: string) =>
   queryOptions({
-    queryKey: [...posQueryKey(restaurantId, branchId), 'payments', sessionId],
+    queryKey: [...posQueryKey(scope), 'payments', sessionId],
     queryFn: async () =>
       unwrap(
         await supabase

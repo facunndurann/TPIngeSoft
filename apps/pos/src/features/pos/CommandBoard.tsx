@@ -2,7 +2,7 @@ import { useId, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronsLeft, ChevronsRight } from 'lucide-react'
 import { groupOrdersByColumn, posBoardColumns, type PosBoardColumnId } from '@restaurant-platform/shared'
-import { useRestaurant } from '@/context/pos-context'
+import { usePosScope } from '@/context/pos-context'
 import { IconButton, QueryView } from '@restaurant-platform/ui'
 import { posBoardQuery } from './queries'
 import { OrderTicket } from './OrderTicket'
@@ -37,11 +37,11 @@ function storeCollapsed(collapsed: boolean) {
 }
 
 export function CommandBoard() {
-  const restaurant = useRestaurant()
+  const scope = usePosScope()
   const [deliveredCollapsed, setDeliveredCollapsed] = useState(readCollapsed)
   const listIdPrefix = useId()
 
-  const board = useQuery(posBoardQuery(restaurant.id, restaurant.branchId))
+  const board = useQuery(posBoardQuery(scope))
 
   function toggleDelivered() {
     const next = !deliveredCollapsed

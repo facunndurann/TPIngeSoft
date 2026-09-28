@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, ErrorText, Modal, QueryView, Select } from '@restaurant-platform/ui'
-import { useRestaurant } from '@/context/pos-context'
+import { usePosScope } from '@/context/pos-context'
 import { refreshPos } from '@/lib/query-client'
 import { freeTables, movePosTableSession, posOpenSessionsQuery, posTablesQuery, type PosDiningTable } from './queries'
 
@@ -14,11 +14,11 @@ export function MoveTableSession({
   sessionId: string
   onClose: () => void
 }) {
-  const restaurant = useRestaurant()
+  const scope = usePosScope()
   const queryClient = useQueryClient()
   const [destinationId, setDestinationId] = useState('')
-  const tables = useQuery(posTablesQuery(restaurant.id, restaurant.branchId))
-  const sessions = useQuery(posOpenSessionsQuery(restaurant.id, restaurant.branchId))
+  const tables = useQuery(posTablesQuery(scope))
+  const sessions = useQuery(posOpenSessionsQuery(scope))
   const move = useMutation({
     mutationFn: () => movePosTableSession(sessionId, source.id, destinationId),
     // El cliente del POS ya releyó todo: se cierra con el plano actualizado.

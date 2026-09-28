@@ -1,7 +1,7 @@
 import { queryOptions } from '@tanstack/react-query'
 import type { ProductPayload } from '@/features/product-draft'
 import type { MediaDraft } from '@/features/product-media'
-import { unwrap } from '@restaurant-platform/shared'
+import { type Tables, unwrap } from '@restaurant-platform/shared'
 import { supabase } from '@/lib/supabase'
 
 const MEDIA_BUCKET = 'product-images'
@@ -115,4 +115,14 @@ export async function uploadMediaDrafts(
     throw failure.reason
   }
   return { urls: uploads.map((upload) => upload.url), discardUploads }
+}
+
+export type ProductPatch = Partial<Pick<Tables<'products'>, 'is_available'>>
+
+export async function updateProduct(productId: string, patch: ProductPatch) {
+  unwrap(await supabase.from('products').update(patch).eq('id', productId))
+}
+
+export async function deleteProduct(productId: string) {
+  unwrap(await supabase.from('products').delete().eq('id', productId))
 }

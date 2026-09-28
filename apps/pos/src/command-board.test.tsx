@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { AccessContext, type PosContext } from './context/pos-context'
+import { AccessContext, scopeOf, type PosContext } from './context/pos-context'
 import { CommandBoard } from './features/pos/CommandBoard'
 import { posBoardQuery, type PosOrder } from './features/pos/queries'
 
@@ -36,7 +36,7 @@ afterEach(() => {
 /** El tablero con un pedido nuevo y uno entregado ya en caché: sin red. */
 async function renderBoard() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
-  client.setQueryData(posBoardQuery('restaurant-a', 'branch-a').queryKey, [
+  client.setQueryData(posBoardQuery(scopeOf(kitchen)).queryKey, [
     orderAt('o1', 'Mesa 1', 'accepted'),
     orderAt('o9', 'Mesa 9', 'delivered'),
   ])

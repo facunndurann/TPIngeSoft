@@ -6,6 +6,7 @@ import { Plus, Trash2 } from 'lucide-react'
 import { DIETARY_TAGS, PRODUCT_MEDIA_LIMIT, type Tables } from '@restaurant-platform/shared'
 import {
   Button,
+  buttonClass,
   ChoiceChip,
   ErrorText,
   IconButton,
@@ -331,8 +332,8 @@ function ProductForm({ productId, initial, categories, groups }: ProductFormProp
       <ErrorText error={errors.message} />
 
       <div className="flex justify-end gap-2 pb-8">
-        <Link to="/productos">
-          <Button variant="secondary">Cancelar</Button>
+        <Link to="/productos" className={buttonClass('secondary')}>
+          Cancelar
         </Link>
         <Button onClick={submit} disabled={save.isPending}>
           {save.isPending ? 'Guardando…' : productId ? 'Guardar cambios' : 'Crear producto'}

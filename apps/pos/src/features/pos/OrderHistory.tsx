@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Constants, countLabel, formatClock, formatPrice, localDateKey, type OrderStatus, orderStatusLabels, sessionPlaceLabel } from '@restaurant-platform/shared'
-import { useRestaurant } from '@/context/pos-context'
+import { usePosScope } from '@/context/pos-context'
 import { EmptyState, Input, Modal, QueryView, Select } from '@restaurant-platform/ui'
 import { OrderItemLine } from './OrderItemLine'
 import { posHistoryQuery, type PosOrder } from './queries'
@@ -43,13 +43,13 @@ function totalsOf(orders: PosOrder[]) {
 }
 
 export function OrderHistory() {
-  const restaurant = useRestaurant()
+  const scope = usePosScope()
   const [dateKey, setDateKey] = useState(() => localDateKey())
   const [status, setStatus] = useState<StatusFilter>('all')
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<PosOrder | null>(null)
 
-  const history = useQuery(posHistoryQuery(restaurant.id, restaurant.branchId, dateKey))
+  const history = useQuery(posHistoryQuery(scope, dateKey))
 
   return (
     <div className="space-y-4">

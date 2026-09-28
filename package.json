@@ -11,6 +11,9 @@
     "typecheck": "pnpm -r typecheck && pnpm typecheck:orders",
     "typecheck:orders": "pnpm --filter customer exec tsc --project ../../supabase/functions/tsconfig.json",
     "lint": "pnpm -r lint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "ci:local": "bash scripts/ci-local.sh",
     "test": "vitest run",
     "test:sql": "bash supabase/tests/run-sql.sh",
     "test:employees:integration": "node supabase/tests/employees.integration.mjs",
@@ -21,6 +24,7 @@
   },
   "devDependencies": {
     "happy-dom": "^20.14.5",
+    "prettier": "^3.9.9",
     "supabase": "^2.45.5",
     "vitest": "^5.0.1"
   },

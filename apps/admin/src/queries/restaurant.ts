@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query'
-import { unwrap } from '@restaurant-platform/shared'
+import { type MenuDesignId, type Tables, unwrap } from '@restaurant-platform/shared'
 import { supabase } from '@/lib/supabase'
 import type { Membership } from '@/restaurant/restaurant-context'
 
@@ -36,3 +36,41 @@ export const myRestaurantQuery = (userId: string) =>
       return { restaurant: membership.restaurants, role: membership.role }
     },
   })
+
+/** "La Ñata Café" → "la-nata-cafe". */
+function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '')
+}
+
+/**
+ * Crea el restaurante con su primera sucursal y la membresía de dueño de quien
+ * lo crea, en una sola transacción (`create_restaurant`). El identificador
+ * público sale del nombre.
+ */
+export async function createRestaurant(input: {
+  name: string
+  description: string
+  menuDesign: MenuDesignId
+  branchName: string
+}) {
+  unwrap(
+    await supabase.rpc('create_restaurant', {
+      p_name: input.name,
+      p_slug: slugify(input.name),
+      p_description: input.description,
+      p_menu_design: input.menuDesign,
+      p_branch_name: input.branchName,
+    }),
+  )
+}
+
+export type RestaurantPatch = Partial<Pick<Tables<'restaurants'>, 'name' | 'description' | 'menu_design'>>
+
+export async function updateRestaurant(restaurantId: string, patch: RestaurantPatch) {
+  unwrap(await supabase.from('restaurants').update(patch).eq('id', restaurantId))
+}

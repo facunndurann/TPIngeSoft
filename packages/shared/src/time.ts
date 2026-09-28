@@ -4,7 +4,7 @@
  * pedido de las 23:30 en Buenos Aires pertenece a ese día aunque el tablero se
  * abra desde otro huso.
  */
-export const RESTAURANT_TIME_ZONE = 'America/Argentina/Buenos_Aires';
+export const RESTAURANT_TIME_ZONE = 'America/Argentina/Buenos_Aires'
 
 /** El día local como 'YYYY-MM-DD', que es la clave con la que se agrupa el historial. */
 export function localDateKey(now: Date = new Date(), timeZone = RESTAURANT_TIME_ZONE): string {
@@ -13,7 +13,7 @@ export function localDateKey(now: Date = new Date(), timeZone = RESTAURANT_TIME_
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-  }).format(now);
+  }).format(now)
 }
 
 const clock = new Intl.DateTimeFormat('es-AR', {
@@ -21,16 +21,16 @@ const clock = new Intl.DateTimeFormat('es-AR', {
   hour: '2-digit',
   minute: '2-digit',
   hourCycle: 'h23',
-});
+})
 const dayAndMonth = new Intl.DateTimeFormat('es-AR', {
   timeZone: RESTAURANT_TIME_ZONE,
   day: 'numeric',
   month: 'numeric',
-});
+})
 
 /** Solo la hora en la zona del restaurante, «22:52»: para listas que ya son de un solo día. */
 export function formatClock(at: string): string {
-  return clock.format(new Date(at));
+  return clock.format(new Date(at))
 }
 
 /**
@@ -40,13 +40,13 @@ export function formatClock(at: string): string {
  * cortaba y dejaba «m.» sola en la línea siguiente.
  */
 export function formatTableTime(at: string, now: number): string {
-  const date = new Date(at);
-  const time = formatClock(at);
-  return localDateKey(date) === localDateKey(new Date(now)) ? time : `${dayAndMonth.format(date)} ${time}`;
+  const date = new Date(at)
+  const time = formatClock(at)
+  return localDateKey(date) === localDateKey(new Date(now)) ? time : `${dayAndMonth.format(date)} ${time}`
 }
 
 /** La hora conserva los minutos solo donde importa cuánto se lleva esperando. */
-export type ElapsedPrecision = 'coarse' | 'exact';
+export type ElapsedPrecision = 'coarse' | 'exact'
 
 /**
  * Cuánto hace que pasó algo, en minúscula y sin sujeto, para que entre en
@@ -59,18 +59,14 @@ export type ElapsedPrecision = 'coarse' | 'exact';
  * Con `exact` la hora conserva los minutos («hace 1 h 5 min»), que es lo que
  * el salón necesita para saber cuánto hace que una mesa espera.
  */
-export function formatElapsed(
-  from: string | number,
-  now: number,
-  precision: ElapsedPrecision = 'coarse',
-): string {
-  const since = typeof from === 'number' ? from : Date.parse(from);
+export function formatElapsed(from: string | number, now: number, precision: ElapsedPrecision = 'coarse'): string {
+  const since = typeof from === 'number' ? from : Date.parse(from)
   // Un reloj que se atrasa no puede producir un «hace -3 min».
-  const minutes = Math.floor(Math.max(0, now - since) / 60_000);
-  if (minutes < 1) return 'hace instantes';
-  if (minutes < 60) return `hace ${minutes} min`;
+  const minutes = Math.floor(Math.max(0, now - since) / 60_000)
+  if (minutes < 1) return 'hace instantes'
+  if (minutes < 60) return `hace ${minutes} min`
 
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  return precision === 'exact' && rest > 0 ? `hace ${hours} h ${rest} min` : `hace ${hours} h`;
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  return precision === 'exact' && rest > 0 ? `hace ${hours} h ${rest} min` : `hace ${hours} h`
 }

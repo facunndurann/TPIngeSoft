@@ -2,16 +2,15 @@ import { useState } from 'react'
 import { Link } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
-import { formatPrice, productMedia, type Tables, unwrap } from '@restaurant-platform/shared'
+import { formatPrice, productMedia, type Tables } from '@restaurant-platform/shared'
 import { Page } from '@/features/Page'
 import { MediaThumb } from '@/features/MediaThumb'
 import { optimistic } from '@/lib/optimistic'
-import { supabase } from '@/lib/supabase'
-import { productsByCategoryQuery } from '@/queries/products'
+import { deleteProduct, productsByCategoryQuery, updateProduct } from '@/queries/products'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import {
   Badge,
-  Button,
+  buttonClass,
   ChoiceChip,
   EmptyState,
   ErrorText,
@@ -35,8 +34,7 @@ export function ProductsPage() {
 
   // Se ve al tocar: el producto cambia en la carta cargada y se relee al terminar.
   const availabilityMutation = useMutation(errors.saving('No pudimos cambiar la disponibilidad.', {
-    mutationFn: async ({ id, is_available }: { id: string; is_available: boolean }) =>
-      unwrap(await supabase.from('products').update({ is_available }).eq('id', id)),
+    mutationFn: ({ id, is_available }: { id: string; is_available: boolean }) => updateProduct(id, { is_available }),
     ...optimistic(
       queryClient,
       productsByCategoryQuery(restaurant.id).queryKey,
@@ -51,7 +49,7 @@ export function ProductsPage() {
   }, ({ id }) => id))
 
   const deleteMutation = useMutation(errors.saving('No pudimos eliminar el producto.', {
-    mutationFn: async (id: string) => unwrap(await supabase.from('products').delete().eq('id', id)),
+    mutationFn: deleteProduct,
     onSuccess: invalidate,
   }, (id) => id))
 
@@ -60,10 +58,8 @@ export function ProductsPage() {
       title="Productos"
       description="El menú que ven tus clientes: precios, fotos, ingredientes y personalización."
       actions={
-        <Link to="/productos/nuevo">
-          <Button>
-            <Plus size={16} /> Nuevo producto
-          </Button>
+        <Link to="/productos/nuevo" className={buttonClass()}>
+          <Plus size={16} /> Nuevo producto
         </Link>
       }
     >

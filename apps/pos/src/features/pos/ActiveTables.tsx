@@ -1,18 +1,18 @@
 import { Link } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { countLabel, formatPrice, sessionRequestsOf } from '@restaurant-platform/shared'
-import { useRestaurant } from '@/context/pos-context'
+import { usePosScope } from '@/context/pos-context'
 import { Badge, buttonClass, Elapsed, EmptyState, QueryView, useControlSize } from '@restaurant-platform/ui'
 import { freeTables, posOpenSessionsQuery, posTablesQuery } from './queries'
 import { CloseSessionButton } from './CloseSessionButton'
 import { AttendRequestButtons, ChargedBadge, SessionRequestBadges } from './ServiceRequests'
 
 export function ActiveTables() {
-  const restaurant = useRestaurant()
+  const scope = usePosScope()
   const controlSize = useControlSize()
 
-  const sessions = useQuery(posOpenSessionsQuery(restaurant.id, restaurant.branchId))
-  const tables = useQuery(posTablesQuery(restaurant.id, restaurant.branchId))
+  const sessions = useQuery(posOpenSessionsQuery(scope))
+  const tables = useQuery(posTablesQuery(scope))
 
   return (
     <div className="space-y-6">

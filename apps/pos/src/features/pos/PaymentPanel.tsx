@@ -12,7 +12,7 @@ import {
   toCents,
 } from '@restaurant-platform/shared'
 import { Button, ErrorText, Field, Input, QueryView, Select, useNow, useSaveErrors } from '@restaurant-platform/ui'
-import { useCan, useRestaurant } from '@/context/pos-context'
+import { useCan, usePosScope } from '@/context/pos-context'
 import { recordPosPayment, sessionPaymentsQuery, type PosOpenSession } from './queries'
 
 type PaymentPanelProps = {
@@ -36,7 +36,7 @@ function amountProblem(value: string, pending: number): string | null {
 }
 
 export function PaymentPanel({ sessionId, pendingAmount, enabledMethods }: PaymentPanelProps) {
-  const restaurant = useRestaurant()
+  const scope = usePosScope()
   const can = useCan()
   const now = useNow()
   const errors = useSaveErrors()
@@ -57,7 +57,7 @@ export function PaymentPanel({ sessionId, pendingAmount, enabledMethods }: Payme
   const method: PaymentMethod | undefined =
     methodChoice && recordable.includes(methodChoice) ? methodChoice : recordable[0]
 
-  const payments = useQuery(sessionPaymentsQuery(restaurant.id, restaurant.branchId, sessionId))
+  const payments = useQuery(sessionPaymentsQuery(scope, sessionId))
 
   const record = useMutation(errors.saving('No pudimos registrar el pago.', {
     mutationFn: (payment: { amount: number; method: PaymentMethod }) =>

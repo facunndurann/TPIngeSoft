@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { countLabel, posColumnFor, sessionRequestsOf } from '@restaurant-platform/shared'
 import type { BadgeColor } from '@restaurant-platform/ui'
-import { useCan, useRestaurant } from '@/context/pos-context'
+import { useCan, usePosScope } from '@/context/pos-context'
 import { playChime } from './chime'
 import { posBoardQuery, posOpenSessionsQuery, type PosOpenSession, type PosOrder } from './queries'
 
@@ -43,12 +43,12 @@ const callingTableCount = (sessions: PosOpenSession[]) =>
  * número de la pestaña no puede diferir del de la pantalla.
  */
 export function usePosAlerts(): Record<PosAlert, number> {
-  const restaurant = useRestaurant()
+  const scope = usePosScope()
   const can = useCan()
 
-  const fresh = useQuery({ ...posBoardQuery(restaurant.id, restaurant.branchId), select: newOrderIds }).data
+  const fresh = useQuery({ ...posBoardQuery(scope), select: newOrderIds }).data
   const calling = useQuery({
-    ...posOpenSessionsQuery(restaurant.id, restaurant.branchId),
+    ...posOpenSessionsQuery(scope),
     select: callingTableCount,
     enabled: can('floor.read'),
   }).data

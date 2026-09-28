@@ -2,8 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { Page } from '@/features/Page'
-import { supabase } from '@/lib/supabase'
-import { formatPrice, unwrap } from '@restaurant-platform/shared'
+import { formatPrice } from '@restaurant-platform/shared'
 import {
   emptyGroupDraft,
   groupDraftFrom,
@@ -14,6 +13,7 @@ import {
   type OptionDraft,
 } from '@/features/modifier-group-draft'
 import {
+  deleteModifierGroup,
   modifierGroupsQuery,
   saveModifierGroup,
   type ModifierGroupWithOptions,
@@ -33,8 +33,7 @@ export function ModifiersPage() {
     queryClient.invalidateQueries({ queryKey: modifierGroupsQuery(restaurant.id).queryKey })
 
   const deleteMutation = useMutation(errors.saving('No pudimos eliminar el grupo.', {
-    mutationFn: async (id: string) =>
-      unwrap(await supabase.from('modifier_groups').delete().eq('id', id)),
+    mutationFn: deleteModifierGroup,
     onSuccess: invalidate,
   }, (id) => id))
 

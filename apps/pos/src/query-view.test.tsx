@@ -8,7 +8,7 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AppError, appErrors } from '@restaurant-platform/shared'
 import { QueryView, type QueryState } from '@restaurant-platform/ui'
-import { AccessContext, type PosContext } from './context/pos-context'
+import { AccessContext, scopeOf, type PosContext } from './context/pos-context'
 import { TableCommand } from './features/pos/TableCommand'
 import {
   posOpenSessionsQuery,
@@ -133,13 +133,13 @@ test('a table whose orders failed to load says so instead of «no orders yet»',
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, retryOnMount: false, staleTime: Infinity } },
   })
-  client.setQueryData(posTablesQuery('restaurant-a', 'branch-a').queryKey, [table])
-  client.setQueryData(posOpenSessionsQuery('restaurant-a', 'branch-a').queryKey, [session])
-  client.setQueryData(posPaymentMethodsQuery('restaurant-a', 'branch-a').queryKey, [])
+  client.setQueryData(posTablesQuery(scopeOf(context)).queryKey, [table])
+  client.setQueryData(posOpenSessionsQuery(scopeOf(context)).queryKey, [session])
+  client.setQueryData(posPaymentMethodsQuery(scopeOf(context)).queryKey, [])
   // La lectura de los pedidos ya falló: está en error y sin datos.
   client
     .getQueryCache()
-    .build(client, { queryKey: sessionOrdersQuery('restaurant-a', 'branch-a', 'session-1').queryKey })
+    .build(client, { queryKey: sessionOrdersQuery(scopeOf(context), 'session-1').queryKey })
     .setState({ status: 'error', error: failed, errorUpdatedAt: Date.now(), fetchStatus: 'idle' })
 
   const markup = renderToStaticMarkup(

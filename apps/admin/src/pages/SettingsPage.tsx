@@ -2,16 +2,13 @@ import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Trash2 } from 'lucide-react'
 import { optimistic, patchRow } from '@/lib/optimistic'
-import { unwrap } from '@restaurant-platform/shared'
-import { supabase } from '@/lib/supabase'
-import { branchesQuery } from '@/queries/branches'
-import { myRestaurantKey } from '@/queries/restaurant'
+import { branchesQuery, createBranch, deleteBranch, updateBranch, type Branch, type BranchPatch } from '@/queries/branches'
+import { myRestaurantKey, updateRestaurant } from '@/queries/restaurant'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { DesignPicker } from '@/features/DesignPicker'
 import { Page } from '@/features/Page'
 import { PaymentMethodsField } from '@/features/PaymentMethods'
 import { Badge, Button, ErrorText, Field, IconButton, Input, QueryView, Textarea, Toggle, useSaveErrors } from '@restaurant-platform/ui'
-import type { Tables } from '@restaurant-platform/shared'
 
 export function SettingsPage() {
   const restaurant = useRestaurant()
@@ -34,8 +31,7 @@ export function SettingsPage() {
     changes.menu_design !== restaurant.menu_design
 
   const saveMutation = useMutation(errors.saving('No pudimos guardar los datos del restaurante.', {
-    mutationFn: async () =>
-      unwrap(await supabase.from('restaurants').update(changes).eq('id', restaurant.id)),
+    mutationFn: () => updateRestaurant(restaurant.id, changes),
     // Se espera a releer el restaurante: si no, por un momento lo guardado todavía
     // sería lo viejo y el aviso diría «cambios sin guardar» justo después de guardar.
     onSuccess: () => queryClient.invalidateQueries({ queryKey: myRestaurantKey }),
@@ -98,14 +94,8 @@ function BranchesSection({ restaurantId }: { restaurantId: string }) {
   const invalidate = () => queryClient.invalidateQueries({ queryKey: branchesQuery(restaurantId).queryKey })
 
   const createMutation = useMutation(errors.saving('No pudimos crear la sucursal.', {
-    mutationFn: async () =>
-      unwrap(
-        await supabase.from('branches').insert({
-          restaurant_id: restaurantId,
-          name: newName.trim(),
-          address: newAddress.trim() || null,
-        }),
-      ),
+    mutationFn: () =>
+      createBranch({ restaurant_id: restaurantId, name: newName.trim(), address: newAddress.trim() || null }),
     onSuccess: () => {
       setNewName('')
       setNewAddress('')
@@ -115,18 +105,13 @@ function BranchesSection({ restaurantId }: { restaurantId: string }) {
 
   // Un solo guardado para la sucursal: alcanza con mandar lo que cambió.
   const updateMutation = useMutation(errors.saving('No pudimos guardar la sucursal.', {
-    mutationFn: async ({
-      id,
-      ...changes
-    }: { id: string } & Partial<Pick<Tables<'branches'>, 'is_active' | 'payment_methods'>>) =>
-      unwrap(await supabase.from('branches').update(changes).eq('id', id)),
+    mutationFn: ({ id, ...patch }: BranchPatch & { id: string }) => updateBranch(id, patch),
     // Activar la sucursal o cambiar sus medios de pago se ve al instante.
-    ...optimistic(queryClient, branchesQuery(restaurantId).queryKey, patchRow<Tables<'branches'>>),
+    ...optimistic(queryClient, branchesQuery(restaurantId).queryKey, patchRow<Branch>),
   }, ({ id }) => id))
 
   const deleteMutation = useMutation(errors.saving('No pudimos eliminar la sucursal.', {
-    mutationFn: async (id: string) =>
-      unwrap(await supabase.from('branches').delete().eq('id', id)),
+    mutationFn: deleteBranch,
     onSuccess: invalidate,
   }, (id) => id))
 

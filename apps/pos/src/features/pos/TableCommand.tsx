@@ -3,7 +3,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { formatPrice, getPosTableState, paymentMethodLabels, sessionRequestsOf, type PaymentMethod } from '@restaurant-platform/shared'
 import { ArrowLeft, Clock3, PlayCircle, UserRound, Users } from 'lucide-react'
 import { Button, Elapsed, EmptyState, ErrorText, QueryView, SummaryItem, useSaveErrors } from '@restaurant-platform/ui'
-import { useCan, useRestaurant } from '@/context/pos-context'
+import { useCan, usePosScope } from '@/context/pos-context'
 import { CloseSessionButton } from './CloseSessionButton'
 import { OrderTicket } from './OrderTicket'
 import { PaymentPanel } from './PaymentPanel'
@@ -27,15 +27,15 @@ import { TableStateBadge } from './StatusBadges'
 export function TableCommand() {
   const { tableId = '' } = useParams()
   const [searchParams] = useSearchParams()
-  const restaurant = useRestaurant()
+  const scope = usePosScope()
 
   const backToMap = `/salon${searchParams.toString() ? `?${searchParams}` : ''}`
 
-  const tables = useQuery(posTablesQuery(restaurant.id, restaurant.branchId))
+  const tables = useQuery(posTablesQuery(scope))
   // La misma lectura que el plano y Mesas activas: la mesa está ocupada si su
   // sesión figura entre las abiertas de la sucursal.
-  const sessions = useQuery(posOpenSessionsQuery(restaurant.id, restaurant.branchId))
-  const paymentMethods = useQuery(posPaymentMethodsQuery(restaurant.id, restaurant.branchId))
+  const sessions = useQuery(posOpenSessionsQuery(scope))
+  const paymentMethods = useQuery(posPaymentMethodsQuery(scope))
 
   return (
     <div className="min-w-0 space-y-4">
@@ -123,10 +123,10 @@ function FreeTable({ tableId }: { tableId: string }) {
 
 /** Mesa con sesión abierta: resumen de la cuenta, llamados, pedidos, cobro y cierre. */
 function OccupiedTable({ session, paymentMethods }: { session: PosOpenSession; paymentMethods: PaymentMethod[] }) {
-  const restaurant = useRestaurant()
+  const scope = usePosScope()
   const can = useCan()
 
-  const orders = useQuery(sessionOrdersQuery(restaurant.id, restaurant.branchId, session.id))
+  const orders = useQuery(sessionOrdersQuery(scope, session.id))
 
   const kitchen = session.kitchen_tickets
 

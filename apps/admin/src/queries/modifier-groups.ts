@@ -45,3 +45,8 @@ export async function saveModifierGroup(input: {
     }),
   )
 }
+
+/** Borra el grupo con sus opciones y sus asignaciones a productos: las dos FK caen en cascada. */
+export async function deleteModifierGroup(groupId: string) {
+  unwrap(await supabase.from('modifier_groups').delete().eq('id', groupId))
+}

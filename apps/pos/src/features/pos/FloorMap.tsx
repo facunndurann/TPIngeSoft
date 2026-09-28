@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { countLabel, formatElapsed, formatPrice, getPosTableState, type PosTableState, posTableStateLabels, posTableStates } from '@restaurant-platform/shared'
 import { ClipboardList, Clock3, Move, UserRound, Users } from 'lucide-react'
 import { Button, ChoiceChip, Elapsed, FloorGrid, QueryView, SummaryItem, useNow } from '@restaurant-platform/ui'
-import { useCan, useRestaurant } from '@/context/pos-context'
+import { useCan, usePosScope } from '@/context/pos-context'
 import { MoveTableSession } from './MoveTableSession'
 import {
   posFloorSectionsQuery,
@@ -24,10 +24,10 @@ import { TableStateBadge } from './StatusBadges'
  * la sesión abierta. Tocar una mesa abre su comanda (MI-64).
  */
 export function FloorMap() {
-  const restaurant = useRestaurant()
-  const sections = useQuery(posFloorSectionsQuery(restaurant.id, restaurant.branchId))
-  const tables = useQuery(posTablesQuery(restaurant.id, restaurant.branchId))
-  const sessions = useQuery(posOpenSessionsQuery(restaurant.id, restaurant.branchId))
+  const scope = usePosScope()
+  const sections = useQuery(posFloorSectionsQuery(scope))
+  const tables = useQuery(posTablesQuery(scope))
+  const sessions = useQuery(posOpenSessionsQuery(scope))
 
   return (
     <div className="min-w-0 space-y-4">

@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { Session } from '@supabase/supabase-js'
 import App from './App'
 import { AuthContext } from '@restaurant-platform/ui'
-import { AccessContext, type PosContext } from './context/pos-context'
+import { AccessContext, scopeOf, type PosContext } from './context/pos-context'
 import { OrderTicket } from './features/pos/OrderTicket'
 import { posBoardQuery, posOpenSessionsQuery, type PosOrder } from './features/pos/queries'
 
@@ -77,12 +77,12 @@ test('every POS control is touch-sized: buttons, fields and section tabs', () =>
 test('tabs count what is new elsewhere, and one status region says it in full', () => {
   const waiter = { ...context, permissions: ['orders.read', 'floor.read'] }
   const html = app(employee, [waiter], '/', (client) => {
-    client.setQueryData(posBoardQuery('restaurant-a', 'branch-a').queryKey, [
+    client.setQueryData(posBoardQuery(scopeOf(context)).queryKey, [
       { ...order, id: 'o1', status: 'submitted' },
       { ...order, id: 'o2', status: 'accepted' },
       { ...order, id: 'o3', status: 'in_preparation' },
     ])
-    client.setQueryData(posOpenSessionsQuery('restaurant-a', 'branch-a').queryKey, [
+    client.setQueryData(posOpenSessionsQuery(scopeOf(context)).queryKey, [
       { id: 's1', bill_requested_at: new Date().toISOString() },
       { id: 's2' },
     ] as never)
