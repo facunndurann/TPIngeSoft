@@ -49,7 +49,7 @@ La prueba de humo recorrió: QR, `submit-order`, pedido aceptado, cuenta con sal
 | Cuenta (`session_bills`: aceptados menos aprobados) | `orders.sql`, `split.sql`; humo |
 | División de la cuenta (`none`, `equal`, `percentages`) | `split.sql`, `percentage-payments.sql`, Vitest |
 | Cobro presencial/externo registrado desde POS | `payments.sql` |
-| Pago móvil con **simulador**: total, partes iguales, porcentaje, ítems | `payments.sql`, `percentage-payments.sql`, `edge.test.ts`; humo (total) |
+| Pago móvil con **simulador**: total, partes iguales, porcentaje, ítems | `payments.sql`, `percentage-payments.sql`, `edge.test.ts` (contrato HTTP), `packages/shared/tests/split.test.ts`; humo (total) |
 | Medios habilitados por sucursal | `payment-methods.sql` |
 | Invitados sin QR | `guest-participants.sql` |
 | Pedir cuenta / cobro presencial | `session-requests.sql` |

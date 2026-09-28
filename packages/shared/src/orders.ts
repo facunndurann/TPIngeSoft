@@ -56,9 +56,9 @@ export type SubmitOrderResult = z.infer<typeof submitOrderResultSchema>;
 
 /**
  * Estados que forman parte de la cuenta. Es el espejo exacto del
- * `filter (where status in (…))` de la vista `session_bills`
- * (supabase/migrations/20260919040000_employee_read_scope.sql): si cambia uno,
- * tienen que cambiar los dos, y supabase/tests/split.sql lo verifica.
+ * `filter (where status in (…))` de la vista `session_bills`: si cambia uno,
+ * tienen que cambiar los dos. Lo verifican supabase/tests/split.sql contra la
+ * base y packages/shared/tests/split.test.ts contra supabase/schema.generated.sql.
  */
 export const billedOrderStatuses = [
   'accepted',
