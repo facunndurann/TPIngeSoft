@@ -70,3 +70,61 @@ export const billedOrderStatuses = [
 export function isBilledStatus(status: OrderStatus): boolean {
   return (billedOrderStatuses as readonly OrderStatus[]).includes(status);
 }
+
+/** `table`: la cuenta de una mesa. `takeout`: una compra para llevar, sin mesa. */
+export type SessionKind = Database['public']['Enums']['session_kind'];
+/** Canal por el que entró un pedido. No cambia después de crearlo. */
+export type OrderOrigin = Database['public']['Enums']['order_origin'];
+
+export const orderOriginLabels: Record<OrderOrigin, string> = {
+  qr: 'QR',
+  pos: 'POS',
+};
+
+/**
+ * Contexto de una cuenta (contrato C1 de docs/sprint3-progress.md). La sucursal
+ * es de la cuenta, no de la mesa: con ella se resuelven permisos, medios de
+ * pago y tablero. `table` es null si y solo si `kind` es `takeout`.
+ */
+export type SessionContext = {
+  sessionId: string;
+  restaurantId: string;
+  branchId: string;
+  kind: SessionKind;
+  table: { id: string; label: string } | null;
+  status: Database['public']['Enums']['session_status'];
+};
+
+/** Lo mínimo para nombrar una cuenta: su tipo y, si tiene, su mesa. */
+export type SessionPlace = { kind: SessionKind; tables?: { label: string } | null };
+
+/**
+ * Cómo se nombra una cuenta en las pantallas del personal. Una cuenta de mesa
+ * sin la mesa a la vista (RLS, o la consulta no la trajo) no inventa un nombre.
+ */
+export function sessionPlaceLabel(session: SessionPlace): string {
+  if (session.kind === 'takeout') return 'Para llevar';
+  return session.tables?.label ?? 'Mesa';
+}
+
+/** Lo que el pedido guarda de quién lo creó (contrato C2). */
+export type OrderAuthorship = {
+  origin: OrderOrigin;
+  submitted_by: string | null;
+  staff_author_name: string | null;
+};
+
+/**
+ * Nombre de quien creó el pedido: el comensal que lo envió por QR o la cuenta
+ * de personal que lo cargó en el POS. Sale de lo que guardó el pedido, nunca del
+ * responsable actual de la mesa, que cambia con cada operación. Si el comensal
+ * ya no está en la cuenta, el autor es desconocido y se dice así.
+ */
+export function orderAuthorName(
+  order: OrderAuthorship,
+  participants: readonly { id: string; display_name: string }[],
+): string {
+  if (order.origin === 'pos') return order.staff_author_name ?? 'Personal';
+  return participants.find((participant) => participant.id === order.submitted_by)?.display_name
+    ?? 'Comensal';
+}

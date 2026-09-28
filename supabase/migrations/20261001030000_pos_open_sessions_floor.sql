@@ -11,6 +11,10 @@
 -- Los importes dejan de pasar por coalesce: session_bills solo devuelve fila a
 -- quien tiene payments.read (o a un comensal), y un importe que no se puede ver
 -- es null, no 0. Antes un mozo leía «$ 0» en una mesa que debía plata.
+--
+-- Parte de la vista de 20261001020000_session_branch_and_order_authorship: la
+-- sucursal sale de la cuenta, la mesa es opcional (una cuenta para llevar no
+-- tiene) y `kind` dice cuál es cuál. El POS filtra por `kind = 'table'`.
 -- ============================================================
 
 drop view if exists public.pos_open_sessions;
@@ -18,8 +22,9 @@ drop view if exists public.pos_open_sessions;
 create view public.pos_open_sessions with (security_invoker = true) as
 select s.id, s.restaurant_id, s.table_id, s.opened_at,
   t.label as table_label,
-  t.branch_id,
+  s.branch_id,
   b.name as branch_name,
+  s.kind,
   coalesce(p.names, '{}') as participant_names,
   -- Left join a propósito: sin payments.read no hay fila de session_bills, la
   -- mesa se sigue viendo y sus importes quedan en null.
@@ -42,8 +47,8 @@ select s.id, s.restaurant_id, s.table_id, s.opened_at,
       and pay.status = 'pending'
   ) as has_pending_payment
 from public.table_sessions s
-join public.tables t on t.id = s.table_id
-join public.branches b on b.id = t.branch_id
+left join public.tables t on t.id = s.table_id
+join public.branches b on b.id = s.branch_id
 left join public.session_bills bill on bill.session_id = s.id
 left join public.profiles e on e.id = s.assigned_user_id
 left join lateral (

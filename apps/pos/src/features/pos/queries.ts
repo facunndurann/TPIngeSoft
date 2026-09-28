@@ -13,6 +13,7 @@ import {
   type Tables,
 } from '@restaurant-platform/shared'
 import { posRootKey } from '@/lib/query-client'
+import { posOrderSelect } from './order-select'
 import { supabase } from '@/lib/supabase'
 
 /**
@@ -38,28 +39,6 @@ export const posContextsQuery = (userId: string) =>
     refetchOnWindowFocus: 'always',
   })
 
-const posOrderSelect = `
-  *,
-  order_items (
-    *,
-    order_item_modifiers (*),
-    order_item_removed_ingredients (*)
-  ),
-  table_sessions!inner (
-    id,
-    status,
-    opened_at,
-    closed_at,
-    table_id,
-    session_participants (id, display_name, joined_at),
-    tables!inner (
-      id,
-      label,
-      branch_id
-    )
-  )
-` as const
-
 /** Pedidos con ítems, sesión, comensales y mesa: la forma de una comanda en todo el POS. */
 const ordersOf = () => supabase.from('orders').select(posOrderSelect)
 
@@ -75,7 +54,7 @@ export function participantName(order: PosOrder, participantId: string | null) {
 const branchOrdersOf = (restaurantId: string, branchId: string) =>
   ordersOf()
     .eq('restaurant_id', restaurantId)
-    .eq('table_sessions.tables.branch_id', branchId)
+    .eq('table_sessions.branch_id', branchId)
 
 /** Comandas activas y las entregadas hoy (día del restaurante, columna local_date). */
 export const posBoardQuery = (restaurantId: string, branchId: string) =>
@@ -137,7 +116,9 @@ type NullableOpenSessionColumn =
  * Sesión abierta tal como la lee todo el POS (plano, comanda, mesas activas y
  * traslado): una fila de `pos_open_sessions` con mesa, comensales, cuenta,
  * solicitudes, responsable y comandas en cocina. Es el único tipo escrito a
- * mano: `QueryData` no puede saber qué columnas de una vista son nullable.
+ * mano: `QueryData` no puede saber qué columnas de una vista son nullable. La
+ * mesa no es nullable acá porque la lectura trae solo cuentas de mesa
+ * (`kind = 'table'`); en la vista sí lo es, por las cuentas para llevar.
  */
 export type PosOpenSession = {
   [Column in Exclude<keyof OpenSessionRow, NullableOpenSessionColumn>]-?: NonNullable<OpenSessionRow[Column]>
@@ -149,6 +130,8 @@ const openSessionsOf = (restaurantId: string, branchId: string) =>
     .select('*')
     .eq('restaurant_id', restaurantId)
     .eq('branch_id', branchId)
+    // Las mesas abiertas: una cuenta para llevar no ocupa mesa ni va a /salon.
+    .eq('kind', 'table')
     .order('opened_at', { ascending: true })
     .overrideTypes<PosOpenSession[], { merge: false }>()
 

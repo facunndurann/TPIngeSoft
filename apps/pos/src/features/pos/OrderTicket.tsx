@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { Undo2, XCircle } from 'lucide-react'
-import { countLabel, formatPrice, type OrderStatus, posActions, transitionPermission } from '@restaurant-platform/shared'
+import { countLabel, formatPrice, type OrderStatus, orderAuthorName, posActions, sessionPlaceLabel, transitionPermission } from '@restaurant-platform/shared'
 import { Button, Elapsed, ErrorText, Modal, useSaveErrors } from '@restaurant-platform/ui'
 import { useCan } from '@/context/pos-context'
 import { OrderItemLine } from './OrderItemLine'
-import { participantName, transitionPosOrder, type PosOrder } from './queries'
+import { transitionPosOrder, type PosOrder } from './queries'
 import { OrderStatusBadge } from './StatusBadges'
 
 /**
@@ -30,8 +30,10 @@ export function OrderTicket({ order }: { order: PosOrder }) {
   const advance = allowed(actions.advance)
   const revert = allowed(actions.revert)
   const cancel = allowed(actions.cancel)
-  const table = order.table_sessions.tables
-  const submitter = participantName(order, order.submitted_by)
+  // La mesa, o «Para llevar» si la cuenta no tiene. El autor es el que guardó el
+  // pedido: el comensal del QR o la cuenta de personal que lo cargó en el POS.
+  const place = sessionPlaceLabel(order.table_sessions)
+  const submitter = orderAuthorName(order, order.table_sessions.session_participants)
   const busy = transition.isPending
 
   return (
@@ -40,7 +42,7 @@ export function OrderTicket({ order }: { order: PosOrder }) {
           abajo: la base de 8rem fuerza el salto antes de partir el rótulo. */}
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 flex-[1_1_8rem]">
-          <p className="text-sm font-semibold text-neutral-900 break-words">{table.label}</p>
+          <p className="text-sm font-semibold text-neutral-900 break-words">{place}</p>
           <p className="text-xs text-neutral-500 break-words">
             {submitter} · <Elapsed since={order.created_at} precision="exact" />
           </p>
@@ -111,7 +113,7 @@ export function OrderTicket({ order }: { order: PosOrder }) {
       {/* Cancelar saca el pedido de la cuenta y no se puede deshacer: es la única
           transición que se confirma, con el mismo modal que el cierre de mesa. */}
       {confirmingCancel && cancel && (
-        <Modal title={`Cancelar el pedido de ${table.label}`} onClose={() => setConfirmingCancel(false)}>
+        <Modal title={`Cancelar el pedido de ${place}`} onClose={() => setConfirmingCancel(false)}>
           <div className="space-y-3 text-sm text-neutral-700">
             <p className="font-medium text-neutral-900">
               {submitter} · {countLabel(order.order_items.length, 'ítem', 'ítems')} · {formatPrice(order.total_amount)}

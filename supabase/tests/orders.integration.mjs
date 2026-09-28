@@ -9,6 +9,9 @@ import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { posActions } from '../../packages/shared/src/pos.ts'
 import { posPermissions } from '../../packages/shared/src/employees.ts'
+// La misma consulta que usa el tablero del POS: si PostgREST no puede resolver
+// algún embed, falla acá y no recién en la app.
+import { posOrderSelect } from '../../apps/pos/src/features/pos/order-select.ts'
 
 const require = createRequire(new URL('../../apps/customer/package.json', import.meta.url))
 const { createClient } = require('@supabase/supabase-js')
@@ -353,11 +356,14 @@ try {
     assert.equal(order.notes, originalRequest.notes)
     assert.ok(order.accepted_at)
   })
-  const posOrderSelect = '*,order_items(*,order_item_modifiers(*),order_item_removed_ingredients(*)),table_sessions!inner(id,status,opened_at,closed_at,table_id,session_participants(id,display_name,joined_at),tables!inner(id,label,branch_id,branch:branches(id,name)))'
   await check('the POS board query returns table, branch, participants and item snapshots', async () => {
     const ticket = unwrap(await admin.from('orders').select(posOrderSelect).eq('id', orderId).single(), 'POS nested order')
+    assert.equal(ticket.origin, 'qr')
+    assert.equal(ticket.table_sessions.kind, 'table')
     assert.equal(ticket.table_sessions.tables.label, title)
-    assert.equal(ticket.table_sessions.tables.branch.name, branch.name)
+    // El ticket no repite el nombre de la sucursal (es la del encabezado del POS):
+    // alcanza con que la cuenta sea de ella. El nombre sale de pos_open_sessions.
+    assert.equal(ticket.table_sessions.branch_id, branch.id)
     assert.equal(ticket.table_sessions.status, 'open')
     assert.ok(ticket.table_sessions.session_participants.length >= 2)
     assert.equal(ticket.order_items[0].product_name, product.name)
@@ -365,6 +371,7 @@ try {
     // Mismo filtro que el tablero del admin: entregas del día por local_date.
     const board = unwrap(await admin.from('orders').select(posOrderSelect)
       .eq('restaurant_id', restaurantId)
+      .eq('table_sessions.branch_id', branch.id)
       .or(`status.in.(submitted,accepted,in_preparation,ready),and(status.eq.delivered,local_date.eq.${ticket.local_date})`), 'POS board filter')
     assert.ok(board.some((row) => row.id === orderId))
     const history = unwrap(await admin.from('orders').select('id').eq('restaurant_id', restaurantId).eq('local_date', ticket.local_date), 'POS history by day')
@@ -375,6 +382,37 @@ try {
     assert.ok(openSession.participant_names.length >= 2)
     assert.equal(openSession.kitchen_tickets, 1)
     assert.equal(openSession.total_amount, 2800)
+  })
+  await check('a takeout account without a table reaches the branch board and stays private', async () => {
+    // La entrada QR de mostrador llega en la fase 9; acá la cuenta se crea con la
+    // clave de servicio para probar lo que ya existe: motor común, tablero y RLS.
+    const service = client(serviceKey)
+    const buyer = await anonymous()
+    const buyerId = unwrap(await buyer.auth.getUser(), 'Buyer identity').user.id
+    const takeout = unwrap(await service.from('table_sessions')
+      .insert({ restaurant_id: restaurantId, branch_id: branch.id, kind: 'takeout' }).select().single(), 'Create takeout account')
+    fixtures.push({ admin: service, table: 'table_sessions', id: takeout.id })
+    unwrap(await service.from('session_participants')
+      .insert({ session_id: takeout.id, user_id: buyerId, display_name: 'Takeout buyer' }), 'Join takeout buyer')
+    const takeoutOrder = successful(await edge(buyer, { ...basicRequest(), sessionId: takeout.id }))
+    const ticket = unwrap(await operator.from('orders').select(posOrderSelect)
+      .eq('restaurant_id', restaurantId)
+      .eq('table_sessions.branch_id', branch.id)
+      .eq('id', takeoutOrder.orderId).single(), 'POS takeout ticket')
+    assert.equal(ticket.origin, 'qr')
+    assert.equal(ticket.table_sessions.kind, 'takeout')
+    assert.equal(ticket.table_sessions.table_id, null)
+    assert.equal(ticket.table_sessions.tables, null)
+    assert.equal(ticket.table_sessions.branch_id, branch.id)
+    const card = unwrap(await operator.from('pos_open_sessions').select('*').eq('id', takeout.id).single(), 'Takeout card')
+    assert.equal(card.kind, 'takeout')
+    assert.equal(card.table_label, null)
+    assert.equal(card.branch_name, branch.name)
+    for (const actor of [peer, outsider, otherAdmin]) {
+      assert.deepEqual(await rows(actor, 'orders', 'id', takeoutOrder.orderId), [])
+      assert.deepEqual(await rows(actor, 'table_sessions', 'id', takeout.id), [])
+      assert.deepEqual(await rows(actor, 'session_bills', 'session_id', takeout.id), [])
+    }
   })
   await check('both diners read the shared order and account', async () => {
     assert.equal((await rows(peer, 'orders', 'id', orderId)).length, 1)

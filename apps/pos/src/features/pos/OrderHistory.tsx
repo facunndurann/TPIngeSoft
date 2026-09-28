@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { countLabel, formatClock, formatPrice, localDateKey, type OrderStatus, orderStatusLabels } from '@restaurant-platform/shared'
+import { countLabel, formatClock, formatPrice, localDateKey, type OrderStatus, orderStatusLabels, sessionPlaceLabel } from '@restaurant-platform/shared'
 import { useRestaurant } from '@/context/pos-context'
 import { EmptyState, ErrorText, Input, Modal, Select, Spinner } from '@restaurant-platform/ui'
 import { OrderItemLine } from './OrderItemLine'
@@ -31,7 +31,7 @@ export function OrderHistory() {
     return (history.data ?? []).filter((order) => {
       if (status !== 'all' && order.status !== status) return false
       if (!query) return true
-      const table = order.table_sessions.tables.label.toLocaleLowerCase()
+      const table = sessionPlaceLabel(order.table_sessions).toLocaleLowerCase()
       const products = order.order_items.map((item) => item.product_name.toLocaleLowerCase()).join(' ')
       const people = order.table_sessions.session_participants
         .map((participant) => participant.display_name.toLocaleLowerCase())
@@ -128,7 +128,7 @@ export function OrderHistory() {
                       onClick={() => setSelected(order)}
                       className="inline-flex min-h-11 cursor-pointer items-center rounded font-medium text-neutral-900 underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-indigo-600 focus-visible:outline-none"
                     >
-                      {order.table_sessions.tables.label}
+                      {sessionPlaceLabel(order.table_sessions)}
                       {/* Varias filas pueden ser de la misma mesa: la hora dice cuál se abre. */}
                       <span className="sr-only">, pedido de las {formatClock(order.created_at)}</span>
                     </button>
@@ -152,7 +152,7 @@ export function OrderHistory() {
       )}
 
       {selected && (
-        <Modal title={`${selected.table_sessions.tables.label} · ${formatClock(selected.created_at)}`} onClose={() => setSelected(null)}>
+        <Modal title={`${sessionPlaceLabel(selected.table_sessions)} · ${formatClock(selected.created_at)}`} onClose={() => setSelected(null)}>
           <HistoryDetail order={selected} />
         </Modal>
       )}

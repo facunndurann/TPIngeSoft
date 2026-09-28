@@ -6,6 +6,9 @@
 -- de cobrar), y la RPC lo guardaba sin revisarlo. La RPC ya calcula el
 -- pendiente real con la sesión bloqueada: con ese mismo número se decide el
 -- modo, y `p_mode` sale de la firma para que ningún cliente pueda mandarlo.
+--
+-- El resto del cuerpo es el de 20261001020000: la sucursal y sus medios de
+-- pago salen de la cuenta, que puede no tener mesa (para llevar).
 -- ============================================================
 
 drop function public.pos_record_payment(
@@ -49,11 +52,10 @@ begin
   if not found then raise exception 'SESSION_NOT_FOUND'; end if;
   if target.status <> 'open' then raise exception 'SESSION_CLOSED'; end if;
 
-  select t.branch_id, b.payment_methods into target_branch, enabled_methods
-  from public.tables t
-  join public.branches b on b.id = t.branch_id and b.restaurant_id = t.restaurant_id
-  where t.id = target.table_id and t.restaurant_id = target.restaurant_id;
-  if target_branch is null then raise exception 'TABLE_NOT_FOUND'; end if;
+  target_branch := target.branch_id;
+  select b.payment_methods into enabled_methods
+  from public.branches b
+  where b.id = target.branch_id and b.restaurant_id = target.restaurant_id;
   if not exists(select 1 from public.profiles where id = auth.uid())
     or not public.has_permission(target.restaurant_id, 'payments.write', target_branch)
     then raise exception 'FORBIDDEN'; end if;

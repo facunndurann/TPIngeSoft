@@ -69,7 +69,7 @@ export const appErrors = {
   TABLE_LABEL_TAKEN: { status: 409, retryable: false, message: 'Ya existe una mesa con ese identificador en esta sucursal.' },
   TABLE_SECTION_BRANCH_MISMATCH: { status: 409, retryable: false, message: 'El sector pertenece a otra sucursal.' },
   CATEGORY_IN_USE: { status: 409, retryable: false, message: 'No se puede eliminar: la categoría tiene productos. Movelos o eliminalos primero.' },
-  BRANCH_IN_USE: { status: 409, retryable: false, message: 'No se puede eliminar: la sucursal tiene mesas asociadas.' },
+  BRANCH_IN_USE: { status: 409, retryable: false, message: 'No se puede eliminar: la sucursal tiene mesas o cuentas asociadas.' },
 
   // Cuentas de empleados (employee-accounts)
   USERNAME_TAKEN: { status: 409, retryable: false, message: 'Ese nombre de usuario ya existe. Elegí otro.' },
@@ -107,6 +107,8 @@ const constraintCodes: Record<string, AppErrorCode> = {
   tables_section_same_branch: 'TABLE_SECTION_BRANCH_MISMATCH',
   products_category_id_fkey: 'CATEGORY_IN_USE',
   tables_branch_id_fkey: 'BRANCH_IN_USE',
+  // Una cuenta para llevar cuelga de la sucursal sin pasar por una mesa.
+  table_sessions_branch_fkey: 'BRANCH_IN_USE',
 }
 
 /** Error de negocio con todo lo que el catálogo sabe de él. */
