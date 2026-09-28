@@ -118,9 +118,6 @@ export function OrderHistory() {
                   <td className="px-4 py-3 text-neutral-700">{formatClock(order.created_at)}</td>
                   <td className="px-4 py-3 font-medium text-neutral-900">
                     {order.table_sessions.tables.label}
-                    <span className="block text-xs font-normal text-neutral-500">
-                      {order.table_sessions.tables.branch?.name}
-                    </span>
                   </td>
                   <td className="px-4 py-3 text-neutral-600">
                     {order.order_items

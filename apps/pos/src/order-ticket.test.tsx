@@ -36,7 +36,7 @@ const readyAt = (id: string, label: string) =>
     notes: null,
     submitted_by: null,
     order_items: [],
-    table_sessions: { status: 'open', session_participants: [], tables: { label, branch: null } },
+    table_sessions: { status: 'open', session_participants: [], tables: { label } },
   }) as unknown as PosOrder
 
 const cleanups: (() => void)[] = []

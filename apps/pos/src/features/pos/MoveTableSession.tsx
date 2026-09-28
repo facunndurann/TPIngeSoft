@@ -32,7 +32,7 @@ export function MoveTableSession({
     onError: () => { void refresh() },
   })
   const destinations = (tables.data ?? []).filter((table) =>
-    table.id !== source.id && table.branch_id === source.branch_id &&
+    table.id !== source.id &&
     !sessions.data?.some((session) => session.table_id === table.id),
   )
   const available = destinations.some((table) => table.id === destinationId)

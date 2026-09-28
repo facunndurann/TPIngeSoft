@@ -5,9 +5,7 @@ export type PosOrderItem = Tables<'order_items'> & {
   order_item_removed_ingredients: Tables<'order_item_removed_ingredients'>[]
 }
 
-export type PosTableRef = Pick<Tables<'tables'>, 'id' | 'label' | 'branch_id'> & {
-  branch: Pick<Tables<'branches'>, 'id' | 'name'> | null
-}
+export type PosTableRef = Pick<Tables<'tables'>, 'id' | 'label' | 'branch_id'>
 
 export type PosSessionRef = Pick<
   Tables<'table_sessions'>,
@@ -26,7 +24,6 @@ export type PosDiningTable = Pick<
   Tables<'tables'>,
   | 'id'
   | 'label'
-  | 'branch_id'
   | 'is_active'
   | 'is_visible'
   | 'section_id'
@@ -37,16 +34,10 @@ export type PosDiningTable = Pick<
   | 'width'
   | 'height'
 > & {
-  branches: Pick<Tables<'branches'>, 'id' | 'name' | 'is_active' | 'payment_methods'> | null
   floor_sections: Pick<Tables<'floor_sections'>, 'id' | 'name' | 'sort_order' | 'is_active'> | null
 }
 
-export type PosFloorSection = Pick<
-  Tables<'floor_sections'>,
-  'id' | 'name' | 'branch_id' | 'sort_order' | 'is_active'
-> & {
-  branches: Pick<Tables<'branches'>, 'id' | 'name' | 'is_active'> | null
-}
+export type PosFloorSection = Pick<Tables<'floor_sections'>, 'id' | 'name' | 'sort_order' | 'is_active'>
 
 export const posOrderSelect = `
   *,
@@ -65,8 +56,7 @@ export const posOrderSelect = `
     tables!inner (
       id,
       label,
-      branch_id,
-      branch:branches (id, name)
+      branch_id
     )
   )
 ` as const

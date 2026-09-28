@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query'
-import { AppError, fromPostgres, isOperable, kitchenTicketStatuses, localDateKey, type OrderStatus, type PaymentMethod, type PaymentMode, type SessionRequestKind, type Tables } from '@restaurant-platform/shared'
+import { AppError, enabledPaymentMethods, fromPostgres, isOperable, kitchenTicketStatuses, localDateKey, type OrderStatus, type PaymentMethod, type PaymentMode, type SessionRequestKind, type Tables } from '@restaurant-platform/shared'
 import { supabase } from '@/lib/supabase'
 import type { PosDiningTable, PosFloorSection, PosOrder } from './types'
 import { posOrderSelect } from './types'
@@ -136,13 +136,15 @@ export async function recordPosPayment(input: {
 
 /**
  * Mesas que el POS puede operar en la sucursal. Quedan afuera las que están
- * fuera de servicio, las ocultas del plano y las de un sector dado de baja.
+ * fuera de servicio, las ocultas del plano y las de un sector dado de baja. La
+ * sucursal no se revisa: `get_pos_contexts` solo devuelve contextos de
+ * sucursales activas.
  */
 export async function loadRestaurantTables(restaurantId: string, branchId: string) {
   const { data, error } = await supabase
     .from('tables')
     .select(
-      'id, label, branch_id, is_active, is_visible, section_id, position_x, position_y, seats, shape, width, height, branches (id, name, is_active, payment_methods), floor_sections (id, name, sort_order, is_active)',
+      'id, label, is_active, is_visible, section_id, position_x, position_y, seats, shape, width, height, floor_sections (id, name, sort_order, is_active)',
     )
     .eq('restaurant_id', restaurantId)
     .eq('branch_id', branchId)
@@ -150,26 +152,41 @@ export async function loadRestaurantTables(restaurantId: string, branchId: strin
     .eq('is_visible', true)
     .order('label')
   throwIfError(error)
-  return ((data ?? []) as PosDiningTable[]).filter(
-    (table) => table.branches?.is_active === true && isOperable(table, table.floor_sections),
-  )
+  return ((data ?? []) as PosDiningTable[]).filter((table) => isOperable(table, table.floor_sections))
 }
 
 /** Sectores activos que el POS puede recorrer, incluso si todavía están vacíos. */
 export async function loadPosFloorSections(restaurantId: string, branchId: string) {
   const { data, error } = await supabase
     .from('floor_sections')
-    .select('id, name, branch_id, sort_order, is_active, branches (id, name, is_active)')
+    .select('id, name, sort_order, is_active')
     .eq('restaurant_id', restaurantId)
     .eq('branch_id', branchId)
     .eq('is_active', true)
     .order('sort_order')
     .order('name')
   throwIfError(error)
-  return ((data ?? []) as PosFloorSection[]).filter(
-    (section) => section.branches?.is_active === true,
-  )
+  return (data ?? []) as PosFloorSection[]
 }
+
+/**
+ * Medios de pago que el admin habilitó en la sucursal (MI-48). Son de la
+ * sucursal y no de cada mesa: se leen una vez y los comparte toda comanda.
+ */
+export const posPaymentMethodsQuery = (restaurantId: string, branchId: string) =>
+  queryOptions({
+    queryKey: [...posQueryKey(restaurantId, branchId), 'payment-methods'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('branches')
+        .select('payment_methods')
+        .eq('restaurant_id', restaurantId)
+        .eq('id', branchId)
+        .maybeSingle()
+      throwIfError(error)
+      return enabledPaymentMethods(data)
+    },
+  })
 
 export async function transitionPosOrder(orderId: string, status: OrderStatus) {
   const { error } = await supabase.rpc('pos_transition_order', {

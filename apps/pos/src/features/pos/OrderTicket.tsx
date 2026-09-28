@@ -36,7 +36,6 @@ export function OrderTicket({ order, now }: { order: PosOrder; now: number }) {
   const revert = allowed(actions.revert)
   const cancel = allowed(actions.cancel)
   const table = order.table_sessions.tables
-  const branch = table.branch?.name
   const submitter = participantName(order, order.submitted_by)
   const busy = transition.isPending
 
@@ -53,7 +52,6 @@ export function OrderTicket({ order, now }: { order: PosOrder; now: number }) {
         <div className="flex-1">
           <p className="text-sm font-semibold text-neutral-900 break-words">{table.label}</p>
           <p className="text-xs text-neutral-500 break-words">
-            {branch ? `${branch} · ` : ''}
             {submitter} · {formatElapsed(order.created_at, now, 'exact')}
           </p>
         </div>

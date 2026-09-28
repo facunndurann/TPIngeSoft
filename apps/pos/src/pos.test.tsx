@@ -28,7 +28,7 @@ const order = {
   table_sessions: {
     status: 'open',
     session_participants: [],
-    tables: { label: 'Mesa 1', branch: { name: 'Central' } },
+    tables: { label: 'Mesa 1' },
   },
 } as unknown as PosOrder
 

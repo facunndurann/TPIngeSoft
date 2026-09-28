@@ -1,6 +1,6 @@
 import { Link, useParams, useSearchParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { enabledPaymentMethods, formatElapsed, formatPrice, getPosTableState, paymentMethodLabels, posTableStateLabels, sessionRequestsOf, type PaymentMethod } from '@restaurant-platform/shared'
+import { formatElapsed, formatPrice, getPosTableState, paymentMethodLabels, posTableStateLabels, sessionRequestsOf, type PaymentMethod } from '@restaurant-platform/shared'
 import { ArrowLeft, Clock3, PlayCircle, UserRound, Users } from 'lucide-react'
 import { Badge, Button, EmptyState, ErrorText, Spinner, SummaryItem, useNow, useSaveErrors } from '@restaurant-platform/ui'
 import { useCan, useRestaurant } from '@/context/pos-context'
@@ -9,6 +9,7 @@ import {
   loadSessionOrders,
   openPosTableSession,
   posOpenSessionsQuery,
+  posPaymentMethodsQuery,
   posQueryKey,
   type PosOpenSession,
 } from './api'
@@ -37,14 +38,18 @@ export function TableCommand() {
   // La misma lectura que el plano y Mesas activas: la mesa está ocupada si su
   // sesión figura entre las abiertas de la sucursal.
   const sessions = useQuery(posOpenSessionsQuery(restaurant.id, restaurant.branchId))
+  const paymentMethods = useQuery(posPaymentMethodsQuery(restaurant.id, restaurant.branchId))
 
-  if (tables.isLoading || sessions.isLoading) return <Spinner />
+  if (tables.isLoading || sessions.isLoading || paymentMethods.isLoading) return <Spinner />
 
-  if (tables.isError || sessions.isError) {
+  if (tables.isError || sessions.isError || paymentMethods.isError) {
     return (
       <div className="space-y-3">
         <BackLink to={backToMap} />
-        <ErrorText error={tables.error ?? sessions.error} fallback="No pudimos cargar la comanda de la mesa." />
+        <ErrorText
+          error={tables.error ?? sessions.error ?? paymentMethods.error}
+          fallback="No pudimos cargar la comanda de la mesa."
+        />
       </div>
     )
   }
@@ -61,7 +66,7 @@ export function TableCommand() {
   }
 
   const session = sessions.data?.find((entry) => entry.table_id === tableId)
-  const branchMethods = enabledPaymentMethods(table.branches)
+  const branchMethods = paymentMethods.data ?? []
 
   return (
     <div className="min-w-0 space-y-4">
@@ -71,8 +76,7 @@ export function TableCommand() {
         <div>
           <h1 className="text-xl font-bold text-neutral-900">{table.label}</h1>
           <p className="text-sm text-neutral-500">
-            {table.floor_sections?.name ?? 'Sin sector'}
-            {table.branches ? ` · ${table.branches.name}` : ''} · {table.seats} lugares
+            {table.floor_sections?.name ?? 'Sin sector'} · {table.seats} lugares
           </p>
           {/* Lo que el admin habilitó para esta sucursal (MI-48): es lo que el
               comensal ve como opción y lo único que se le puede cobrar acá. */}

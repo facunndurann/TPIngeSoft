@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { formatElapsed, formatPrice, getPosTableState, type PosTableState, posTableStateLabels } from '@restaurant-platform/shared'
 import { ClipboardList, Clock3, Move, UserRound, Users } from 'lucide-react'
-import { Button, EmptyState, ErrorText, FloorGrid, Select, Spinner, SummaryItem, useNow } from '@restaurant-platform/ui'
+import { Button, EmptyState, ErrorText, FloorGrid, Spinner, SummaryItem, useNow } from '@restaurant-platform/ui'
 import { useCan, useRestaurant } from '@/context/pos-context'
 import {
   loadPosFloorSections,
@@ -20,9 +20,8 @@ import type { PosDiningTable } from './types'
  * configuración administrativa y el estado de pedidos/cuenta se compone desde
  * la sesión abierta. Tocar una mesa abre su comanda (MI-64).
  *
- * La sucursal y el sector viven en la query, no en estado local: así volver
- * desde la comanda deja el plano en el mismo sector, y recargar o compartir el
- * link también.
+ * El sector vive en la query, no en estado local: así volver desde la comanda
+ * deja el plano en el mismo sector, y recargar o compartir el link también.
  */
 export function FloorMap() {
   const restaurant = useRestaurant()
@@ -30,15 +29,9 @@ export function FloorMap() {
   const [moving, setMoving] = useState<FloorMapEntry | null>(null)
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const branchChoice = searchParams.get('sucursal')
   const sectionChoice = searchParams.get('sector')
 
-  const chooseBranch = (id: string) => setSearchParams({ sucursal: id }, { replace: true })
-  const chooseSection = (id: string) =>
-    setSearchParams(
-      branchChoice ? { sucursal: branchChoice, sector: id } : { sector: id },
-      { replace: true },
-    )
+  const chooseSection = (id: string) => setSearchParams({ sector: id }, { replace: true })
 
   const sections = useQuery({
     queryKey: ['pos', restaurant.id, restaurant.branchId, 'floor-sections'],
@@ -50,23 +43,12 @@ export function FloorMap() {
   })
   const sessions = useQuery(posOpenSessionsQuery(restaurant.id, restaurant.branchId))
 
-  const branches = useMemo(() => {
-    const byId = new Map<string, { id: string; name: string }>()
-    for (const section of sections.data ?? []) {
-      if (section.branches) byId.set(section.branches.id, section.branches)
-    }
-    return [...byId.values()]
-  }, [sections.data])
-
-  const branchId = branches.some((branch) => branch.id === branchChoice)
-    ? branchChoice
-    : (branches[0]?.id ?? null)
-  const branchSections = (sections.data ?? []).filter((section) => section.branch_id === branchId)
-  const sectionId = branchSections.some((section) => section.id === sectionChoice)
+  const floorSections = sections.data ?? []
+  const sectionId = floorSections.some((section) => section.id === sectionChoice)
     ? sectionChoice
-    : (branchSections[0]?.id ?? null)
+    : (floorSections[0]?.id ?? null)
   const sectionTables = (tables.data ?? []).filter((table) => table.section_id === sectionId)
-  const activeSection = branchSections.find((section) => section.id === sectionId)
+  const activeSection = floorSections.find((section) => section.id === sectionId)
 
   const sessionByTable = useMemo(
     () => new Map((sessions.data ?? []).map((session) => [session.table_id, session])),
@@ -87,33 +69,16 @@ export function FloorMap() {
         <MoveTableSession source={moving.table} sessionId={moving.session.id}
           onClose={() => setMoving(null)} />
       )}
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-neutral-900">Salón</h1>
-          <p className="text-sm text-neutral-500">
-            Plano operativo de las mesas disponibles, organizado por sector.
-          </p>
-        </div>
-        {branches.length > 1 && (
-          <label className="w-56">
-            <span className="mb-1 block text-xs font-medium text-neutral-600">Sucursal</span>
-            <Select
-              value={branchId ?? ''}
-              onChange={(event) => chooseBranch(event.target.value)}
-            >
-              {branches.map((branch) => (
-                <option key={branch.id} value={branch.id}>
-                  {branch.name}
-                </option>
-              ))}
-            </Select>
-          </label>
-        )}
+      <div>
+        <h1 className="text-xl font-bold text-neutral-900">Salón</h1>
+        <p className="text-sm text-neutral-500">
+          Plano operativo de las mesas disponibles, organizado por sector.
+        </p>
       </div>
 
       {queryFailed ? (
         <ErrorText error={queryError} fallback="No pudimos cargar el plano del salón." />
-      ) : branches.length === 0 ? (
+      ) : floorSections.length === 0 ? (
         <EmptyState message="Todavía no hay sectores activos configurados para operar." />
       ) : (
         <>
@@ -122,7 +87,7 @@ export function FloorMap() {
             role="tablist"
             aria-label="Sectores del salón"
           >
-            {branchSections.map((section) => {
+            {floorSections.map((section) => {
               const selected = section.id === sectionId
               return (
                 <button
