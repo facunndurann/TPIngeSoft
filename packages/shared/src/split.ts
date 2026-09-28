@@ -15,7 +15,7 @@
 
 import { z } from 'zod';
 import { isBilledStatus, type OrderStatus } from './orders.ts';
-import { asAmount } from './money.ts';
+import { fromCents, hasAtMostTwoDecimals, toCents } from './money.ts';
 
 export const splitTypes = ['none', 'equal', 'percentages'] as const;
 export type SplitType = (typeof splitTypes)[number];
@@ -44,10 +44,7 @@ const percentageSchema = z
   .finite()
   .min(0)
   .max(SPLIT_PERCENTAGE_TOTAL)
-  .refine(
-    (value) => Math.abs(value * HUNDREDTHS - Math.round(value * HUNDREDTHS)) < 1e-6,
-    'El porcentaje admite como máximo dos decimales',
-  );
+  .refine(hasAtMostTwoDecimals, 'El porcentaje admite como máximo dos decimales');
 
 export const splitTypeSchema = z.enum(splitTypes);
 export const splitAllocationsSchema = z.record(z.string().uuid(), percentageSchema);
@@ -177,9 +174,6 @@ export type SplitShare = {
   amount: number;
 };
 
-const toCents = (value: number | string | null | undefined) =>
-  Math.round(asAmount(value) * 100);
-
 /**
  * Peso de cada comensal en el reparto. Son enteros (centavos o centésimas de
  * punto) para que el prorrateo posterior sea aritmética exacta.
@@ -256,7 +250,7 @@ function distribute(
   return participants.map((participant, index) => ({
     participantId: participant.id,
     amountCents: cents[index],
-    amount: cents[index] / 100,
+    amount: fromCents(cents[index]),
   }));
 }
 
@@ -304,7 +298,7 @@ export function splitEqualAmounts(bill: SplitBill, parts: number): number[] {
   const totalCents = Math.max(0, toCents(bill.pending_amount));
   const base = Math.floor(totalCents / parts);
   const remainder = totalCents % parts;
-  return Array.from({ length: parts }, (_, index) => (base + (index < remainder ? 1 : 0)) / 100);
+  return Array.from({ length: parts }, (_, index) => fromCents(base + (index < remainder ? 1 : 0)));
 }
 
 /**

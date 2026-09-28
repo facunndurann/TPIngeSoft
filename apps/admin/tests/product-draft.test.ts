@@ -48,6 +48,8 @@ test('draftPrice solo acepta un precio real', () => {
   assert.equal(draftPrice({ ...base, basePrice: '   ' }), null)
   assert.equal(draftPrice({ ...base, basePrice: 'gratis' }), null)
   assert.equal(draftPrice({ ...base, basePrice: '-5' }), null)
+  // La columna guarda dos decimales: un tercero se redondearía en silencio al guardar.
+  assert.equal(draftPrice({ ...base, basePrice: '1250.555' }), null)
 })
 
 test('draftErrors dice qué campo impide guardar y por qué', () => {

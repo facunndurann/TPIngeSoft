@@ -1,9 +1,8 @@
-import type { Tables } from '@restaurant-platform/shared'
-import { parsePrice } from '@/features/price'
+import { parseAmount, type Tables } from '@restaurant-platform/shared'
 
 /**
  * Una opción mientras se edita. `key` identifica la fila en la lista (una opción
- * nueva todavía no tiene `id`); `price` es el texto del input, y `parsePrice`
+ * nueva todavía no tiene `id`); `price` es el texto del input, y `parseAmount`
  * decide si es un precio.
  */
 export type OptionDraft = {
@@ -86,8 +85,8 @@ export function groupDraftErrors(draft: ModifierGroupDraft): string | null {
   if (!range) return 'El mínimo tiene que ser un entero desde 0, y el máximo desde 1'
   if (range.min > range.max) return 'El mínimo no puede superar al máximo'
   if (draft.options.length === 0) return 'Agregá al menos una opción'
-  if (draft.options.some((option) => parsePrice(option.price) === null)) {
-    return 'Cada opción necesita un precio de 0 o más'
+  if (draft.options.some((option) => parseAmount(option.price) === null)) {
+    return 'Cada opción necesita un precio de 0 o más, con hasta dos decimales'
   }
   return null
 }
@@ -102,7 +101,7 @@ export function groupPayload(draft: ModifierGroupDraft): ModifierGroupPayload | 
 
   const options: ModifierGroupPayload['options'] = []
   for (const option of draft.options) {
-    const price = parsePrice(option.price)
+    const price = parseAmount(option.price)
     if (price === null) return null
     options.push({ id: option.id, name: option.name, price_delta: price, is_available: option.isAvailable })
   }

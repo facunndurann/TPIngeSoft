@@ -58,7 +58,7 @@ test('groupDraftErrors nombra el primer problema, y un campo vacío no vale 0', 
   assert.match(groupDraftErrors({ ...valid, minSelect: '1.5' })!, /entero/)
   assert.match(groupDraftErrors({ ...valid, minSelect: '3', maxSelect: '2' })!, /superar/)
   assert.match(groupDraftErrors({ ...valid, options: [] })!, /al menos una opción/)
-  for (const price of ['', '-1', 'gratis']) {
+  for (const price of ['', '-1', 'gratis', '1.234']) {
     assert.match(groupDraftErrors({ ...valid, options: [{ ...valid.options[0], price }] })!, /precio/)
   }
 })

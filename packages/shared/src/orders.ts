@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { Constants, type Database } from './database.types.ts';
+import { hasAtMostTwoDecimals } from './money.ts';
 
 const uuid = z.string().uuid().transform(value => value.toLowerCase());
 const selectionIds = z.array(uuid).max(100).refine(
@@ -27,10 +28,8 @@ export const submitOrderSchema = z.object({
   sessionId: uuid,
   requestId: uuid,
   items: z.array(orderItemSchema).min(1).max(MAX_ORDER_LINES),
-  expectedTotal: z.number().finite().min(0).max(99999999.99).refine(
-    amount => Math.abs(amount * 100 - Math.round(amount * 100)) < 0.000001,
-    'El importe debe tener como máximo dos decimales',
-  ),
+  expectedTotal: z.number().finite().min(0).max(99999999.99)
+    .refine(hasAtMostTwoDecimals, 'El importe debe tener como máximo dos decimales'),
   notes: z.string().trim().max(500).optional(),
 }).strict();
 

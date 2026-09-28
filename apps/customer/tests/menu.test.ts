@@ -1,7 +1,7 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import {
-  calculateItemPrice,
+  itemPriceCents,
   mediaElementSrc,
   mediaKindFromMimeType,
   productMedia,
@@ -13,7 +13,8 @@ import { menu, product, productAfter, selection } from './fixtures'
 test('required single-choice groups and decimal pricing', () => {
   assert.deepEqual(selectionErrors(product, selection), [])
   assert.equal(price(product, selection), 30.90)
-  assert.equal(calculateItemPrice(.1, [{ optionId: 'o', priceDelta: .2 }], 3), .9)
+  // En float, (0.1 + 0.2) × 3 da 0.9000000000000001; en centavos, exacto.
+  assert.equal(itemPriceCents(.1, [{ optionId: 'o', priceDelta: .2 }], 3), 90)
   assert.ok(selectionErrors(product, { ...selection, optionIds: [] }).length)
   assert.ok(selectionErrors(product, { ...selection, optionIds: ['o', 'o2'] }).length)
   assert.equal(cartPrice(menu, [{ ...selection, productId: 'p' }, { ...selection, productId: 'p', quantity: 1 }]), 41.2)

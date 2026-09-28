@@ -4,10 +4,12 @@ import {
   asAmount,
   formatPrice,
   formatTableTime,
+  hasAtMostTwoDecimals,
   paymentMethodLabels,
   paymentModeLabels,
   paymentStatusLabels,
   type PaymentMethod,
+  toCents,
 } from '@restaurant-platform/shared'
 import { Button, ErrorText, Field, Input, QueryView, Select, useNow, useSaveErrors } from '@restaurant-platform/ui'
 import { useCan, useRestaurant } from '@/context/pos-context'
@@ -28,9 +30,8 @@ function amountProblem(value: string, pending: number): string | null {
   if (value.trim() === '') return 'Ingresá el importe a registrar.'
   const amount = Number(value)
   if (!Number.isFinite(amount) || amount <= 0) return 'El importe tiene que ser mayor a cero.'
-  // Se mira el texto y no el número: 1.1 × 100 da 110.00000000000001.
-  if (!/^\d+(\.\d{1,2})?$/.test(value.trim())) return 'Usá hasta dos decimales.'
-  if (amount > pending) return `Supera el pendiente de ${formatPrice(pending)}.`
+  if (!hasAtMostTwoDecimals(amount)) return 'Usá hasta dos decimales.'
+  if (toCents(amount) > toCents(pending)) return `Supera el pendiente de ${formatPrice(pending)}.`
   return null
 }
 

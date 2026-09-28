@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import {
+  asAmount,
   formatPrice,
   formatTableTime,
   parseSessionSplit,
@@ -72,8 +73,8 @@ export function SessionBill() {
           {session && me && paymentMethods.includes('mobile') && (
             <MobilePayment
               sessionId={session.id}
-              pending={Number(bill.data.pending_amount ?? 0)}
-              accountTotal={Number(bill.data.total_amount ?? 0)}
+              pending={asAmount(bill.data.pending_amount)}
+              accountTotal={asAmount(bill.data.total_amount)}
               participantId={me.id}
               participants={participants}
               payments={payments.data ?? []}

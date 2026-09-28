@@ -1,5 +1,4 @@
-import type { Tables } from '@restaurant-platform/shared'
-import { parsePrice } from '@/features/price'
+import { parseAmount, type Tables } from '@restaurant-platform/shared'
 import { savedMediaDrafts, type MediaDraft } from '@/features/product-media'
 
 /** Ingrediente tal como se envía a save_product; sin `id` es un ingrediente nuevo. */
@@ -71,7 +70,7 @@ export function draftFrom(product: SavedProduct): ProductDraft {
 
 /** Precio válido del borrador, o `null` si el texto todavía no lo es. */
 export function draftPrice(draft: ProductDraft): number | null {
-  return parsePrice(draft.basePrice)
+  return parseAmount(draft.basePrice)
 }
 
 /** Un campo del formulario que puede tener un error: los fijos y cada ingrediente. */
@@ -89,7 +88,7 @@ export function draftErrors(draft: ProductDraft): DraftError[] {
   if (!draft.name.trim()) errors.push({ field: 'name', message: 'El producto necesita un nombre.' })
   if (!draft.categoryId) errors.push({ field: 'categoryId', message: 'Elegí una categoría.' })
   if (draftPrice(draft) === null) {
-    errors.push({ field: 'basePrice', message: 'Ingresá un precio de 0 o más, sin letras.' })
+    errors.push({ field: 'basePrice', message: 'Ingresá un precio de 0 o más, con hasta dos decimales.' })
   }
   draft.ingredients.forEach((ingredient, index) => {
     if (!ingredient.name.trim()) {
