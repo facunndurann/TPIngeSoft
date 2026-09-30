@@ -35,6 +35,14 @@ begin
     returning id into restaurant;
   insert into public.branches(restaurant_id,name,payment_methods)
     values(restaurant,'Centro','{mobile}') returning id into branch;
+  insert into private.payment_provider_credentials(
+    restaurant_id,provider,environment,access_token_secret_id,access_token_hint
+  ) values (
+    restaurant,'mercado_pago','test',
+    vault.create_secret('APP_USR-percentage-test-token',gen_random_uuid()::text),'oken'
+  );
+  insert into private.payment_provider_branches(restaurant_id,branch_id,provider)
+    values(restaurant,branch,'mercado_pago');
   insert into public.tables(restaurant_id,branch_id,label) values(restaurant,branch,'Mesa 1')
     returning id into table_id;
   insert into public.table_sessions(restaurant_id,table_id) values(restaurant,table_id)
@@ -121,6 +129,14 @@ begin
     returning id into restaurant;
   insert into public.branches(restaurant_id,name,payment_methods)
     values(restaurant,'Centro','{mobile,external}') returning id into branch;
+  insert into private.payment_provider_credentials(
+    restaurant_id,provider,environment,access_token_secret_id,access_token_hint
+  ) values (
+    restaurant,'mercado_pago','test',
+    vault.create_secret('APP_USR-percentage-cap-token',gen_random_uuid()::text),'oken'
+  );
+  insert into private.payment_provider_branches(restaurant_id,branch_id,provider)
+    values(restaurant,branch,'mercado_pago');
   insert into public.tables(restaurant_id,branch_id,label) values(restaurant,branch,'Mesa 1')
     returning id into table_id;
   insert into public.table_sessions(restaurant_id,table_id) values(restaurant,table_id)

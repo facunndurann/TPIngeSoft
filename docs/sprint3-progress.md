@@ -299,7 +299,7 @@ Ninguno de los tres recursos externos se puede verificar desde este checkout. Mi
 | URL HTTPS para webhook | No hay proyecto vinculado (`linked_project: null`). `DEPLOY.md` documenta cómo crear uno en la nube. | Un proyecto Supabase desplegado (`https://<ref>.supabase.co/functions/v1/<webhook>`) o un túnel HTTPS hacia el stack local. La función del webhook necesita `verify_jwt = false` en `supabase/config.toml`: no recibe el JWT del comensal. |
 | Dispositivos para push | No hay service worker, manifest ni inventario de dispositivos. | La lista de dispositivos reales de la demo. Restricciones conocidas para planificar: Web Push requiere HTTPS y service worker; en iPhone/iPad requiere agregar la app a la pantalla de inicio (iOS 16.4+); Safari de iOS no implementa la API de vibración; el audio necesita un gesto previo del usuario. |
 
-Datos de la documentación vigente de Mercado Pago, consultados el 27/09/2026, que afectan a C3:
+Datos de la documentación vigente de Mercado Pago, consultados el 27/09/2026 y revalidados el 30/09/2026, que afectan a C3:
 
 - **Configuración del aviso:** se hace en el panel o por preferencia con `notification_url`, que tiene prioridad sobre el panel.
 - **Contenido del aviso:** trae solo el tipo y `data.id`. El estado se obtiene con `GET /v1/payments/{id}`.
@@ -399,3 +399,48 @@ Las dos historias se verifican contra ese subsistema y se cierran juntas en la f
   - `add_guest_participant` todavía reasigna cualquier ítem de la cuenta (fase 8).
   - Falta el recorrido visual del POS con una cuenta takeout.
 - **Siguiente paso concreto:** en la fase 3, modelar la configuración de Mercado Pago por restaurante con asociación explícita a sucursales. Tiene que exponer al panel solo un estado enmascarado y resolver en backend la disponibilidad efectiva para una cuenta, usando `table_sessions.branch_id`.
+
+### Fase 3 — Resultado
+
+- **Estado:** completa en código y pruebas locales. La validez de una credencial real de Mercado Pago sigue pendiente porque esta fase no llama al proveedor y el checkout empieza en la fase 4.
+- **Historias:** MI-40 cubierta: el administrador configura la cuenta receptora, ambiente y sucursales; el medio `mobile` sigue habilitándose por sucursal. No se adelantó MI-74: todavía no se crea una preferencia ni se redirige a Mercado Pago.
+- **Incremento que se puede ejecutar:**
+  - En **Restaurante → Mercado Pago**, owner o manager carga/reemplaza el Access Token, puede dejar preparado el secreto de webhook, elige pruebas/producción y asocia la cuenta a sucursales.
+  - El panel solo vuelve a leer `configurado`, ambiente, últimos 4 caracteres del token, presencia del secreto, sucursales y fecha. Los campos secretos quedan vacíos después de guardar.
+  - Customer ofrece pago desde el celular únicamente cuando se cumplen juntas las tres condiciones: `mobile` habilitado, sucursal asociada y credencial configurada. La disponibilidad se relee cada 15 segundos y el servidor vuelve a comprobarla al insertar el intento.
+  - Quitar una asociación, apagar `mobile` o desvincular la cuenta bloquea intentos nuevos. No bloquea la actualización/resolución de una fila `payments` ya creada.
+- **Archivos y migraciones:**
+  - `supabase/migrations/20261001060000_mercado_pago_provider_config.sql`
+  - `supabase/tests/payment-provider-config.sql` y ajustes de fixtures de pago/contexto
+  - `apps/admin/src/features/MercadoPagoSettings.tsx`, `apps/admin/src/queries/payment-provider.ts` y `SettingsPage.tsx`
+  - `apps/customer/src/features/SessionBill.tsx` y `apps/customer/src/features/orders-api.ts`
+  - `packages/shared/src/{payments,database.types}.ts` y `packages/shared/tests/payments.test.ts`
+  - `supabase/schema.generated.sql` y `supabase/functions/.env.example`
+- **Contratos entregados:**
+  - Enums separados de medio y reparto: `payment_provider = 'mercado_pago'` y `payment_provider_environment = 'test' | 'production'`. `payment_method` y `payment_mode` no cambian.
+  - Configuración privada: `private.payment_provider_credentials` guarda únicamente IDs de secretos de Supabase Vault y la máscara; `private.payment_provider_branches` asocia explícitamente restaurante, proveedor y sucursal. `anon` y `authenticated` no tienen acceso al schema.
+  - `get_payment_provider_config(p_restaurant_id)` → una fila enmascarada. Requiere `admin.manage`; nunca devuelve Access Token ni secreto de webhook.
+  - `save_payment_provider_config(p_restaurant_id, p_environment, p_branch_ids, p_access_token?, p_webhook_secret?)` → `void`. Requiere `admin.manage`, rechaza sucursales ajenas y guarda los secretos cifrados en Vault. `null` conserva un secreto; al crear o cambiar de ambiente exige token nuevo.
+  - `delete_payment_provider_config(p_restaurant_id)` → `void`. Requiere `admin.manage` y limpia asociaciones, metadatos y secretos de Vault.
+  - `mobile_payment_available(p_session_id)` → `boolean`. Solo responde a un participante autenticado de esa cuenta y no expone más información del proveedor.
+  - `resolve_payment_provider_for_session(p_session_id)` → proveedor, ambiente, credenciales, restaurante y sucursal. Solo `service_role` puede ejecutarla; es la entrada backend de la fase 4.
+  - Trigger `payments_require_mobile_provider`: los inserts con la referencia de intento `mobile-request:*` exigen configuración efectiva. Las actualizaciones de intentos existentes quedan fuera del trigger para no cortar webhook/reconciliación después de deshabilitar.
+- **Consumidor siguiente:** la fase 4 llama `resolve_payment_provider_for_session` desde `mobile-payment`, crea la preferencia de Checkout Pro en backend y conserva `payments.external_reference` como identidad local.
+- **Compatibilidad:** medios presenciales/externos y modos de reparto no cambian. El simulador y `resolve_mobile_payment` conservan su contrato, pero iniciar un pago móvil nuevo ahora necesita configuración efectiva; los fixtures que ejercen ese flujo configuran una cuenta receptora de prueba. Los pagos pendientes anteriores pueden resolverse aunque luego se deshabilite el proveedor.
+- **Pruebas ejecutadas y resultado:**
+  - `pnpm test`: 62 archivos, 265 pruebas: **pasan**. Incluye customer sin botón cuando falta proveedor y validación compartida de configuración.
+  - `pnpm typecheck`, `pnpm lint` y `pnpm build`: **pasan**. Build conserva solamente los avisos previos de chunks mayores a 500 kB.
+  - `pnpm test:sql`: 16 archivos: **pasan** sobre la base local existente. La prueba nueva cubre Vault, respuesta enmascarada, owner/manager, rol operativo, restaurante/sucursal ajenos, disponibilidad efectiva, privilegio exclusivo de `service_role` y resolución posterior a deshabilitar.
+  - `pnpm test:orders:integration`: 41 verificaciones: **pasan**; `pnpm test:employees:integration`: **pasa**.
+  - Stack Supabase temporal desde cero: aplicó todas las migraciones, cargó el seed y volvió a pasar los 16 archivos SQL. Se detuvo y se eliminó al terminar.
+- **Recorrido manual y entorno/dispositivo:** no se ejecutó navegador. El formulario quedó cubierto por typecheck/build y los contratos por SQL; no se usó una cuenta real ni de prueba de Mercado Pago.
+- **Decisiones nuevas y motivo:**
+  - Se usa Supabase Vault en vez de una columna de texto o una variable global: cada restaurante tiene su propia credencial cifrada y la base solo conserva sus IDs.
+  - No existe otro switch de proveedor. La asociación define qué sucursales cobran en esa cuenta y el chip `mobile` existente decide si el medio se ofrece; la disponibilidad efectiva exige ambos.
+  - Cambiar pruebas/producción exige reemplazar el token para evitar usar accidentalmente una credencial del ambiente anterior.
+  - La documentación oficial vigente de Checkout Pro se revalidó el 30/09/2026: la preferencia se crea en backend con `POST /checkout/preferences` y `Authorization: Bearer <Access Token>`; la implementación HTTP queda en fase 4.
+- **Bloqueos y evidencia pendiente:**
+  - Sigue sin haber Access Token de prueba real, comprador de prueba ni aplicación de Mercado Pago en este checkout. No se validó la credencial contra el proveedor.
+  - Sigue faltando URL HTTPS y configuración real del webhook; no bloquea MI-40, pero sí la evidencia externa de fases 4–6.
+  - `PAYMENT_SANDBOX_ENABLED` continúa como herramienta explícita de desarrollo. No es evidencia de Mercado Pago.
+- **Siguiente paso concreto:** en la fase 4, extender la respuesta de `mobile-payment`, persistir los metadatos 1:1 del proveedor por intento, crear la preferencia con `payments.id` como referencia enviada y devolver su URL. Antes, cerrar las reservas pendientes para `full`/`percentage_split` y contra cobro POS, y cubrir timeout/reintento sin crear otro intento local.

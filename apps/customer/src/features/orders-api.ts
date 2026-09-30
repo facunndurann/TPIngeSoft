@@ -26,9 +26,7 @@ export function submitOrder(input: SubmitOrderInput): Promise<SubmitOrderResult>
   })
 }
 
-export type AbandonResult =
-  | { outcome: 'abandoned' }
-  | { outcome: 'already_submitted'; orderId: string }
+export type AbandonResult = { outcome: 'abandoned' } | { outcome: 'already_submitted'; orderId: string }
 
 /**
  * Descarta un envío con resultado desconocido. El servidor lo serializa con
@@ -91,7 +89,9 @@ export async function loadPayments(sessionId: string) {
   return unwrap(
     await supabase
       .from('payments')
-      .select('id, participant_id, amount, mode, method, status, external_reference, created_at, payment_order_items(order_item_id)')
+      .select(
+        'id, participant_id, amount, mode, method, status, external_reference, created_at, payment_order_items(order_item_id)',
+      )
       .eq('session_id', sessionId)
       .order('created_at', { ascending: false }),
     'No pudimos actualizar el historial de pagos.',
@@ -102,6 +102,21 @@ export function paymentsQuery(sessionId: string | undefined) {
   return queryOptions({
     queryKey: [...sessionKey(sessionId), 'payments'],
     queryFn: sessionId ? () => loadPayments(sessionId) : skipToken,
+    refetchInterval: SESSION_POLL_MS,
+  })
+}
+
+/** Solo disponibilidad efectiva; no expone ambiente, asociación ni credenciales. */
+export function mobilePaymentAvailabilityQuery(sessionId: string | undefined) {
+  return queryOptions({
+    queryKey: [...sessionKey(sessionId), 'mobile-payment-availability'],
+    queryFn: sessionId
+      ? async () =>
+          unwrap(
+            await supabase.rpc('mobile_payment_available', { p_session_id: sessionId }),
+            'No pudimos verificar si el pago desde el celular está disponible.',
+          )
+      : skipToken,
     refetchInterval: SESSION_POLL_MS,
   })
 }

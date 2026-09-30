@@ -14,7 +14,14 @@ import { AddGuest } from '@/features/AddGuest'
 import { BillSplitter } from '@/features/BillSplitter'
 import { oldestUpdate } from '@/features/freshness'
 import { MobilePayment } from '@/features/MobilePayment'
-import { billQuery, type loadBill, type loadPayments, ordersQuery, paymentsQuery } from '@/features/orders-api'
+import {
+  billQuery,
+  type loadBill,
+  type loadPayments,
+  mobilePaymentAvailabilityQuery,
+  ordersQuery,
+  paymentsQuery,
+} from '@/features/orders-api'
 import { ServiceRequests } from '@/features/ServiceRequests'
 import { useTable } from '@/features/table-context'
 import { WithoutSession } from '@/features/TableChrome'
@@ -33,17 +40,16 @@ export function SessionBill() {
   const participants = session?.participants ?? []
   // `parseSessionSplit` acepta lo que venga y cae en `none`: sin mesa leída no
   // hay división, y así el valor nunca es nulo para quien lo muestra.
-  const split = parseSessionSplit(
-    session?.split_type,
-    session?.split_allocations,
-    session?.split_equal_parts,
-  )
+  const split = parseSessionSplit(session?.split_type, session?.split_allocations, session?.split_equal_parts)
 
   const bill = useQuery(billQuery(sessionId))
   // Lo pedido lo necesitan «cada uno lo suyo», el pago por ítems y los invitados.
   // Es la misma consulta que la pestaña Pedidos: react-query la comparte.
   const orders = useQuery(ordersQuery(sessionId))
   const payments = useQuery(paymentsQuery(sessionId))
+  const mobileAvailable = useQuery(
+    mobilePaymentAvailabilityQuery(paymentMethods.includes('mobile') ? sessionId : undefined),
+  )
 
   if (!sessionId) return <WithoutSession title="Cuenta" subject="su cuenta" />
 
@@ -52,9 +58,7 @@ export function SessionBill() {
   return (
     <section aria-label="Cuenta de la mesa">
       <h2>Cuenta</h2>
-      {closed && (
-        <p className="muted">La mesa ya cerró su cuenta; podés seguir consultando el detalle.</p>
-      )}
+      {closed && <p className="muted">La mesa ya cerró su cuenta; podés seguir consultando el detalle.</p>}
       <FreshnessNote
         label="la cuenta"
         updatedAt={oldestUpdate(bill.dataUpdatedAt, orders.dataUpdatedAt, payments.dataUpdatedAt)}
@@ -63,14 +67,20 @@ export function SessionBill() {
 
       {bill.isPending && <p role="status">Cargando la cuenta…</p>}
       {/* Cada lectura dice qué falló (lo pone su loader) y el catálogo decide si reintentar. */}
-      <ErrorText variant="menu" error={bill.error} retry={() => { void bill.refetch() }} />
+      <ErrorText
+        variant="menu"
+        error={bill.error}
+        retry={() => {
+          void bill.refetch()
+        }}
+      />
       {bill.data && (
         <>
           <BillSummary bill={bill.data} />
           <BillSplitter split={split} bill={bill.data} orders={ordered} />
           {/* Con la mesa cerrada ya no se suma gente: la RPC lo rechazaría. */}
           {!closed && <AddGuest sessionId={sessionId} orders={ordered} />}
-          {session && me && paymentMethods.includes('mobile') && (
+          {session && me && mobileAvailable.data === true && (
             <MobilePayment
               sessionId={session.id}
               pending={asAmount(bill.data.pending_amount)}
@@ -83,13 +93,18 @@ export function SessionBill() {
               orders={ordered}
             />
           )}
+          {paymentMethods.includes('mobile') && mobileAvailable.data === false && !closed && (
+            <p className="muted">El pago desde el celular no está disponible en esta sucursal.</p>
+          )}
         </>
       )}
       <PaymentHistory
         payments={payments.data}
         loading={payments.isPending}
         error={payments.error}
-        retry={() => { void payments.refetch() }}
+        retry={() => {
+          void payments.refetch()
+        }}
       />
       <ServiceRequests />
     </section>

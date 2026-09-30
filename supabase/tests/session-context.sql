@@ -66,6 +66,14 @@ begin
     returning id into other_restaurant;
   insert into public.branches(restaurant_id, name, payment_methods)
     values(restaurant, 'Mostrador', '{mobile,in_person,external}') returning id into branch;
+  insert into private.payment_provider_credentials(
+    restaurant_id,provider,environment,access_token_secret_id,access_token_hint
+  ) values (
+    restaurant,'mercado_pago','test',
+    vault.create_secret('APP_USR-session-context-token',gen_random_uuid()::text),'oken'
+  );
+  insert into private.payment_provider_branches(restaurant_id,branch_id,provider)
+    values(restaurant,branch,'mercado_pago');
   insert into public.branches(restaurant_id, name) values(restaurant, 'Segunda') returning id into branch_two;
   insert into public.branches(restaurant_id, name) values(other_restaurant, 'Ajena') returning id into other_branch;
   insert into public.restaurant_members(restaurant_id, user_id, role) values

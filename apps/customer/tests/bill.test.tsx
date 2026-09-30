@@ -8,6 +8,7 @@ import {
   type loadBill,
   type loadOrders,
   type loadPayments,
+  mobilePaymentAvailabilityQuery,
   ordersQuery,
   paymentsQuery,
 } from '../src/features/orders-api'
@@ -40,20 +41,22 @@ const order: Awaited<ReturnType<typeof loadOrders>>[number] = {
   notes: null,
   request_id: null,
   request_payload: null,
-  order_items: [{
-    id: 'item-1',
-    order_id: 'order-1',
-    product_id: 'p',
-    product_name: 'Milanesa',
-    quantity: 1,
-    base_price: 9000,
-    total_price: 9000,
-    participant_id: ana.id,
-    is_shared: false,
-    notes: null,
-    order_item_modifiers: [],
-    order_item_removed_ingredients: [],
-  }],
+  order_items: [
+    {
+      id: 'item-1',
+      order_id: 'order-1',
+      product_id: 'p',
+      product_name: 'Milanesa',
+      quantity: 1,
+      base_price: 9000,
+      total_price: 9000,
+      participant_id: ana.id,
+      is_shared: false,
+      notes: null,
+      order_item_modifiers: [],
+      order_item_removed_ingredients: [],
+    },
+  ],
 }
 
 const bill: Awaited<ReturnType<typeof loadBill>> = {
@@ -82,6 +85,7 @@ function seed(client: QueryClient) {
   client.setQueryData(ordersQuery(sessionId).queryKey, [order])
   client.setQueryData(billQuery(sessionId).queryKey, bill)
   client.setQueryData(paymentsQuery(sessionId).queryKey, [payment])
+  client.setQueryData(mobilePaymentAvailabilityQuery(sessionId).queryKey, true)
 }
 
 /** Cada bloque de la cuenta, por la etiqueta de su sección o el texto de su botón. */
@@ -129,8 +133,24 @@ test('without mobile payment, calling the waiter is the primary action of the bi
   assert.deepEqual(primaries, ['Llamar mozo'])
 })
 
+test('an enabled mobile method is not offered when the branch has no effective provider', async () => {
+  const unavailable = (client: QueryClient) => {
+    seed(client)
+    client.setQueryData(mobilePaymentAvailabilityQuery(sessionId).queryKey, false)
+  }
+  const container = await renderTable(billPath(token), <Route path="cuenta" element={<TableBillPage />} />, {
+    paymentMethods: ['mobile', 'in_person'],
+    seed: unavailable,
+  })
+
+  assert.deepEqual(blocksIn(container), ['falta pagar', 'división', 'invitados', 'pagos', 'mozo'])
+  assert.match(container.textContent ?? '', /pago desde el celular no está disponible/i)
+})
+
 test('the orders tab lists what was ordered and nothing of the bill', async () => {
-  const container = await renderTable(ordersPath(token), <Route path="pedidos" element={<TableOrdersPage />} />, { seed })
+  const container = await renderTable(ordersPath(token), <Route path="pedidos" element={<TableOrdersPage />} />, {
+    seed,
+  })
 
   assert.match(container.textContent ?? '', /Pedido 1/)
   assert.ok([...container.querySelectorAll('button')].some((button) => button.textContent === 'Pedir de nuevo'))

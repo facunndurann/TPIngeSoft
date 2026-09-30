@@ -173,6 +173,14 @@ begin
   perform set_config('request.jwt.claim.sub',diner::text,true);
   perform pg_temp.expect_mobile_create_error(sid,request_id,'PAYMENT_METHOD_DISABLED');
   update public.branches set payment_methods='{mobile,in_person}' where id=branch;
+  insert into private.payment_provider_credentials(
+    restaurant_id,provider,environment,access_token_secret_id,access_token_hint
+  ) values (
+    restaurant,'mercado_pago','test',
+    vault.create_secret('APP_USR-payment-test-access-token',gen_random_uuid()::text),'oken'
+  );
+  insert into private.payment_provider_branches(restaurant_id,branch_id,provider)
+    values(restaurant,branch,'mercado_pago');
   select * into saved from public.create_mobile_payment(sid,request_id);
   if saved.amount<>10 or saved.status<>'pending' then raise exception 'Wrong pending mobile payment'; end if;
   select * into repeated from public.create_mobile_payment(sid,request_id);

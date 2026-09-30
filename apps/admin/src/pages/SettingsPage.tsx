@@ -2,13 +2,33 @@ import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Trash2 } from 'lucide-react'
 import { optimistic, patchRow } from '@/lib/optimistic'
-import { branchesQuery, createBranch, deleteBranch, updateBranch, type Branch, type BranchPatch } from '@/queries/branches'
+import {
+  branchesQuery,
+  createBranch,
+  deleteBranch,
+  updateBranch,
+  type Branch,
+  type BranchPatch,
+} from '@/queries/branches'
 import { myRestaurantKey, updateRestaurant } from '@/queries/restaurant'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import { DesignPicker } from '@/features/DesignPicker'
 import { Page } from '@/features/Page'
 import { PaymentMethodsField } from '@/features/PaymentMethods'
-import { Badge, Button, ErrorText, Field, IconButton, Input, QueryView, Textarea, Toggle, useConfirm, useSaveErrors } from '@restaurant-platform/ui'
+import { MercadoPagoSettings } from '@/features/MercadoPagoSettings'
+import {
+  Badge,
+  Button,
+  ErrorText,
+  Field,
+  IconButton,
+  Input,
+  QueryView,
+  Textarea,
+  Toggle,
+  useConfirm,
+  useSaveErrors,
+} from '@restaurant-platform/ui'
 
 export function SettingsPage() {
   const restaurant = useRestaurant()
@@ -30,12 +50,14 @@ export function SettingsPage() {
     changes.description !== restaurant.description ||
     changes.menu_design !== restaurant.menu_design
 
-  const saveMutation = useMutation(errors.saving('No pudimos guardar los datos del restaurante.', {
-    mutationFn: () => updateRestaurant(restaurant.id, changes),
-    // Se espera a releer el restaurante: si no, por un momento lo guardado todavía
-    // sería lo viejo y el aviso diría «cambios sin guardar» justo después de guardar.
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: myRestaurantKey }),
-  }))
+  const saveMutation = useMutation(
+    errors.saving('No pudimos guardar los datos del restaurante.', {
+      mutationFn: () => updateRestaurant(restaurant.id, changes),
+      // Se espera a releer el restaurante: si no, por un momento lo guardado todavía
+      // sería lo viejo y el aviso diría «cambios sin guardar» justo después de guardar.
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: myRestaurantKey }),
+    }),
+  )
 
   const status = saveMutation.isPending
     ? 'Guardando…'
@@ -79,6 +101,7 @@ export function SettingsPage() {
       </section>
 
       <BranchesSection restaurantId={restaurant.id} />
+      <MercadoPagoSettings restaurantId={restaurant.id} />
     </Page>
   )
 }
@@ -94,27 +117,41 @@ function BranchesSection({ restaurantId }: { restaurantId: string }) {
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: branchesQuery(restaurantId).queryKey })
 
-  const createMutation = useMutation(errors.saving('No pudimos crear la sucursal.', {
-    mutationFn: () =>
-      createBranch({ restaurant_id: restaurantId, name: newName.trim(), address: newAddress.trim() || null }),
-    onSuccess: () => {
-      setNewName('')
-      setNewAddress('')
-      invalidate()
-    },
-  }))
+  const createMutation = useMutation(
+    errors.saving('No pudimos crear la sucursal.', {
+      mutationFn: () =>
+        createBranch({ restaurant_id: restaurantId, name: newName.trim(), address: newAddress.trim() || null }),
+      onSuccess: () => {
+        setNewName('')
+        setNewAddress('')
+        invalidate()
+      },
+    }),
+  )
 
   // Un solo guardado para la sucursal: alcanza con mandar lo que cambió.
-  const updateMutation = useMutation(errors.saving('No pudimos guardar la sucursal.', {
-    mutationFn: ({ id, ...patch }: BranchPatch & { id: string }) => updateBranch(id, patch),
-    // Activar la sucursal o cambiar sus medios de pago se ve al instante.
-    ...optimistic(queryClient, branchesQuery(restaurantId).queryKey, patchRow<Branch>),
-  }, ({ id }) => id))
+  const updateMutation = useMutation(
+    errors.saving(
+      'No pudimos guardar la sucursal.',
+      {
+        mutationFn: ({ id, ...patch }: BranchPatch & { id: string }) => updateBranch(id, patch),
+        // Activar la sucursal o cambiar sus medios de pago se ve al instante.
+        ...optimistic(queryClient, branchesQuery(restaurantId).queryKey, patchRow<Branch>),
+      },
+      ({ id }) => id,
+    ),
+  )
 
-  const deleteMutation = useMutation(errors.saving('No pudimos eliminar la sucursal.', {
-    mutationFn: deleteBranch,
-    onSuccess: invalidate,
-  }, (id) => id))
+  const deleteMutation = useMutation(
+    errors.saving(
+      'No pudimos eliminar la sucursal.',
+      {
+        mutationFn: deleteBranch,
+        onSuccess: invalidate,
+      },
+      (id) => id,
+    ),
+  )
 
   function handleCreate(e: FormEvent) {
     e.preventDefault()
@@ -129,8 +166,8 @@ function BranchesSection({ restaurantId }: { restaurantId: string }) {
       <div>
         <h2 className="font-semibold text-neutral-900">Sucursales</h2>
         <p className="text-sm text-muted">
-          Cada sucursal decide con qué se le puede pagar: el comensal solo ve los medios
-          habilitados en la suya. Estos cambios se guardan al tocarlos.
+          Cada sucursal decide con qué se le puede pagar: el comensal solo ve los medios habilitados en la suya. Estos
+          cambios se guardan al tocarlos.
         </p>
       </div>
 
@@ -138,11 +175,7 @@ function BranchesSection({ restaurantId }: { restaurantId: string }) {
           así que llevan rótulo visible. En pantallas chicas se apilan. */}
       <form onSubmit={handleCreate} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
         <Field label="Nombre de la sucursal">
-          <Input
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            placeholder="Ej: Sucursal Centro"
-          />
+          <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Ej: Sucursal Centro" />
         </Field>
         <Field label="Dirección (opcional)">
           <Input
@@ -194,9 +227,7 @@ function BranchesSection({ restaurantId }: { restaurantId: string }) {
                 <PaymentMethodsField
                   value={branch.payment_methods}
                   busy={savingBranch === branch.id}
-                  onChange={(payment_methods) =>
-                    updateMutation.mutate({ id: branch.id, payment_methods })
-                  }
+                  onChange={(payment_methods) => updateMutation.mutate({ id: branch.id, payment_methods })}
                 />
                 <ErrorText error={errors.messageFor(branch.id)} />
               </li>

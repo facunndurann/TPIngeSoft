@@ -18,6 +18,52 @@ export type PaymentMethod = Database['public']['Enums']['payment_method']
 export type PaymentStatus = Database['public']['Enums']['payment_status']
 export type PaymentMode = Database['public']['Enums']['payment_mode']
 
+/** El medio sigue siendo `mobile`; esto identifica quién procesa ese medio. */
+export type PaymentProvider = Database['public']['Enums']['payment_provider']
+export type PaymentProviderEnvironment = Database['public']['Enums']['payment_provider_environment']
+export const paymentProviders = ['mercado_pago'] as const satisfies readonly PaymentProvider[]
+export const paymentProviderEnvironments = [
+  'test',
+  'production',
+] as const satisfies readonly PaymentProviderEnvironment[]
+
+export const paymentProviderLabels: Record<PaymentProvider, string> = {
+  mercado_pago: 'Mercado Pago',
+}
+
+export const paymentProviderEnvironmentLabels: Record<PaymentProviderEnvironment, string> = {
+  test: 'Pruebas',
+  production: 'Producción',
+}
+
+/** Estado administrativo seguro: nunca contiene el access token ni el secreto de webhook. */
+export type PaymentProviderConfig = {
+  provider: PaymentProvider
+  environment: PaymentProviderEnvironment
+  configured: boolean
+  accessTokenHint: string | null
+  webhookConfigured: boolean
+  branchIds: string[]
+  updatedAt: string | null
+}
+
+const backendSecret = z.string().trim().min(16).max(512).regex(/^\S+$/)
+
+/**
+ * Guardado del panel. Los secretos vacíos conservan el valor existente; el
+ * backend vuelve a validar todo y exige access token en la primera configuración.
+ */
+export const paymentProviderConfigInputSchema = z
+  .object({
+    restaurantId: uuid,
+    environment: z.enum(paymentProviderEnvironments),
+    branchIds: z.array(uuid).max(100),
+    accessToken: backendSecret.min(20).optional(),
+    webhookSecret: backendSecret.optional(),
+  })
+  .strict()
+export type PaymentProviderConfigInput = z.infer<typeof paymentProviderConfigInputSchema>
+
 /** Orden en que se ofrecen y se muestran, del más automático al más manual. */
 export const paymentMethods = ['mobile', 'in_person', 'external'] as const satisfies readonly PaymentMethod[]
 

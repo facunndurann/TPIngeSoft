@@ -6,6 +6,8 @@ import {
   paymentMethodDescriptions,
   paymentMethodLabels,
   paymentMethods,
+  paymentProviderConfigInputSchema,
+  paymentProviderEnvironmentLabels,
 } from '../src/payments.ts'
 
 test('a branch offers only the payment methods it enabled', () => {
@@ -26,4 +28,22 @@ test('a branch offers only the payment methods it enabled', () => {
     assert.ok(paymentMethodLabels[method])
     assert.ok(paymentMethodDescriptions[method])
   }
+})
+
+test('provider configuration keeps provider credentials separate from payment methods and modes', () => {
+  const input = paymentProviderConfigInputSchema.parse({
+    restaurantId: '00000000-0000-4000-8000-000000000001',
+    environment: 'test',
+    branchIds: ['00000000-0000-4000-8000-000000000002'],
+    accessToken: 'APP_USR-this-is-a-test-token',
+  })
+  assert.equal(input.environment, 'test')
+  assert.deepEqual(input.branchIds, ['00000000-0000-4000-8000-000000000002'])
+  assert.equal(paymentProviderEnvironmentLabels.production, 'Producción')
+  assert.throws(() =>
+    paymentProviderConfigInputSchema.parse({
+      ...input,
+      accessToken: 'too short',
+    }),
+  )
 })

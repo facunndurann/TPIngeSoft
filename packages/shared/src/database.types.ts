@@ -1569,6 +1569,10 @@ export type Database = {
         Args: { participant_name?: string; qr: string }
         Returns: string
       }
+      delete_payment_provider_config: {
+        Args: { p_restaurant_id: string }
+        Returns: undefined
+      }
       delete_pos_employee: {
         Args: { p_employee_id: string; p_restaurant_id: string }
         Returns: string
@@ -1582,6 +1586,18 @@ export type Database = {
       get_order_pos_type: {
         Args: { p_order_id: string }
         Returns: Database["public"]["Enums"]["pos_type"]
+      }
+      get_payment_provider_config: {
+        Args: { p_restaurant_id: string }
+        Returns: {
+          access_token_hint: string
+          branch_ids: string[]
+          configured: boolean
+          environment: Database["public"]["Enums"]["payment_provider_environment"]
+          provider: Database["public"]["Enums"]["payment_provider"]
+          updated_at: string
+          webhook_configured: boolean
+        }[]
       }
       get_pos_contexts: {
         Args: never
@@ -1615,6 +1631,10 @@ export type Database = {
           user_id: string
           username: string
         }[]
+      }
+      mobile_payment_available: {
+        Args: { p_session_id: string }
+        Returns: boolean
       }
       pos_close_table_session: {
         Args: { p_session_id: string }
@@ -1687,6 +1707,17 @@ export type Database = {
           status: Database["public"]["Enums"]["payment_status"]
         }[]
       }
+      resolve_payment_provider_for_session: {
+        Args: { p_session_id: string }
+        Returns: {
+          access_token: string
+          branch_id: string
+          environment: Database["public"]["Enums"]["payment_provider_environment"]
+          provider: Database["public"]["Enums"]["payment_provider"]
+          restaurant_id: string
+          webhook_secret: string
+        }[]
+      }
       save_employee_account: {
         Args: {
           p_active: boolean
@@ -1712,6 +1743,16 @@ export type Database = {
           p_restaurant_id: string
         }
         Returns: string
+      }
+      save_payment_provider_config: {
+        Args: {
+          p_access_token?: string
+          p_branch_ids: string[]
+          p_environment: Database["public"]["Enums"]["payment_provider_environment"]
+          p_restaurant_id: string
+          p_webhook_secret?: string
+        }
+        Returns: undefined
       }
       save_product: {
         Args: {
@@ -1830,6 +1871,8 @@ export type Database = {
         | "equal_split"
         | "custom"
         | "percentage_split"
+      payment_provider: "mercado_pago"
+      payment_provider_environment: "test" | "production"
       payment_status: "pending" | "approved" | "rejected" | "cancelled"
       pos_type: "internal" | "fudo"
       session_kind: "table" | "takeout"
@@ -1994,6 +2037,8 @@ export const Constants = {
         "custom",
         "percentage_split",
       ],
+      payment_provider: ["mercado_pago"],
+      payment_provider_environment: ["test", "production"],
       payment_status: ["pending", "approved", "rejected", "cancelled"],
       pos_type: ["internal", "fudo"],
       session_kind: ["table", "takeout"],
