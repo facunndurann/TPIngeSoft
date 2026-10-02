@@ -19,10 +19,9 @@ import {
  * servidor vuelve a calcular y validar todo; esto es lo que se muestra antes.
  */
 
-export type Payment = Pick<
-  Tables<'payments'>,
-  'id' | 'participant_id' | 'amount' | 'method' | 'mode' | 'status'
-> & {
+export type Payment = Pick<Tables<'payments'>, 'id' | 'participant_id' | 'amount' | 'method' | 'mode' | 'status'> & {
+  /** Crédito neto de un pago aprobado, igual que session_bills. */
+  refunded_amount?: number
   payment_order_items: readonly { order_item_id: string }[]
 }
 
@@ -71,7 +70,7 @@ export type PaymentShare =
     }
   | { mode: 'full'; amount: number }
 
-/** Lo que la pantalla ofrece: confirmar un pago, iniciar uno o explicar por qué no hay. */
+/** Lo que la pantalla ofrece: consultar un pago, iniciar uno o explicar por qué no hay. */
 export type PaymentStep =
   /** Ya hay un pago de este comensal esperando la respuesta del proveedor. */
   | { kind: 'pending'; payment: Payment }
@@ -137,7 +136,7 @@ function shareFor(input: PaymentPlanInput, chosen: PayableItem[]): PaymentShare 
   const { participantId, payments, split } = input
   // En centavos, como toda la plata de la app: en float 0.1 + 0.2 supera a 0.3 y
   // el plan diría que los ítems exceden el saldo.
-  const pendingCents = toCents(input.pending)
+  const pendingCents = availableCents(input)
 
   if (chosen.length > 0) {
     return {
@@ -148,16 +147,11 @@ function shareFor(input: PaymentPlanInput, chosen: PayableItem[]): PaymentShare 
   }
 
   if (split.type === 'equal') {
-    // Cada pago vivo de partes iguales toma una parte, y los que esperan
-    // confirmación además retienen su importe: no se puede volver a ofrecer.
-    const taken = payments.filter(
-      (payment) => payment.mode === 'equal_split' && isLive(payment.status),
-    )
-    const reservedCents = sumCents(
-      taken.filter((payment) => payment.status === 'pending').map((payment) => payment.amount),
-    )
+    // Cada pago vivo de partes iguales toma una parte. Las reservas de todos
+    // los modos ya se descontaron del importe disponible, como en la RPC.
+    const taken = payments.filter((payment) => payment.mode === 'equal_split' && isLive(payment.status))
     const remainingParts = split.equalParts ? Math.max(1, split.equalParts - taken.length) : 1
-    const available = fromCents(Math.max(0, pendingCents - reservedCents))
+    const available = fromCents(pendingCents)
     // Con una sola parte libre no hay nada que dividir (splitEqualAmounts pide dos o
     // más): esa parte es todo lo disponible.
     const amount = splitEqualAmounts({ pending_amount: available }, remainingParts)[0] ?? available
@@ -172,11 +166,9 @@ function shareFor(input: PaymentPlanInput, chosen: PayableItem[]): PaymentShare 
       splitPercentageAmounts(input.accountTotal, input.participants, split.allocations).find(
         (share) => share.participantId === participantId,
       )?.amountCents ?? 0
-    const settledCents = sumCents(
-      payments
-        .filter((payment) => payment.participant_id === participantId && payment.status === 'approved')
-        .map((payment) => payment.amount),
-    )
+    const settledCents = payments
+      .filter((payment) => payment.participant_id === participantId && payment.status === 'approved')
+      .reduce((total, payment) => total + toCents(payment.amount) - toCents(payment.refunded_amount ?? 0), 0)
     return {
       mode: 'percentage_split',
       percentage: split.allocations[participantId] ?? 0,
@@ -189,20 +181,26 @@ function shareFor(input: PaymentPlanInput, chosen: PayableItem[]): PaymentShare 
   return { mode: 'full', amount: fromCents(pendingCents) }
 }
 
+/** Los pendientes reservan saldo, cualquiera sea la modalidad elegida. */
+function availableCents(input: PaymentPlanInput): number {
+  const reserved = sumCents(
+    input.payments.filter((payment) => payment.status === 'pending').map((payment) => payment.amount),
+  )
+  return Math.max(0, toCents(input.pending) - reserved)
+}
+
 function nextStep(input: PaymentPlanInput, share: PaymentShare): PaymentStep {
   // Un pago esperando al proveedor bloquea todo lo demás: primero hay que resolverlo.
   const own = input.payments.find(
     (payment) =>
-      payment.participant_id === input.participantId &&
-      payment.method === 'mobile' &&
-      payment.status === 'pending',
+      payment.participant_id === input.participantId && payment.method === 'mobile' && payment.status === 'pending',
   )
   if (own) return { kind: 'pending', payment: own }
 
   const amountCents = toCents(share.amount)
   const pendingCents = toCents(input.pending)
-  if (share.mode === 'custom' && amountCents > pendingCents) {
-    return { kind: 'exceeds', balance: input.pending }
+  if (share.mode === 'custom' && amountCents > availableCents(input)) {
+    return { kind: 'exceeds', balance: fromCents(availableCents(input)) }
   }
 
   // Sin saldo o con la mesa cerrada no hay pago que ofrecer ni parte que explicar.
@@ -214,6 +212,7 @@ function nextStep(input: PaymentPlanInput, share: PaymentShare): PaymentStep {
   }
   // Una parte en cero todavía dice algo: o las partes están tomadas, o ya pagó lo suyo.
   if (share.mode === 'equal_split') return { kind: 'partsReserved' }
-  if (share.mode === 'percentage_split') return { kind: 'sharePaid', percentage: share.percentage }
+  if (share.mode === 'percentage_split' && availableCents(input) > 0)
+    return { kind: 'sharePaid', percentage: share.percentage }
   return { kind: 'nothing' }
 }

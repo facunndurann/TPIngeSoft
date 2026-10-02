@@ -1,7 +1,8 @@
 {
   "imports": {
     "@supabase/supabase-js": "npm:@supabase/supabase-js@2.112.4",
-    "zod": "npm:zod@3.25.76"
+    "zod": "npm:zod@3.25.76",
+    "mercadopago": "npm:mercadopago@3.6.1"
   },
   "compilerOptions": { "strict": true }
 }

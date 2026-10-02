@@ -2,6 +2,9 @@ import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import {
   acceptsPaymentMethod,
+  isMercadoPagoCheckoutUrl,
+  mobilePaymentRequestSchema,
+  mobilePaymentResultSchema,
   enabledPaymentMethods,
   paymentMethodDescriptions,
   paymentMethodLabels,
@@ -45,5 +48,54 @@ test('provider configuration keeps provider credentials separate from payment me
       ...input,
       accessToken: 'too short',
     }),
+  )
+})
+
+const paymentId = '00000000-0000-4000-8000-000000000003'
+const attempt = {
+  request: {
+    action: 'create',
+    sessionId: '00000000-0000-4000-8000-000000000001',
+    requestId: '00000000-0000-4000-8000-000000000004',
+    mode: 'full',
+  },
+}
+
+test('the browser can request status but can never confirm a payment or send an amount', () => {
+  assert.deepEqual(mobilePaymentRequestSchema.parse({ action: 'status', paymentId }), { action: 'status', paymentId })
+  for (const request of [
+    { action: 'confirm', paymentId, outcome: 'approved' },
+    { action: 'status', paymentId, outcome: 'approved' },
+    { ...attempt.request, amount: 1 },
+    { ...attempt.request, mode: 'custom' },
+    { ...attempt.request, itemIds: [paymentId] },
+  ])
+    assert.equal(mobilePaymentRequestSchema.safeParse(request).success, false)
+})
+
+test('checkout destinations reject insecure URLs, lookalike hosts, credentials and unrelated paths', () => {
+  const valid = 'https://www.mercadopago.com.ar/checkout/v1/redirect?pref_id=123-abc'
+  assert.equal(isMercadoPagoCheckoutUrl(valid), true)
+  assert.equal(isMercadoPagoCheckoutUrl('https://www.mercadopago.com/mla/checkout/start?pref_id=123'), true)
+  for (const url of [
+    'http://www.mercadopago.com.ar/checkout/v1/redirect',
+    'https://www.mercadopago.com.ar.evil.example/checkout/v1/redirect',
+    'https://evil.example/checkout/v1/redirect',
+    'https://www.mercadopago.com.ar@evil.example/checkout/v1/redirect',
+    'https://user@www.mercadopago.com.ar/checkout/v1/redirect',
+    'https://www.mercadopago.com.ar:8443/checkout/v1/redirect',
+    'https://www.mercadopago.com.ar/developers',
+    'javascript:alert(1)',
+    '/checkout/v1/redirect',
+  ]) {
+    assert.equal(isMercadoPagoCheckoutUrl(url), false, url)
+    assert.equal(
+      mobilePaymentResultSchema.safeParse({ paymentId, amount: 10, status: 'pending', checkoutUrl: url }).success,
+      false,
+    )
+  }
+  assert.equal(
+    mobilePaymentResultSchema.parse({ paymentId, amount: 10, status: 'pending', checkoutUrl: valid }).checkoutUrl,
+    valid,
   )
 })

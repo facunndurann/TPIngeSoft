@@ -34,7 +34,7 @@ Phones / browsers
 
 You will **not** deploy Docker, and you will **not** run `seed.sql` in the cloud. Demo users (`admin@esquina.demo`) exist only in local Docker. In the cloud you register a real account and create the restaurant from the admin onboarding screen.
 
-El pago electrónico usa un simulador controlado para la demo. No procesa dinero real ni requiere una cuenta de Mercado Pago.
+El pago electrónico usa Mercado Pago Checkout Pro. Preparar cuentas de prueba, credenciales por restaurante y URLs públicas HTTPS siguiendo [MERCADO_PAGO.md](MERCADO_PAGO.md). El ambiente seleccionado en el panel no transforma las credenciales ni impide cobros reales: el token debe corresponder al vendedor de prueba o productivo elegido.
 
 ---
 
@@ -150,42 +150,46 @@ Do **not** run `pnpm supabase db reset` against the cloud (that wipes data). Do 
 
 ## Part 4 — Deploy the Edge Functions
 
-The three functions live under `supabase/functions/`. Browsers never write orders, create Auth employees, or confirm payments directly: each app calls the matching function with the user's JWT.
+The four functions live under `supabase/functions/`. Apps call authenticated functions with the user's JWT; Mercado Pago sends signed notifications to the webhook.
 
 | Function | Called by | What it does |
 |----------|-----------|----------------|
 | `submit-order` | Customer (`apps/customer`) | Validates the diner JWT and runs `submit_order` (menu snapshot, persistence, internal POS accept) in one transaction. |
 | `employee-accounts` | Admin (`apps/admin`) | Creates / updates employee Auth users and memberships. Uses the Auth Admin API (`service_role`) **after** authorizing the caller. |
-| `mobile-payment` | Customer (`apps/customer`) | Creates a pending mobile payment as the diner. With the sandbox flag on, also resolves approve/reject for the demo. |
+| `mobile-payment` | Customer (`apps/customer`) | Creates Checkout Pro preferences and queries authoritative payment status for the verified anonymous diner. |
+| `mercado-pago-webhook` | Mercado Pago | Verifies HMAC, retrieves the payment using the original seller credential, and reconciles it transactionally. |
 
 Set secrets **before** the first deploy of the functions that read them:
 
 ```bash
 pnpm supabase secrets set EMPLOYEE_EMAIL_DOMAIN=employees.your-controlled-domain.com
-pnpm supabase secrets set PAYMENT_SANDBOX_ENABLED=true
+pnpm supabase secrets set MERCADO_PAGO_APP_URL=https://mesa.your-controlled-domain.com
+pnpm supabase secrets set MERCADO_PAGO_WEBHOOK_URL=https://PROJECT_REF.supabase.co/functions/v1/mercado-pago-webhook
 ```
 
-Use a **controlled subdomain you own**, with no real mailboxes. The POS env var `VITE_EMPLOYEE_EMAIL_DOMAIN` must be **exactly** the same string. `PAYMENT_SANDBOX_ENABLED=true` is for the academic demo only; turn it off before wiring a real provider (create still works; confirm then returns `PAYMENT_PROVIDER_UNAVAILABLE` until a webhook replaces the simulator).
+Use a **controlled subdomain you own**, with no real mailboxes. The POS env var `VITE_EMPLOYEE_EMAIL_DOMAIN` must be **exactly** the same string. Replace the checkout URL placeholders with your public customer origin and Supabase project before running these commands. Load seller Access Tokens and webhook secrets from the restaurant settings into Vault.
 
-Then deploy all three:
+Then deploy all four:
 
 ```bash
 pnpm supabase functions deploy submit-order
 pnpm supabase functions deploy employee-accounts
 pnpm supabase functions deploy mobile-payment
+pnpm supabase functions deploy mercado-pago-webhook
 ```
 
-`SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are injected by the Edge runtime. Do **not** copy them to Vercel or any frontend `.env`. Only `employee-accounts` and `mobile-payment` use `service_role` (Auth Admin and sandbox payment resolve). `submit-order` talks to Postgres with the diner JWT.
+`SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are injected by the Edge runtime. Keep the service role in the backend. `employee-accounts`, `mobile-payment` and `mercado-pago-webhook` use it only after their authorization checks; `submit-order` talks to Postgres with the diner JWT.
 
 JWT at the gateway (`supabase/config.toml`):
 
 | Function | `verify_jwt` | Why |
 |----------|--------------|-----|
 | `submit-order` | `true` | Gateway rejects calls without a valid JWT before the handler. |
-| `mobile-payment` | `true` | Same; the handler then requires an **anonymous** diner. |
+| `mobile-payment` | `false` | Handler verifies JWT with Auth.getUser and requires an anonymous diner. |
+| `mercado-pago-webhook` | `false` | Mercado Pago authenticates with HMAC; it does not send a Supabase JWT. |
 | `employee-accounts` | `false` | The handler calls `Auth.getUser` itself (needed for signing-key projects). Unauthenticated calls still get `401`. |
 
-Confirm: dashboard → **Edge Functions** → all three names listed. Dashboard → **Edge Functions → Secrets** (or `pnpm supabase secrets list`) → `EMPLOYEE_EMAIL_DOMAIN` and `PAYMENT_SANDBOX_ENABLED`.
+Confirm all four functions are listed and the employee domain plus both Mercado Pago URL variables are configured. Verify signed notification delivery and test purchases using [MERCADO_PAGO.md](MERCADO_PAGO.md) before enabling production credentials.
 
 ---
 
@@ -358,9 +362,9 @@ pnpm supabase functions deploy mobile-payment
 git add ... && git commit && git push   # keep GitHub in sync
 ```
 
-- Changing `_shared/` (used by all three functions) → redeploy all three.
+- Changing `_shared/` → redeploy each function importing that module, including the webhook.
 - Changing `packages/shared` schemas imported by a function → redeploy that function.
-- Changing `EMPLOYEE_EMAIL_DOMAIN` or `PAYMENT_SANDBOX_ENABLED` → `pnpm supabase secrets set …` and **redeploy** the function that reads the secret (`employee-accounts` / `mobile-payment`).
+- Changing `EMPLOYEE_EMAIL_DOMAIN` or the Mercado Pago HTTPS URL variables → `pnpm supabase secrets set …` and redeploy the function that reads the configuration. Restaurant credentials are updated in Vault through the panel.
 
 ### Typical “I shipped a feature” checklist
 
@@ -402,7 +406,7 @@ You can point **local** Vite apps at the **cloud** project by putting the cloud 
 | Order confirm fails, menu works | `submit-order` not deployed, or JWT verification failed (anon auth). |
 | Admin: create / update / reset employee fails | `employee-accounts` not deployed, or `EMPLOYEE_EMAIL_DOMAIN` missing. Check Edge Function logs. |
 | POS login works locally but not in cloud with the same username | `VITE_EMPLOYEE_EMAIL_DOMAIN` on the POS Vercel project does not match `EMPLOYEE_EMAIL_DOMAIN`. |
-| Customer: pay from phone create works, approve/reject fails | `mobile-payment` not deployed, or `PAYMENT_SANDBOX_ENABLED` is not `true`. |
+| Customer: checkout fails or stays pending | Verify both payment functions, HTTPS configuration, seller credentials and signed Webhook delivery; see [MERCADO_PAGO.md](MERCADO_PAGO.md). |
 | Photos do not upload | Migration not pushed (bucket `product-images` missing). Check **Storage** in the dashboard. |
 | POS does not update live | Realtime publication missing (migration 1). Dashboard → **Database → Publications** / **Realtime**. |
 | `db push` asks for password | Use the database password from project creation. Reset it under **Project Settings → Database** if lost. |
@@ -416,7 +420,7 @@ You can point **local** Vite apps at the **cloud** project by putting the cloud 
 ## What we are not deploying yet
 
 - **Phase 6** `recommend` (LLM) — not in the repo.
-- A **real** Mercado Pago (or other) provider and webhooks — not in the repo. The demo uses `mobile-payment` with `PAYMENT_SANDBOX_ENABLED=true`.
+- Production Mercado Pago credentials and real-environment QA require the prioritized validations in [MERCADO_PAGO.md](MERCADO_PAGO.md).
 - Custom domains — optional later in Vercel (Domains) and then update `VITE_CUSTOMER_APP_URL` + Auth Site URL + redeploy admin.
 - Running `seed.sql` in production — do not.
 

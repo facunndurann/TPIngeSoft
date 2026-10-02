@@ -73,6 +73,8 @@ const payment: Awaited<ReturnType<typeof loadPayments>>[number] = {
   id: 'payment-1',
   participant_id: ana.id,
   amount: 2000,
+  refunded_amount: 0,
+  provider_status: null,
   mode: 'full',
   method: 'in_person',
   status: 'approved',
@@ -155,4 +157,16 @@ test('the orders tab lists what was ordered and nothing of the bill', async () =
   assert.match(container.textContent ?? '', /Pedido 1/)
   assert.ok([...container.querySelectorAll('button')].some((button) => button.textContent === 'Pedir de nuevo'))
   assert.deepEqual(blocksIn(container), [])
+})
+
+test('payment history distinguishes a partial refund from the amount credited to the bill', async () => {
+  const container = await renderTable(billPath(token), <Route path="cuenta" element={<TableBillPage />} />, {
+    seed: (client) => {
+      seed(client)
+      client.setQueryData(paymentsQuery(sessionId).queryKey, [{ ...payment, refunded_amount: 500 }])
+    },
+  })
+  const history = container.querySelector('.payment-line')?.textContent ?? ''
+  assert.match(history, /Reintegrado:.*500/)
+  assert.match(history, /Acreditado:.*1[.,]500/)
 })

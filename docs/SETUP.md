@@ -84,7 +84,7 @@ VITE_SUPABASE_ANON_KEY=<anon key local>
 VITE_EMPLOYEE_EMAIL_DOMAIN=employees.example.com
 ```
 
-`pnpm dev:pos` abre el POS en `http://localhost:5175`. `pnpm dev:functions` sirve las Edge Functions usando `supabase/functions/.env.example`. Ese archivo habilita el simulador de pagos local con `PAYMENT_SANDBOX_ENABLED=true`. Para otro dominio interno, usar un archivo de entorno propio y el mismo dominio en POS.
+`pnpm dev:pos` abre el POS en `http://localhost:5175`. `pnpm dev:functions` sirve las Edge Functions usando `supabase/functions/.env.example`. Para Checkout Pro, copiar el ejemplo a `.env`, completar las dos URLs HTTPS públicas y servir con `pnpm supabase functions serve --env-file supabase/functions/.env`. Las credenciales de cada restaurante se cargan desde el panel; ver [MERCADO_PAGO.md](MERCADO_PAGO.md). Para otro dominio interno de empleados, usar el mismo dominio en POS y en el entorno de funciones.
 
 ### `apps/customer/.env`
 
@@ -228,21 +228,15 @@ pnpm lint
 pnpm build
 ```
 
-## 7. Probar pago electrónico sandbox (Fase 10)
+## 7. Probar Mercado Pago Checkout Pro
 
-La sucursal debe tener habilitado **Pago desde el celular**. Levantá `pnpm dev:functions`
-y `pnpm dev:customer`, abrí una mesa con consumo aceptado y entrá a **Cuenta**.
-El botón calcula el saldo en PostgreSQL, crea un pago pendiente y muestra dos respuestas del
-simulador: aprobación o rechazo. Sólo la aprobación reduce el saldo. Un rechazo permite iniciar
-otro intento; una sesión cerrada o un importe ya cubierto se rechazan en el servidor.
+Configurar URLs HTTPS, Access Token del vendedor de prueba y secreto de webhook según [MERCADO_PAGO.md](MERCADO_PAGO.md). Asociar la sucursal y habilitar **Pago desde el celular**. Abrir una mesa con consumo aceptado y entrar a **Cuenta**: el backend calcula y reserva el saldo, crea una preferencia y devuelve el enlace de Checkout Pro. Al regresar se consulta el proveedor; los parámetros de retorno no aprueban pagos. Sólo la aprobación verificada reduce el saldo, descontando reintegros.
 
-El sandbox es únicamente de desarrollo/demo. Para deshabilitarlo usá
-`PAYMENT_SANDBOX_ENABLED=false`; iniciar pagos seguirá disponible, pero la confirmación requiere
-reemplazar el simulador por el callback de un proveedor real.
+El intento se conserva al recargar y reintentar. Ante una creación incierta, el backend busca la preferencia original y mantiene la reserva hasta resolverla. El panel **Restaurante → Pagos de Mercado Pago** muestra estados y casos de conciliación. El simulador y la acción pública de confirmar pagos fueron retirados.
 
 La suite integrada necesita el seed demo y la función activa. Usa 32 verificaciones HTTP/Realtime con fixtures propios que elimina al terminar, sin modificar los menús existentes. Crea tres usuarios Auth anónimos locales; si se proporciona `SUPABASE_SERVICE_ROLE_KEY` solo al proceso de pruebas, también los elimina. No colocar esa clave en un `.env` del frontend. Las pruebas SQL crean fixtures dentro de `BEGIN … ROLLBACK` e incluyen pagos aprobados/rechazados, sin invocar proveedores de pago.
 
-La suite de integración completa requiere Supabase local (Auth, Edge, PostgREST y Realtime). La integración con un proveedor real como Mercado Pago sigue pendiente; la fase 10 usa el sandbox controlado.
+La suite de integración completa requiere Supabase local (Auth, Edge, PostgREST y Realtime). Las pruebas de Checkout Pro usan HTTP simulado del SDK y SQL real; las compras con cuentas de prueba y la entrega del proveedor a un endpoint HTTPS requieren validación humana.
 
 ### Cómo se confirma un pedido
 
@@ -252,7 +246,7 @@ El contrato compartido limita cada envío a 50 ítems, cantidades de 1 a 99, opc
 
 Con el POS interno, la misma transacción registra la recepción (estado **aceptado**, timestamp y log). Si la integración está inactiva o es `fudo`, se revierte todo con un error explícito y el mismo envío se puede reintentar más tarde; los POS externos se integrarán a futuro. El estado **enviado, por confirmar** queda para pedidos anteriores a este flujo. Los navegadores, incluido el admin, no pueden escribir directamente precios, snapshots o estados de pedidos.
 
-La vista `session_bills` usa `security_invoker` para respetar las [políticas RLS de sus tablas](https://supabase.com/docs/guides/database/postgres/row-level-security). Agrega pedidos y pagos por separado para evitar multiplicar importes. No implementa cobros ni repartos; corresponden a la Fase 7.
+La vista `session_bills` usa `security_invoker` para respetar las [políticas RLS de sus tablas](https://supabase.com/docs/guides/database/postgres/row-level-security). Agrega pedidos y pagos por separado para evitar multiplicar importes. Acredita pagos aprobados netos de reintegros; Checkout Pro y el reparto se describen en [MERCADO_PAGO.md](MERCADO_PAGO.md).
 
 ## 7. Probar el POS propio (Fase 5)
 
@@ -287,7 +281,7 @@ pnpm build
 
 `close_table_session` requiere una cuenta empleada activa, sucursal asignada y permiso `sessions.close`, idempotente y usa el mismo orden de bloqueo mesa → sesión que el ingreso por QR. Los navegadores no pueden cambiar el estado de una sesión con un `update` directo.
 
-**Resultado de implementación:** migración aplicada; 32 verificaciones integradas (incluye consulta anidada del tablero, cierre por RPC, aislamiento y Realtime de cierre); aserciones SQL de POS y pedidos; 18 pruebas de lógica (9 de pedidos/POS + 9 del comensal); typecheck, lint y build verificados. El cobro con Mercado Pago y el cierre automático al saldar siguen en la Fase 7.
+**Resultado de implementación original:** migración aplicada y verificaciones de POS, aislamiento y Realtime completas. La suite actual de pedidos tiene 41 verificaciones integradas. Checkout Pro está implementado y documentado en [MERCADO_PAGO.md](MERCADO_PAGO.md); el cierre de mesa sigue siendo manual.
 
 ---
 

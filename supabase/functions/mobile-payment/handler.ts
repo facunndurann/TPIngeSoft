@@ -15,7 +15,7 @@ export function createMobilePaymentHandler(authenticate: (jwt: string) => Promis
     maxBytes: 16 * 1024,
     authenticate,
     messages: { METHOD_NOT_ALLOWED: 'Usá POST para iniciar un pago.' },
-    // Iniciar crea un pago; confirmar cambia uno que ya existe.
+    // El navegador inicia o consulta; solo el proveedor puede confirmar un pago.
     run: async (input, gateway) => reply(await gateway.execute(input), input.action === 'create' ? 201 : 200),
   })
 }

@@ -88,6 +88,7 @@ jobs:
           export SUPABASE_ANON_KEY=$(jq -r .ANON_KEY <<< "$stack")
           export SUPABASE_SERVICE_ROLE_KEY=$(jq -r .SERVICE_ROLE_KEY <<< "$stack")
           pnpm test:orders:integration
+          pnpm test:payments:integration
 
       - name: Edge Functions log
         if: failure()

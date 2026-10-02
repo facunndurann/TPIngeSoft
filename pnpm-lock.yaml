@@ -8,9 +8,15 @@ importers:
 
   .:
     devDependencies:
+      '@supabase/supabase-js':
+        specifier: 2.112.4
+        version: 2.112.4
       happy-dom:
         specifier: ^20.14.5
         version: 20.14.5
+      mercadopago:
+        specifier: 3.6.1
+        version: 3.6.1
       prettier:
         specifier: ^3.9.9
         version: 3.9.9
@@ -20,6 +26,9 @@ importers:
       vitest:
         specifier: ^5.0.1
         version: 5.0.1(@types/node@26.4.0)(happy-dom@20.14.5)(vite@7.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0))
+      zod:
+        specifier: 3.25.76
+        version: 3.25.76
 
   apps/admin:
     dependencies:
@@ -1508,6 +1517,10 @@ packages:
   magic-string@1.4.1:
     resolution: {integrity: sha512-8lyCu36ErXR0J9uaGKlKQoiLZKmtI63YGLE8G2o9jyRPdr4X47LusSOwgOJOzcVtp81fTAAjxR7BwKz682Jhow==}
 
+  mercadopago@3.6.1:
+    resolution: {integrity: sha512-JFgKCSRHMxkS1p12VMIcpI/Zki739J+5lbpl7PB0O8WHaFl4SFKQnm9paX/gqBQeh211Ozc498D49Fbe3U1jEw==}
+    engines: {node: '>=18'}
+
   minimatch@10.2.6:
     resolution: {integrity: sha512-vpLQEs+VLCr1nU0BXS07maYoFwlDAH0gngQuuttxIwutDFEMHq2blX+8vpgxDdK3J1PwjCJiep77OitTZ4Ll1A==}
     engines: {node: 18 || 20 || >=22}
@@ -2917,6 +2930,8 @@ snapshots:
   magic-string@1.4.1:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.6.0
+
+  mercadopago@3.6.1: {}
 
   minimatch@10.2.6:
     dependencies:

@@ -385,7 +385,12 @@ deno_version = 2
 verify_jwt = true
 
 [functions.mobile-payment]
-verify_jwt = true
+# The handler verifies the JWT with Auth.getUser, including asymmetric signing keys.
+verify_jwt = false
+
+[functions.mercado-pago-webhook]
+# Mercado Pago authenticates with x-signature; it does not send a Supabase JWT.
+verify_jwt = false
 
 [functions.employee-accounts]
 # The handler verifies the bearer token using Auth.getUser (supports signing keys).

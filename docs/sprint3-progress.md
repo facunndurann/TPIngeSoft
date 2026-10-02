@@ -2,6 +2,8 @@
 
 Registro de decisiones, resultados y traspasos del plan de [`sprint3.md`](../sprint3.md). Cada fase agrega su sección de resultado al final. La fase siguiente empieza leyendo este archivo y verificando los contratos que hereda; no reinterpreta el sprint desde cero.
 
+Actualización del 2 de octubre de 2026: Checkout Pro reemplaza el simulador descrito en los registros históricos. Ver el resultado al final y la guía vigente en [MERCADO_PAGO.md](MERCADO_PAGO.md).
+
 ---
 
 ## Línea de base (fase 1)
@@ -444,3 +446,22 @@ Las dos historias se verifican contra ese subsistema y se cierran juntas en la f
   - Sigue faltando URL HTTPS y configuración real del webhook; no bloquea MI-40, pero sí la evidencia externa de fases 4–6.
   - `PAYMENT_SANDBOX_ENABLED` continúa como herramienta explícita de desarrollo. No es evidencia de Mercado Pago.
 - **Siguiente paso concreto:** en la fase 4, extender la respuesta de `mobile-payment`, persistir los metadatos 1:1 del proveedor por intento, crear la preferencia con `payments.id` como referencia enviada y devolver su URL. Antes, cerrar las reservas pendientes para `full`/`percentage_split` y contra cobro POS, y cubrir timeout/reintento sin crear otro intento local.
+
+## Checkout Pro — integración implementada (2 de octubre de 2026)
+
+Se extendió el stack existente con el SDK oficial `mercadopago@3.6.1`, preferencias por intento, redirección a `init_point`, consulta de estado autorizada y webhook con HMAC. La acción pública `confirm` y `PAYMENT_SANDBOX_ENABLED` se retiraron del flujo. Las referencias oficiales y configuración reproducible están en [MERCADO_PAGO.md](MERCADO_PAGO.md).
+
+La migración `20261002010000_mercado_pago_checkout.sql` agrega snapshots cifrados en Vault por pago, reserva entre modos/POS, creación con lease, recuperación de preferencias inciertas y reconciliación transaccional con reintegros y casos de revisión. Se aplicó localmente sin resetear la base. Se regeneraron los tipos y el snapshot público.
+
+El comensal conserva el intento al recargar/volver de Mercado Pago y consulta al backend; el panel administrativo muestra pagos y casos que requieren conciliación. Los repartos existentes se conservan. Los retornos del navegador no son evidencia de aprobación.
+
+Verificaciones ejecutadas:
+
+- `pnpm exec vitest run --maxWorkers 2`: 289 pruebas en 66 archivos pasan. La primera ejecución junto con build/typecheck sufrió timeouts de importación; al limitar la concurrencia pasó la suite completa.
+- `pnpm typecheck`, `pnpm lint`, `pnpm build`: pasan.
+- `pnpm test:sql`: 17 archivos pasan.
+- `pnpm test:orders:integration`: 41 verificaciones pasan.
+- `pnpm test:payments:integration`: Auth, PostgREST, Vault y RPCs reales con proveedor simulado; recuperación de respuesta perdida, reintentos concurrentes, aislamiento, HMAC, duplicados y reintegro parcial pasan. Una ráfaga de 30 consultas aceptó las 19 restantes de la ventana y rechazó 11 con HTTP 429.
+- Runtime local Deno: `mobile-payment` responde al preflight y el webhook rechaza solicitudes inválidas; el SDK carga correctamente.
+
+Queda la validación humana con vendedor/comprador de prueba, endpoints HTTPS públicos, entrega real de Webhooks, transición de credenciales y QA antes de producción. Una preferencia incierta sin evidencia conserva su reserva; cobros externos repetidos o tardíos pueden exigir conciliación y devolución manual. El cierre de mesa sigue siendo manual.

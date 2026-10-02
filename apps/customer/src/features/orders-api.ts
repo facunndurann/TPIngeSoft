@@ -90,7 +90,7 @@ export async function loadPayments(sessionId: string) {
     await supabase
       .from('payments')
       .select(
-        'id, participant_id, amount, mode, method, status, external_reference, created_at, payment_order_items(order_item_id)',
+        'id, participant_id, amount, refunded_amount, provider_status, mode, method, status, external_reference, created_at, payment_order_items(order_item_id)',
       )
       .eq('session_id', sessionId)
       .order('created_at', { ascending: false }),

@@ -4,6 +4,7 @@ Plataforma web multi-restaurante de autoservicio: menú digital por QR de mesa, 
 
 > Setup local de Supabase y variables de entorno: **[docs/SETUP.md](docs/SETUP.md)**  
 > Deploy a la nube (Supabase + Vercel), desde cero: **[docs/DEPLOY.md](docs/DEPLOY.md)**
+> Checkout Pro, credenciales, Webhooks y validación de cobros: **[docs/MERCADO_PAGO.md](docs/MERCADO_PAGO.md)**
 
 ## Estado del proyecto
 
@@ -21,7 +22,7 @@ Plataforma web multi-restaurante de autoservicio: menú digital por QR de mesa, 
 | 5.4 | Abrir y continuar comandas desde el mapa (MI-64) | Completa |
 | 5.5 | Mover comandas entre mesas libres de la misma sucursal (MI-65) | Completa |
 | 6 | Menú inteligente (LLM) | Pendiente |
-| 7 | Pagos (Mercado Pago sandbox, división) | Pendiente |
+| 7 | Pagos (Mercado Pago Checkout Pro, división) | Implementados; validación con cuentas de prueba y HTTPS pendiente |
 | 8 | Pulido y demo | Pendiente |
 
 ## Qué se puede probar hoy
@@ -48,10 +49,10 @@ La **app del comensal** incluye las Fases 3 y 4. Aplicá las migraciones con `pn
 
 - Envío del carrito en un toque, con el total en el botón; validación transaccional de disponibilidad, personalización y precios reales. Si cambian los precios, el servidor rechaza el total anterior y hay que actualizar la carta y volver a enviar.
 - Envíos persistidos con identificador de reintento: una respuesta perdida o dos solicitudes simultáneas no duplican el pedido.
-- Recepción del POS interno en la misma transacción de `submit_order`, con estados y registro de transiciones. El personal avanza las comandas desde el **POS independiente** (`http://localhost:5175`): tablero kanban, mesas activas y historial del día. El cierre de mesa es manual; el cobro digital corresponde a la Fase 7.
+- Recepción del POS interno en la misma transacción de `submit_order`, con estados y registro de transiciones. El personal avanza las comandas desde el **POS independiente** (`http://localhost:5175`): tablero kanban, mesas activas y historial del día. El cierre de mesa es manual. El cobro digital redirige a Mercado Pago Checkout Pro y se verifica desde el backend.
 - Pedidos de toda la mesa con nombres, modificaciones y precios conservados, junto con una cuenta que distingue enviado por confirmar, en cuenta, pendiente y pagado. Realtime con respaldo por polling cada 15 segundos.
 
-El menú se actualiza cada minuto y al volver a la ventana. La cuenta incluye pedidos aceptados y descuenta únicamente pagos aprobados; la integración de pagos corresponde a la Fase 7. Ver el recorrido de prueba y las verificaciones ejecutadas en [docs/SETUP.md](docs/SETUP.md#6-probar-pedidos-y-cuenta-fase-4) y el POS en [docs/SETUP.md](docs/SETUP.md#7-probar-el-pos-propio-fase-5).
+El menú se actualiza cada minuto y al volver a la ventana. La cuenta incluye pedidos aceptados y descuenta pagos aprobados, netos de reintegros. Checkout Pro conserva los repartos por ítems, partes iguales y porcentajes; firma y verifica notificaciones, recupera preferencias inciertas y reserva saldos para cobros pendientes. El panel de Restaurante muestra pagos y casos que requieren conciliación. Configuración y pruebas: [docs/MERCADO_PAGO.md](docs/MERCADO_PAGO.md). Ver pedidos y POS en [docs/SETUP.md](docs/SETUP.md).
 
 ## Estructura del monorepo
 
@@ -65,7 +66,7 @@ packages/
 supabase/
   migrations/  Schema SQL versionado (Postgres)
   seed.sql     Datos demo: 2 restaurantes con menús distintos + usuarios admin
-  functions/   submit-order y employee-accounts (provisión de cuentas de empleados)
+  functions/   submit-order, employee-accounts, mobile-payment y mercado-pago-webhook
   tests/       Pruebas de función, SQL e integración local
 ```
 
@@ -73,7 +74,7 @@ supabase/
 
 - **Frontend**: React 19 + TypeScript + Vite 7, Tailwind CSS 4, React Router, TanStack Query y Zustand (carrito del comensal). Zod valida los contratos de `packages/shared`.
 - **Backend**: Supabase (Postgres + RLS, Auth, Realtime, Storage, Edge Functions).
-- **Integraciones**: Mercado Pago (sandbox) para pagos; POS propio incluido; los POS externos (Fudo y otros) se integrarán a futuro.
+- **Integraciones**: Mercado Pago Checkout Pro mediante su SDK oficial; POS propio incluido; los POS externos (Fudo y otros) se integrarán a futuro.
 
 ## Cómo correr el proyecto
 
@@ -120,6 +121,7 @@ pnpm --filter pos test # login y vistas del POS según permisos
 pnpm test:sql         # aserciones SQL contra el stack local (cada archivo en BEGIN … ROLLBACK)
 pnpm test:employees:integration # Auth + Edge + RLS; requiere credenciales locales
 pnpm test:orders:integration # pruebas contra el stack local + Edge Functions (pedidos y cierre de sesión)
+pnpm test:payments:integration # Auth, Vault, RPCs y carga local; Mercado Pago simulado
 pnpm build            # build de producción de todas las apps
 pnpm ci:local         # lo mismo que el job "check" del CI: install, test, typecheck, lint y build
 pnpm format           # Prettier con la convención del repo (sin punto y coma, comillas simples, 120 columnas)

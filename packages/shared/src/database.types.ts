@@ -661,6 +661,10 @@ export type Database = {
           mode: Database["public"]["Enums"]["payment_mode"]
           mp_payment_id: string | null
           participant_id: string | null
+          provider_status: string | null
+          provider_updated_at: string | null
+          reconciliation_issue: string | null
+          refunded_amount: number
           restaurant_id: string
           session_id: string
           status: Database["public"]["Enums"]["payment_status"]
@@ -675,6 +679,10 @@ export type Database = {
           mode: Database["public"]["Enums"]["payment_mode"]
           mp_payment_id?: string | null
           participant_id?: string | null
+          provider_status?: string | null
+          provider_updated_at?: string | null
+          reconciliation_issue?: string | null
+          refunded_amount?: number
           restaurant_id: string
           session_id: string
           status?: Database["public"]["Enums"]["payment_status"]
@@ -689,6 +697,10 @@ export type Database = {
           mode?: Database["public"]["Enums"]["payment_mode"]
           mp_payment_id?: string | null
           participant_id?: string | null
+          provider_status?: string | null
+          provider_updated_at?: string | null
+          reconciliation_issue?: string | null
+          refunded_amount?: number
           restaurant_id?: string
           session_id?: string
           status?: Database["public"]["Enums"]["payment_status"]
@@ -1512,6 +1524,23 @@ export type Database = {
         }
         Returns: string
       }
+      apply_mercado_pago_payment: {
+        Args: {
+          p_amount: number
+          p_currency_id: string
+          p_external_reference: string
+          p_payment_id: string
+          p_provider_payment_id: string
+          p_provider_status: string
+          p_provider_updated_at: string
+          p_refunded_amount?: number
+        }
+        Returns: {
+          amount: number
+          payment_id: string
+          status: Database["public"]["Enums"]["payment_status"]
+        }[]
+      }
       audit_employee_password_reset: {
         Args: {
           p_actor: string
@@ -1537,7 +1566,45 @@ export type Database = {
         Args: { permission_name?: string; sid: string }
         Returns: boolean
       }
+      claim_mobile_checkout: {
+        Args: { p_payment_id: string; p_user_id: string }
+        Returns: {
+          access_token: string
+          amount: number
+          branch_id: string
+          checkout_state: string
+          checkout_url: string
+          collector_id: string
+          currency_id: string
+          environment: Database["public"]["Enums"]["payment_provider_environment"]
+          external_reference: string
+          lease_token: string
+          mp_payment_id: string
+          payment_id: string
+          preference_id: string
+          provider_status: string
+          qr_token: string
+          restaurant_id: string
+          session_id: string
+          status: Database["public"]["Enums"]["payment_status"]
+          webhook_secret: string
+        }[]
+      }
       close_table_session: { Args: { p_session_id: string }; Returns: string }
+      complete_mobile_checkout: {
+        Args: {
+          p_checkout_url: string
+          p_collector_id: string
+          p_lease_token: string
+          p_payment_id: string
+          p_preference_id: string
+        }
+        Returns: undefined
+      }
+      consume_payment_rate_limit: {
+        Args: { p_action: string; p_user_id: string }
+        Returns: undefined
+      }
       create_mobile_payment: {
         Args: {
           p_item_ids?: string[]
@@ -1583,6 +1650,14 @@ export type Database = {
         Returns: boolean
       }
       employee_email_exists: { Args: { p_email: string }; Returns: boolean }
+      fail_mobile_checkout: {
+        Args: {
+          p_definitive?: boolean
+          p_lease_token: string
+          p_payment_id: string
+        }
+        Returns: undefined
+      }
       get_order_pos_type: {
         Args: { p_order_id: string }
         Returns: Database["public"]["Enums"]["pos_type"]
@@ -1705,6 +1780,30 @@ export type Database = {
           amount: number
           payment_id: string
           status: Database["public"]["Enums"]["payment_status"]
+        }[]
+      }
+      resolve_payment_provider_for_payment: {
+        Args: { p_payment_id: string; p_user_id?: string }
+        Returns: {
+          access_token: string
+          amount: number
+          branch_id: string
+          checkout_state: string
+          checkout_url: string
+          collector_id: string
+          currency_id: string
+          environment: Database["public"]["Enums"]["payment_provider_environment"]
+          external_reference: string
+          lease_token: string
+          mp_payment_id: string
+          payment_id: string
+          preference_id: string
+          provider_status: string
+          qr_token: string
+          restaurant_id: string
+          session_id: string
+          status: Database["public"]["Enums"]["payment_status"]
+          webhook_secret: string
         }[]
       }
       resolve_payment_provider_for_session: {

@@ -1,6 +1,6 @@
-import { useRef, useState } from 'react'
-import { useMutation } from '@tanstack/react-query'
-import { countLabel, formatPrice } from '@restaurant-platform/shared'
+import { useCallback, useEffect, useState } from 'react'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { AppError, countLabel, formatPrice, type MobilePaymentResult } from '@restaurant-platform/shared'
 import { ErrorText } from '@restaurant-platform/ui'
 import {
   type PaymentPlanInput,
@@ -11,40 +11,101 @@ import {
 } from '@/features/mobile-payment'
 import { runMobilePayment } from '@/features/orders-api'
 import { useTable } from '@/features/table-context'
+import {
+  clearCheckoutAttempt,
+  readCheckoutAttempt,
+  saveCheckoutAttempt,
+  type CheckoutAttempt,
+} from '@/features/checkout-attempt'
 
 type MobilePaymentProps = Omit<PaymentPlanInput, 'selected'> & { sessionId: string }
 
-type Outcome = 'approved' | 'rejected'
-
 const coverageLabels = { approved: 'Pagado', pending: 'Pago pendiente' } as const
+const resultCopy = {
+  approved: 'Tu pago fue aprobado. Actualizamos la cuenta.',
+  rejected: 'El pago fue rechazado. Podés volver a intentarlo.',
+  cancelled: 'El pago fue cancelado. Podés volver a intentarlo.',
+  pending: 'El pago sigue pendiente de confirmación.',
+} as const
 
 export function MobilePayment({ sessionId, ...account }: MobilePaymentProps) {
   const { refreshTable, nameOf } = useTable()
-  // Clave de idempotencia del próximo pago: se renueva cuando cambia lo que se va a
-  // pagar, así un reintento del mismo pago no crea otro.
-  const requestId = useRef(crypto.randomUUID())
+  const [attempt, setAttempt] = useState(() => readCheckoutAttempt(sessionId, account.participantId))
+  const [result, setResult] = useState<MobilePaymentResult>()
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set())
   const plan = paymentPlan({ ...account, selected })
   const copy = shareCopy(plan.share)
+  const pendingId = plan.step.kind === 'pending' ? plan.step.payment.id : attempt?.paymentId
+
+  const forgetAttempt = useCallback(() => {
+    clearCheckoutAttempt(sessionId, account.participantId)
+    setAttempt(undefined)
+    setSelected(new Set())
+  }, [sessionId, account.participantId])
+
+  // Nunca leemos status/payment_id de la URL: al volver, la cuenta identifica
+  // el pago y el backend consulta al proveedor. También funciona tras recargar.
+  const status = useQuery({
+    queryKey: ['checkout-pro-status', sessionId, account.participantId, pendingId],
+    enabled: !!pendingId,
+    queryFn: async () => {
+      const verified = await runMobilePayment({ action: 'status', paymentId: pendingId! })
+      await refreshTable()
+      return verified
+    },
+    staleTime: 0,
+    retry: false,
+    refetchInterval: (query) => {
+      if (query.state.error instanceof AppError && !query.state.error.retryable) return false
+      return !query.state.data || query.state.data.status === 'pending' ? 15_000 : false
+    },
+  })
+
+  useEffect(() => {
+    if (!status.data) return
+    setResult(status.data)
+    if (status.data.status !== 'pending') forgetAttempt()
+  }, [status.data, forgetAttempt])
 
   const start = useMutation({
-    mutationFn: (request: PaymentRequest) =>
-      runMobilePayment({ action: 'create', sessionId, requestId: requestId.current, ...request }),
-    onSuccess: refreshTable,
-  })
-  const confirm = useMutation({
-    mutationFn: ({ paymentId, outcome }: { paymentId: string; outcome: Outcome }) =>
-      runMobilePayment({ action: 'confirm', paymentId, outcome }),
-    onSuccess: async () => {
-      requestId.current = crypto.randomUUID()
-      setSelected(new Set())
+    mutationFn: async (request: PaymentRequest) => {
+      const next: CheckoutAttempt = attempt ?? {
+        request: { action: 'create', sessionId, requestId: crypto.randomUUID(), ...request },
+      }
+      // Guardar antes de enviar permite repetir exactamente la misma solicitud,
+      // incluso si se pierde la respuesta o se recarga durante el checkout.
+      saveCheckoutAttempt(account.participantId, next)
+      setAttempt(next)
+      setResult(undefined)
+      return { response: await runMobilePayment(next.request), attempt: next }
+    },
+    onSuccess: async ({ response, attempt: sent }) => {
+      const next = { ...sent, paymentId: response.paymentId }
+      saveCheckoutAttempt(account.participantId, next)
+      setAttempt(next)
+      setResult(response)
+      if (response.status !== 'pending') forgetAttempt()
+      await refreshTable()
+      if (response.status === 'pending' && response.checkoutUrl) window.location.assign(response.checkoutUrl)
+    },
+    onError: async (error) => {
+      // Una falla de red conserva el intento. Un rechazo definitivo permite
+      // corregir la selección; el backend conserva la protección de duplicados.
+      if (
+        error instanceof AppError &&
+        !error.retryable &&
+        error.code !== 'PAYMENT_RECONCILIATION_REQUIRED' &&
+        error.code !== 'PAYMENT_VERIFICATION_FAILED'
+      ) {
+        forgetAttempt()
+      }
       await refreshTable()
     },
   })
 
   const toggleItem = (id: string) => {
-    requestId.current = crypto.randomUUID()
     start.reset()
+    setResult(undefined)
     setSelected((current) => {
       const next = new Set(current)
       if (next.has(id)) next.delete(id)
@@ -57,16 +118,14 @@ export function MobilePayment({ sessionId, ...account }: MobilePaymentProps) {
     <section className="bill-panel" aria-label="Pago electrónico">
       <h3>Pagar desde el celular</h3>
       {plan.items.length > 0 && (
-        <fieldset className="payment-items" disabled={account.closed || plan.step.kind === 'pending'}>
+        <fieldset
+          className="payment-items"
+          disabled={account.closed || !!attempt || start.isPending || plan.step.kind === 'pending'}
+        >
           <legend>Elegir ítems para pagar</legend>
           {plan.items.map(({ item, coverage, selected: checked }) => (
             <label key={item.id} className="payment-item">
-              <input
-                type="checkbox"
-                checked={checked}
-                disabled={!!coverage}
-                onChange={() => toggleItem(item.id)}
-              />
+              <input type="checkbox" checked={checked} disabled={!!coverage} onChange={() => toggleItem(item.id)} />
               <span>
                 <strong>
                   {item.quantity} × {item.product_name}
@@ -87,15 +146,46 @@ export function MobilePayment({ sessionId, ...account }: MobilePaymentProps) {
         </fieldset>
       )}
       {copy.help && <p className="muted">{copy.help}</p>}
-      <PaymentStepView
-        step={plan.step}
-        payLabel={copy.pay}
-        starting={start.isPending}
-        confirming={confirm.isPending}
-        onPay={(request) => start.mutate(request)}
-        onConfirm={(paymentId, outcome) => confirm.mutate({ paymentId, outcome })}
-      />
-      <ErrorText variant="menu" error={start.error ?? confirm.error} />
+      {result && result.status !== 'pending' && (
+        <p role="status">
+          {result.providerStatus === 'refunded' || result.providerStatus === 'charged_back'
+            ? 'El pago fue reintegrado o revertido. Consultá con el restaurante antes de volver a pagar.'
+            : resultCopy[result.status]}
+        </p>
+      )}
+      {attempt && !pendingId ? (
+        <>
+          <p className="muted">Tu intento de pago está guardado. Reintentá para continuar con el mismo pago.</p>
+          <button className="primary wide" disabled={start.isPending} onClick={() => start.mutate(attempt.request)}>
+            {start.isPending ? 'Iniciando pago…' : 'Reintentar pago'}
+          </button>
+        </>
+      ) : pendingId && plan.step.kind !== 'pending' ? (
+        <div role="status">
+          <p className="muted">Consultando tu pago anterior…</p>
+          <button
+            disabled={status.isFetching}
+            onClick={() => {
+              void status.refetch()
+            }}
+          >
+            Actualizar estado
+          </button>
+        </div>
+      ) : (
+        <PaymentStepView
+          step={plan.step}
+          payLabel={copy.pay}
+          starting={start.isPending}
+          checking={status.isFetching}
+          checkoutUrl={!account.closed && status.data?.status === 'pending' ? status.data.checkoutUrl : undefined}
+          onPay={(request) => start.mutate(request)}
+          onCheck={() => {
+            void status.refetch()
+          }}
+        />
+      )}
+      <ErrorText variant="menu" error={status.error ?? (status.data ? null : start.error)} />
     </section>
   )
 }
@@ -128,16 +218,18 @@ function PaymentStepView({
   step,
   payLabel,
   starting,
-  confirming,
+  checking,
+  checkoutUrl,
   onPay,
-  onConfirm,
+  onCheck,
 }: {
   step: PaymentStep
   payLabel: string
   starting: boolean
-  confirming: boolean
+  checking: boolean
+  checkoutUrl?: string
   onPay: (request: PaymentRequest) => void
-  onConfirm: (paymentId: string, outcome: Outcome) => void
+  onCheck: () => void
 }) {
   switch (step.kind) {
     case 'pending':
@@ -146,44 +238,38 @@ function PaymentStepView({
           <p>
             Pago pendiente por <strong>{formatPrice(step.payment.amount)}</strong>.
           </p>
-          <p className="muted">Simulador sandbox: elegí la respuesta del proveedor.</p>
+          <p className="muted">Completá el pago en Mercado Pago. La cuenta se actualiza cuando se confirma.</p>
           <div className="cart-actions">
-            <button disabled={confirming} onClick={() => onConfirm(step.payment.id, 'rejected')}>
-              Simular rechazo
+            <button disabled={checking} onClick={onCheck}>
+              {checking ? 'Consultando…' : 'Actualizar estado'}
             </button>
-            <button
-              className="primary"
-              disabled={confirming}
-              onClick={() => onConfirm(step.payment.id, 'approved')}
-            >
-              {confirming ? 'Confirmando…' : 'Simular aprobación'}
-            </button>
+            {checkoutUrl && (
+              <button className="primary" disabled={checking} onClick={() => window.location.assign(checkoutUrl)}>
+                Continuar en Mercado Pago
+              </button>
+            )}
           </div>
         </>
       )
     case 'exceeds':
       return (
         <p className="error-notice" role="alert">
-          El subtotal elegido supera el saldo pendiente de {formatPrice(step.balance)}. Deseleccioná
-          algún ítem.
+          El subtotal elegido supera el saldo pendiente de {formatPrice(step.balance)}. Deseleccioná algún ítem.
         </p>
       )
     case 'payable':
       return (
-        <button className="primary wide" disabled={starting} onClick={() => onPay(step.request)}>
-          {starting ? 'Iniciando pago…' : payLabel}
-        </button>
+        <>
+          <p className="muted">Vas a continuar en Mercado Pago para elegir cómo pagar.</p>
+          <button className="primary wide" disabled={starting} onClick={() => onPay(step.request)}>
+            {starting ? 'Iniciando pago…' : payLabel}
+          </button>
+        </>
       )
     case 'partsReserved':
-      return (
-        <p className="muted">Todas las partes disponibles ya tienen un pago esperando confirmación.</p>
-      )
+      return <p className="muted">Todas las partes disponibles ya tienen un pago esperando confirmación.</p>
     case 'sharePaid':
-      return (
-        <p className="settled">
-          Ya pagaste tu {step.percentage}% de la cuenta. El resto lo pagan los demás.
-        </p>
-      )
+      return <p className="settled">Ya pagaste tu {step.percentage}% de la cuenta. El resto lo pagan los demás.</p>
     case 'nothing':
       return <p className="settled">No hay saldo disponible para pagar.</p>
   }

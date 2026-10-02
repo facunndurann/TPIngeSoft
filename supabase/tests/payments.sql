@@ -104,6 +104,10 @@ begin
   perform pg_temp.expect_payment_error(sid, 1, 'in_person', null, null, 'PAYMENT_METHOD_DISABLED');
   perform pg_temp.expect_payment_error(sid, 1, 'mobile', null, null, 'PAYMENT_METHOD_UNAVAILABLE');
 
+  -- El intento móvil reserva fondos aunque todavía no acredita la cuenta.
+  perform pg_temp.expect_payment_error(sid, 6, 'external', null, 'cash-2', 'PAYMENT_ALREADY_PENDING');
+  update public.payments set status='rejected' where session_id=sid and external_reference='provider-pending';
+
   -- 6 de 6 pendientes: salda la cuenta, así que el servidor lo registra como completa.
   payment_id := public.pos_record_payment(sid, 6, 'external', null, 'cash-2');
   if not exists(select 1 from public.payments where id = payment_id and mode = 'full')

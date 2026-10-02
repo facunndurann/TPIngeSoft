@@ -57,38 +57,42 @@ test('chosen items are paid on their own, win over the split and cannot exceed t
   assert.deepEqual(plan.share, { mode: 'custom', itemIds: ['a'], amount: 60 })
   assert.deepEqual(plan.step, { kind: 'payable', request: { mode: 'custom', itemIds: ['a'] } })
 
-  assert.deepEqual(
-    paymentPlan(table({ pending: 50, selected: new Set(['a']) })).step,
-    { kind: 'exceeds', balance: 50 },
-  )
+  assert.deepEqual(paymentPlan(table({ pending: 50, selected: new Set(['a']) })).step, { kind: 'exceeds', balance: 50 })
 
   // En centavos: sumado en float, 0.1 + 0.2 supera a 0.3 y el pago quedaba trabado.
-  const cents = paymentPlan(table({
-    pending: 0.3,
-    orders: [{ status: 'accepted', order_items: [item('a', 0.1), item('b', 0.2)] }],
-    selected: new Set(['a', 'b']),
-  }))
+  const cents = paymentPlan(
+    table({
+      pending: 0.3,
+      orders: [{ status: 'accepted', order_items: [item('a', 0.1), item('b', 0.2)] }],
+      selected: new Set(['a', 'b']),
+    }),
+  )
   assert.equal(cents.share.amount, 0.3)
   assert.equal(cents.step.kind, 'payable')
 })
 
 test('only billed items are listed, and those in a live payment cannot be chosen again', () => {
-  const plan = paymentPlan(table({
-    orders: [
-      { status: 'accepted', order_items: [item('a', 60), item('b', 40)] },
-      { status: 'submitted', order_items: [item('c', 10)] },
-    ],
-    payments: [
-      payment({ status: 'approved', payment_order_items: [{ order_item_id: 'a' }] }),
-      // Un pago rechazado libera sus ítems.
-      payment({ status: 'rejected', payment_order_items: [{ order_item_id: 'b' }] }),
-    ],
-    selected: new Set(['a', 'b']),
-  }))
+  const plan = paymentPlan(
+    table({
+      orders: [
+        { status: 'accepted', order_items: [item('a', 60), item('b', 40)] },
+        { status: 'submitted', order_items: [item('c', 10)] },
+      ],
+      payments: [
+        payment({ status: 'approved', payment_order_items: [{ order_item_id: 'a' }] }),
+        // Un pago rechazado libera sus ítems.
+        payment({ status: 'rejected', payment_order_items: [{ order_item_id: 'b' }] }),
+      ],
+      selected: new Set(['a', 'b']),
+    }),
+  )
 
   assert.deepEqual(
     plan.items.map((row) => [row.item.id, row.coverage, row.selected]),
-    [['a', 'approved', false], ['b', undefined, true]],
+    [
+      ['a', 'approved', false],
+      ['b', undefined, true],
+    ],
   )
   assert.deepEqual(plan.share, { mode: 'custom', itemIds: ['b'], amount: 40 })
 })
@@ -109,10 +113,7 @@ test('equal parts offer a free part and hold back what pending payments reserved
   assert.equal(paymentPlan(table({ split: split(3), pending: 90, payments })).share.amount, 60)
 
   // Todo lo que falta ya está reservado por un pago esperando confirmación.
-  assert.deepEqual(
-    paymentPlan(table({ split: split(2), pending: 30, payments })).step,
-    { kind: 'partsReserved' },
-  )
+  assert.deepEqual(paymentPlan(table({ split: split(2), pending: 30, payments })).step, { kind: 'partsReserved' })
 })
 
 test('a percentage is taken from the account total, minus what the diner already paid', () => {
@@ -134,10 +135,10 @@ test('a percentage is taken from the account total, minus what the diner already
   assert.equal(paymentPlan(table({ split, pending: 10 })).share.amount, 10)
 
   // 0.7 + 0.1 en float queda apenas debajo de 0.8: en centavos, ya pagó su parte.
-  assert.deepEqual(
-    paymentPlan(table({ split, accountTotal: 2, pending: 1.2, payments: paid(0.7, 0.1) })).step,
-    { kind: 'sharePaid', percentage: 40 },
-  )
+  assert.deepEqual(paymentPlan(table({ split, accountTotal: 2, pending: 1.2, payments: paid(0.7, 0.1) })).step, {
+    kind: 'sharePaid',
+    percentage: 40,
+  })
 })
 
 test('a payment of this diner waiting for the provider blocks everything else', () => {
@@ -151,4 +152,24 @@ test('a payment of this diner waiting for the provider blocks everything else', 
   // El pago pendiente de otro comensal no traba el de Ana.
   const others = payment({ status: 'pending', amount: 60 })
   assert.equal(paymentPlan(table({ payments: [others] })).step.kind, 'payable')
+})
+
+test('all pending payment modes reserve the balance offered by full and percentage payments', () => {
+  const payments = [payment({ status: 'pending', amount: 75, mode: 'custom' })]
+  assert.equal(paymentPlan(table({ payments })).share.amount, 25)
+  const split: SessionSplit = { type: 'percentages', allocations: { [ana]: 40, [beto]: 60 } }
+  assert.equal(paymentPlan(table({ payments, split })).share.amount, 25)
+  assert.deepEqual(paymentPlan(table({ payments, selected: new Set(['a']) })).step, { kind: 'exceeds', balance: 25 })
+  // Un saldo totalmente reservado no significa que Ana ya pagó su porcentaje.
+  assert.deepEqual(paymentPlan(table({ payments: [payment({ status: 'pending', amount: 100 })], split })).step, {
+    kind: 'nothing',
+  })
+})
+
+test('a percentage deducts only net approved credit after a partial refund', () => {
+  const split: SessionSplit = { type: 'percentages', allocations: { [ana]: 40, [beto]: 60 } }
+  const payments = [payment({ participant_id: ana, amount: 40, refunded_amount: 15 })]
+  const plan = paymentPlan(table({ split, payments, pending: 75 }))
+  assert.equal(plan.share.amount, 15)
+  assert.equal(plan.step.kind, 'payable')
 })

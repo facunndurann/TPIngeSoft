@@ -80,19 +80,26 @@ export function SessionBill() {
           <BillSplitter split={split} bill={bill.data} orders={ordered} />
           {/* Con la mesa cerrada ya no se suma gente: la RPC lo rechazaría. */}
           {!closed && <AddGuest sessionId={sessionId} orders={ordered} />}
-          {session && me && mobileAvailable.data === true && (
-            <MobilePayment
-              sessionId={session.id}
-              pending={asAmount(bill.data.pending_amount)}
-              accountTotal={asAmount(bill.data.total_amount)}
-              participantId={me.id}
-              participants={participants}
-              payments={payments.data ?? []}
-              closed={closed}
-              split={split}
-              orders={ordered}
-            />
-          )}
+          {session &&
+            me &&
+            (mobileAvailable.data === true ||
+              payments.data?.some(
+                (payment) =>
+                  payment.method === 'mobile' && payment.participant_id === me.id && payment.status === 'pending',
+              )) && (
+              <MobilePayment
+                key={`${session.id}:${me.id}`}
+                sessionId={session.id}
+                pending={asAmount(bill.data.pending_amount)}
+                accountTotal={asAmount(bill.data.total_amount)}
+                participantId={me.id}
+                participants={participants}
+                payments={payments.data ?? []}
+                closed={closed}
+                split={split}
+                orders={ordered}
+              />
+            )}
           {paymentMethods.includes('mobile') && mobileAvailable.data === false && !closed && (
             <p className="muted">El pago desde el celular no está disponible en esta sucursal.</p>
           )}
@@ -151,6 +158,16 @@ function PaymentHistory({
           <li className="payment-line" key={payment.id}>
             <div>
               <strong>{formatPrice(payment.amount)}</strong> <span>{paymentStatusLabels[payment.status]}</span>
+              {payment.refunded_amount > 0 && (
+                <p className="muted">
+                  Reintegrado: {formatPrice(payment.refunded_amount)}
+                  {payment.status === 'approved' &&
+                    ` · Acreditado: ${formatPrice(payment.amount - payment.refunded_amount)}`}
+                </p>
+              )}
+              {payment.provider_status === 'charged_back' && (
+                <p className="muted">Contracargo: consultá con el restaurante.</p>
+              )}
               <p className="muted">
                 {paymentMethodLabels[payment.method]} · {paymentModeLabels[payment.mode]}
                 {payment.participant_id ? ` · ${nameOf(payment.participant_id)}` : ''}

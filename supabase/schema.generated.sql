@@ -265,6 +265,102 @@ $$;
 ALTER FUNCTION "public"."add_guest_participant"("p_session_id" "uuid", "p_display_name" "text", "p_item_ids" "uuid"[]) OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."apply_mercado_pago_payment"("p_payment_id" "uuid", "p_provider_payment_id" "text", "p_external_reference" "text", "p_amount" numeric, "p_currency_id" "text", "p_provider_status" "text", "p_provider_updated_at" timestamp with time zone, "p_refunded_amount" numeric DEFAULT 0) RETURNS TABLE("payment_id" "uuid", "amount" numeric, "status" "public"."payment_status")
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'private'
+    AS $_$
+declare
+  saved public.payments; checkout private.mobile_checkouts; target public.table_sessions;
+  decided public.payment_status; issue text; event_outcome text := 'applied'; due numeric;
+begin
+  if p_provider_payment_id is null or p_provider_payment_id !~ '^[0-9]+$'
+    or p_provider_updated_at is null or nullif(p_provider_status,'') is null
+    or length(p_provider_status)>80 or p_refunded_amount is null or p_amount is null
+    or p_amount in ('NaN'::numeric,'Infinity'::numeric,'-Infinity'::numeric)
+    or p_refunded_amount in ('NaN'::numeric,'Infinity'::numeric,'-Infinity'::numeric)
+    then raise exception 'INVALID_REQUEST'; end if;
+  select * into saved from public.payments where id=p_payment_id;
+  if not found then raise exception 'PAYMENT_NOT_FOUND'; end if;
+  -- All paths share session -> payment order to avoid deadlocks with new reservations.
+  select * into target from public.table_sessions where id=saved.session_id for update;
+  select * into saved from public.payments where id=p_payment_id for update;
+  select * into checkout from private.mobile_checkouts where mobile_checkouts.payment_id=p_payment_id;
+  if not found or saved.method<>'mobile' then raise exception 'PAYMENT_NOT_FOUND'; end if;
+  if p_external_reference is distinct from saved.id::text or p_amount<>saved.amount
+    or p_currency_id is distinct from checkout.currency_id or p_refunded_amount<0
+    or p_refunded_amount>saved.amount or p_refunded_amount<>round(p_refunded_amount,2)
+    then raise exception 'PAYMENT_PROVIDER_MISMATCH'; end if;
+
+  if exists(select 1 from public.payments p where p.mp_payment_id=p_provider_payment_id and p.id<>saved.id)
+    then raise exception 'PAYMENT_PROVIDER_MISMATCH'; end if;
+
+  -- Capture provider observations without exposing notification payloads or secrets.
+  insert into private.mobile_payment_events(payment_id,provider_payment_id,provider_status,
+    provider_updated_at,refunded_amount,outcome)
+    values(saved.id,p_provider_payment_id,p_provider_status,p_provider_updated_at,p_refunded_amount,'received')
+    on conflict do nothing;
+  if not found then return query select saved.id,saved.amount,saved.status; return; end if;
+
+  if saved.mp_payment_id=p_provider_payment_id and saved.provider_updated_at>p_provider_updated_at then
+    event_outcome := 'ignored_stale';
+  elsif saved.mp_payment_id=p_provider_payment_id and p_refunded_amount<saved.refunded_amount then
+    event_outcome := 'ignored_regression';
+  elsif saved.mp_payment_id is not null and saved.mp_payment_id<>p_provider_payment_id
+    and (saved.status='approved' or saved.refunded_amount>0 or saved.provider_status in ('refunded','charged_back')) then
+    -- Checkout Pro can produce several attempts. Never overwrite a collected
+    -- payment with another ID, and preserve evidence of a second collection.
+    event_outcome := 'additional_provider_payment';
+    if p_provider_status in ('approved','refunded','charged_back') then
+      update public.payments set reconciliation_issue='MULTIPLE_PROVIDER_PAYMENTS',updated_at=now() where id=saved.id;
+    end if;
+  else
+    decided := saved.status;
+    issue := saved.reconciliation_issue;
+    if p_provider_status='approved' then
+      if saved.provider_status in ('refunded','charged_back') and saved.mp_payment_id=p_provider_payment_id then
+        event_outcome := 'ignored_terminal';
+      else
+        decided := 'approved';
+        if p_refunded_amount>0 then issue := 'PARTIAL_REFUND_REVIEW'; end if;
+        select greatest(coalesce((select sum(o.total_amount) from public.orders o where o.session_id=target.id
+          and o.status in ('accepted','in_preparation','ready','delivered')),0)
+          -coalesce((select sum(p.amount-p.refunded_amount) from public.payments p where p.session_id=target.id
+            and p.id<>saved.id and p.status='approved'),0),0) into due;
+        if target.status<>'open' then issue := 'APPROVED_AFTER_SESSION_CLOSED';
+        elsif saved.amount-p_refunded_amount>due then issue := 'APPROVED_EXCEEDS_BALANCE'; end if;
+      end if;
+    elsif p_provider_status in ('refunded','charged_back') then
+      decided := 'cancelled';
+      issue := case when p_provider_status='charged_back' then 'CHARGEBACK_REVIEW' else 'REFUND_REVIEW' end;
+    elsif p_provider_status in ('rejected','cancelled') then
+      if saved.status='approved' then issue := 'UNEXPECTED_PROVIDER_TRANSITION';
+      else decided := case when p_provider_status='rejected' then 'rejected'::public.payment_status else 'cancelled'::public.payment_status end; end if;
+    elsif p_provider_status in ('pending','in_process','authorized') then
+      if saved.status='approved' and saved.mp_payment_id=p_provider_payment_id then event_outcome := 'ignored_regression';
+      elsif saved.status in ('rejected','cancelled') and saved.mp_payment_id=p_provider_payment_id then event_outcome := 'ignored_regression';
+      else decided := 'pending'; end if;
+    elsif p_provider_status='in_mediation' then
+      issue := 'PAYMENT_IN_MEDIATION';
+    else
+      issue := 'UNSUPPORTED_PROVIDER_STATUS';
+    end if;
+    if event_outcome='applied' then
+      update public.payments set mp_payment_id=p_provider_payment_id,provider_status=p_provider_status,
+        provider_updated_at=p_provider_updated_at,status=decided,refunded_amount=p_refunded_amount,
+        reconciliation_issue=issue,updated_at=now() where id=saved.id;
+    end if;
+  end if;
+  update private.mobile_payment_events set outcome=event_outcome
+    where mobile_payment_events.payment_id=saved.id and provider_payment_id=p_provider_payment_id
+      and provider_status=p_provider_status and provider_updated_at=p_provider_updated_at and refunded_amount=p_refunded_amount;
+  return query select p.id,p.amount,p.status from public.payments p where p.id=saved.id;
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."apply_mercado_pago_payment"("p_payment_id" "uuid", "p_provider_payment_id" "text", "p_external_reference" "text", "p_amount" numeric, "p_currency_id" "text", "p_provider_status" "text", "p_provider_updated_at" timestamp with time zone, "p_refunded_amount" numeric) OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."audit_employee_password_reset"("p_actor" "uuid", "p_restaurant" "uuid", "p_user" "uuid", "p_completed" boolean DEFAULT false) RETURNS "void"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -357,6 +453,41 @@ $$;
 ALTER FUNCTION "public"."can_read_session"("sid" "uuid", "permission_name" "text") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."claim_mobile_checkout"("p_payment_id" "uuid", "p_user_id" "uuid") RETURNS TABLE("payment_id" "uuid", "amount" numeric, "status" "public"."payment_status", "currency_id" "text", "external_reference" "text", "environment" "public"."payment_provider_environment", "access_token" "text", "webhook_secret" "text", "checkout_state" "text", "lease_token" "uuid", "preference_id" "text", "checkout_url" "text", "collector_id" "text", "mp_payment_id" "text", "provider_status" "text", "session_id" "uuid", "restaurant_id" "uuid", "branch_id" "uuid", "qr_token" "text")
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'private'
+    AS $$
+declare saved public.payments; checkout private.mobile_checkouts; target public.table_sessions;
+begin
+  if p_user_id is null then raise exception 'AUTH_REQUIRED'; end if;
+  select * into saved from public.payments where id=p_payment_id;
+  if not found then raise exception 'PAYMENT_NOT_FOUND'; end if;
+  select * into target from public.table_sessions where id=saved.session_id for update;
+  perform 1 from public.payments where id=p_payment_id for update;
+  if not exists(select 1 from public.session_participants sp where sp.id=saved.participant_id
+    and sp.session_id=saved.session_id and sp.user_id=p_user_id) then raise exception 'FORBIDDEN'; end if;
+  select * into checkout from private.mobile_checkouts where mobile_checkouts.payment_id=p_payment_id for update;
+  if not found then raise exception 'PAYMENT_NOT_FOUND'; end if;
+  if checkout.checkout_state='new' then
+    if saved.status<>'pending' then raise exception 'INVALID_PAYMENT_STATUS'; end if;
+    if target.status<>'open' then raise exception 'SESSION_CLOSED'; end if;
+    update private.mobile_checkouts set checkout_state='creating',lease_token=gen_random_uuid(),
+      lease_expires_at=clock_timestamp()+interval '90 seconds',updated_at=now()
+      where mobile_checkouts.payment_id=p_payment_id;
+  elsif checkout.checkout_state='creating' then
+    if checkout.lease_expires_at>clock_timestamp() then raise exception 'CHECKOUT_IN_PROGRESS'; end if;
+    -- Expiry says nothing about the remote result. Search/adopt only; no new POST.
+    update private.mobile_checkouts set checkout_state='uncertain',updated_at=now()
+      where mobile_checkouts.payment_id=p_payment_id;
+  end if;
+  return query select * from public.resolve_payment_provider_for_payment(p_payment_id,p_user_id);
+end;
+$$;
+
+
+ALTER FUNCTION "public"."claim_mobile_checkout"("p_payment_id" "uuid", "p_user_id" "uuid") OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."close_table_session"("p_session_id" "uuid") RETURNS "uuid"
     LANGUAGE "sql" SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -372,6 +503,60 @@ COMMENT ON FUNCTION "public"."close_table_session"("p_session_id" "uuid") IS 'Te
 
 
 
+CREATE OR REPLACE FUNCTION "public"."complete_mobile_checkout"("p_payment_id" "uuid", "p_lease_token" "uuid", "p_preference_id" "text", "p_checkout_url" "text", "p_collector_id" "text") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'private'
+    AS $_$
+declare checkout private.mobile_checkouts;
+begin
+  if p_lease_token is null or nullif(p_preference_id,'') is null
+    or length(p_preference_id)>200 or p_checkout_url is null or p_checkout_url !~ '^https://'
+    or length(p_checkout_url)>2048 or p_collector_id is null or p_collector_id !~ '^[0-9]+$'
+    then raise exception 'INVALID_REQUEST'; end if;
+  select * into checkout from private.mobile_checkouts where payment_id=p_payment_id for update;
+  if not found then raise exception 'PAYMENT_NOT_FOUND'; end if;
+  if checkout.lease_token is distinct from p_lease_token then raise exception 'CHECKOUT_LEASE_MISMATCH'; end if;
+  if checkout.checkout_state='ready' then
+    if checkout.preference_id<>p_preference_id or checkout.collector_id<>p_collector_id
+      then raise exception 'IDEMPOTENCY_CONFLICT'; end if;
+    return;
+  end if;
+  if checkout.checkout_state not in ('creating','uncertain') then raise exception 'INVALID_PAYMENT_STATUS'; end if;
+  update private.mobile_checkouts set preference_id=p_preference_id,checkout_url=p_checkout_url,
+    collector_id=p_collector_id,checkout_state='ready',lease_expires_at=null,updated_at=now()
+    where payment_id=p_payment_id;
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."complete_mobile_checkout"("p_payment_id" "uuid", "p_lease_token" "uuid", "p_preference_id" "text", "p_checkout_url" "text", "p_collector_id" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."consume_payment_rate_limit"("p_user_id" "uuid", "p_action" "text") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'private'
+    AS $$
+declare counter private.payment_rate_limits;
+begin
+  if p_user_id is null or p_action not in ('create','status') then raise exception 'INVALID_REQUEST'; end if;
+  insert into private.payment_rate_limits(user_id,action,window_start,requests)
+    values(p_user_id,p_action,clock_timestamp(),0) on conflict do nothing;
+  select * into counter from private.payment_rate_limits
+    where user_id=p_user_id and action=p_action for update;
+  if counter.window_start <= clock_timestamp()-interval '1 minute' then
+    update private.payment_rate_limits set window_start=clock_timestamp(),requests=1
+      where user_id=p_user_id and action=p_action;
+  elsif counter.requests>=20 then raise exception 'PAYMENT_RATE_LIMITED';
+  else update private.payment_rate_limits set requests=requests+1
+    where user_id=p_user_id and action=p_action;
+  end if;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."consume_payment_rate_limit"("p_user_id" "uuid", "p_action" "text") OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."create_mobile_payment"("p_session_id" "uuid", "p_request_id" "uuid", "p_mode" "public"."payment_mode" DEFAULT 'full'::"public"."payment_mode", "p_item_ids" "uuid"[] DEFAULT NULL::"uuid"[]) RETURNS TABLE("payment_id" "uuid", "amount" numeric, "status" "public"."payment_status")
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -384,7 +569,7 @@ declare
   available_due numeric;
   payment_amount numeric;
   allocated_equal_parts integer;
-  reserved_equal_amount numeric;
+  reserved_amount numeric;
   remaining_parts integer;
   requested_count integer;
   saved_count integer;
@@ -407,13 +592,11 @@ begin
 
   select * into target from public.table_sessions where id=p_session_id for update;
   if not found then raise exception 'SESSION_NOT_FOUND'; end if;
-  if target.status <> 'open' then raise exception 'SESSION_CLOSED'; end if;
   select id into diner_id from public.session_participants
     where session_id=target.id and user_id=auth.uid();
   if diner_id is null then raise exception 'NOT_PARTICIPANT'; end if;
   select b.payment_methods into methods from public.branches b
     where b.id=target.branch_id and b.restaurant_id=target.restaurant_id;
-  if not ('mobile'=any(methods)) then raise exception 'PAYMENT_METHOD_DISABLED'; end if;
 
   select * into saved from public.payments
     where restaurant_id=target.restaurant_id and method='mobile'
@@ -434,6 +617,8 @@ begin
     end if;
     return query select saved.id,saved.amount,saved.status; return;
   end if;
+  if target.status <> 'open' then raise exception 'SESSION_CLOSED'; end if;
+  if not ('mobile'=any(methods)) then raise exception 'PAYMENT_METHOD_DISABLED'; end if;
   if exists(select 1 from public.payments p where p.session_id=target.id
     and p.participant_id=diner_id and p.method='mobile' and p.status='pending')
     then raise exception 'PAYMENT_ALREADY_PENDING'; end if;
@@ -442,20 +627,22 @@ begin
     coalesce((select sum(o.total_amount) from public.orders o where o.session_id=target.id
       and o.restaurant_id=target.restaurant_id
       and o.status in ('accepted','in_preparation','ready','delivered')),0)
-    - coalesce((select sum(p.amount) from public.payments p where p.session_id=target.id
+    - coalesce((select sum(p.amount-p.refunded_amount) from public.payments p where p.session_id=target.id
       and p.restaurant_id=target.restaurant_id and p.status='approved'),0), 0
   ) into due;
   if due=0 then raise exception 'NOTHING_TO_PAY'; end if;
+  select coalesce(sum(p.amount),0) into reserved_amount from public.payments p
+    where p.session_id=target.id and p.status='pending';
+  available_due := greatest(due-reserved_amount,0);
+  if available_due=0 then raise exception 'PAYMENT_ALREADY_PENDING'; end if;
 
   if p_mode = 'equal_split' then
     if target.split_type <> 'equal' or target.split_equal_parts is null
       then raise exception 'INVALID_SPLIT'; end if;
-    select count(*), coalesce(sum(p.amount) filter (where p.status='pending'),0)
-      into allocated_equal_parts, reserved_equal_amount
+    select count(*) into allocated_equal_parts
       from public.payments p
       where p.session_id=target.id and p.restaurant_id=target.restaurant_id
         and p.mode='equal_split' and p.status in ('pending','approved');
-    available_due := greatest(due - reserved_equal_amount, 0);
     if available_due=0 then raise exception 'PAYMENT_ALREADY_PENDING'; end if;
     remaining_parts := greatest(target.split_equal_parts - allocated_equal_parts, 1);
     payment_amount := ceil(available_due * 100 / remaining_parts) / 100;
@@ -465,13 +652,13 @@ begin
     -- Sin asignación, o con 0%, no hay nada que este comensal deba pagar por
     -- porcentaje: la división es lo que hay que revisar, no el saldo.
     if coalesce(percentage_share, 0) <= 0 then raise exception 'INVALID_SPLIT'; end if;
-    select coalesce(sum(p.amount),0) into settled_by_diner
+    select coalesce(sum(p.amount-p.refunded_amount),0) into settled_by_diner
       from public.payments p
       where p.session_id=target.id and p.restaurant_id=target.restaurant_id
         and p.participant_id=diner_id and p.status='approved';
     -- Lo que le falta de su parte, nunca más que lo que la mesa todavía debe:
     -- si otro pagó de más, el porcentaje no lo vuelve a cobrar.
-    payment_amount := least(greatest(percentage_share - settled_by_diner, 0), due);
+    payment_amount := least(greatest(percentage_share - settled_by_diner, 0), available_due);
     if payment_amount <= 0 then raise exception 'NOTHING_TO_PAY'; end if;
   elsif p_mode = 'custom' then
     select count(*), coalesce(sum(oi.total_price),0)
@@ -490,11 +677,12 @@ begin
       join public.payments p on p.id=poi.payment_id
       where poi.order_item_id=any(p_item_ids) and p.status in ('pending','approved')
     ) then raise exception 'PAYMENT_ITEMS_UNAVAILABLE'; end if;
-    if payment_amount > due then raise exception 'PAYMENT_EXCEEDS_BALANCE'; end if;
+    if payment_amount > available_due then raise exception 'PAYMENT_EXCEEDS_BALANCE'; end if;
   else
-    payment_amount := due;
+    payment_amount := available_due;
   end if;
 
+  perform public.consume_payment_rate_limit(auth.uid(),'create');
   insert into public.payments(
     restaurant_id,session_id,participant_id,amount,mode,method,status,external_reference
   ) values(
@@ -753,6 +941,33 @@ $$;
 
 
 ALTER FUNCTION "public"."employee_email_exists"("p_email" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."fail_mobile_checkout"("p_payment_id" "uuid", "p_lease_token" "uuid", "p_definitive" boolean DEFAULT false) RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'private'
+    AS $$
+declare checkout private.mobile_checkouts; target_session uuid;
+begin
+  select session_id into target_session from public.payments where id=p_payment_id;
+  perform 1 from public.table_sessions where id=target_session for update;
+  perform 1 from public.payments where id=p_payment_id for update;
+  select * into checkout from private.mobile_checkouts where payment_id=p_payment_id for update;
+  if not found then raise exception 'PAYMENT_NOT_FOUND'; end if;
+  if checkout.lease_token is distinct from p_lease_token or p_lease_token is null
+    then raise exception 'CHECKOUT_LEASE_MISMATCH'; end if;
+  if checkout.checkout_state='ready' then return; end if;
+  if checkout.checkout_state='failed' then return; end if;
+  update private.mobile_checkouts set checkout_state=case when p_definitive then 'failed' else 'uncertain' end,
+    lease_expires_at=null,updated_at=now() where payment_id=p_payment_id;
+  -- Only a definitive API rejection BEFORE creating a preference releases funds.
+  if p_definitive then update public.payments set status='cancelled',updated_at=now()
+    where id=p_payment_id and status='pending' and mp_payment_id is null; end if;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."fail_mobile_checkout"("p_payment_id" "uuid", "p_lease_token" "uuid", "p_definitive" boolean) OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."fill_session_branch"() RETURNS "trigger"
@@ -1160,13 +1375,17 @@ begin
   from public.orders
   where session_id = target.id and restaurant_id = target.restaurant_id
     and status in ('accepted','in_preparation','ready','delivered');
-  select coalesce(sum(amount), 0) into approved_total
+  select coalesce(sum(amount-refunded_amount), 0) into approved_total
   from public.payments
   where session_id = target.id and restaurant_id = target.restaurant_id
     and status = 'approved';
   pending_total := greatest(account_total - approved_total, 0);
   if pending_total = 0 then raise exception 'NOTHING_TO_PAY'; end if;
   if p_amount > pending_total then raise exception 'PAYMENT_EXCEEDS_BALANCE'; end if;
+  if p_amount > pending_total-coalesce((select sum(p.amount) from public.payments p
+    where p.session_id=target.id and p.status='pending'),0) then
+    raise exception 'PAYMENT_ALREADY_PENDING';
+  end if;
 
   -- Con la sesión bloqueada el pendiente no puede cambiar hasta el commit: si
   -- el cobro lo salda es la cuenta completa, y si no, un importe parcial.
@@ -1526,6 +1745,31 @@ $$;
 
 
 ALTER FUNCTION "public"."resolve_mobile_payment"("p_payment_id" "uuid", "p_user_id" "uuid", "p_status" "public"."payment_status") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."resolve_payment_provider_for_payment"("p_payment_id" "uuid", "p_user_id" "uuid" DEFAULT NULL::"uuid") RETURNS TABLE("payment_id" "uuid", "amount" numeric, "status" "public"."payment_status", "currency_id" "text", "external_reference" "text", "environment" "public"."payment_provider_environment", "access_token" "text", "webhook_secret" "text", "checkout_state" "text", "lease_token" "uuid", "preference_id" "text", "checkout_url" "text", "collector_id" "text", "mp_payment_id" "text", "provider_status" "text", "session_id" "uuid", "restaurant_id" "uuid", "branch_id" "uuid", "qr_token" "text")
+    LANGUAGE "plpgsql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public', 'private', 'vault'
+    AS $$
+begin
+  if p_user_id is not null and not exists(
+    select 1 from public.payments p join public.session_participants sp on sp.id=p.participant_id
+    where p.id=p_payment_id and sp.user_id=p_user_id and sp.session_id=p.session_id
+  ) then raise exception 'FORBIDDEN'; end if;
+  return query select p.id,p.amount,p.status,c.currency_id,p.id::text,c.environment,
+    a.decrypted_secret,w.decrypted_secret,c.checkout_state,c.lease_token,c.preference_id,c.checkout_url,
+    c.collector_id,p.mp_payment_id,p.provider_status,p.session_id,p.restaurant_id,s.branch_id,t.qr_token
+    from public.payments p join private.mobile_checkouts c on c.payment_id=p.id
+    join public.table_sessions s on s.id=p.session_id
+    left join public.tables t on t.id=s.table_id
+    join vault.decrypted_secrets a on a.id=c.access_token_secret_id
+    left join vault.decrypted_secrets w on w.id=c.webhook_secret_id
+    where p.id=p_payment_id and p.method='mobile';
+end;
+$$;
+
+
+ALTER FUNCTION "public"."resolve_payment_provider_for_payment"("p_payment_id" "uuid", "p_user_id" "uuid") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."resolve_payment_provider_for_session"("p_session_id" "uuid") RETURNS TABLE("provider" "public"."payment_provider", "environment" "public"."payment_provider_environment", "access_token" "text", "webhook_secret" "text", "restaurant_id" "uuid", "branch_id" "uuid")
@@ -2577,7 +2821,12 @@ CREATE TABLE IF NOT EXISTS "public"."payments" (
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "method" "public"."payment_method" NOT NULL,
     "external_reference" "text",
+    "provider_status" "text",
+    "provider_updated_at" timestamp with time zone,
+    "reconciliation_issue" "text",
+    "refunded_amount" numeric(10,2) DEFAULT 0 NOT NULL,
     CONSTRAINT "payments_amount_check" CHECK (("amount" > (0)::numeric)),
+    CONSTRAINT "payments_check" CHECK ((("refunded_amount" >= (0)::numeric) AND ("refunded_amount" <= "amount"))),
     CONSTRAINT "payments_external_reference_length" CHECK ((("external_reference" IS NULL) OR ("length"("external_reference") <= 200)))
 );
 
@@ -2585,7 +2834,7 @@ CREATE TABLE IF NOT EXISTS "public"."payments" (
 ALTER TABLE "public"."payments" OWNER TO "postgres";
 
 
-COMMENT ON COLUMN "public"."payments"."mp_payment_id" IS 'Compatibilidad histórica. Las integraciones nuevas deben usar external_reference.';
+COMMENT ON COLUMN "public"."payments"."mp_payment_id" IS 'Verified Mercado Pago payment identifier; external_reference remains the local request key.';
 
 
 
@@ -2594,6 +2843,10 @@ COMMENT ON COLUMN "public"."payments"."method" IS 'Medio concreto usado para pag
 
 
 COMMENT ON COLUMN "public"."payments"."external_reference" IS 'Identificador opcional del proveedor, transferencia, recibo o terminal. No contiene credenciales.';
+
+
+
+COMMENT ON COLUMN "public"."payments"."refunded_amount" IS 'Provider-verified amount refunded. Approved ledger credit is amount minus refunded_amount.';
 
 
 
@@ -2739,7 +2992,7 @@ CREATE OR REPLACE VIEW "public"."session_bills" WITH ("security_invoker"='true')
             "sum"("orders"."total_amount") FILTER (WHERE ("orders"."status" = ANY (ARRAY['accepted'::"public"."order_status", 'in_preparation'::"public"."order_status", 'ready'::"public"."order_status", 'delivered'::"public"."order_status"]))) AS "total_amount"
            FROM "public"."orders"
           WHERE (("orders"."session_id" = "s"."id") AND ("orders"."restaurant_id" = "s"."restaurant_id"))) "o" ON (true))
-     LEFT JOIN LATERAL ( SELECT "sum"("payments"."amount") AS "paid_amount"
+     LEFT JOIN LATERAL ( SELECT "sum"(("payments"."amount" - "payments"."refunded_amount")) AS "paid_amount"
            FROM "public"."payments"
           WHERE (("payments"."session_id" = "s"."id") AND ("payments"."restaurant_id" = "s"."restaurant_id") AND ("payments"."status" = 'approved'::"public"."payment_status"))) "p" ON (true))
   WHERE ("public"."is_session_participant"("s"."id") OR "public"."can_read_session"("s"."id", 'payments.read'::"text"));
@@ -3267,6 +3520,10 @@ CREATE UNIQUE INDEX "payments_external_reference_unique" ON "public"."payments" 
 
 
 
+CREATE UNIQUE INDEX "payments_mp_payment_id_unique" ON "public"."payments" USING "btree" ("mp_payment_id") WHERE ("mp_payment_id" IS NOT NULL);
+
+
+
 CREATE INDEX "payments_session_created_idx" ON "public"."payments" USING "btree" ("session_id", "created_at" DESC);
 
 
@@ -3331,7 +3588,15 @@ CREATE INDEX "tables_section_id_idx" ON "public"."tables" USING "btree" ("sectio
 
 
 
+CREATE OR REPLACE TRIGGER "order_items_protect_checkout" BEFORE DELETE OR UPDATE ON "public"."order_items" FOR EACH ROW EXECUTE FUNCTION "private"."protect_checkout_order_item"();
+
+
+
 CREATE OR REPLACE TRIGGER "orders_keep_authorship" BEFORE UPDATE ON "public"."orders" FOR EACH ROW EXECUTE FUNCTION "public"."keep_order_authorship"();
+
+
+
+CREATE OR REPLACE TRIGGER "orders_protect_checkout" BEFORE DELETE OR UPDATE ON "public"."orders" FOR EACH ROW EXECUTE FUNCTION "private"."protect_checkout_order"();
 
 
 
@@ -3340,6 +3605,10 @@ CREATE OR REPLACE TRIGGER "orders_reject_abandoned_request" BEFORE INSERT ON "pu
 
 
 CREATE OR REPLACE TRIGGER "payments_require_mobile_provider" BEFORE INSERT ON "public"."payments" FOR EACH ROW EXECUTE FUNCTION "private"."require_mobile_payment_provider"();
+
+
+
+CREATE OR REPLACE TRIGGER "payments_snapshot_mobile_credentials" AFTER INSERT ON "public"."payments" FOR EACH ROW EXECUTE FUNCTION "private"."snapshot_mobile_payment_credentials"();
 
 
 
@@ -3970,6 +4239,11 @@ GRANT ALL ON FUNCTION "public"."add_guest_participant"("p_session_id" "uuid", "p
 
 
 
+REVOKE ALL ON FUNCTION "public"."apply_mercado_pago_payment"("p_payment_id" "uuid", "p_provider_payment_id" "text", "p_external_reference" "text", "p_amount" numeric, "p_currency_id" "text", "p_provider_status" "text", "p_provider_updated_at" timestamp with time zone, "p_refunded_amount" numeric) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."apply_mercado_pago_payment"("p_payment_id" "uuid", "p_provider_payment_id" "text", "p_external_reference" "text", "p_amount" numeric, "p_currency_id" "text", "p_provider_status" "text", "p_provider_updated_at" timestamp with time zone, "p_refunded_amount" numeric) TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."audit_employee_password_reset"("p_actor" "uuid", "p_restaurant" "uuid", "p_user" "uuid", "p_completed" boolean) FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."audit_employee_password_reset"("p_actor" "uuid", "p_restaurant" "uuid", "p_user" "uuid", "p_completed" boolean) TO "service_role";
 
@@ -3998,9 +4272,24 @@ GRANT ALL ON FUNCTION "public"."can_read_session"("sid" "uuid", "permission_name
 
 
 
+REVOKE ALL ON FUNCTION "public"."claim_mobile_checkout"("p_payment_id" "uuid", "p_user_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."claim_mobile_checkout"("p_payment_id" "uuid", "p_user_id" "uuid") TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."close_table_session"("p_session_id" "uuid") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."close_table_session"("p_session_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."close_table_session"("p_session_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."complete_mobile_checkout"("p_payment_id" "uuid", "p_lease_token" "uuid", "p_preference_id" "text", "p_checkout_url" "text", "p_collector_id" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."complete_mobile_checkout"("p_payment_id" "uuid", "p_lease_token" "uuid", "p_preference_id" "text", "p_checkout_url" "text", "p_collector_id" "text") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."consume_payment_rate_limit"("p_user_id" "uuid", "p_action" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."consume_payment_rate_limit"("p_user_id" "uuid", "p_action" "text") TO "service_role";
 
 
 
@@ -4049,6 +4338,11 @@ GRANT ALL ON FUNCTION "public"."employee_catalog_access"("rid" "uuid", "bid" "uu
 
 REVOKE ALL ON FUNCTION "public"."employee_email_exists"("p_email" "text") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."employee_email_exists"("p_email" "text") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."fail_mobile_checkout"("p_payment_id" "uuid", "p_lease_token" "uuid", "p_definitive" boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."fail_mobile_checkout"("p_payment_id" "uuid", "p_lease_token" "uuid", "p_definitive" boolean) TO "service_role";
 
 
 
@@ -4184,6 +4478,11 @@ GRANT ALL ON FUNCTION "public"."request_session_service"("p_session_id" "uuid", 
 
 REVOKE ALL ON FUNCTION "public"."resolve_mobile_payment"("p_payment_id" "uuid", "p_user_id" "uuid", "p_status" "public"."payment_status") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."resolve_mobile_payment"("p_payment_id" "uuid", "p_user_id" "uuid", "p_status" "public"."payment_status") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."resolve_payment_provider_for_payment"("p_payment_id" "uuid", "p_user_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."resolve_payment_provider_for_payment"("p_payment_id" "uuid", "p_user_id" "uuid") TO "service_role";
 
 
 

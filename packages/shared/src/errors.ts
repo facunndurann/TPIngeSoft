@@ -11,75 +11,245 @@ type AppErrorDefinition = { status: number; retryable: boolean; message: string 
 
 export const appErrors = {
   // Sesión y permisos
-  AUTH_REQUIRED: { status: 401, retryable: true, message: 'Tu sesión expiró. Recargá la página para volver a conectarte.' },
+  AUTH_REQUIRED: {
+    status: 401,
+    retryable: true,
+    message: 'Tu sesión expiró. Recargá la página para volver a conectarte.',
+  },
   FORBIDDEN: { status: 403, retryable: false, message: 'No tenés permiso para realizar esta acción.' },
 
   // Forma de la solicitud
   METHOD_NOT_ALLOWED: { status: 405, retryable: false, message: 'Usá POST para enviar un pedido.' },
-  INVALID_REQUEST: { status: 400, retryable: false, message: 'Los datos enviados no son válidos. Revisalos e intentá de nuevo.' },
+  INVALID_REQUEST: {
+    status: 400,
+    retryable: false,
+    message: 'Los datos enviados no son válidos. Revisalos e intentá de nuevo.',
+  },
   PAYLOAD_TOO_LARGE: { status: 413, retryable: false, message: 'El pedido es demasiado grande.' },
 
   // Envío de pedidos (submit_order, abandon_order_request)
   INVALID_ITEMS: { status: 400, retryable: false, message: 'Revisá los productos y cantidades del carrito.' },
   SESSION_NOT_FOUND: { status: 404, retryable: false, message: 'No encontramos la cuenta de esa mesa.' },
   SESSION_CLOSED: { status: 409, retryable: false, message: 'La mesa ya cerró su cuenta.' },
-  NOT_PARTICIPANT: { status: 403, retryable: false, message: 'Ingresá desde el QR de esta mesa para realizar pedidos.' },
+  NOT_PARTICIPANT: {
+    status: 403,
+    retryable: false,
+    message: 'Ingresá desde el QR de esta mesa para realizar pedidos.',
+  },
   INVALID_NAME: { status: 400, retryable: false, message: 'Usá un nombre de 1 a 40 caracteres.' },
-  TABLE_UNAVAILABLE: { status: 409, retryable: false, message: 'Esta mesa no está recibiendo pedidos. Consultá con el personal del restaurante.' },
-  PRODUCT_UNAVAILABLE: { status: 409, retryable: false, message: 'Un producto ya no está disponible. Actualizamos la carta para que revises tu carrito.' },
-  INVALID_MODIFIERS: { status: 409, retryable: false, message: 'Cambiaron las opciones disponibles de un plato. Revisá su personalización.' },
-  INVALID_INGREDIENTS: { status: 409, retryable: false, message: 'Revisá los ingredientes: hay cambios en su disponibilidad o en cuáles se pueden quitar.' },
-  INVALID_SPLIT: { status: 400, retryable: false, message: 'Revisá la división: los porcentajes tienen que sumar 100 y corresponder a comensales de esta mesa.' },
-  PAYMENT_METHOD_DISABLED: { status: 409, retryable: false, message: 'Este local no ofrece ese medio de pago. Pedí la cuenta y consultá con el personal.' },
-  INVALID_PAYMENT_AMOUNT: { status: 400, retryable: false, message: 'Ingresá un importe válido, con hasta dos decimales.' },
+  TABLE_UNAVAILABLE: {
+    status: 409,
+    retryable: false,
+    message: 'Esta mesa no está recibiendo pedidos. Consultá con el personal del restaurante.',
+  },
+  PRODUCT_UNAVAILABLE: {
+    status: 409,
+    retryable: false,
+    message: 'Un producto ya no está disponible. Actualizamos la carta para que revises tu carrito.',
+  },
+  INVALID_MODIFIERS: {
+    status: 409,
+    retryable: false,
+    message: 'Cambiaron las opciones disponibles de un plato. Revisá su personalización.',
+  },
+  INVALID_INGREDIENTS: {
+    status: 409,
+    retryable: false,
+    message: 'Revisá los ingredientes: hay cambios en su disponibilidad o en cuáles se pueden quitar.',
+  },
+  INVALID_SPLIT: {
+    status: 400,
+    retryable: false,
+    message: 'Revisá la división: los porcentajes tienen que sumar 100 y corresponder a comensales de esta mesa.',
+  },
+  PAYMENT_METHOD_DISABLED: {
+    status: 409,
+    retryable: false,
+    message: 'Este local no ofrece ese medio de pago. Pedí la cuenta y consultá con el personal.',
+  },
+  INVALID_PAYMENT_AMOUNT: {
+    status: 400,
+    retryable: false,
+    message: 'Ingresá un importe válido, con hasta dos decimales.',
+  },
   INVALID_PARTICIPANT: { status: 400, retryable: false, message: 'El comensal seleccionado no pertenece a esta mesa.' },
-  PAYMENT_METHOD_UNAVAILABLE: { status: 409, retryable: false, message: 'Ese medio necesita confirmación electrónica y no se registra manualmente.' },
+  PAYMENT_METHOD_UNAVAILABLE: {
+    status: 409,
+    retryable: false,
+    message: 'Ese medio necesita confirmación electrónica y no se registra manualmente.',
+  },
   NOTHING_TO_PAY: { status: 409, retryable: false, message: 'La cuenta ya no tiene saldo pendiente.' },
-  PAYMENT_EXCEEDS_BALANCE: { status: 409, retryable: false, message: 'El importe supera el saldo pendiente. Actualizá la cuenta.' },
-  PAYMENT_REFERENCE_CONFLICT: { status: 409, retryable: false, message: 'Esa referencia ya fue registrada en otro pago.' },
-  PAYMENT_ALREADY_PENDING: { status: 409, retryable: false, message: 'Ya tenés un pago electrónico esperando confirmación.' },
-  INVALID_PAYMENT_ITEMS: { status: 400, retryable: false, message: 'Revisá los ítems elegidos: deben pertenecer a pedidos confirmados de esta mesa.' },
-  PAYMENT_ITEMS_UNAVAILABLE: { status: 409, retryable: false, message: 'Uno de los ítems ya está incluido en otro pago. Actualizamos la cuenta para que elijas nuevamente.' },
+  PAYMENT_EXCEEDS_BALANCE: {
+    status: 409,
+    retryable: false,
+    message: 'El importe supera el saldo pendiente. Actualizá la cuenta.',
+  },
+  PAYMENT_REFERENCE_CONFLICT: {
+    status: 409,
+    retryable: false,
+    message: 'Esa referencia ya fue registrada en otro pago.',
+  },
+  PAYMENT_ALREADY_PENDING: {
+    status: 409,
+    retryable: false,
+    message: 'Ya tenés un pago electrónico esperando confirmación.',
+  },
+  INVALID_PAYMENT_ITEMS: {
+    status: 400,
+    retryable: false,
+    message: 'Revisá los ítems elegidos: deben pertenecer a pedidos confirmados de esta mesa.',
+  },
+  PAYMENT_ITEMS_UNAVAILABLE: {
+    status: 409,
+    retryable: false,
+    message: 'Uno de los ítems ya está incluido en otro pago. Actualizamos la cuenta para que elijas nuevamente.',
+  },
   PAYMENT_NOT_FOUND: { status: 404, retryable: false, message: 'No encontramos ese pago.' },
-  PAYMENT_PROVIDER_UNAVAILABLE: { status: 503, retryable: true, message: 'El proveedor de pagos no está disponible. Reintentá en unos momentos.' },
-  PRICE_CHANGED: { status: 409, retryable: false, message: 'El precio cambió. Revisá el total actualizado y volvé a enviar el pedido.' },
-  IDEMPOTENCY_CONFLICT: { status: 409, retryable: false, message: 'Este envío ya se usó para otro contenido. Revisá los pedidos de la mesa antes de continuar.' },
-  REQUEST_ABANDONED: { status: 409, retryable: false, message: 'Cancelaste este envío. Revisá tu carrito y volvé a enviarlo.' },
+  PAYMENT_PROVIDER_UNAVAILABLE: {
+    status: 503,
+    retryable: true,
+    message: 'El proveedor de pagos no está disponible. Reintentá en unos momentos.',
+  },
+  CHECKOUT_IN_PROGRESS: {
+    status: 409,
+    retryable: true,
+    message: 'Estamos preparando tu pago. Esperá unos momentos y volvé a consultar.',
+  },
+  CHECKOUT_UNCERTAIN: {
+    status: 503,
+    retryable: true,
+    message: 'Estamos verificando el intento de pago anterior. Reintentá en unos momentos.',
+  },
+  PAYMENT_RATE_LIMITED: {
+    status: 429,
+    retryable: true,
+    message: 'Consultaste el pago demasiadas veces. Esperá unos momentos y reintentá.',
+  },
+  PAYMENT_VERIFICATION_FAILED: {
+    status: 409,
+    retryable: false,
+    message: 'No pudimos verificar los datos del pago. Consultá con el personal del restaurante.',
+  },
+  PAYMENT_RECONCILIATION_REQUIRED: {
+    status: 409,
+    retryable: false,
+    message: 'El pago necesita una revisión. Consultá con el personal antes de volver a pagar.',
+  },
+  PAYMENT_COMMITTED_ORDER: {
+    status: 409,
+    retryable: false,
+    message: 'La cuenta tiene un pago iniciado. Revisá el cobro antes de modificar estos pedidos.',
+  },
+  PRICE_CHANGED: {
+    status: 409,
+    retryable: false,
+    message: 'El precio cambió. Revisá el total actualizado y volvé a enviar el pedido.',
+  },
+  IDEMPOTENCY_CONFLICT: {
+    status: 409,
+    retryable: false,
+    message: 'Este envío ya se usó para otro contenido. Revisá los pedidos de la mesa antes de continuar.',
+  },
+  REQUEST_ABANDONED: {
+    status: 409,
+    retryable: false,
+    message: 'Cancelaste este envío. Revisá tu carrito y volvé a enviarlo.',
+  },
 
   // Red: la respuesta nunca llegó, así que el envío se conserva para reintentar.
-  CONNECTION_ERROR: { status: 503, retryable: true, message: 'No pudimos confirmar el envío. Reintentá: conservamos tu pedido para evitar duplicados.' },
+  CONNECTION_ERROR: {
+    status: 503,
+    retryable: true,
+    message: 'No pudimos confirmar el envío. Reintentá: conservamos tu pedido para evitar duplicados.',
+  },
 
   // POS (transition_order, close_table_session, recepción de pedidos)
   ORDER_NOT_FOUND: { status: 404, retryable: false, message: 'No encontramos ese pedido.' },
-  INVALID_TRANSITION: { status: 409, retryable: false, message: 'Ese cambio de estado ya no está permitido. Actualizá el tablero e intentá de nuevo.' },
-  POS_UNAVAILABLE: { status: 503, retryable: true, message: 'El POS del restaurante no está recibiendo pedidos ahora. Reintentá en unos momentos.' },
-  POS_UNSUPPORTED: { status: 503, retryable: true, message: 'La integración con el POS del restaurante todavía no está disponible. Reintentá más tarde.' },
+  INVALID_TRANSITION: {
+    status: 409,
+    retryable: false,
+    message: 'Ese cambio de estado ya no está permitido. Actualizá el tablero e intentá de nuevo.',
+  },
+  POS_UNAVAILABLE: {
+    status: 503,
+    retryable: true,
+    message: 'El POS del restaurante no está recibiendo pedidos ahora. Reintentá en unos momentos.',
+  },
+  POS_UNSUPPORTED: {
+    status: 503,
+    retryable: true,
+    message: 'La integración con el POS del restaurante todavía no está disponible. Reintentá más tarde.',
+  },
 
   // Salón y mesas (pos_open_table_session, pos_move_table_session)
   TABLE_NOT_FOUND: { status: 404, retryable: false, message: 'Esa mesa ya no existe. Actualizá el plano.' },
-  TABLE_OCCUPIED: { status: 409, retryable: false, message: 'La mesa destino ya tiene una comanda abierta. Elegí otra mesa.' },
+  TABLE_OCCUPIED: {
+    status: 409,
+    retryable: false,
+    message: 'La mesa destino ya tiene una comanda abierta. Elegí otra mesa.',
+  },
   TABLE_BRANCH_MISMATCH: { status: 409, retryable: false, message: 'La mesa destino debe estar en la misma sucursal.' },
-  SESSION_MOVE_CONFLICT: { status: 409, retryable: false, message: 'La comanda fue movida o cerrada por otro operador. Actualizá el plano.' },
-  EMPLOYEE_NOT_FOUND: { status: 403, retryable: false, message: 'Tu cuenta ya no está habilitada en esta sucursal. Volvé a ingresar.' },
+  SESSION_MOVE_CONFLICT: {
+    status: 409,
+    retryable: false,
+    message: 'La comanda fue movida o cerrada por otro operador. Actualizá el plano.',
+  },
+  EMPLOYEE_NOT_FOUND: {
+    status: 403,
+    retryable: false,
+    message: 'Tu cuenta ya no está habilitada en esta sucursal. Volvé a ingresar.',
+  },
 
   // Guardados del panel admin
   SLUG_TAKEN: { status: 409, retryable: false, message: 'Ya existe un restaurante con ese nombre. Probá con otro.' },
-  STALE_DATA: { status: 409, retryable: false, message: 'Estos datos cambiaron mientras editabas. Recargá la página y volvé a intentar.' },
-  SECTION_NAME_TAKEN: { status: 409, retryable: false, message: 'Ya existe un sector con ese nombre en esta sucursal.' },
-  TABLE_LABEL_TAKEN: { status: 409, retryable: false, message: 'Ya existe una mesa con ese identificador en esta sucursal.' },
+  STALE_DATA: {
+    status: 409,
+    retryable: false,
+    message: 'Estos datos cambiaron mientras editabas. Recargá la página y volvé a intentar.',
+  },
+  SECTION_NAME_TAKEN: {
+    status: 409,
+    retryable: false,
+    message: 'Ya existe un sector con ese nombre en esta sucursal.',
+  },
+  TABLE_LABEL_TAKEN: {
+    status: 409,
+    retryable: false,
+    message: 'Ya existe una mesa con ese identificador en esta sucursal.',
+  },
   TABLE_SECTION_BRANCH_MISMATCH: { status: 409, retryable: false, message: 'El sector pertenece a otra sucursal.' },
-  CATEGORY_IN_USE: { status: 409, retryable: false, message: 'No se puede eliminar: la categoría tiene productos. Movelos o eliminalos primero.' },
-  BRANCH_IN_USE: { status: 409, retryable: false, message: 'No se puede eliminar: la sucursal tiene mesas o cuentas asociadas.' },
+  CATEGORY_IN_USE: {
+    status: 409,
+    retryable: false,
+    message: 'No se puede eliminar: la categoría tiene productos. Movelos o eliminalos primero.',
+  },
+  BRANCH_IN_USE: {
+    status: 409,
+    retryable: false,
+    message: 'No se puede eliminar: la sucursal tiene mesas o cuentas asociadas.',
+  },
 
   // Cuentas de empleados (employee-accounts)
   USERNAME_TAKEN: { status: 409, retryable: false, message: 'Ese nombre de usuario ya existe. Elegí otro.' },
-  INVALID_LEGACY_EMPLOYEE: { status: 409, retryable: false, message: 'Ese empleado del POS anterior ya fue vinculado o no existe. Actualizá la lista.' },
-  PROVISIONING_CLEANUP_REQUIRED: { status: 500, retryable: false, message: 'El alta quedó pendiente de revisión. Contactá al soporte antes de reintentar.' },
+  INVALID_LEGACY_EMPLOYEE: {
+    status: 409,
+    retryable: false,
+    message: 'Ese empleado del POS anterior ya fue vinculado o no existe. Actualizá la lista.',
+  },
+  PROVISIONING_CLEANUP_REQUIRED: {
+    status: 500,
+    retryable: false,
+    message: 'El alta quedó pendiente de revisión. Contactá al soporte antes de reintentar.',
+  },
 
   // Falla inesperada: el detalle interno nunca se expone. El mensaje sirve a
   // cualquier operación de las tres apps, lecturas incluidas; quien necesite
   // decir algo más preciso lo pasa al constructor de AppError.
-  SERVER_ERROR: { status: 503, retryable: true, message: 'No pudimos completar la operación. Revisá tu conexión y reintentá.' },
+  SERVER_ERROR: {
+    status: 503,
+    retryable: true,
+    message: 'No pudimos completar la operación. Revisá tu conexión y reintentá.',
+  },
 } satisfies Record<string, AppErrorDefinition>
 
 export type AppErrorCode = keyof typeof appErrors

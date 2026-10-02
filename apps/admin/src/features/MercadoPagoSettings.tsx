@@ -110,6 +110,7 @@ function MercadoPagoForm({
 
   const environmentChanged = environment !== saved.environment
   const tokenRequired = !saved.configured || environmentChanged
+  const webhookRequired = !saved.webhookConfigured || environmentChanged
   const dirty =
     tokenRequired ||
     accessToken.trim().length > 0 ||
@@ -129,7 +130,10 @@ function MercadoPagoForm({
 
   return (
     <form className="space-y-4" onSubmit={submit}>
-      <Field label="Ambiente" hint="Pruebas no procesa dinero real; producción usa la cuenta real del restaurante.">
+      <Field
+        label="Ambiente"
+        hint="Para pruebas usá las credenciales de un vendedor de prueba; para producción, las de la cuenta del restaurante."
+      >
         <Select
           value={environment}
           disabled={busy}
@@ -144,7 +148,7 @@ function MercadoPagoForm({
       </Field>
 
       <Field
-        label={saved.configured ? 'Reemplazar Access Token (opcional)' : 'Access Token'}
+        label={tokenRequired ? 'Access Token' : 'Reemplazar Access Token (opcional)'}
         hint={
           saved.accessTokenHint
             ? `Guardado de forma cifrada; termina en ${saved.accessTokenHint}. Dejalo vacío para conservarlo.`
@@ -164,17 +168,18 @@ function MercadoPagoForm({
       </Field>
 
       <Field
-        label="Reemplazar secreto de webhook (opcional)"
+        label={webhookRequired ? 'Secreto de webhook' : 'Reemplazar secreto de webhook (opcional)'}
         hint={
           saved.webhookConfigured
             ? 'Hay un secreto guardado de forma cifrada. Dejalo vacío para conservarlo.'
-            : 'Podés cargarlo ahora o antes de activar el webhook en una fase posterior.'
+            : 'Cargá la firma secreta de Webhooks de Tus integraciones antes de habilitar Checkout Pro.'
         }
       >
         <Input
           type="password"
           autoComplete="new-password"
           value={webhookSecret}
+          required={webhookRequired}
           minLength={16}
           maxLength={512}
           disabled={busy}

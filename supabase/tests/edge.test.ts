@@ -109,7 +109,7 @@ test('unexpected failures never leak backend details', async () => {
   assert.equal(message, 'No pudimos confirmar el resultado. Reintentá el mismo envío para evitar duplicados.')
 })
 
-test('mobile payment endpoint creates and confirms only validated requests', async () => {
+test('mobile payment endpoint creates and reads status; client confirmation is forbidden', async () => {
   const calls: string[] = []
   const gateway: MobilePaymentGateway = {
     execute: async (input) => {
@@ -117,7 +117,7 @@ test('mobile payment endpoint creates and confirms only validated requests', asy
       return {
         paymentId: input.action === 'create' ? input.requestId : input.paymentId,
         amount: 1250,
-        status: input.action === 'create' ? 'pending' : input.outcome,
+        status: input.action === 'create' ? 'pending' : 'approved',
       }
     },
   }
@@ -135,7 +135,8 @@ test('mobile payment endpoint creates and confirms only validated requests', asy
   const created = await handler(mobileRequest({ action: 'create', sessionId: input.sessionId, requestId: paymentId }))
   assert.equal(created.status, 201)
   assert.deepEqual(await created.json(), { paymentId, amount: 1250, status: 'pending' })
-  const approved = await handler(mobileRequest({ action: 'confirm', paymentId, outcome: 'approved' }))
+  assert.equal((await handler(mobileRequest({ action: 'confirm', paymentId, outcome: 'approved' }))).status, 400)
+  const approved = await handler(mobileRequest({ action: 'status', paymentId }))
   assert.equal(approved.status, 200)
   assert.deepEqual(await approved.json(), { paymentId, amount: 1250, status: 'approved' })
   const byItems = await handler(
@@ -148,7 +149,7 @@ test('mobile payment endpoint creates and confirms only validated requests', asy
     }),
   )
   assert.equal(byItems.status, 201)
-  assert.deepEqual(calls, ['create', 'confirm', 'create'])
+  assert.deepEqual(calls, ['create', 'status', 'create'])
   assert.equal((await handler(mobileRequest({ action: 'create', sessionId: 'bad', requestId: paymentId }))).status, 400)
   assert.equal((await handler(mobileRequest({ action: 'confirm', paymentId, outcome: 'invented' }))).status, 400)
   assert.equal(

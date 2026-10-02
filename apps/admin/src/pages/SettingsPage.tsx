@@ -16,6 +16,7 @@ import { DesignPicker } from '@/features/DesignPicker'
 import { Page } from '@/features/Page'
 import { PaymentMethodsField } from '@/features/PaymentMethods'
 import { MercadoPagoSettings } from '@/features/MercadoPagoSettings'
+import { MercadoPagoPayments } from '@/features/MercadoPagoPayments'
 import {
   Badge,
   Button,
@@ -102,6 +103,7 @@ export function SettingsPage() {
 
       <BranchesSection restaurantId={restaurant.id} />
       <MercadoPagoSettings restaurantId={restaurant.id} />
+      <MercadoPagoPayments restaurantId={restaurant.id} />
     </Page>
   )
 }

@@ -75,7 +75,7 @@ export const paymentMethodLabels: Record<PaymentMethod, string> = {
 
 /** Qué habilita cada medio, para que el administrador sepa qué está prendiendo. */
 export const paymentMethodDescriptions: Record<PaymentMethod, string> = {
-  mobile: 'El comensal paga en la app con un medio electrónico.',
+  mobile: 'El comensal continúa el pago en Mercado Pago desde su celular.',
   in_person: 'El comensal puede pedir que un mozo le cobre en la mesa.',
   external: 'Se arregla fuera de la app: caja, efectivo o transferencia.',
 }
@@ -125,9 +125,8 @@ export const mobilePaymentRequestSchema = z
       .strict(),
     z
       .object({
-        action: z.literal('confirm'),
+        action: z.literal('status'),
         paymentId: uuid,
-        outcome: z.enum(['approved', 'rejected']),
       })
       .strict(),
   ])
@@ -142,9 +141,33 @@ export const mobilePaymentRequestSchema = z
   })
 export type MobilePaymentRequest = z.infer<typeof mobilePaymentRequestSchema>
 
+/**
+ * Solo admitimos HTTPS hacia los dominios de checkout publicados por Mercado Pago.
+ * El destino siempre viene del init_point del servidor, nunca de la URL de retorno.
+ * https://www.mercadopago.com.ar/developers/es/reference/online-payments/checkout-pro-preferences/get-preference/get
+ */
+export function isMercadoPagoCheckoutUrl(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return (
+      url.protocol === 'https:' &&
+      !url.username &&
+      !url.password &&
+      !url.port &&
+      ['www.mercadopago.com', 'sandbox.mercadopago.com', 'www.mercadopago.com.ar'].includes(url.hostname) &&
+      /^\/(?:mla\/)?checkout\/(?:v1\/redirect|start|pay)\/?$/.test(url.pathname)
+    )
+  } catch {
+    return false
+  }
+}
+
 export const mobilePaymentResultSchema = z.object({
   paymentId: uuid,
   amount: z.number().finite().positive(),
   status: z.enum(Constants.public.Enums.payment_status),
+  checkoutUrl: z.string().url().refine(isMercadoPagoCheckoutUrl).optional(),
+  preferenceId: z.string().min(1).max(200).optional(),
+  providerStatus: z.string().min(1).max(100).optional(),
 })
 export type MobilePaymentResult = z.infer<typeof mobilePaymentResultSchema>

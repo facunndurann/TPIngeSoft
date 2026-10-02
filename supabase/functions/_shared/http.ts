@@ -48,7 +48,7 @@ export const errorBody = ({ code, message }: AppError, wording = message): AppEr
  * Lee el cuerpo como JSON y corta apenas pasa `maxBytes`: uno enorme se rechaza
  * sin terminar de recibirlo, y el tope cuenta bytes aunque el texto tenga tildes.
  */
-async function readJson(request: Request, maxBytes: number): Promise<unknown> {
+export async function readJson(request: Request, maxBytes: number): Promise<unknown> {
   const reader = request.body?.getReader()
   if (!reader) throw new AppError('INVALID_REQUEST')
 
