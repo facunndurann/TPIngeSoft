@@ -101,7 +101,7 @@ function SectionEditor({
               onSelect={setSelectedId}
               onMove={editor.moveTable}
               onResize={editor.reshapeTable}
-              onReject={editor.errors.report}
+              onReject={editor.reportError}
               toolbar={
                 <SectionToolbar
                   section={section}

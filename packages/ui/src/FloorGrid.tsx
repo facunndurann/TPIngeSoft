@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import {
-  FLOOR_GRID,
+  FLOOR_CELL,
   floorExtent,
   tablePlacement,
   type Footprint,
@@ -28,108 +28,104 @@ export type FloorTile = {
   shapeClass: string
 }
 
-type FloorGridProps<T extends FloorGridTable> = {
-  tables: readonly T[]
-  /** Lo que se lee en el plano sin mesas. Solo con `extent="fit"`: sin bordes, no hay dónde centrarlo. */
-  emptyMessage?: string
-  ariaLabel: string
-  /**
-   * Caja a dibujar en lugar de la guardada, mientras dura un gesto de arrastre
-   * o de redimensionado. Devolver `null` usa la posición guardada.
-   */
-  preview?: (table: T) => Placed | null
-  /**
-   * La grilla nunca se queda con los gestos táctiles: un dedo que la recorre
-   * desplaza el plano. Si las mesas se arrastran, quien las dibuja les pone
-   * `touch-none` a ellas, no a la superficie.
-   */
-  renderTable: (table: T, tile: FloorTile) => ReactNode
-  /**
-   * El plano no tiene bordes, así que alguien decide qué parte se dibuja.
-   *
-   * - `fit`: una superficie con líneas finas que abarca el área de siempre
-   *   (`FLOOR_GRID.cols` × `rows`) y, si alguna mesa queda afuera, también a
-   *   ella. Es el plano del POS, que se recorre con el scroll.
-   * - `unbounded`: un ancla sin tamaño ni fondo en la celda (0, 0); las mesas se
-   *   dibujan en sus coordenadas, aunque sean negativas. Quien la contiene pone
-   *   la cámara y el fondo, como el editor del admin.
-   */
-  extent?: 'fit' | 'unbounded'
-}
-
-/** Líneas finas de grilla: el fondo del plano del POS. */
-const LINES = {
-  backgroundSize: `${FLOOR_GRID.cell}px ${FLOOR_GRID.cell}px`,
-  backgroundImage:
-    'linear-gradient(to right, #f1f1f1 1px, transparent 1px), linear-gradient(to bottom, #f1f1f1 1px, transparent 1px)',
-}
+/** Celda que cae en el píxel (0, 0) de lo que se dibuja. */
+type Origin = { x: number; y: number }
 
 /** Separación entre mesas vecinas, repartida a cada lado de la celda. */
 const GAP = 6
 
-/** Celda que queda en la esquina de arriba a la izquierda de la superficie. */
-type Origin = { x: number; y: number }
-
-function tileOf(table: FloorGridTable, origin: Origin, override?: Placed | null): FloorTile {
-  const { footprint, x, y } = override ?? tablePlacement(table)
+/**
+ * La única traducción de celdas a píxeles del plano. La usan el plano del POS
+ * (`FloorGrid`) y el editor del admin, así el plano que se edita y el que se
+ * opera son el mismo.
+ *
+ * `placed` es dónde se dibuja la mesa: su posición guardada (`tablePlacement`)
+ * o la de un gesto en curso. Sin `origin`, la celda (0, 0) cae en el píxel
+ * (0, 0) y quien dibuja corre la vista, como la cámara del admin.
+ */
+export function floorTile(
+  table: Pick<FloorGridTable, 'shape'>,
+  placed: Placed,
+  origin: Origin = { x: 0, y: 0 },
+): FloorTile {
+  const { footprint, x, y } = placed
 
   return {
     footprint,
     x,
     y,
     box: {
-      left: (x - origin.x) * FLOOR_GRID.cell + GAP / 2,
-      top: (y - origin.y) * FLOOR_GRID.cell + GAP / 2,
-      width: footprint.w * FLOOR_GRID.cell - GAP,
-      height: footprint.h * FLOOR_GRID.cell - GAP,
+      left: (x - origin.x) * FLOOR_CELL + GAP / 2,
+      top: (y - origin.y) * FLOOR_CELL + GAP / 2,
+      width: footprint.w * FLOOR_CELL - GAP,
+      height: footprint.h * FLOOR_CELL - GAP,
     },
     shapeClass: table.shape === 'round' ? 'rounded-full' : 'rounded-lg',
   }
 }
 
+/** Lo que el POS dibuja como mínimo, en celdas: el plano de siempre. */
+const MIN_AREA = { w: 24, h: 16 } as const
+
+/** Líneas finas de grilla: el fondo del plano del POS. */
+const LINES = {
+  backgroundSize: `${FLOOR_CELL}px ${FLOOR_CELL}px`,
+  backgroundImage:
+    'linear-gradient(to right, #f1f1f1 1px, transparent 1px), linear-gradient(to bottom, #f1f1f1 1px, transparent 1px)',
+}
+
 /**
- * El área de siempre más la que haga falta para que entren todas las mesas, en
- * celdas. Se agranda para cualquier lado, también hacia columnas negativas.
+ * El área mínima más la que haga falta para que entren todas las mesas, en
+ * celdas. El plano no tiene bordes, así que se agranda para cualquier lado,
+ * también hacia columnas o filas negativas.
  */
 function fittedArea(tables: readonly FloorGridTable[]) {
   const extent = floorExtent(tables.map(tablePlacement))
   const x = Math.min(0, extent?.x ?? 0)
   const y = Math.min(0, extent?.y ?? 0)
-  const right = Math.max(FLOOR_GRID.cols, extent ? extent.x + extent.w : 0)
-  const bottom = Math.max(FLOOR_GRID.rows, extent ? extent.y + extent.h : 0)
+  const right = Math.max(MIN_AREA.w, extent ? extent.x + extent.w : 0)
+  const bottom = Math.max(MIN_AREA.h, extent ? extent.y + extent.h : 0)
   return { x, y, w: right - x, h: bottom - y }
 }
 
+type FloorGridProps<T extends FloorGridTable> = {
+  tables: readonly T[]
+  emptyMessage: string
+  ariaLabel: string
+  /**
+   * Cómo se ve cada mesa; dónde va ya lo resolvió la grilla (`tile.box`). La
+   * grilla nunca se queda con los gestos táctiles: un dedo que la recorre
+   * desplaza el plano.
+   */
+  renderTable: (table: T, tile: FloorTile) => ReactNode
+}
+
 /**
- * Superficie del plano de salón. Es la única dueña de la grilla: su tamaño, su
- * fondo y la traducción de celdas a píxeles. Quien la usa solo decide cómo se
- * ve cada mesa — el admin le suma los gestos de edición y el POS los colores de
- * estado — para que el plano que se edita y el que se opera sean el mismo.
+ * El plano del POS: una superficie con líneas finas que abarca a todas las mesas
+ * y se recorre con el scroll. Elige el área y el fondo; quien la usa decide cómo
+ * se ve cada mesa (los colores de estado).
  */
 export function FloorGrid<T extends FloorGridTable>({
   tables,
   emptyMessage,
   ariaLabel,
-  preview,
   renderTable,
-  extent = 'fit',
 }: FloorGridProps<T>) {
-  const area = extent === 'fit' ? fittedArea(tables) : null
-  const origin = area ?? { x: 0, y: 0 }
+  const area = fittedArea(tables)
 
   return (
     <div
-      // `touch-manipulation` deja desplazar el plano y quita la espera del doble
-      // toque para hacer zoom. Con `touch-none` acá, en el editor ningún toque
-      // desplazaba (la grilla es todo el plano) y en una tablet no se llegaba a
-      // la parte que no entraba en pantalla.
+      // `touch-manipulation` deja desplazar el plano con el dedo y quita la espera
+      // del doble toque para hacer zoom. Con `touch-none`, en una tablet no se
+      // llegaba a la parte del plano que no entraba en pantalla.
       className="relative touch-manipulation"
-      style={area ? { width: area.w * FLOOR_GRID.cell, height: area.h * FLOOR_GRID.cell, ...LINES } : undefined}
+      style={{ width: area.w * FLOOR_CELL, height: area.h * FLOOR_CELL, ...LINES }}
       aria-label={ariaLabel}
     >
-      {tables.map((table) => renderTable(table, tileOf(table, origin, preview?.(table))))}
+      {/* La esquina de arriba a la izquierda del área es la celda del píxel (0, 0). */}
+      {tables.map((table) => renderTable(table, floorTile(table, tablePlacement(table), area)))}
 
-      {area && tables.length === 0 && emptyMessage && (
+      {tables.length === 0 && (
         <p className="absolute inset-0 flex items-center justify-center text-sm text-muted">
           {emptyMessage}
         </p>

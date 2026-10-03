@@ -12,16 +12,17 @@ import {
   type Ref,
 } from 'react'
 import {
-  FLOOR_GRID,
+  FLOOR_CELL,
   clampSpan,
   clampToFloor,
   collidesWithAny,
   floorExtent,
   occupiedBy,
   tablePlacement,
+  type Placed,
 } from '@restaurant-platform/shared'
 import { Minus, Plus, Users } from 'lucide-react'
-import { FloorGrid, type FloorTile } from '@restaurant-platform/ui'
+import { floorTile, type FloorTile } from '@restaurant-platform/ui'
 import type { FloorTable } from '@/queries/floor'
 import { CHAIR_SIZE, chairsAround } from './chairs'
 import { keyBelongsElsewhere } from './keys'
@@ -121,7 +122,7 @@ const checker = ({ x, y, zoom }: Camera) => ({
   backgroundColor: 'var(--color-neutral-50)',
   backgroundImage:
     'conic-gradient(var(--color-neutral-100) 25%, transparent 0 50%, var(--color-neutral-100) 0 75%, transparent 0)',
-  backgroundSize: `${FLOOR_GRID.cell * 2 * zoom}px ${FLOOR_GRID.cell * 2 * zoom}px`,
+  backgroundSize: `${FLOOR_CELL * 2 * zoom}px ${FLOOR_CELL * 2 * zoom}px`,
   backgroundPosition: `${x}px ${y}px`,
 })
 
@@ -205,7 +206,7 @@ export function FloorCanvas({
   /** La celda bajo el puntero, con decimales. */
   const cellFromPointer = (event: { clientX: number; clientY: number }) => {
     const point = inViewport(event)
-    const cell = FLOOR_GRID.cell * camera.zoom
+    const cell = FLOOR_CELL * camera.zoom
     return { x: (point.x - camera.x) / cell, y: (point.y - camera.y) / cell }
   }
 
@@ -215,7 +216,7 @@ export function FloorCanvas({
       centerCell: () => {
         const view = viewport.current
         const { x, y, zoom } = cameraNow.current
-        const cell = FLOOR_GRID.cell * zoom
+        const cell = FLOOR_CELL * zoom
         return {
           x: ((view?.clientWidth ?? 0) / 2 - x) / cell,
           y: ((view?.clientHeight ?? 0) / 2 - y) / cell,
@@ -250,13 +251,13 @@ export function FloorCanvas({
       setCamera({ x: PADDING, y: PADDING, zoom: 1 })
       return
     }
-    const width = extent.w * FLOOR_GRID.cell + PADDING * 2
-    const height = extent.h * FLOOR_GRID.cell + PADDING * 2
+    const width = extent.w * FLOOR_CELL + PADDING * 2
+    const height = extent.h * FLOOR_CELL + PADDING * 2
     const zoom = clampZoom(Math.min(view.clientWidth / width, view.clientHeight / height, FIT_MAX_ZOOM))
     setCamera({
       zoom,
-      x: view.clientWidth / 2 - (extent.x + extent.w / 2) * FLOOR_GRID.cell * zoom,
-      y: view.clientHeight / 2 - (extent.y + extent.h / 2) * FLOOR_GRID.cell * zoom,
+      x: view.clientWidth / 2 - (extent.x + extent.w / 2) * FLOOR_CELL * zoom,
+      y: view.clientHeight / 2 - (extent.y + extent.h / 2) * FLOOR_CELL * zoom,
     })
   }, [])
 
@@ -371,9 +372,9 @@ export function FloorCanvas({
     if (panPointers.current.size === 0) setPanning(false)
   }
 
-  /** Caja del gesto en curso; sin gesto, FloorGrid dibuja la posición guardada. */
-  const previewOf = (table: FloorTable) => {
-    if (gesture?.tableId !== table.id) return null
+  /** Dónde se dibuja una mesa: en la caja del gesto en curso o, sin gesto, donde está guardada. */
+  const placementOf = (table: FloorTable): Placed => {
+    if (gesture?.tableId !== table.id) return tablePlacement(table)
     if (gesture.kind === 'move') return { footprint: tablePlacement(table).footprint, x: gesture.x, y: gesture.y }
     return { footprint: { w: gesture.width, h: gesture.height }, x: gesture.x, y: gesture.y }
   }
@@ -518,16 +519,14 @@ export function FloorCanvas({
         onPointerUp={endPan}
         onPointerCancel={endPan}
       >
+        {/* Las mesas van en sus coordenadas del plano (`floorTile` sin origen), aunque
+            sean negativas: es la cámara la que corre y escala esta capa. */}
         <div
           className="absolute top-0 left-0"
           style={{ transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.zoom})`, transformOrigin: '0 0' }}
         >
-          <FloorGrid
-            tables={tables}
-            extent="unbounded"
-            ariaLabel="Plano del sector"
-            preview={previewOf}
-          renderTable={(table, tile) => {
+          {tables.map((table) => {
+            const tile = floorTile(table, placementOf(table))
             const active = gesture?.tableId === table.id
             const look = tableLook({
               invalid: active && !gesture.valid,
@@ -593,8 +592,7 @@ export function FloorCanvas({
                   ))}
               </div>
             )
-          }}
-          />
+          })}
         </div>
         {tables.length === 0 && (
           <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted">

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   collidesWithAny,
@@ -9,7 +9,7 @@ import {
   type Footprint,
   type TableSpan,
 } from '@restaurant-platform/shared'
-import { useSaveErrors, useToast } from '@restaurant-platform/ui'
+import { errorMessage, useToast } from '@restaurant-platform/ui'
 import {
   createSection,
   createTable,
@@ -53,6 +53,9 @@ type TableChange = { id: string; before: TablePatch; after: TablePatch }
 
 type History = { done: TableChange[]; undone: TableChange[] }
 
+/** Una escritura de una mesa: qué columnas cambian y a qué. */
+type TableWrite = { id: string; patch: TablePatch }
+
 export type FloorEditorActions = ReturnType<typeof useFloorEditor>
 
 /** Los valores actuales de la mesa en las columnas que toca `patch`. */
@@ -71,10 +74,6 @@ export function useFloorEditor(branchId: string, floor: Floor) {
   const restaurant = useRestaurant()
   const queryClient = useQueryClient()
   const toast = useToast()
-  // Los errores del plano salen como aviso flotante: un recuadro arriba del plano
-  // corría toda la pantalla cada vez que una mesa no entraba donde se la soltó.
-  const notify = useCallback((message: string) => toast(message, { tone: 'error' }), [toast])
-  const errors = useSaveErrors({ notify })
   const tablesKey = tablesQuery(branchId).queryKey
   const [history, setHistory] = useState<History>({ done: [], undone: [] })
 
@@ -83,9 +82,21 @@ export function useFloorEditor(branchId: string, floor: Floor) {
     void queryClient.invalidateQueries({ queryKey: floorKey(branchId) })
   }
 
-  /** Toda mutación del plano falla igual: limpia, guarda y reporta. */
-  const run = <TData, TArgs>(mutationFn: (args: TArgs) => Promise<TData>) =>
-    errors.saving(SAVE_FAILED, { mutationFn, onSuccess: refresh })
+  /**
+   * Los errores del plano salen como aviso flotante: un recuadro arriba del plano
+   * corría toda la pantalla cada vez que una mesa no entraba donde se la soltó.
+   */
+  const reportError = (message: string) => toast(message, { tone: 'error' })
+
+  /** Una escritura que falló: el mensaje del catálogo si lo trae, o el genérico. */
+  const reportFailure = (error: Error) => reportError(errorMessage(error, SAVE_FAILED))
+
+  /** Casi toda escritura del plano: si se guardó, relee el salón; si falló, avisa. */
+  const run = <TData, TArgs>(mutationFn: (args: TArgs) => Promise<TData>) => ({
+    mutationFn,
+    onSuccess: refresh,
+    onError: reportFailure,
+  })
 
   const addSection = useMutation(
     run((name: string) =>
@@ -124,26 +135,31 @@ export function useFloorEditor(branchId: string, floor: Floor) {
     }),
   )
 
-  // Una mesa borrada sale del historial: no hay nada que devolverle.
-  const removeTable = useMutation(
-    errors.saving(SAVE_FAILED, {
-      mutationFn: (id: string) => deleteTable(id),
-      onSuccess: (_data, id) => {
-        refresh()
-        const keep = (change: TableChange) => change.id !== id
-        setHistory((current) => ({ done: current.done.filter(keep), undone: current.undone.filter(keep) }))
-      },
-    }),
-  )
+  const removeTable = useMutation({
+    ...run((id: string) => deleteTable(id)),
+    // Además de releer el salón, una mesa borrada sale del historial: no hay nada
+    // que devolverle.
+    onSuccess: (_data: void, id: string) => {
+      refresh()
+      const keep = (change: TableChange) => change.id !== id
+      setHistory((current) => ({ done: current.done.filter(keep), undone: current.undone.filter(keep) }))
+    },
+  })
 
-  const patchTable = useMutation(errors.saving(SAVE_FAILED, {
-    mutationFn: ({ id, patch }: { id: string; patch: TablePatch }) => updateTable(id, patch),
-    // Optimista: al soltar una mesa tiene que quedar donde la soltaste, no
-    // saltar a la posición vieja hasta que vuelva el refetch.
-    ...optimistic(queryClient, tablesKey, (tables, { id, patch }: { id: string; patch: TablePatch }) =>
-      patchRow(tables, { id, ...patch }),
-    ),
-  }))
+  // Optimista: al soltar una mesa tiene que quedar donde la soltaste, no saltar
+  // a la posición vieja hasta que vuelva el refetch.
+  const tablesCache = optimistic(queryClient, tablesKey, (tables, { id, patch }: TableWrite) =>
+    patchRow(tables, { id, ...patch }),
+  )
+  const patchTable = useMutation({
+    ...tablesCache,
+    mutationFn: ({ id, patch }: TableWrite) => updateTable(id, patch),
+    onError: (error, write, cached) => {
+      // Primero la mesa vuelve a donde estaba; después se avisa por qué.
+      tablesCache.onError(error, write, cached)
+      reportFailure(error)
+    },
+  })
 
   /**
    * Escribe y, si se guardó, lo anota para deshacer. Se anota al guardarse y no
@@ -172,7 +188,7 @@ export function useFloorEditor(branchId: string, floor: Floor) {
     if (!table) return false
     const next = { ...table, ...values }
     if (next.section_id && collidesWithAny(tablePlacement(next), occupiedBy(floor.tablesIn(next.section_id), id))) {
-      errors.report(OVERLAP_MESSAGE)
+      reportError(OVERLAP_MESSAGE)
       return false
     }
     patchTable.mutate({ id, patch: values })
@@ -226,7 +242,7 @@ export function useFloorEditor(branchId: string, floor: Floor) {
   }
 
   return {
-    errors,
+    reportError,
     addSection,
     patchSection,
     removeSection,

@@ -48,3 +48,10 @@ test('editing, a finger that starts on a table or a handle drags it instead of t
 test('in view mode no table grabs the finger: anywhere it lands, it moves the floor', () => {
   assert.doesNotMatch(render(false), /data-floor-item/)
 })
+
+test('a table left of or above the origin is drawn there: the camera, not the floor, brings it into view', () => {
+  const far = { ...table, id: 'table-far', label: 'Mesa lejos', position_x: -2, position_y: -1 } as FloorTable
+  const html = renderToStaticMarkup(<FloorCanvas tables={[far]} />)
+  // 44px por celda, y 3px de aire a cada lado entre mesas vecinas.
+  assert.match(html, /style="left:-85px;top:-41px;width:82px;height:82px/)
+})

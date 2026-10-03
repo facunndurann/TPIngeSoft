@@ -9,16 +9,11 @@
  */
 
 /**
- * El plano no tiene bordes: una mesa va donde se la deje, también en columnas o
- * filas negativas. `cols` y `rows` son solo el área que el POS dibuja como
- * mínimo; si las mesas pasan de ahí, el plano se agranda hasta abarcarlas.
+ * Lado de una celda del plano, en píxeles con zoom 1. El plano no tiene bordes:
+ * una mesa va donde se la deje, también en columnas o filas negativas. Qué parte
+ * se dibuja lo decide cada pantalla, no la geometría.
  */
-export const FLOOR_GRID = {
-  cols: 24,
-  rows: 16,
-  /** Lado de celda en píxeles con zoom 1. */
-  cell: 44,
-} as const
+export const FLOOR_CELL = 44
 
 /**
  * Rango de posiciones que acepta la base (`tables_position_range`). No es un
