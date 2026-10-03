@@ -48,6 +48,16 @@ const ARROW_STEPS: Record<string, Step> = {
 }
 
 /**
+ * Cómo se desliza la cámara cuando la mueve un botón o el encuadre: lo bastante
+ * para no perder dónde se estaba, sin hacer esperar. Con «menos movimiento» en el
+ * sistema, `motion-safe` no aplica y salta. La capa de las mesas y el damero usan
+ * la misma duración y curva: como el navegador interpola por separado el
+ * corrimiento y la escala, lo que estaba bajo el punto del zoom queda quieto
+ * durante todo el deslizamiento, y el piso no se despega de las mesas.
+ */
+const GLIDE = 'motion-safe:duration-200 motion-safe:ease-out'
+
+/**
  * Damero del fondo, un cuadro por celda. Es del recuadro y no de las mesas, así
  * que no se termina nunca; corre con la cámara para quedar alineado a las celdas.
  */
@@ -142,7 +152,7 @@ export function FloorCanvas({ tables, camera, editing, toolbar, footerStart }: F
         data-floor-viewport
         className={`relative min-h-48 flex-1 touch-none overflow-hidden select-none ${
           camera.panning ? 'cursor-grabbing **:cursor-grabbing' : camera.spaceHeld ? 'cursor-grab **:cursor-grab' : ''
-        }`}
+        } ${camera.glide ? `motion-safe:transition-[background-position,background-size] ${GLIDE}` : ''}`}
         style={checker(camera)}
         onPointerDownCapture={camera.grabWithSpace}
         onPointerDown={camera.grab}
@@ -156,7 +166,7 @@ export function FloorCanvas({ tables, camera, editing, toolbar, footerStart }: F
         {/* Las mesas van en sus coordenadas del plano (`floorTile` sin origen), aunque
             sean negativas: es la cámara la que corre y escala esta capa. */}
         <div
-          className="absolute top-0 left-0"
+          className={`absolute top-0 left-0 ${camera.glide ? `motion-safe:transition-transform ${GLIDE}` : ''}`}
           style={{ transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.zoom})`, transformOrigin: '0 0' }}
         >
           {tables.map((table) => {

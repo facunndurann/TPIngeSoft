@@ -188,6 +188,49 @@ test('corner handles stay at least 24px on screen, even fully zoomed out', async
   assert.ok(onScreen() >= 24 - 1e-9, `al ${Math.round(cameraOf(layer).zoom * 100)} %: ${onScreen()}px`)
 })
 
+test('buttons and framing glide the camera; gestures move it right away; opening the floor does not animate', async () => {
+  // happy-dom no avisa cuando cambia un tamaño: este observador avisa apenas
+  // observa, como el navegador la primera vez, para que haya encuadre.
+  const RealObserver = globalThis.ResizeObserver
+  globalThis.ResizeObserver = class {
+    readonly onResize: ResizeObserverCallback
+    constructor(onResize: ResizeObserverCallback) {
+      this.onResize = onResize
+    }
+    observe() {
+      this.onResize([], this as unknown as ResizeObserver)
+    }
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver
+  try {
+    const { container, viewport, layer } = await mount(<Plan editing={recorder(table.id).editing} />)
+    const button = (label: string) =>
+      [...container.querySelectorAll('button')].find(
+        (entry) => entry.getAttribute('aria-label') === label || entry.textContent === label,
+      )!
+    // La capa de las mesas y el damero del fondo se deslizan juntos, o ninguno.
+    const glides = () => {
+      const tables = layer.className.includes('motion-safe:transition-transform')
+      const floor = viewport.className.includes('motion-safe:transition-[background-position,background-size]')
+      assert.equal(tables, floor)
+      return tables
+    }
+
+    assert.equal(glides(), false, 'al abrir, el primer encuadre aparece de una')
+    await act(async () => button('Acercar').click())
+    assert.equal(glides(), true, 'el zoom de los botones se desliza')
+    await pointer(viewport, 'pointerdown', 10, 10)
+    await pointer(viewport, 'pointermove', 40, 10)
+    await pointer(viewport, 'pointerup', 40, 10)
+    assert.equal(glides(), false, 'arrastrar el piso lo mueve al instante')
+    await act(async () => button('Ajustar al salón').click())
+    assert.equal(glides(), true, '«Ajustar al salón» se desliza')
+  } finally {
+    globalThis.ResizeObserver = RealObserver
+  }
+})
+
 test('a table left of or above the origin is drawn there: the camera, not the floor, brings it into view', () => {
   const far = { ...table, id: 'table-far', label: 'Mesa lejos', position_x: -2, position_y: -1 } as FloorTable
   const html = renderToStaticMarkup(<Plan tables={[far]} />)

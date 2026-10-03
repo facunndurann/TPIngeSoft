@@ -35,6 +35,14 @@ export type FloorCamera = ReturnType<typeof useFloorCamera>
 export function useFloorCamera(tables: readonly FloorTable[]) {
   const viewport = useRef<HTMLDivElement | null>(null)
   const [camera, setCamera] = useState<Camera>(HOME)
+  /**
+   * Si el último cambio de cámara se desliza o salta. Se desliza lo que pide un
+   * botón o el encuadre, que el usuario ve pasar sin estar haciendo nada: así no
+   * pierde dónde estaba. Salta lo que sigue a un gesto, que tiene que acompañar
+   * al dedo, y el primer encuadre, que no tiene un antes. La animación la hace el
+   * plano con CSS (`FloorCanvas`), y respeta «menos movimiento».
+   */
+  const [glide, setGlide] = useState(false)
   const [view, setView] = useState<ViewSize | null>(null)
 
   // Mientras nadie movió la cámara, el salón se encuadra solo cada vez que el
@@ -43,10 +51,7 @@ export function useFloorCamera(tables: readonly FloorTable[]) {
   // mismo render, sin un efecto: `framedFor` recuerda para qué tamaño se hizo.
   const [autoFit, setAutoFit] = useState(true)
   const [framedFor, setFramedFor] = useState<ViewSize | null>(null)
-  if (autoFit && view && view !== framedFor) {
-    setFramedFor(view)
-    setCamera(framing(tables.map(tablePlacement), view))
-  }
+  if (autoFit && view && view !== framedFor) frame(view, framedFor !== null)
 
   const [spaceHeld, setSpaceHeld] = useState(false)
   const [panning, setPanning] = useState(false)
@@ -57,8 +62,23 @@ export function useFloorCamera(tables: readonly FloorTable[]) {
   /** El puntero está sobre el plano: recién ahí Espacio es para arrastrarlo. */
   const hovering = useRef(false)
 
-  /** Cámara movida a mano: desde acá, el salón ya no se encuadra solo. */
-  function moveCamera(update: (current: Camera) => Camera) {
+  /** Encuadra las mesas en un recuadro de ese tamaño, deslizándose o de una. */
+  function frame(size: ViewSize, glideThere: boolean) {
+    setGlide(glideThere)
+    setFramedFor(size)
+    setCamera(framing(tables.map(tablePlacement), size))
+  }
+
+  /** Un gesto mueve la cámara: lo sigue al instante, y el salón deja de encuadrarse solo. */
+  function follow(update: (current: Camera) => Camera) {
+    setGlide(false)
+    setAutoFit(false)
+    setCamera(update)
+  }
+
+  /** Un botón mueve la cámara: se desliza hasta ahí, y el salón deja de encuadrarse solo. */
+  function glideTo(update: (current: Camera) => Camera) {
+    setGlide(true)
     setAutoFit(false)
     setCamera(update)
   }
@@ -74,6 +94,7 @@ export function useFloorCamera(tables: readonly FloorTable[]) {
     const resizes = new ResizeObserver(() => setView({ width: node.clientWidth, height: node.clientHeight }))
     const wheel = (event: WheelEvent) => {
       event.preventDefault()
+      setGlide(false)
       setAutoFit(false)
       const unit = event.deltaMode === 1 ? WHEEL_LINE : event.deltaMode === 2 ? node.clientHeight : 1
       if (event.ctrlKey || event.metaKey) {
@@ -164,7 +185,7 @@ export function useFloorCamera(tables: readonly FloorTable[]) {
     pointers.current.set(event.pointerId, now)
     if (now.x !== last.x || now.y !== last.y) press.current.moved = true
     const after = [...pointers.current.values()]
-    moveCamera((current) =>
+    follow((current) =>
       after.length === 1
         ? panned(current, now.x - last.x, now.y - last.y)
         : // Dos dedos: mandan los dos primeros, aunque se apoye un tercero.
@@ -182,7 +203,7 @@ export function useFloorCamera(tables: readonly FloorTable[]) {
   /** Acerca o aleja un paso, sin que se mueva lo que hay en el medio del recuadro. */
   function zoomBy(step: number) {
     const center = { x: (view?.width ?? 0) / 2, y: (view?.height ?? 0) / 2 }
-    moveCamera((current) => zoomedAround(current, current.zoom + step, center))
+    glideTo((current) => zoomedAround(current, current.zoom + step, center))
   }
 
   /**
@@ -193,17 +214,18 @@ export function useFloorCamera(tables: readonly FloorTable[]) {
   function reveal(placed: Placed) {
     if (!view) return
     const next = revealed(camera, placed, view)
-    if (next !== camera) moveCamera(() => next)
+    if (next !== camera) glideTo(() => next)
   }
 
   /** «Ajustar al salón»: vuelve a encuadrar las mesas, y a hacerlo solo cuando cambie el recuadro. */
   function fit() {
     setAutoFit(true)
-    setFramedFor(null)
+    if (view) frame(view, true)
   }
 
   return {
     ...camera,
+    glide,
     viewportRef,
     panning,
     spaceHeld,
