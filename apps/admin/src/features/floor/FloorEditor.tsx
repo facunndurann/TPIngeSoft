@@ -99,7 +99,13 @@ function SectionEditor({
             <FloorCanvas
               tables={tables}
               camera={camera}
-              editing={{ selectedId, onSelect: setSelectedId, onPlace: editor.placeTable }}
+              editing={{
+                selectedId,
+                onSelect: setSelectedId,
+                onPlace: editor.placeTable,
+                refusal: editor.refusal,
+                onRefusalShown: editor.dismissRefusal,
+              }}
               toolbar={
                 <SectionToolbar
                   section={section}

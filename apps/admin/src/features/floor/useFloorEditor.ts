@@ -28,7 +28,7 @@ import { optimistic, patchRow } from '@/lib/optimistic'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import type { TableEdit } from './TableInspector'
 import { nextTableLabel, type Floor } from './floor'
-import { OVERLAP_MESSAGE, changesTo, fitsAt } from './placement'
+import { OVERLAP_MESSAGE, changesTo, fitsAt, type Refusal } from './placement'
 
 const SAVE_FAILED = 'No pudimos guardar el cambio.'
 
@@ -81,6 +81,8 @@ export function useFloorEditor(branchId: string, floor: Floor) {
   const toast = useToast()
   const tablesKey = tablesQuery(branchId).queryKey
   const [history, setHistory] = useState<History>({ done: [], undone: [] })
+  /** La última mesa que no entró, hasta que el plano termina de marcarla. */
+  const [refusal, setRefusal] = useState<Refusal | null>(null)
 
   /** Sectores y mesas juntos: borrar un sector también cambia sus mesas. */
   function refresh() {
@@ -193,7 +195,10 @@ export function useFloorEditor(branchId: string, floor: Floor) {
   function roomFor(table: FloorTable, changes: TablePatch) {
     const next = { ...table, ...changes }
     if (!next.section_id || fitsAt(table, tablePlacement(next), floor.tablesIn(next.section_id))) return true
+    // El aviso explica por qué, y lo anuncia el lector de pantalla; la marca en la
+    // mesa dice cuál, donde se la estaba mirando.
     reportError(OVERLAP_MESSAGE)
+    setRefusal((current) => ({ tableId: table.id, key: (current?.key ?? 0) + 1 }))
     return false
   }
 
@@ -256,6 +261,8 @@ export function useFloorEditor(branchId: string, floor: Floor) {
     editTable,
     undo,
     redo,
+    refusal,
+    dismissRefusal: () => setRefusal(null),
     canUndo: history.done.length > 0,
     canRedo: history.undone.length > 0,
   }

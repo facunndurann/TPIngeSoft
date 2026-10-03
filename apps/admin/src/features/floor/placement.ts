@@ -114,3 +114,10 @@ export function grownToward(placed: Placed, corner: Corner): Placed {
     footprint: { w, h },
   }
 }
+
+/**
+ * Una mesa que no entró donde se la quiso llevar, para marcarla en el plano.
+ * `key` cambia con cada rechazo: dos seguidos de la misma mesa (una flecha
+ * apretada dos veces contra otra) también se marcan los dos.
+ */
+export type Refusal = { tableId: string; key: number }

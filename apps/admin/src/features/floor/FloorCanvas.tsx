@@ -5,7 +5,7 @@ import { Button, IconButton, floorTile } from '@restaurant-platform/ui'
 import type { FloorTable } from '@/queries/floor'
 import { ZOOM, type Camera } from './camera'
 import { FloorTableTile } from './FloorTableTile'
-import { changesTo, fitsAt, followPointer, grownToward, nudged, type Grip, type Step } from './placement'
+import { changesTo, fitsAt, followPointer, grownToward, nudged, type Grip, type Refusal, type Step } from './placement'
 import { cardClass } from './styles'
 import type { FloorCamera } from './useFloorCamera'
 
@@ -23,9 +23,16 @@ export type FloorEditing = {
   /**
    * Propone otro lugar o tamaño para una mesa: al soltarla después de arrastrarla
    * o estirarla, y con las flechas. Quien edita valida y escribe; el plano solo
-   * pinta de rojo, mientras dura el gesto, un lugar donde no entraría.
+   * marca, mientras dura el gesto, un lugar donde no entraría.
    */
   onPlace: (table: FloorTable, placed: Placed) => void
+  /**
+   * La última mesa que no entró donde se la quiso llevar, desde el plano, el
+   * panel o deshacer: el plano la marca sobre ella. Cuando la marca terminó de
+   * verse, `onRefusalShown`, y quien edita la olvida.
+   */
+  refusal: Refusal | null
+  onRefusalShown: () => void
 }
 
 type FloorCanvasProps = {
@@ -192,6 +199,8 @@ export function FloorCanvas({ tables, camera, editing, toolbar, footerStart }: F
                     onCancel: () => setGesture(null),
                     onNudge: (event) => nudge(event, table, editing.onPlace),
                     onKeyboardFocus: () => camera.reveal(tablePlacement(table)),
+                    refusalKey: editing.refusal?.tableId === table.id ? editing.refusal.key : null,
+                    onRefusalShown: editing.onRefusalShown,
                   }
                 }
               />

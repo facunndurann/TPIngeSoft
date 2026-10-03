@@ -38,6 +38,8 @@ function recorder(selectedId: string | null) {
     selectedId,
     onSelect: (id) => selections.push(id),
     onPlace: (_table, placed) => placements.push(placed),
+    refusal: null,
+    onRefusalShown: () => {},
   }
   return { editing, selections, placements }
 }
@@ -53,9 +55,10 @@ async function mount(node: ReactNode) {
     act(() => root.unmount())
     container.remove()
   })
-  await act(async () => root.render(node))
+  const render = (next: ReactNode) => act(async () => root.render(next))
+  await render(node)
   const viewport = container.querySelector<HTMLElement>('[data-floor-viewport]')!
-  return { container, viewport, layer: viewport.firstElementChild as HTMLElement }
+  return { container, viewport, layer: viewport.firstElementChild as HTMLElement, render }
 }
 
 /** Un puntero que aprieta, se mueve o suelta en un punto de la pantalla. */
@@ -72,6 +75,13 @@ function cameraOf(layer: HTMLElement) {
 }
 
 const tableButton = (container: HTMLElement) => container.querySelector('button[aria-label^="Mesa 1,"]')!
+
+/** Las marcas de «no entra» del plano: cada una, la ✕ y el borde que la rodea. */
+const noFitMarks = (container: HTMLElement) =>
+  [...container.querySelectorAll('svg.lucide-x')].map((icon) => icon.parentElement!)
+
+/** Otra mesa, cuatro celdas a la derecha de la primera. */
+const neighbor = { ...table, id: 'table-b', label: 'Mesa 2', position_x: 4 } as FloorTable
 
 /** Las clases del elemento cuya apertura cumple `pattern`. */
 const classOf = (html: string, pattern: RegExp) => /class="([^"]*)"/.exec(pattern.exec(html)?.[0] ?? '')?.[1] ?? ''
@@ -229,6 +239,52 @@ test('buttons and framing glide the camera; gestures move it right away; opening
   } finally {
     globalThis.ResizeObserver = RealObserver
   }
+})
+
+test('dragging a table onto another marks it with an ✕ and a dashed border, not only in red, while it stays there', async () => {
+  const { editing } = recorder(table.id)
+  const { container, layer } = await mount(<Plan tables={[table, neighbor]} editing={editing} />)
+  const cell = 44 * cameraOf(layer).zoom
+  assert.equal(noFitMarks(container).length, 0)
+
+  await pointer(tableButton(container), 'pointerdown', 10, 10)
+  await pointer(tableButton(container), 'pointermove', 10 + cell * 3, 10)
+  const [mark, ...others] = noFitMarks(container)
+  assert.equal(others.length, 0)
+  assert.match(mark.className, /\bborder-dashed\b/)
+  // Sigue a la mesa, quieta: se sacude solo cuando se la quiso dejar ahí.
+  assert.equal(mark.style.left, '135px')
+  assert.doesNotMatch(mark.className, /animate-refuse/)
+
+  await pointer(tableButton(container), 'pointermove', 10 + cell * 6, 10)
+  assert.equal(noFitMarks(container).length, 0, 'en un lugar libre, la marca se va')
+})
+
+test('a table that didn’t fit is marked on itself: it shakes unless motion is reduced, goes once seen, and each refusal starts over', async () => {
+  let shown = 0
+  const refusedTwice = (key: number): FloorEditing => ({
+    ...recorder(null).editing,
+    refusal: { tableId: neighbor.id, key },
+    onRefusalShown: () => {
+      shown += 1
+    },
+  })
+  const { container, render } = await mount(<Plan tables={[table, neighbor]} editing={refusedTwice(1)} />)
+
+  // Sobre la que no entró y no sobre la otra: 4 celdas de 44 px, más 3 px de aire.
+  const [mark, ...others] = noFitMarks(container)
+  assert.equal(others.length, 0)
+  assert.equal(mark.style.left, '179px')
+  assert.match(mark.className, /\bborder-dashed\b/)
+  assert.match(mark.className, /(^| )motion-safe:animate-refuse( |$)/)
+  assert.match(mark.className, /(^| )motion-reduce:animate-refuse-still( |$)/)
+
+  await act(async () => mark.dispatchEvent(new Event('animationend', { bubbles: true })))
+  assert.equal(shown, 1, 'cuando termina de verse, quien edita lo olvida')
+
+  // La misma mesa, otra vez contra la otra: una marca nueva, que vuelve a sacudirse.
+  await render(<Plan tables={[table, neighbor]} editing={refusedTwice(2)} />)
+  assert.notEqual(noFitMarks(container)[0], mark)
 })
 
 test('a table left of or above the origin is drawn there: the camera, not the floor, brings it into view', () => {
