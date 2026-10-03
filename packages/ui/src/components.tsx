@@ -234,7 +234,7 @@ type IconTone = 'neutral' | 'danger'
 /**
  * `ghost` es el ícono suelto, con fondo solo al pasar el mouse. `secondary` lo
  * enmarca como un botón secundario, para cuando va entre otros controles
- * enmarcados: los − y + de un número, el zoom de un plano.
+ * enmarcados: los − y + de un número, las flechas del panel de una mesa.
  */
 export type IconVariant = 'ghost' | 'secondary'
 

@@ -245,34 +245,61 @@ export function FloorCanvas({ tables, camera, editing, onOpenTable, toolbar, foo
   )
 }
 
-/** Alejar, acercar y volver a encuadrar todas las mesas. */
+/** Un zoom en porcentaje entero, como se lee y como lo maneja el control deslizante. */
+const percent = (zoom: number) => Math.round(zoom * 100)
+
+/**
+ * El zoom, como un control de volumen: se arrastra la perilla o se toca la barra,
+ * y el plano acerca o aleja al instante desde el medio del recuadro. Con el
+ * teclado, la barra es un control deslizante nativo: las flechas la mueven de a
+ * 1 %, Re Pág y Av Pág de a 12 %, e Inicio y Fin la llevan a los extremos. − y +
+ * a los costados dan pasos de 10 % que se deslizan, y «Ajustar al salón» vuelve
+ * a encuadrar todas las mesas.
+ */
 function ZoomControls({ camera }: { camera: FloorCamera }) {
+  const zoom = percent(camera.zoom)
+
   return (
-    <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Zoom del plano">
-      <IconButton
-        label="Alejar"
-        size="touch"
-        shape="pill"
-        variant="secondary"
-        disabled={camera.zoom <= ZOOM.min}
-        onClick={() => camera.zoomBy(-ZOOM.step)}
-      >
-        <Minus size={18} aria-hidden="true" />
-      </IconButton>
-      <span aria-live="polite" className="min-w-14 text-center text-sm font-semibold text-neutral-900 tabular-nums">
-        {Math.round(camera.zoom * 100)} %
+    <div className="flex flex-wrap items-center gap-3" role="group" aria-label="Zoom del plano">
+      {/* Un solo control con sus dos extremos: el contorno es el del grupo, y el
+          foco del teclado en la barra lo marca entero. */}
+      <div className="flex items-center rounded-full bg-white ring-1 ring-neutral-200 ring-inset has-[input:focus-visible]:ring-2 has-[input:focus-visible]:ring-primary">
+        <IconButton
+          label="Alejar"
+          size="touch"
+          shape="pill"
+          disabled={camera.zoom <= ZOOM.min}
+          onClick={() => camera.zoomBy(-ZOOM.step)}
+        >
+          <Minus size={18} aria-hidden="true" />
+        </IconButton>
+        <input
+          type="range"
+          aria-label="Zoom"
+          min={percent(ZOOM.min)}
+          max={percent(ZOOM.max)}
+          step={1}
+          value={zoom}
+          aria-valuetext={`${zoom} %`}
+          onChange={(event) => camera.zoomTo(Number(event.target.value) / 100)}
+          // La caja entera es lo que se toca (44 px de alto), aunque la barra se vea fina.
+          className="h-11 w-36 cursor-pointer accent-primary focus-visible:outline-none"
+        />
+        <IconButton
+          label="Acercar"
+          size="touch"
+          shape="pill"
+          disabled={camera.zoom >= ZOOM.max}
+          onClick={() => camera.zoomBy(ZOOM.step)}
+        >
+          <Plus size={18} aria-hidden="true" />
+        </IconButton>
+      </div>
+      {/* Lo mismo que anuncia la barra (`aria-valuetext`): para los ojos, no para leerlo dos veces. */}
+      <span aria-hidden="true" className="min-w-12 text-sm font-semibold text-neutral-900 tabular-nums">
+        {zoom} %
       </span>
-      <IconButton
-        label="Acercar"
-        size="touch"
-        shape="pill"
-        variant="secondary"
-        disabled={camera.zoom >= ZOOM.max}
-        onClick={() => camera.zoomBy(ZOOM.step)}
-      >
-        <Plus size={18} aria-hidden="true" />
-      </IconButton>
-      <Button type="button" variant="secondary" size="touch" shape="pill" className="ml-1" onClick={camera.fit}>
+      <Button type="button" variant="secondary" size="touch" shape="pill" onClick={camera.fit}>
         Ajustar al salón
       </Button>
     </div>

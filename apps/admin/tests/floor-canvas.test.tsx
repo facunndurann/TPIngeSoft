@@ -236,6 +236,38 @@ test('corner handles stay at least 24px on screen, even fully zoomed out', async
   assert.ok(onScreen() >= 24 - 1e-9, `al ${Math.round(cameraOf(layer).zoom * 100)} %: ${onScreen()}px`)
 })
 
+/** Mueve la perilla del zoom como el navegador: cambia el valor y avisa con `input`. */
+async function slide(slider: HTMLInputElement, value: number) {
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(slider, String(value))
+    slider.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+}
+
+test('the zoom works like a volume control: the slider zooms right away, reads in percent and follows every other way of zooming', async () => {
+  const { container, layer } = await mount(<Plan editing={recorder(null).editing} />)
+  const slider = container.querySelector<HTMLInputElement>('input[type="range"][aria-label="Zoom"]')!
+  const shown = () => container.querySelector('[aria-label="Zoom del plano"] span[aria-hidden="true"]')?.textContent
+  assert.deepEqual([slider.min, slider.max, slider.step, slider.value], ['30', '150', '1', '100'])
+  assert.equal(slider.getAttribute('aria-valuetext'), '100 %')
+
+  await slide(slider, 60)
+  assert.equal(cameraOf(layer).zoom, 0.6)
+  // Sigue a la perilla como un gesto: no se desliza.
+  assert.doesNotMatch(layer.className, /transition-transform/)
+  // El porcentaje lo anuncia la barra; el número de al lado es para los ojos.
+  assert.equal(slider.getAttribute('aria-valuetext'), '60 %')
+  assert.equal(shown(), '60 %')
+
+  // Lo que cambia el zoom por otro lado (acá, «Acercar») también mueve la perilla.
+  const zoomIn = [...container.querySelectorAll('button')].find(
+    (button) => button.getAttribute('aria-label') === 'Acercar',
+  )!
+  await act(async () => zoomIn.click())
+  assert.equal(slider.value, '70')
+  assert.equal(shown(), '70 %')
+})
+
 test('buttons and framing glide the camera; gestures move it right away; opening the floor does not animate', async () => {
   // happy-dom no avisa cuando cambia un tamaño: este observador avisa apenas
   // observa, como el navegador la primera vez, para que haya encuadre.

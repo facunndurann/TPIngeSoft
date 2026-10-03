@@ -212,10 +212,20 @@ export function useFloorCamera(tables: readonly FloorTable[]) {
     return press.current.tap && !press.current.moved
   }
 
-  /** Acerca o aleja un paso, sin que se mueva lo que hay en el medio del recuadro. */
+  /** El medio del recuadro: ahí se anclan los controles de zoom, y ahí se ubica lo nuevo. */
+  const viewCenter = () => ({ x: (view?.width ?? 0) / 2, y: (view?.height ?? 0) / 2 })
+
+  /** Acerca o aleja un paso, deslizándose, sin que se mueva lo que hay en el medio del recuadro. */
   function zoomBy(step: number) {
-    const center = { x: (view?.width ?? 0) / 2, y: (view?.height ?? 0) / 2 }
-    glideTo((current) => zoomedAround(current, current.zoom + step, center))
+    glideTo((current) => zoomedAround(current, current.zoom + step, viewCenter()))
+  }
+
+  /**
+   * Lleva el zoom a `zoom` al instante, anclado en el medio del recuadro. Es el
+   * control deslizante: tiene que seguir a la perilla, como un gesto.
+   */
+  function zoomTo(zoom: number) {
+    follow((current) => zoomedAround(current, zoom, viewCenter()))
   }
 
   /**
@@ -246,10 +256,11 @@ export function useFloorCamera(tables: readonly FloorTable[]) {
     drag,
     release,
     zoomBy,
+    zoomTo,
     fit,
     reveal,
     /** La celda que se ve en el medio del recuadro: ahí se ubica lo nuevo. */
-    centerCell: () => cellAt(camera, { x: (view?.width ?? 0) / 2, y: (view?.height ?? 0) / 2 }),
+    centerCell: () => cellAt(camera, viewCenter()),
     /** La celda bajo el puntero, con decimales: la usan los gestos sobre las mesas. */
     cellFromPointer: (event: ClientPoint) => cellAt(camera, pointIn(viewport.current, event)),
   }
