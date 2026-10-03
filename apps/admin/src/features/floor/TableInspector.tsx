@@ -1,9 +1,9 @@
 import { useId, useState, type ChangeEvent, type KeyboardEvent } from 'react'
 import { Minus, Plus, Trash2, X } from 'lucide-react'
 import { tableShapeLabels, tableShapes } from '@restaurant-platform/shared'
-import { Field, Input, Toggle } from '@restaurant-platform/ui'
+import { Button, Field, IconButton, Input, Toggle } from '@restaurant-platform/ui'
 import type { FloorSection, FloorTable, TablePatch } from '@/queries/floor'
-import { cardClass, pillClass, roundIconClass } from './styles'
+import { cardClass } from './styles'
 import { TableGlyph } from './TableGlyph'
 
 /**
@@ -106,15 +106,16 @@ function NumberField({
         {label}
       </label>
       <div className="flex items-center gap-2">
-        <button
-          type="button"
-          className={roundIconClass}
-          aria-label={`${label}: restar uno`}
+        <IconButton
+          label={`${label}: restar uno`}
+          size="touch"
+          shape="pill"
+          variant="secondary"
           disabled={value <= min}
           onClick={() => onCommit(value - 1)}
         >
           <Minus size={18} aria-hidden="true" />
-        </button>
+        </IconButton>
         <Input
           id={id}
           size="touch"
@@ -122,15 +123,16 @@ function NumberField({
           className="w-18 min-w-0 text-center text-base font-bold tabular-nums"
           {...field}
         />
-        <button
-          type="button"
-          className={roundIconClass}
-          aria-label={`${label}: sumar uno`}
+        <IconButton
+          label={`${label}: sumar uno`}
+          size="touch"
+          shape="pill"
+          variant="secondary"
           disabled={value >= max}
           onClick={() => onCommit(value + 1)}
         >
           <Plus size={18} aria-hidden="true" />
-        </button>
+        </IconButton>
       </div>
     </div>
   )
@@ -155,9 +157,9 @@ export function TableInspector({ table, sections, onEdit, onDelete, onClose, bus
           <h2 className="text-lg leading-tight font-bold break-words text-neutral-900">{table.label}</h2>
           <p className="text-sm text-muted">{sectionName}</p>
         </div>
-        <button type="button" className={roundIconClass} aria-label="Cerrar" title="Cerrar" onClick={onClose}>
+        <IconButton label="Cerrar" size="touch" shape="pill" variant="secondary" onClick={onClose}>
           <X size={18} aria-hidden="true" />
-        </button>
+        </IconButton>
       </div>
 
       <Field label="Nombre">
@@ -217,15 +219,20 @@ export function TableInspector({ table, sections, onEdit, onDelete, onClose, bus
       </div>
 
       <div className="border-t border-neutral-200 pt-4">
-        <button
+        <Button
           type="button"
-          className={pillClass('danger')}
+          variant="danger-ghost"
+          size="touch"
+          shape="pill"
+          // Destructiva pero no la principal: rojo sin relleno, con borde para que
+          // se lea como botón al pie del panel. El rojo lleno es el de confirmarla.
+          className="border border-red-200"
           disabled={busy}
           onClick={onDelete}
         >
           <Trash2 size={16} aria-hidden="true" />
           Eliminar mesa
-        </button>
+        </Button>
       </div>
     </aside>
   )

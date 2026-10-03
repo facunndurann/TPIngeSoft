@@ -1,8 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Check, Plus, X } from 'lucide-react'
-import { Badge, Input } from '@restaurant-platform/ui'
+import { Badge, Button, IconButton, Input } from '@restaurant-platform/ui'
 import type { Floor } from './floor'
-import { pillClass, roundIconClass } from './styles'
 
 type SectionTabsProps = {
   floor: Floor
@@ -67,10 +66,18 @@ export function NewSectionButton({
 
   if (!adding)
     return (
-      <button type="button" className={pillClass('dashed')} onClick={() => setAdding(true)}>
+      <Button
+        type="button"
+        variant="ghost"
+        size="touch"
+        shape="pill"
+        // Crea algo, pero no es la acción principal de la pantalla: va punteado.
+        className="border border-dashed border-neutral-400"
+        onClick={() => setAdding(true)}
+      >
         <Plus size={16} aria-hidden="true" />
         Nuevo sector
-      </button>
+      </Button>
     )
 
   const close = () => {
@@ -99,12 +106,12 @@ export function NewSectionButton({
         aria-label="Nombre del nuevo sector"
         autoFocus
       />
-      <button type="submit" className={pillClass('primary')} disabled={pending}>
+      <Button type="submit" size="touch" shape="pill" disabled={pending}>
         Crear
-      </button>
-      <button type="button" className={roundIconClass} aria-label="Cancelar" title="Cancelar" onClick={close}>
+      </Button>
+      <IconButton label="Cancelar" size="touch" shape="pill" variant="secondary" onClick={close}>
         <X size={18} aria-hidden="true" />
-      </button>
+      </IconButton>
     </form>
   )
 }

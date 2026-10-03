@@ -33,7 +33,7 @@ const navigation = [
  */
 export function AdminLayout() {
   return (
-    <div className="min-h-dvh bg-canvas">
+    <div className="flex min-h-dvh flex-col bg-canvas">
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-60 flex-col border-r border-neutral-200 bg-white lg:flex">
         <div className="border-b border-neutral-200 px-4 py-4">
           <Brand />
@@ -48,7 +48,9 @@ export function AdminLayout() {
 
       <MobileHeader />
 
-      <main className="min-w-0 p-4 sm:p-6 lg:ml-60 lg:p-8">
+      {/* Una columna que llena el alto de la pantalla: una página con `fill` (el
+          Salón) estira su contenido hasta el margen de abajo, sin medir nada. */}
+      <main className="flex min-w-0 flex-1 flex-col p-4 sm:p-6 lg:ml-60 lg:p-8">
         <Outlet />
       </main>
     </div>

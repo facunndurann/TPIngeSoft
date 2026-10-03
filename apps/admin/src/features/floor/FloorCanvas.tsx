@@ -1,12 +1,12 @@
 import { useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { FLOOR_CELL, clampSpan, clampToFloor, tablePlacement, type Placed } from '@restaurant-platform/shared'
 import { Minus, Plus } from 'lucide-react'
-import { floorTile } from '@restaurant-platform/ui'
+import { Button, IconButton, floorTile } from '@restaurant-platform/ui'
 import type { FloorTable } from '@/queries/floor'
 import { ZOOM, type Camera } from './camera'
 import { FloorTableTile } from './FloorTableTile'
 import { fitsAt, followPointer, type Grip } from './placement'
-import { cardClass, pillClass, roundIconClass } from './styles'
+import { cardClass } from './styles'
 import type { FloorCamera } from './useFloorCamera'
 
 /** Una mesa agarrada: de dónde, dónde quedaría si se la suelta ahora y si ahí entra. */
@@ -201,32 +201,32 @@ export function FloorCanvas({ tables, camera, editing, toolbar, footerStart }: F
 function ZoomControls({ camera }: { camera: FloorCamera }) {
   return (
     <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Zoom del plano">
-      <button
-        type="button"
-        className={roundIconClass}
-        aria-label="Alejar"
-        title="Alejar"
+      <IconButton
+        label="Alejar"
+        size="touch"
+        shape="pill"
+        variant="secondary"
         disabled={camera.zoom <= ZOOM.min}
         onClick={() => camera.zoomBy(-ZOOM.step)}
       >
         <Minus size={18} aria-hidden="true" />
-      </button>
+      </IconButton>
       <span aria-live="polite" className="min-w-14 text-center text-sm font-semibold text-neutral-900 tabular-nums">
         {Math.round(camera.zoom * 100)} %
       </span>
-      <button
-        type="button"
-        className={roundIconClass}
-        aria-label="Acercar"
-        title="Acercar"
+      <IconButton
+        label="Acercar"
+        size="touch"
+        shape="pill"
+        variant="secondary"
         disabled={camera.zoom >= ZOOM.max}
         onClick={() => camera.zoomBy(ZOOM.step)}
       >
         <Plus size={18} aria-hidden="true" />
-      </button>
-      <button type="button" className={`ml-1 ${pillClass('secondary')}`} onClick={camera.fit}>
+      </IconButton>
+      <Button type="button" variant="secondary" size="touch" shape="pill" className="ml-1" onClick={camera.fit}>
         Ajustar al salón
-      </button>
+      </Button>
     </div>
   )
 }

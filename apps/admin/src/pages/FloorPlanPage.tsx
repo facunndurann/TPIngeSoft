@@ -35,6 +35,7 @@ export function FloorPlanPage() {
     <Page
       title="Salón"
       wide
+      fill
       actions={
         <>
           {/* Con una sola sucursal, o mientras cargan, no hay nada que elegir. */}

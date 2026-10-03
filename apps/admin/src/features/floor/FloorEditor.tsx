@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { Check, Ellipsis, Pencil, Plus, Redo2, Trash2, Undo2, X } from 'lucide-react'
-import { EmptyState, Input, Toggle, useConfirm } from '@restaurant-platform/ui'
+import { Button, EmptyState, IconButton, Input, Toggle, iconButtonClass, useConfirm } from '@restaurant-platform/ui'
 import { countLabel } from '@restaurant-platform/shared'
 import type { FloorSection, FloorTable } from '@/queries/floor'
 import { FloorCanvas } from './FloorCanvas'
@@ -11,7 +11,6 @@ import { NewSectionButton, SectionTabs } from './SectionTabs'
 import { SectionTables } from './SectionTables'
 import { TableInspector } from './TableInspector'
 import type { FloorScreenProps } from './floor'
-import { ghostIconClass, pillClass, roundIconClass } from './styles'
 import { useFloorCamera } from './useFloorCamera'
 import { useFloorEditor, type FloorEditorActions } from './useFloorEditor'
 
@@ -198,10 +197,10 @@ function SectionToolbar({
           onSave={(name) => onRename(name, () => setRenaming(false))}
         />
       ) : (
-        <button type="button" className={pillClass('primary')} disabled={adding} onClick={onAddTable}>
+        <Button type="button" size="touch" shape="pill" disabled={adding} onClick={onAddTable}>
           <Plus size={18} aria-hidden="true" />
           Agregar mesa
-        </button>
+        </Button>
       )}
       <div className="flex items-center gap-3">
         <Toggle checked={section.is_active} onChange={onActiveChange} label="Sector en uso" />
@@ -267,7 +266,7 @@ function SectionMenu({
       <button
         ref={toggle}
         type="button"
-        className={ghostIconClass}
+        className={iconButtonClass({ size: 'touch', shape: 'pill' })}
         aria-label={`Opciones del sector ${sectionName}`}
         title="Opciones del sector"
         aria-expanded={open}
@@ -326,12 +325,17 @@ function RenameSectionForm({
         aria-label={`Nuevo nombre de ${section.name}`}
         autoFocus
       />
-      <button type="submit" className={roundIconClass} aria-label="Guardar nombre" title="Guardar nombre">
+      <button
+        type="submit"
+        className={iconButtonClass({ size: 'touch', shape: 'pill', variant: 'secondary' })}
+        aria-label="Guardar nombre"
+        title="Guardar nombre"
+      >
         <Check size={18} aria-hidden="true" />
       </button>
-      <button type="button" className={roundIconClass} onClick={onCancel} aria-label="Cancelar" title="Cancelar">
+      <IconButton label="Cancelar" size="touch" shape="pill" variant="secondary" onClick={onCancel}>
         <X size={18} aria-hidden="true" />
-      </button>
+      </IconButton>
     </form>
   )
 }
@@ -372,10 +376,10 @@ function UnassignedTables({
       <ul className="flex flex-wrap gap-2">
         {tables.map((table) => (
           <li key={table.id}>
-            <button type="button" className={pillClass('secondary')} onClick={() => onPlace(table)}>
+            <Button type="button" variant="secondary" size="touch" shape="pill" onClick={() => onPlace(table)}>
               <Plus size={16} aria-hidden="true" />
               {table.label}
-            </button>
+            </Button>
           </li>
         ))}
       </ul>
