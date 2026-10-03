@@ -46,8 +46,8 @@ function ViewPlan({
       tables={tables}
       emptyMessage="Este sector todavía no tiene mesas."
       onTap={onTap}
-      renderTable={(entry) => (
-        <TableTile table={entry} tile={floorTile(entry, tablePlacement(entry))} zoom={camera.zoom} />
+      renderTable={(entry, events) => (
+        <TableTile table={entry} tile={floorTile(entry, tablePlacement(entry))} zoom={camera.zoom} events={events} />
       )}
     />
   )
@@ -105,6 +105,42 @@ const noFitMarks = (container: HTMLElement) =>
 
 /** Otra mesa, cuatro celdas a la derecha de la primera. */
 const neighbor = { ...table, id: 'table-b', label: 'Mesa 2', position_x: 4 } as FloorTable
+
+/**
+ * Corre `run` con un recuadro de `width` × `height`. happy-dom no mide ni avisa
+ * cuando cambia un tamaño: este observador avisa apenas observa, como el
+ * navegador la primera vez, para que haya encuadre.
+ */
+async function withMeasuredView({ width, height }: { width: number; height: number }, run: () => Promise<void>) {
+  const RealObserver = globalThis.ResizeObserver
+  const sizes = { clientWidth: width, clientHeight: height }
+  const realSizes = Object.fromEntries(
+    Object.keys(sizes).map((key) => [key, Object.getOwnPropertyDescriptor(HTMLElement.prototype, key)]),
+  )
+  globalThis.ResizeObserver = class {
+    readonly onResize: ResizeObserverCallback
+    constructor(onResize: ResizeObserverCallback) {
+      this.onResize = onResize
+    }
+    observe() {
+      this.onResize([], this as unknown as ResizeObserver)
+    }
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver
+  for (const [key, value] of Object.entries(sizes)) {
+    Object.defineProperty(HTMLElement.prototype, key, { configurable: true, get: () => value })
+  }
+  try {
+    await run()
+  } finally {
+    globalThis.ResizeObserver = RealObserver
+    for (const [key, descriptor] of Object.entries(realSizes)) {
+      if (descriptor) Object.defineProperty(HTMLElement.prototype, key, descriptor)
+      else delete (HTMLElement.prototype as unknown as Record<string, unknown>)[key]
+    }
+  }
+}
 
 /** Las clases del elemento cuya apertura cumple `pattern`. */
 const classOf = (html: string, pattern: RegExp) => /class="([^"]*)"/.exec(pattern.exec(html)?.[0] ?? '')?.[1] ?? ''
@@ -185,8 +221,48 @@ test('in the view a table doesn’t grab the finger: dragging over it moves the 
   await pointer(tile, 'pointermove', 0, 30)
   await pointer(tile, 'pointerup', 0, 30)
 
-  assert.equal(container.querySelector('button[aria-label^="Mesa 1,"]'), null)
+  // Es un botón, pero no se queda con el dedo: los gestos son del plano.
+  assert.doesNotMatch(tableButton(container).className, /\btouch-none\b/)
   assert.deepEqual(cameraOf(layer), { ...before, y: before.y + 30 })
+})
+
+test('in the view the keyboard reaches every table: its own click counts as a tap, the one a finger fires there doesn’t count twice', async () => {
+  const taps: (string | null)[] = []
+  const { container } = await mount(<ViewPlan onTap={(entry) => taps.push(entry?.id ?? null)} />)
+  const button = tableButton(container) as HTMLButtonElement
+
+  // El toque de un dedo dispara también un clic sobre la mesa (`detail` 1): ese ya lo resolvió el plano.
+  await act(async () => button.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 })))
+  assert.deepEqual(taps, [])
+
+  // Enter o Espacio sobre la mesa, o un lector de pantalla: un clic sin puntero.
+  await act(async () => button.click())
+  assert.deepEqual(taps, ['table-a'])
+  assert.match(button.getAttribute('aria-label') ?? '', /^Mesa 1, 4 lugares\. Enter para ver su QR\.$/)
+})
+
+test('the keyboard focus brings a table into view, in the editor and in the view', async () => {
+  for (const mode of ['editor', 'vista'] as const) {
+    await withMeasuredView({ width: 400, height: 300 }, async () => {
+      const plan = mode === 'editor' ? <Plan editing={recorder(null).editing} /> : <ViewPlan />
+      const { container, viewport, layer } = await mount(plan)
+      // Dónde cae la mesa de 2 × 2 en el recuadro, con sus 3 px de aire a cada lado.
+      const inView = () => {
+        const { x, y, zoom } = cameraOf(layer)
+        return x + 3 * zoom >= 0 && x + 85 * zoom <= 400 && y + 3 * zoom >= 0 && y + 85 * zoom <= 300
+      }
+      assert.ok(inView(), `${mode}: al abrir, el encuadre la muestra`)
+
+      // El piso arrastrado hasta que la mesa queda afuera, a la izquierda.
+      await pointer(viewport, 'pointerdown', 350, 150)
+      await pointer(viewport, 'pointermove', -650, 150)
+      await pointer(viewport, 'pointerup', -650, 150)
+      assert.ok(!inView(), `${mode}: arrastrada afuera`)
+
+      await act(async () => (tableButton(container) as HTMLButtonElement).focus())
+      assert.ok(inView(), `${mode}: con el foco del teclado, el plano la trae a la vista`)
+    })
+  }
 })
 
 test('in the view a tap reports the table under it, even if the finger slips a little, and the empty floor as none; a drag or the middle button report nothing', async () => {
@@ -279,21 +355,7 @@ test('the zoom works like a volume control: the slider zooms right away, reads i
 })
 
 test('buttons and framing glide the camera; gestures move it right away; opening the floor does not animate', async () => {
-  // happy-dom no avisa cuando cambia un tamaño: este observador avisa apenas
-  // observa, como el navegador la primera vez, para que haya encuadre.
-  const RealObserver = globalThis.ResizeObserver
-  globalThis.ResizeObserver = class {
-    readonly onResize: ResizeObserverCallback
-    constructor(onResize: ResizeObserverCallback) {
-      this.onResize = onResize
-    }
-    observe() {
-      this.onResize([], this as unknown as ResizeObserver)
-    }
-    unobserve() {}
-    disconnect() {}
-  } as unknown as typeof ResizeObserver
-  try {
+  await withMeasuredView({ width: 800, height: 400 }, async () => {
     const { container, viewport, layer } = await mount(<Plan editing={recorder(table.id).editing} />)
     const button = (label: string) =>
       [...container.querySelectorAll('button')].find(
@@ -316,9 +378,7 @@ test('buttons and framing glide the camera; gestures move it right away; opening
     assert.equal(glides(), false, 'arrastrar el piso lo mueve al instante')
     await act(async () => button('Ajustar al salón').click())
     assert.equal(glides(), true, '«Ajustar al salón» se desliza')
-  } finally {
-    globalThis.ResizeObserver = RealObserver
-  }
+  })
 })
 
 test('dragging a table onto another marks it with an ✕ and a dashed border, not only in red, while it stays there', async () => {

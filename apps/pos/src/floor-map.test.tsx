@@ -155,8 +155,8 @@ test('dragging the floor from a table moves the plan and doesn’t choose the ta
   assert.ok(!summary(), 'Arrastrar no elige la mesa')
 })
 
-test('the keyboard chooses a table with its own click; the click a finger also fires there doesn’t count twice', async () => {
-  const { table, summary } = await renderFloor()
+test('the keyboard chooses a table with its own click, and twice in a row opens its command; the click a finger also fires there doesn’t count twice', async () => {
+  const { container, table, summary } = await renderFloor()
 
   // El de un toque trae `detail` 1: ese ya lo resolvió el plano.
   await act(async () => table.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 })))
@@ -165,6 +165,31 @@ test('the keyboard chooses a table with its own click; the click a finger also f
   // Enter o Espacio sobre la mesa, o un lector de pantalla: un clic sin puntero.
   await act(async () => table.click())
   assert.ok(summary())
+
+  // Es un toque más: dos seguidos sobre la misma mesa abren su comanda.
+  await act(async () => table.click())
+  assert.match(container.textContent ?? '', /Comanda abierta/)
+})
+
+test('a second tap too late, or a tap on the floor in between, only chooses the table', async () => {
+  const { container, viewport, table, summary } = await renderFloor()
+  const clock = vi.spyOn(performance, 'now')
+  try {
+    // A los 600 ms ya no es doble; y el piso, en el medio, corta la cuenta.
+    for (const [at, target] of [
+      [0, table],
+      [600, table],
+      [700, viewport],
+      [800, table],
+    ] as const) {
+      clock.mockReturnValue(at)
+      await (target === viewport ? tap(viewport, 300, 300) : tap(table))
+    }
+    assert.ok(summary(), 'La mesa queda elegida')
+    assert.doesNotMatch(container.textContent ?? '', /Comanda abierta/)
+  } finally {
+    clock.mockRestore()
+  }
 })
 
 test('closing the floating summary gives focus back to its table', async () => {

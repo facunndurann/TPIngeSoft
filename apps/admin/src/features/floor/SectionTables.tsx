@@ -21,8 +21,7 @@ type SectionTablesProps = {
 
 /**
  * Panel lateral sin mesa elegida: las mesas del sector, en el orden del POS. Es
- * también la forma de llegar a una mesa sin tocar el plano: con el teclado, o
- * con un lector de pantalla.
+ * también otra forma de llegar a una mesa, sin recorrer el plano.
  */
 export function SectionTables({
   tables,

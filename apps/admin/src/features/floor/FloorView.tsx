@@ -48,14 +48,20 @@ function SectionView({ floor, section }: { floor: Floor; section: FloorSection }
               camera={camera}
               tables={tables}
               emptyMessage="Este sector todavía no tiene mesas."
-              // Las mesas de la vista dejan pasar el apretón: un toque sobre una
-              // muestra su QR, y un arrastre que empieza ahí mueve el piso.
+              // Las mesas de la vista dejan pasar el apretón: un toque sobre una (o
+              // Enter, con el teclado) muestra su QR, y un arrastre que empieza ahí
+              // mueve el piso.
               onTap={(table) => {
                 if (table) openQr(table)
               }}
               toolbar={<SectionStatus section={section} />}
-              renderTable={(table) => (
-                <TableTile table={table} tile={floorTile(table, tablePlacement(table))} zoom={camera.zoom} />
+              renderTable={(table, events) => (
+                <TableTile
+                  table={table}
+                  tile={floorTile(table, tablePlacement(table))}
+                  zoom={camera.zoom}
+                  events={events}
+                />
               )}
             />
             <FloorLegend editing={false} />

@@ -181,7 +181,12 @@ test('in Vista, tapping a table on the plan, or its row in the list, shows its Q
   await act(async () => container.querySelector<HTMLButtonElement>('dialog button[aria-label="Cerrar"]')!.click())
   assert.equal(container.querySelector('dialog'), null)
 
-  // Con el teclado o un lector de pantalla, la lista lleva al mismo QR.
+  // Con el teclado o un lector de pantalla, la mesa del plano y la fila de la lista llevan al mismo QR.
+  const plan = container.querySelector<HTMLButtonElement>('[data-floor-viewport] button[aria-label^="Mesa 1,"]')!
+  await act(async () => plan.click())
+  assert.equal(qrTitle(), 'QR de Mesa 1')
+  await act(async () => container.querySelector<HTMLButtonElement>('dialog button[aria-label="Cerrar"]')!.click())
+
   const row = [...container.querySelectorAll<HTMLButtonElement>('aside li button')].find((button) =>
     button.textContent?.startsWith('Mesa 1'),
   )!

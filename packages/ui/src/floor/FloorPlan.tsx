@@ -1,8 +1,9 @@
 import { Fragment, type ReactNode } from 'react'
-import { FLOOR_CELL, tableAt, type GridTable } from '@restaurant-platform/shared'
+import { FLOOR_CELL, tableAt, tablePlacement, type GridTable } from '@restaurant-platform/shared'
 import { Minus, Plus } from 'lucide-react'
 import { Button, IconButton } from '../components'
 import { ZOOM, type Camera } from './camera'
+import type { TableEvents } from './TableButton'
 import type { FloorCamera } from './useFloorCamera'
 
 /**
@@ -43,15 +44,17 @@ type FloorPlanProps<T extends PlanTable> = {
   tables: readonly T[]
   /**
    * Cómo se ve cada mesa, en coordenadas del plano (`floorTile`) aunque sean
-   * negativas: la cámara corre y escala la capa que las lleva.
+   * negativas: la cámara corre y escala la capa que las lleva. `events` es lo que
+   * la maneja sin un puntero; una mesa que se toca se lo pasa a `TableButton`.
    */
-  renderTable: (table: T) => ReactNode
+  renderTable: (table: T, events: TableEvents) => ReactNode
   /** Lo que se lee en el medio del recuadro si el sector no tiene mesas. */
   emptyMessage: string
   /**
    * Un toque en el plano que no lo movió: la mesa que estaba debajo, o `null` si
    * cayó en el piso vacío. Solo llegan los apretones que una mesa deja pasar: en
-   * el editor, las mesas se quedan con los suyos para moverlas.
+   * el editor, las mesas se quedan con los suyos para moverlas. Enter sobre una
+   * mesa que se toca (`TableButton`) también llega acá, como un toque más.
    */
   onTap: (table: T | null) => void
   /** Barra de arriba de la tarjeta: el estado del sector y, editando, sus acciones. */
@@ -74,6 +77,24 @@ export function FloorPlan<T extends PlanTable>({
   toolbar,
   footerStart,
 }: FloorPlanProps<T>) {
+  /**
+   * Lo que maneja una mesa sin un puntero. Con el mouse o el dedo, el toque lo
+   * resuelve el piso (`onPointerUp`): mientras se lo arrastra, el puntero es suyo,
+   * y el clic de un mouse ni llega a la mesa. El de un dedo sí llega, porque lo
+   * dispara el toque mismo: por eso la mesa atiende solo el clic que no trae un
+   * puntero (`detail` 0), el del teclado o un lector de pantalla, y no cuenta dos
+   * veces el del dedo. El foco del teclado la trae a la vista (WCAG 2.4.11); con
+   * el mouse o el dedo ya se ve, se la acaba de tocar.
+   */
+  const eventsOf = (table: T): TableEvents => ({
+    onClick: (event) => {
+      if (event.detail === 0) onTap(table)
+    },
+    onFocus: (event) => {
+      if (event.currentTarget.matches(':focus-visible')) camera.reveal(tablePlacement(table))
+    },
+  })
+
   return (
     <div className={`flex min-h-0 flex-1 flex-col overflow-hidden ${floorCardClass}`}>
       {toolbar && (
@@ -105,7 +126,7 @@ export function FloorPlan<T extends PlanTable>({
           style={{ transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.zoom})`, transformOrigin: '0 0' }}
         >
           {tables.map((table) => (
-            <Fragment key={table.id}>{renderTable(table)}</Fragment>
+            <Fragment key={table.id}>{renderTable(table, eventsOf(table))}</Fragment>
           ))}
         </div>
         {tables.length === 0 && (

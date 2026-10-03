@@ -125,13 +125,14 @@ export function FloorCanvas({ tables, camera, editing, toolbar, footerStart }: F
       onTap={() => editing.onSelect(null)}
       toolbar={toolbar}
       footerStart={footerStart}
-      renderTable={(table) => {
+      renderTable={(table, events) => {
         const active = gesture?.tableId === table.id
         return (
           <EditableTableTile
             table={table}
             tile={floorTile(table, placementOf(table))}
             zoom={camera.zoom}
+            events={events}
             active={active}
             invalid={active && !gesture.valid}
             editing={{
@@ -145,7 +146,6 @@ export function FloorCanvas({ tables, camera, editing, toolbar, footerStart }: F
               onDrop: () => drop(table),
               onCancel: () => setGesture(null),
               onNudge: (event) => nudge(event, table),
-              onKeyboardFocus: () => camera.reveal(tablePlacement(table)),
               refusalKey: editing.refusal?.tableId === table.id ? editing.refusal.key : null,
               onRefusalShown: editing.onRefusalShown,
             }}
