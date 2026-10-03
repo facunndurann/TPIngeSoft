@@ -1,8 +1,8 @@
-import type { ReactNode } from 'react'
-import { FLOOR_CELL } from '@restaurant-platform/shared'
+import { Fragment, type ReactNode } from 'react'
+import { FLOOR_CELL, tableAt, type GridTable } from '@restaurant-platform/shared'
 import { Minus, Plus } from 'lucide-react'
 import { Button, IconButton } from '../components'
-import { ZOOM, type Camera, type Point } from './camera'
+import { ZOOM, type Camera } from './camera'
 import type { FloorCamera } from './useFloorCamera'
 
 /**
@@ -33,22 +33,27 @@ const checker = ({ x, y, zoom }: Camera) => ({
   backgroundPosition: `${x}px ${y}px`,
 })
 
-type FloorPlanProps = {
+/** Lo que el plano necesita de una mesa: dónde está, cuánto ocupa y quién es. */
+type PlanTable = GridTable & { id: string }
+
+type FloorPlanProps<T extends PlanTable> = {
   /** Qué parte del plano se ve y cómo se recorre. Es de quien dibuja el plano (ver `useFloorCamera`). */
   camera: FloorCamera
+  /** Las mesas del sector: el plano las dibuja y sabe cuál se tocó. */
+  tables: readonly T[]
   /**
-   * Las mesas, ya dibujadas en coordenadas del plano (`floorTile`), aunque sean
+   * Cómo se ve cada mesa, en coordenadas del plano (`floorTile`) aunque sean
    * negativas: la cámara corre y escala la capa que las lleva.
    */
-  children: ReactNode
-  /** Lo que se lee en el medio del recuadro cuando no hay nada que dibujar. */
-  empty?: string
+  renderTable: (table: T) => ReactNode
+  /** Lo que se lee en el medio del recuadro si el sector no tiene mesas. */
+  emptyMessage: string
   /**
-   * Un toque en el plano que no lo movió, en la celda donde cayó, con decimales.
-   * Llega desde el piso vacío y desde las mesas que dejan pasar el apretón: quien
-   * dibuja sabe qué hay ahí (ver `tableAt`).
+   * Un toque en el plano que no lo movió: la mesa que estaba debajo, o `null` si
+   * cayó en el piso vacío. Solo llegan los apretones que una mesa deja pasar: en
+   * el editor, las mesas se quedan con los suyos para moverlas.
    */
-  onTap?: (cell: Point) => void
+  onTap: (table: T | null) => void
   /** Barra de arriba de la tarjeta: el estado del sector y, editando, sus acciones. */
   toolbar?: ReactNode
   /** Lo que va a la izquierda del zoom, abajo, como deshacer y rehacer. */
@@ -56,11 +61,19 @@ type FloorPlanProps = {
 }
 
 /**
- * El plano de un sector dentro de su tarjeta: el mismo en el editor del admin y
- * en el POS. El recuadro es una ventana a un plano sin bordes: no hay scroll ni
- * barras, la cámara corre el contenido y el damero. Abajo, el zoom.
+ * El plano de un sector dentro de su tarjeta: el mismo en el editor y en la vista
+ * del admin, y en el POS. El recuadro es una ventana a un plano sin bordes: no hay
+ * scroll ni barras, la cámara corre el contenido y el damero. Abajo, el zoom.
  */
-export function FloorPlan({ camera, children, empty, onTap, toolbar, footerStart }: FloorPlanProps) {
+export function FloorPlan<T extends PlanTable>({
+  camera,
+  tables,
+  renderTable,
+  emptyMessage,
+  onTap,
+  toolbar,
+  footerStart,
+}: FloorPlanProps<T>) {
   return (
     <div className={`flex min-h-0 flex-1 flex-col overflow-hidden ${floorCardClass}`}>
       {toolbar && (
@@ -83,7 +96,7 @@ export function FloorPlan({ camera, children, empty, onTap, toolbar, footerStart
         onPointerDown={camera.grab}
         onPointerMove={camera.drag}
         onPointerUp={(event) => {
-          if (camera.release(event)) onTap?.(camera.cellFromPointer(event))
+          if (camera.release(event)) onTap(tableAt(tables, camera.cellFromPointer(event)) ?? null)
         }}
         onPointerCancel={camera.release}
       >
@@ -91,11 +104,13 @@ export function FloorPlan({ camera, children, empty, onTap, toolbar, footerStart
           className={`absolute top-0 left-0 ${camera.glide ? `motion-safe:transition-transform ${GLIDE}` : ''}`}
           style={{ transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.zoom})`, transformOrigin: '0 0' }}
         >
-          {children}
+          {tables.map((table) => (
+            <Fragment key={table.id}>{renderTable(table)}</Fragment>
+          ))}
         </div>
-        {empty && (
+        {tables.length === 0 && (
           <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted">
-            {empty}
+            {emptyMessage}
           </p>
         )}
       </div>

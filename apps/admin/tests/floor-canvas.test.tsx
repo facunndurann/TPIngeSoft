@@ -4,9 +4,10 @@ import assert from 'node:assert/strict'
 import { act, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { renderToStaticMarkup } from 'react-dom/server'
-import type { Placed } from '@restaurant-platform/shared'
-import { useFloorCamera } from '@restaurant-platform/ui'
+import { tablePlacement, type Placed } from '@restaurant-platform/shared'
+import { FloorPlan, floorTile, useFloorCamera } from '@restaurant-platform/ui'
 import { FloorCanvas, type FloorEditing } from '../src/features/floor/FloorCanvas'
+import { TableTile } from '../src/features/floor/TableTile'
 import type { FloorTable } from '../src/queries/floor'
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
@@ -24,18 +25,32 @@ const table = {
   is_visible: true,
 } as FloorTable
 
-/** El plano con su cámara, como lo arman el editor y la vista. */
-function Plan({
+/** El plano del editor con su cámara, como lo arma `FloorEditor`. */
+function Plan({ tables = [table], editing }: { tables?: FloorTable[]; editing: FloorEditing }) {
+  const camera = useFloorCamera(tables)
+  return <FloorCanvas tables={tables} camera={camera} editing={editing} />
+}
+
+/** El plano de la vista con su cámara, como lo arma `FloorView`: mesas de solo lectura que dejan pasar el toque. */
+function ViewPlan({
   tables = [table],
-  editing,
-  onOpenTable,
+  onTap = () => {},
 }: {
   tables?: FloorTable[]
-  editing?: FloorEditing
-  onOpenTable?: (table: FloorTable) => void
+  onTap?: (table: FloorTable | null) => void
 }) {
   const camera = useFloorCamera(tables)
-  return <FloorCanvas tables={tables} camera={camera} editing={editing} onOpenTable={onOpenTable} />
+  return (
+    <FloorPlan
+      camera={camera}
+      tables={tables}
+      emptyMessage="Este sector todavía no tiene mesas."
+      onTap={onTap}
+      renderTable={(entry) => (
+        <TableTile table={entry} tile={floorTile(entry, tablePlacement(entry))} zoom={camera.zoom} />
+      )}
+    />
+  )
 }
 
 /** Un editor que anota lo que se elige y lo que se propone, sin escribir nada. */
@@ -97,8 +112,8 @@ const classOf = (html: string, pattern: RegExp) => /class="([^"]*)"/.exec(patter
 test('the floor owns every touch gesture: one finger moves it, two pinch it', () => {
   // Sin bordes no hay scroll nativo que desplace: el recuadro toma los toques y
   // los traduce a la cámara, en los dos modos.
-  for (const editing of [recorder(table.id).editing, undefined]) {
-    const html = renderToStaticMarkup(<Plan editing={editing} />)
+  for (const plan of [<Plan editing={recorder(table.id).editing} />, <ViewPlan />]) {
+    const html = renderToStaticMarkup(plan)
     assert.match(classOf(html, /<div data-floor-viewport="true" class="[^"]*"/), /\btouch-none\b/)
   }
 })
@@ -161,8 +176,8 @@ test('with Space held, a press over a table grabs the floor instead', async () =
   assert.deepEqual(cameraOf(layer), { ...before, x: before.x + 20 })
 })
 
-test('in view mode a table doesn’t grab the finger: dragging over it moves the floor', async () => {
-  const { container, layer } = await mount(<Plan />)
+test('in the view a table doesn’t grab the finger: dragging over it moves the floor', async () => {
+  const { container, layer } = await mount(<ViewPlan />)
   const tile = [...container.querySelectorAll('span')].find((span) => span.textContent === 'Mesa 1')!.parentElement!
   const before = cameraOf(layer)
 
@@ -174,9 +189,9 @@ test('in view mode a table doesn’t grab the finger: dragging over it moves the
   assert.deepEqual(cameraOf(layer), { ...before, y: before.y + 30 })
 })
 
-test('in view mode a tap opens the table under it, even if the finger slips a little; a drag, the empty floor or the middle button open nothing', async () => {
-  const opened: string[] = []
-  const { container, viewport } = await mount(<Plan onOpenTable={(entry) => opened.push(entry.id)} />)
+test('in the view a tap reports the table under it, even if the finger slips a little, and the empty floor as none; a drag or the middle button report nothing', async () => {
+  const taps: (string | null)[] = []
+  const { container, viewport } = await mount(<ViewPlan onTap={(entry) => taps.push(entry?.id ?? null)} />)
   const tile = [...container.querySelectorAll('span')].find((span) => span.textContent === 'Mesa 1')!.parentElement!
   assert.match(tile.className, /\bcursor-pointer\b/)
 
@@ -185,23 +200,18 @@ test('in view mode a tap opens the table under it, even if the finger slips a li
   await pointer(tile, 'pointerdown', 60, 60)
   await pointer(tile, 'pointermove', 65, 63)
   await pointer(tile, 'pointerup', 65, 63)
-  assert.deepEqual(opened, ['table-a'])
+  assert.deepEqual(taps, ['table-a'])
 
-  // Más allá de la tolerancia es un arrastre: mueve el plano y no abre la mesa.
+  // Más allá de la tolerancia es un arrastre, y el botón del medio solo arrastra:
+  // ninguno de los dos es un toque. El piso vacío sí, sin mesa.
   await pointer(tile, 'pointerdown', 60, 60)
   await pointer(tile, 'pointermove', 70, 60)
   await pointer(tile, 'pointerup', 70, 60)
-  await pointer(viewport, 'pointerdown', 300, 300)
-  await pointer(viewport, 'pointerup', 300, 300)
   await pointer(tile, 'pointerdown', 60, 60, 1)
   await pointer(tile, 'pointerup', 60, 60, 1)
-  assert.deepEqual(opened, ['table-a'])
-})
-
-test('a table that the plan can’t open doesn’t look clickable', async () => {
-  const { container } = await mount(<Plan />)
-  const tile = [...container.querySelectorAll('span')].find((span) => span.textContent === 'Mesa 1')!.parentElement!
-  assert.doesNotMatch(tile.className, /\bcursor-pointer\b/)
+  await pointer(viewport, 'pointerdown', 300, 300)
+  await pointer(viewport, 'pointerup', 300, 300)
+  assert.deepEqual(taps, ['table-a', null])
 })
 
 test('tapping a corner handle without dragging grows the table one cell toward that corner', async () => {
@@ -357,9 +367,14 @@ test('a table that didn’t fit is marked on itself: it shakes unless motion is 
   assert.ok(noFitMarks(container)[0] !== mark, 'Otro rechazo es una marca nueva')
 })
 
+test('the plan says the sector is empty only when it has no tables', () => {
+  assert.match(renderToStaticMarkup(<ViewPlan tables={[]} />), /Este sector todavía no tiene mesas\./)
+  assert.doesNotMatch(renderToStaticMarkup(<ViewPlan />), /todavía no tiene mesas/)
+})
+
 test('a table left of or above the origin is drawn there: the camera, not the floor, brings it into view', () => {
   const far = { ...table, id: 'table-far', label: 'Mesa lejos', position_x: -2, position_y: -1 } as FloorTable
-  const html = renderToStaticMarkup(<Plan tables={[far]} />)
+  const html = renderToStaticMarkup(<ViewPlan tables={[far]} />)
   // 44px por celda, y 3px de aire a cada lado entre mesas vecinas.
   assert.match(html, /style="left:-85px;top:-41px;width:82px;height:82px/)
 })

@@ -6,7 +6,7 @@
    viven en el paquete de UI (Spinner, SummaryItem) no llegan al CSS. */
 @source "../../../packages/ui/src";
 
-/* «Ahí no entra», sobre la propia mesa del Salón (NoFitMark, en FloorTableTile):
+/* «Ahí no entra», sobre la propia mesa del Salón (NoFitMark, en TableTile.tsx):
    la marca aparece, se sacude un instante y se va. Cada marca pone `--refuse-shake`
    según el zoom de la cámara, así el sacudón mide lo mismo en pantalla. Con «menos
    movimiento», aparece y se va sin sacudirse (`refuse-still`). */

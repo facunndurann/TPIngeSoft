@@ -1,15 +1,14 @@
 import { useState } from 'react'
 import { QrCode } from 'lucide-react'
-import { countLabel, isOperable } from '@restaurant-platform/shared'
-import { EmptyState, useFloorCamera } from '@restaurant-platform/ui'
+import { countLabel, isOperable, tablePlacement } from '@restaurant-platform/shared'
+import { EmptyState, FloorPlan, floorTile, useFloorCamera } from '@restaurant-platform/ui'
 import { QrModal } from '@/features/QrModal'
 import type { FloorSection, FloorTable } from '@/queries/floor'
 import { useRestaurant } from '@/restaurant/restaurant-context'
-import { FloorCanvas } from './FloorCanvas'
 import { FloorLayout } from './FloorLayout'
-import { FloorLegend } from './FloorTableTile'
 import { SectionTables } from './SectionTables'
 import { SectionTabs } from './SectionTabs'
+import { FloorLegend, TableTile } from './TableTile'
 import type { Floor, FloorScreenProps } from './floor'
 
 /**
@@ -45,11 +44,19 @@ function SectionView({ floor, section }: { floor: Floor; section: FloorSection }
       <FloorLayout
         plan={
           <>
-            <FloorCanvas
-              tables={tables}
+            <FloorPlan
               camera={camera}
-              onOpenTable={openQr}
+              tables={tables}
+              emptyMessage="Este sector todavía no tiene mesas."
+              // Las mesas de la vista dejan pasar el apretón: un toque sobre una
+              // muestra su QR, y un arrastre que empieza ahí mueve el piso.
+              onTap={(table) => {
+                if (table) openQr(table)
+              }}
               toolbar={<SectionStatus section={section} />}
+              renderTable={(table) => (
+                <TableTile table={table} tile={floorTile(table, tablePlacement(table))} zoom={camera.zoom} />
+              )}
             />
             <FloorLegend editing={false} />
           </>

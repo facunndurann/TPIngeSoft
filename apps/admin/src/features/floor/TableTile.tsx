@@ -28,19 +28,20 @@ export type TileEditing = {
   onRefusalShown: () => void
 }
 
-type FloorTableTileProps = {
+/** Una mesa y dónde se dibuja. */
+type TileProps = {
   table: FloorTable
   tile: FloorTile
   /** El zoom de la cámara: el texto y las manijas lo compensan para no achicarse en pantalla. */
   zoom: number
+}
+
+type EditableTableTileProps = TileProps & {
   /** La del gesto en curso: va arriba de las demás. */
   active: boolean
   /** Donde la lleva el gesto pisaría a otra: se marca con una ✕, además del rojo. */
   invalid: boolean
-  /** Sin esto, la mesa es de solo lectura: no es un botón ni tiene manijas. */
-  editing?: TileEditing
-  /** En la vista: tocarla la abre (lo resuelve el plano, ver `FloorCanvas`), y el puntero lo anuncia. */
-  openable?: boolean
+  editing: TileEditing
 }
 
 const CORNERS: readonly (Corner & { cursor: string })[] = [
@@ -65,14 +66,38 @@ const NO_FIT_SHAKE = 6
 const tableBaseClass =
   'absolute flex flex-col items-center justify-center overflow-hidden border-2 text-center transition-colors'
 
+/** Fuera de servicio u oculta: se dibuja apagada, y el POS no la ofrece. */
+const isMuted = (table: FloorTable) => !table.is_active || !table.is_visible
+
 /**
- * Una mesa del plano con sus sillas: mientras se edita, un botón que se arrastra,
- * se estira desde sus manijas y se mueve con las flechas; en la vista, un dibujo
- * de solo lectura.
+ * Una mesa de la vista, con sus sillas: un dibujo de solo lectura. Tocarla
+ * muestra su QR, pero el toque lo resuelve el plano (`FloorPlan`) y no la mesa:
+ * así, un arrastre que empieza sobre ella mueve el piso.
  */
-export function FloorTableTile({ table, tile, zoom, active, invalid, editing, openable = false }: FloorTableTileProps) {
-  const selected = editing?.selected ?? false
-  const muted = !table.is_active || !table.is_visible
+export function TableTile({ table, tile, zoom }: TileProps) {
+  const muted = isMuted(table)
+  const look = tableLook({ invalid: false, selected: false, muted })
+
+  return (
+    <>
+      <TableChairs tile={tile} round={table.shape === 'round'} seats={table.seats} color={look.chair} />
+      <div
+        className={`${tableBaseClass} cursor-pointer ${tile.shapeClass} ${look.table}`}
+        style={{ ...tile.box, zIndex: 1 }}
+      >
+        <TableLabel table={table} tile={tile} zoom={zoom} muted={muted} />
+      </div>
+    </>
+  )
+}
+
+/**
+ * Una mesa del editor, con sus sillas: un botón que se arrastra, se estira desde
+ * sus manijas y se mueve con las flechas.
+ */
+export function EditableTableTile({ table, tile, zoom, active, invalid, editing }: EditableTableTileProps) {
+  const { selected } = editing
+  const muted = isMuted(table)
   const look = tableLook({ invalid, selected, muted })
   // El área que se toca de cada manija: nunca menos de 24 px en pantalla, haya el zoom que haya.
   const handleHit = Math.max(HANDLE_SIZE, MIN_TARGET / zoom)
@@ -86,75 +111,63 @@ export function FloorTableTile({ table, tile, zoom, active, invalid, editing, op
         color={look.chair}
         zIndex={active ? 9 : 0}
       />
+      <button
+        type="button"
+        aria-pressed={selected}
+        onPointerDown={editing.onGrab}
+        onPointerMove={editing.onDrag}
+        onPointerUp={editing.onDrop}
+        onPointerCancel={editing.onCancel}
+        onKeyDown={editing.onNudge}
+        onFocus={(event) => {
+          // Con el teclado, la mesa que recibe el foco se trae a la vista (WCAG
+          // 2.4.11); con el mouse o el dedo ya se ve: se la acaba de tocar.
+          if (event.currentTarget.matches(':focus-visible')) editing.onKeyboardFocus()
+        }}
+        // Editando, el toque que empieza sobre una mesa es para arrastrarla
+        // (`touch-none`); el que empieza en el piso vacío desplaza el plano.
+        className={`${tableBaseClass} cursor-grab touch-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none active:cursor-grabbing ${tile.shapeClass} ${look.table}`}
+        style={{ ...tile.box, zIndex: active ? 10 : 1 }}
+        aria-label={`${table.label}, ${table.seats} lugares${muted ? ', fuera de uso' : ''}. Flechas para mover, Mayús y flechas para cambiar el tamaño, Suprimir para eliminar.`}
+      >
+        <TableLabel table={table} tile={tile} zoom={zoom} muted={muted} />
+      </button>
 
-      {editing ? (
-        <>
-          <button
-            type="button"
-            aria-pressed={selected}
-            onPointerDown={editing.onGrab}
+      {/* Manijas de tamaño: solo en la mesa elegida, para no ensuciar el plano.
+          Son un atajo para el mouse y el dedo, sin rol ni foco: con teclado se
+          estira con Mayús y las flechas, y con un toque, desde el panel. El área
+          que se toca va de la esquina hacia afuera, para no tapar la mesa; el
+          cuadradito que se ve queda pegado a la esquina. */}
+      {selected &&
+        CORNERS.map((corner) => (
+          <span
+            key={corner.cursor}
+            aria-hidden="true"
+            className={`absolute flex touch-none ${corner.dx > 0 ? 'justify-start' : 'justify-end'} ${
+              corner.dy > 0 ? 'items-start' : 'items-end'
+            } ${corner.cursor}`}
+            onPointerDown={(event) => editing.onGrabCorner(event, corner)}
             onPointerMove={editing.onDrag}
             onPointerUp={editing.onDrop}
             onPointerCancel={editing.onCancel}
-            onKeyDown={editing.onNudge}
-            onFocus={(event) => {
-              // Con el teclado, la mesa que recibe el foco se trae a la vista (WCAG
-              // 2.4.11); con el mouse o el dedo ya se ve: se la acaba de tocar.
-              if (event.currentTarget.matches(':focus-visible')) editing.onKeyboardFocus()
+            style={{
+              left: corner.dx > 0 ? tile.box.left + tile.box.width : tile.box.left - handleHit,
+              top: corner.dy > 0 ? tile.box.top + tile.box.height : tile.box.top - handleHit,
+              width: handleHit,
+              height: handleHit,
+              zIndex: active ? 11 : 2,
             }}
-            // Editando, el toque que empieza sobre una mesa es para arrastrarla
-            // (`touch-none`); el que empieza en el piso vacío desplaza el plano.
-            className={`${tableBaseClass} cursor-grab touch-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none active:cursor-grabbing ${tile.shapeClass} ${look.table}`}
-            style={{ ...tile.box, zIndex: active ? 10 : 1 }}
-            aria-label={`${table.label}, ${table.seats} lugares${muted ? ', fuera de uso' : ''}. Flechas para mover, Mayús y flechas para cambiar el tamaño, Suprimir para eliminar.`}
           >
-            <TableLabel table={table} tile={tile} zoom={zoom} muted={muted} />
-          </button>
+            <span className="h-3.5 w-3.5 rounded-sm border-2 border-primary bg-white" />
+          </span>
+        ))}
 
-          {/* Manijas de tamaño: solo en la mesa elegida, para no ensuciar el plano.
-              Son un atajo para el mouse y el dedo, sin rol ni foco: con teclado se
-              estira con Mayús y las flechas, y con un toque, desde el panel. El área
-              que se toca va de la esquina hacia afuera, para no tapar la mesa; el
-              cuadradito que se ve queda pegado a la esquina. */}
-          {selected &&
-            CORNERS.map((corner) => (
-              <span
-                key={corner.cursor}
-                aria-hidden="true"
-                className={`absolute flex touch-none ${corner.dx > 0 ? 'justify-start' : 'justify-end'} ${
-                  corner.dy > 0 ? 'items-start' : 'items-end'
-                } ${corner.cursor}`}
-                onPointerDown={(event) => editing.onGrabCorner(event, corner)}
-                onPointerMove={editing.onDrag}
-                onPointerUp={editing.onDrop}
-                onPointerCancel={editing.onCancel}
-                style={{
-                  left: corner.dx > 0 ? tile.box.left + tile.box.width : tile.box.left - handleHit,
-                  top: corner.dy > 0 ? tile.box.top + tile.box.height : tile.box.top - handleHit,
-                  width: handleHit,
-                  height: handleHit,
-                  zIndex: active ? 11 : 2,
-                }}
-              >
-                <span className="h-3.5 w-3.5 rounded-sm border-2 border-primary bg-white" />
-              </span>
-            ))}
-
-          {/* «Ahí no entra», sobre la propia mesa y no solo con color: quieta mientras
-              el gesto la lleva a un lugar ocupado, y un instante cuando se la quiso
-              dejar en uno. Cada rechazo es una marca nueva (`key`). */}
-          {invalid && <NoFitMark tile={tile} zoom={zoom} />}
-          {editing.refusalKey !== null && (
-            <NoFitMark key={editing.refusalKey} tile={tile} zoom={zoom} onShown={editing.onRefusalShown} />
-          )}
-        </>
-      ) : (
-        <div
-          className={`${tableBaseClass} ${tile.shapeClass} ${look.table} ${openable ? 'cursor-pointer' : ''}`}
-          style={{ ...tile.box, zIndex: 1 }}
-        >
-          <TableLabel table={table} tile={tile} zoom={zoom} muted={muted} />
-        </div>
+      {/* «Ahí no entra», sobre la propia mesa y no solo con color: quieta mientras
+          el gesto la lleva a un lugar ocupado, y un instante cuando se la quiso
+          dejar en uno. Cada rechazo es una marca nueva (`key`). */}
+      {invalid && <NoFitMark tile={tile} zoom={zoom} />}
+      {editing.refusalKey !== null && (
+        <NoFitMark key={editing.refusalKey} tile={tile} zoom={zoom} onShown={editing.onRefusalShown} />
       )}
     </>
   )

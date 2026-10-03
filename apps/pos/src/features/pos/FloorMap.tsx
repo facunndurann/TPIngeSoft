@@ -8,7 +8,6 @@ import {
   getPosTableState,
   posTableStateLabels,
   posTableStates,
-  tableAt,
   tablePlacement,
   type PosTableState,
 } from '@restaurant-platform/shared'
@@ -27,7 +26,6 @@ import {
   useFloorCamera,
   useNow,
   type FloorTile,
-  type Point,
 } from '@restaurant-platform/ui'
 import { useCan, usePosScope } from '@/context/pos-context'
 import { MoveTableSession } from './MoveTableSession'
@@ -223,10 +221,9 @@ function FloorSurface({
   /**
    * Un toque del mouse o del dedo que no movió el plano (los del teclado llegan a
    * cada mesa): sobre una mesa muestra su resumen, y dos seguidos sobre la misma
-   * abren su comanda; en el piso vacío, cierra el resumen.
+   * abren su comanda; en el piso vacío (`null`), cierra el resumen.
    */
-  function tapAt(cell: Point) {
-    const entry = tableAt(entries, cell)
+  function tapOn(entry: FloorMapEntry | null) {
     const at = performance.now()
     const previous = lastTap.current
     lastTap.current = entry ? { tableId: entry.id, at } : null
@@ -251,8 +248,9 @@ function FloorSurface({
       >
         <FloorPlan
           camera={camera}
-          onTap={tapAt}
-          empty={entries.length === 0 ? 'Este sector todavía no tiene mesas operativas.' : undefined}
+          tables={entries}
+          emptyMessage="Este sector todavía no tiene mesas operativas."
+          onTap={tapOn}
           toolbar={
             <div className="px-1">
               <h2 id="floor-map-heading" className="text-sm font-semibold text-neutral-800">
@@ -263,10 +261,8 @@ function FloorSurface({
               </p>
             </div>
           }
-        >
-          {entries.map((entry) => (
+          renderTable={(entry) => (
             <FloorTable
-              key={entry.id}
               entry={entry}
               tile={floorTile(entry, tablePlacement(entry))}
               zoom={camera.zoom}
@@ -275,8 +271,8 @@ function FloorSurface({
               onChoose={() => setSelectedId(entry.id)}
               onKeyboardFocus={() => camera.reveal(tablePlacement(entry))}
             />
-          ))}
-        </FloorPlan>
+          )}
+        />
         <StateLegend />
       </section>
 
