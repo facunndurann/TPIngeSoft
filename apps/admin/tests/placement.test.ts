@@ -1,6 +1,6 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
-import { changesTo, fitsAt, followPointer } from '../src/features/floor/placement'
+import { changesTo, fitsAt, followPointer, grownToward, nudged } from '../src/features/floor/placement'
 
 const table = (id: string, x: number, y: number, width = 3, height = 3) => ({
   id,
@@ -62,4 +62,23 @@ test('stretched from a corner, a table keeps the opposite edges still', () => {
   // y la mesa nunca baja de una celda por lado.
   const topLeft = { kind: 'resize' as const, corner: { dx: -1 as const, dy: -1 as const } }
   assert.deepEqual(followPointer(at(2, 2), topLeft, { x: 0.6, y: 4.7 }), at(1, 4, 4, 1))
+})
+
+test('an arrow moves the table one cell, or stretches it from its right or bottom edge', () => {
+  assert.deepEqual(nudged(at(2, 3), { dx: 1, dy: 0 }, 'move'), at(3, 3))
+  assert.deepEqual(nudged(at(2, 3), { dx: 0, dy: -1 }, 'move'), at(2, 2))
+  // Estirar: → y ↓ agrandan, ← y ↑ achican, sin mover la esquina de arriba a la izquierda.
+  assert.deepEqual(nudged(at(2, 3), { dx: 1, dy: 0 }, 'stretch'), at(2, 3, 4, 3))
+  assert.deepEqual(nudged(at(2, 3), { dx: 0, dy: -1 }, 'stretch'), at(2, 3, 3, 2))
+  // En el tamaño mínimo, achicar no hace nada.
+  assert.deepEqual(nudged(at(2, 3, 1, 1), { dx: -1, dy: 0 }, 'stretch'), at(2, 3, 1, 1))
+})
+
+test('tapping a corner handle grows the table one cell toward it, keeping the opposite edges still', () => {
+  assert.deepEqual(grownToward(at(2, 2), { dx: 1, dy: 1 }), at(2, 2, 4, 4))
+  assert.deepEqual(grownToward(at(2, 2), { dx: -1, dy: -1 }), at(1, 1, 4, 4))
+  assert.deepEqual(grownToward(at(2, 2), { dx: 1, dy: -1 }), at(2, 1, 4, 4))
+  assert.deepEqual(grownToward(at(2, 2), { dx: -1, dy: 1 }), at(1, 2, 4, 4))
+  // En el tamaño máximo no crece, ni se corre.
+  assert.deepEqual(grownToward(at(2, 2, 12, 12), { dx: -1, dy: -1 }), at(2, 2, 12, 12))
 })

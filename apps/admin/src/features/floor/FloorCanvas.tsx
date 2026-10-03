@@ -1,16 +1,19 @@
 import { useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
-import { FLOOR_CELL, clampSpan, clampToFloor, tablePlacement, type Placed } from '@restaurant-platform/shared'
+import { FLOOR_CELL, tablePlacement, type Placed } from '@restaurant-platform/shared'
 import { Minus, Plus } from 'lucide-react'
 import { Button, IconButton, floorTile } from '@restaurant-platform/ui'
 import type { FloorTable } from '@/queries/floor'
 import { ZOOM, type Camera } from './camera'
 import { FloorTableTile } from './FloorTableTile'
-import { fitsAt, followPointer, type Grip } from './placement'
+import { changesTo, fitsAt, followPointer, grownToward, nudged, type Grip, type Step } from './placement'
 import { cardClass } from './styles'
 import type { FloorCamera } from './useFloorCamera'
 
-/** Una mesa agarrada: de dónde, dónde quedaría si se la suelta ahora y si ahí entra. */
-type Gesture = { tableId: string; grip: Grip; placed: Placed; valid: boolean }
+/**
+ * Una mesa agarrada: de dónde, dónde quedaría si se la suelta ahora, si ahí entra
+ * y si llegó a moverse (soltarla sin moverla es un toque, no un arrastre).
+ */
+type Gesture = { tableId: string; grip: Grip; placed: Placed; valid: boolean; moved: boolean }
 
 /** Lo que el plano necesita para editar. Sin esto es de solo lectura. */
 export type FloorEditing = {
@@ -37,7 +40,7 @@ type FloorCanvasProps = {
   footerStart?: ReactNode
 }
 
-const ARROW_STEPS: Record<string, { dx: number; dy: number }> = {
+const ARROW_STEPS: Record<string, Step> = {
   ArrowLeft: { dx: -1, dy: 0 },
   ArrowRight: { dx: 1, dy: 0 },
   ArrowUp: { dx: 0, dy: -1 },
@@ -77,7 +80,7 @@ export function FloorCanvas({ tables, camera, editing, toolbar, footerStart }: F
   function grab(event: ReactPointerEvent<HTMLElement>, table: FloorTable, grip: Grip) {
     event.stopPropagation()
     event.currentTarget.setPointerCapture(event.pointerId)
-    setGesture({ tableId: table.id, grip, placed: tablePlacement(table), valid: true })
+    setGesture({ tableId: table.id, grip, placed: tablePlacement(table), valid: true, moved: false })
   }
 
   /** Para moverla, se la agarra por el punto donde se apoyó el puntero. */
@@ -90,13 +93,21 @@ export function FloorCanvas({ tables, camera, editing, toolbar, footerStart }: F
   function drag(event: ReactPointerEvent<HTMLElement>, table: FloorTable) {
     if (gesture?.tableId !== table.id) return
     const placed = followPointer(tablePlacement(table), gesture.grip, camera.cellFromPointer(event))
-    setGesture({ ...gesture, placed, valid: fitsAt(table, placed, tables) })
+    setGesture({
+      ...gesture,
+      placed,
+      valid: fitsAt(table, placed, tables),
+      moved: gesture.moved || changesTo(table, placed) !== null,
+    })
   }
 
   /** Suelta la mesa y propone dónde quedó; si no cambió nada, quien edita no escribe. */
   function drop(table: FloorTable, onPlace: FloorEditing['onPlace']) {
     if (gesture?.tableId !== table.id) return
-    onPlace(table, gesture.placed)
+    const { grip, placed, moved } = gesture
+    // Tocar una manija sin arrastrarla estira la mesa una celda hacia esa esquina:
+    // agrandarla no exige arrastrar (WCAG 2.5.7).
+    onPlace(table, grip.kind === 'resize' && !moved ? grownToward(tablePlacement(table), grip.corner) : placed)
     setGesture(null)
   }
 
@@ -108,13 +119,10 @@ export function FloorCanvas({ tables, camera, editing, toolbar, footerStart }: F
     const step = ARROW_STEPS[event.key]
     if (!step) return
     event.preventDefault()
-    const { x, y, footprint } = tablePlacement(table)
-    onPlace(
-      table,
-      event.shiftKey
-        ? { x, y, footprint: { w: clampSpan(footprint.w + step.dx), h: clampSpan(footprint.h + step.dy) } }
-        : { footprint, ...clampToFloor(x + step.dx, y + step.dy) },
-    )
+    const next = nudged(tablePlacement(table), step, event.shiftKey ? 'stretch' : 'move')
+    onPlace(table, next)
+    // La mesa sigue con el foco: que no se vaya de la vista (WCAG 2.4.11).
+    camera.reveal(next)
   }
 
   return (
@@ -158,6 +166,7 @@ export function FloorCanvas({ tables, camera, editing, toolbar, footerStart }: F
                 key={table.id}
                 table={table}
                 tile={floorTile(table, placementOf(table))}
+                zoom={camera.zoom}
                 active={active}
                 invalid={active && !gesture.valid}
                 editing={
@@ -172,6 +181,7 @@ export function FloorCanvas({ tables, camera, editing, toolbar, footerStart }: F
                     onDrop: () => drop(table, editing.onPlace),
                     onCancel: () => setGesture(null),
                     onNudge: (event) => nudge(event, table, editing.onPlace),
+                    onKeyboardFocus: () => camera.reveal(tablePlacement(table)),
                   }
                 }
               />

@@ -79,3 +79,38 @@ export function followPointer(origin: Placed, grip: Grip, pointer: { x: number; 
   const down = stretch(pointer.y, origin.y, origin.footprint.h, grip.corner.dy)
   return { x: across.start, y: down.start, footprint: { w: across.size, h: down.size } }
 }
+
+/** Un paso de una celda, el de una flecha: hacia dónde en cada eje. */
+export type Step = { dx: -1 | 0 | 1; dy: -1 | 0 | 1 }
+
+/**
+ * Qué hace un paso: correr la mesa (`move`) o estirarla (`stretch`), que mueve
+ * su borde de la derecha o el de abajo: → y ↓ la agrandan, ← y ↑ la achican.
+ * Las flechas del teclado (Mayús estira) y las del panel hacen lo mismo.
+ */
+export type NudgeKind = 'move' | 'stretch'
+
+export function nudged(placed: Placed, step: Step, kind: NudgeKind): Placed {
+  if (kind === 'move') {
+    return { footprint: placed.footprint, ...clampToFloor(placed.x + step.dx, placed.y + step.dy) }
+  }
+  return {
+    x: placed.x,
+    y: placed.y,
+    footprint: { w: clampSpan(placed.footprint.w + step.dx), h: clampSpan(placed.footprint.h + step.dy) },
+  }
+}
+
+/**
+ * La mesa una celda más grande hacia una esquina, con el borde opuesto quieto:
+ * lo que hace tocar una manija sin arrastrarla. En el tamaño máximo, no cambia.
+ */
+export function grownToward(placed: Placed, corner: Corner): Placed {
+  const w = clampSpan(placed.footprint.w + 1)
+  const h = clampSpan(placed.footprint.h + 1)
+  return {
+    x: corner.dx > 0 ? placed.x : placed.x + placed.footprint.w - w,
+    y: corner.dy > 0 ? placed.y : placed.y + placed.footprint.h - h,
+    footprint: { w, h },
+  }
+}

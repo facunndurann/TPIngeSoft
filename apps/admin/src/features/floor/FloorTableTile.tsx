@@ -4,6 +4,7 @@ import type { FloorTile } from '@restaurant-platform/ui'
 import type { FloorTable } from '@/queries/floor'
 import { CHAIR_SIZE, chairsAround } from './chairs'
 import type { Corner } from './placement'
+import { labelLayout } from './tableLabel'
 
 type PointerHandler = (event: ReactPointerEvent<HTMLElement>) => void
 
@@ -19,11 +20,15 @@ export type TileEditing = {
   onCancel: () => void
   /** Las flechas: moverla o, con Mayús, estirarla. */
   onNudge: (event: KeyboardEvent<HTMLElement>) => void
+  /** Le llegó el foco con el teclado: el plano la trae a la vista. */
+  onKeyboardFocus: () => void
 }
 
 type FloorTableTileProps = {
   table: FloorTable
   tile: FloorTile
+  /** El zoom de la cámara: el texto y las manijas lo compensan para no achicarse en pantalla. */
+  zoom: number
   /** La del gesto en curso: va arriba de las demás. */
   active: boolean
   /** Donde la lleva el gesto pisaría a otra: se pinta de rojo. */
@@ -39,8 +44,11 @@ const CORNERS: readonly (Corner & { cursor: string })[] = [
   { dx: 1, dy: 1, cursor: 'cursor-se-resize' },
 ]
 
-/** Del borde de la mesa al centro de su manija: sobre el contorno de la selección. */
-const HANDLE_REACH = 7
+/** Lo mínimo que se puede tocar con el puntero, en píxeles de pantalla (WCAG 2.5.8). */
+const MIN_TARGET = 24
+
+/** El cuadradito que se ve en cada esquina, en píxeles del plano (`h-3.5`). */
+const HANDLE_SIZE = 14
 
 const tableBaseClass =
   'absolute flex flex-col items-center justify-center overflow-hidden border-2 text-center transition-colors'
@@ -50,10 +58,12 @@ const tableBaseClass =
  * se estira desde sus manijas y se mueve con las flechas; en la vista, un dibujo
  * de solo lectura.
  */
-export function FloorTableTile({ table, tile, active, invalid, editing }: FloorTableTileProps) {
+export function FloorTableTile({ table, tile, zoom, active, invalid, editing }: FloorTableTileProps) {
   const selected = editing?.selected ?? false
   const muted = !table.is_active || !table.is_visible
   const look = tableLook({ invalid, selected, muted })
+  // El área que se toca de cada manija: nunca menos de 24 px en pantalla, haya el zoom que haya.
+  const handleHit = Math.max(HANDLE_SIZE, MIN_TARGET / zoom)
 
   return (
     <>
@@ -76,39 +86,52 @@ export function FloorTableTile({ table, tile, active, invalid, editing }: FloorT
             onPointerUp={editing.onDrop}
             onPointerCancel={editing.onCancel}
             onKeyDown={editing.onNudge}
+            onFocus={(event) => {
+              // Con el teclado, la mesa que recibe el foco se trae a la vista (WCAG
+              // 2.4.11); con el mouse o el dedo ya se ve: se la acaba de tocar.
+              if (event.currentTarget.matches(':focus-visible')) editing.onKeyboardFocus()
+            }}
             // Editando, el toque que empieza sobre una mesa es para arrastrarla
             // (`touch-none`); el que empieza en el piso vacío desplaza el plano.
             className={`${tableBaseClass} cursor-grab touch-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none active:cursor-grabbing ${tile.shapeClass} ${look.table}`}
             style={{ ...tile.box, zIndex: active ? 10 : 1 }}
             aria-label={`${table.label}, ${table.seats} lugares${muted ? ', fuera de uso' : ''}. Flechas para mover, Mayús y flechas para cambiar el tamaño, Suprimir para eliminar.`}
           >
-            <TableLabel table={table} tile={tile} muted={muted} />
+            <TableLabel table={table} tile={tile} zoom={zoom} muted={muted} />
           </button>
 
           {/* Manijas de tamaño: solo en la mesa elegida, para no ensuciar el plano.
-              Son un atajo para el mouse y el dedo, sin rol ni foco: el tamaño con
-              teclado se cambia con Mayús y las flechas. */}
+              Son un atajo para el mouse y el dedo, sin rol ni foco: con teclado se
+              estira con Mayús y las flechas, y con un toque, desde el panel. El área
+              que se toca va de la esquina hacia afuera, para no tapar la mesa; el
+              cuadradito que se ve queda pegado a la esquina. */}
           {selected &&
             CORNERS.map((corner) => (
               <span
                 key={corner.cursor}
                 aria-hidden="true"
-                className={`absolute h-3.5 w-3.5 touch-none rounded-sm border-2 border-primary bg-white ${corner.cursor}`}
+                className={`absolute flex touch-none ${corner.dx > 0 ? 'justify-start' : 'justify-end'} ${
+                  corner.dy > 0 ? 'items-start' : 'items-end'
+                } ${corner.cursor}`}
                 onPointerDown={(event) => editing.onGrabCorner(event, corner)}
                 onPointerMove={editing.onDrag}
                 onPointerUp={editing.onDrop}
                 onPointerCancel={editing.onCancel}
                 style={{
-                  left: tile.box.left + (corner.dx > 0 ? tile.box.width : 0) + corner.dx * HANDLE_REACH - 7,
-                  top: tile.box.top + (corner.dy > 0 ? tile.box.height : 0) + corner.dy * HANDLE_REACH - 7,
+                  left: corner.dx > 0 ? tile.box.left + tile.box.width : tile.box.left - handleHit,
+                  top: corner.dy > 0 ? tile.box.top + tile.box.height : tile.box.top - handleHit,
+                  width: handleHit,
+                  height: handleHit,
                   zIndex: active ? 11 : 2,
                 }}
-              />
+              >
+                <span className="h-3.5 w-3.5 rounded-sm border-2 border-primary bg-white" />
+              </span>
             ))}
         </>
       ) : (
         <div className={`${tableBaseClass} ${tile.shapeClass} ${look.table}`} style={{ ...tile.box, zIndex: 1 }}>
-          <TableLabel table={table} tile={tile} muted={muted} />
+          <TableLabel table={table} tile={tile} zoom={zoom} muted={muted} />
         </div>
       )}
     </>
@@ -130,41 +153,57 @@ function tableLook({ invalid, selected, muted }: { invalid: boolean; selected: b
   }
 }
 
-/**
- * Nombre y lugares de la mesa, como entren: en dos renglones si hay lugar, en
- * uno si es baja y larga (una barra), y los lugares con ícono en la de una celda,
- * donde «12 lugares» no entra. Fuera de uso, el estado reemplaza a los lugares.
- */
-function TableLabel({ table, tile, muted }: { table: FloorTable; tile: FloorTile; muted: boolean }) {
-  const { w, h } = tile.footprint
+function TableLabel({ table, tile, zoom, muted }: { table: FloorTable; tile: FloorTile; zoom: number; muted: boolean }) {
   const detail = muted ? 'fuera de uso' : `${table.seats} lugares`
-  const name = <span className="px-1 text-sm leading-tight font-bold">{table.label}</span>
-
-  if (w >= 2 && h >= 2)
-    return (
-      <>
-        {name}
-        <span className="text-xs leading-tight">{detail}</span>
-      </>
-    )
-  if (w >= 3)
-    return (
-      <span className="flex items-baseline gap-2">
-        {name}
-        <span className="text-xs leading-tight">{detail}</span>
-      </span>
-    )
-  return (
-    <>
-      {name}
-      {!muted && (
-        <span className="inline-flex items-center gap-0.5 text-xs leading-tight">
-          <Users size={12} aria-hidden="true" />
-          {table.seats}
-        </span>
-      )}
-    </>
+  const layout = labelLayout(tile.box, zoom, {
+    name: table.label,
+    detail,
+    compact: muted ? null : String(table.seats),
+  })
+  const detailStyle = { fontSize: layout.detailSize }
+  const name = (
+    <span
+      className={`max-w-full min-w-0 px-1 leading-tight font-bold ${
+        layout.nameLines === 2 ? 'line-clamp-2 break-words' : 'truncate'
+      }`}
+      style={{ fontSize: layout.nameSize }}
+    >
+      {table.label}
+    </span>
   )
+
+  switch (layout.detail) {
+    case 'below':
+      return (
+        <>
+          {name}
+          <span className="leading-tight" style={detailStyle}>
+            {detail}
+          </span>
+        </>
+      )
+    case 'beside':
+      return (
+        <span className="flex max-w-full items-baseline gap-2">
+          {name}
+          <span className="shrink-0 leading-tight" style={detailStyle}>
+            {detail}
+          </span>
+        </span>
+      )
+    case 'compact':
+      return (
+        <>
+          {name}
+          <span className="inline-flex items-center gap-0.5 leading-tight" style={detailStyle}>
+            <Users size={layout.detailSize} aria-hidden="true" />
+            {table.seats}
+          </span>
+        </>
+      )
+    case 'none':
+      return name
+  }
 }
 
 /**

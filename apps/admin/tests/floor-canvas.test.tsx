@@ -156,6 +156,38 @@ test('in view mode a table doesn’t grab the finger: dragging over it moves the
   assert.deepEqual(cameraOf(layer), { ...before, y: before.y + 30 })
 })
 
+test('tapping a corner handle without dragging grows the table one cell toward that corner', async () => {
+  const { editing, placements } = recorder(table.id)
+  const { container } = await mount(<Plan editing={editing} />)
+  const handle = (cursor: string) => container.querySelector(`span.${cursor}`)!
+
+  await pointer(handle('cursor-se-resize'), 'pointerdown')
+  await pointer(handle('cursor-se-resize'), 'pointerup')
+  await pointer(handle('cursor-nw-resize'), 'pointerdown')
+  await pointer(handle('cursor-nw-resize'), 'pointerup')
+
+  // La mesa de 2 × 2 en (0, 0): hacia abajo a la derecha crece sin moverse; hacia
+  // arriba a la izquierda, la esquina opuesta queda quieta.
+  assert.deepEqual(placements, [
+    { x: 0, y: 0, footprint: { w: 3, h: 3 } },
+    { x: -1, y: -1, footprint: { w: 3, h: 3 } },
+  ])
+})
+
+test('corner handles stay at least 24px on screen, even fully zoomed out', async () => {
+  const { editing } = recorder(table.id)
+  const { container, layer } = await mount(<Plan editing={editing} />)
+  const onScreen = () => {
+    const handle = container.querySelector<HTMLElement>('span.cursor-se-resize')!
+    return parseFloat(handle.style.width) * cameraOf(layer).zoom
+  }
+
+  assert.ok(onScreen() >= 24, `a zoom 1: ${onScreen()}px`)
+  const zoomOut = [...container.querySelectorAll('button')].find((button) => button.getAttribute('aria-label') === 'Alejar')!
+  while (!zoomOut.disabled) await act(async () => zoomOut.click())
+  assert.ok(onScreen() >= 24 - 1e-9, `al ${Math.round(cameraOf(layer).zoom * 100)} %: ${onScreen()}px`)
+})
+
 test('a table left of or above the origin is drawn there: the camera, not the floor, brings it into view', () => {
   const far = { ...table, id: 'table-far', label: 'Mesa lejos', position_x: -2, position_y: -1 } as FloorTable
   const html = renderToStaticMarkup(<Plan tables={[far]} />)

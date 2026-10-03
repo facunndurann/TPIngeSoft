@@ -1,14 +1,26 @@
 import { useId, useState, type ChangeEvent, type KeyboardEvent } from 'react'
-import { Minus, Plus, Trash2, X } from 'lucide-react'
-import { tableShapeLabels, tableShapes } from '@restaurant-platform/shared'
-import { Button, Field, IconButton, Input, Toggle } from '@restaurant-platform/ui'
+import {
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
+  Minus,
+  Plus,
+  Scaling,
+  Trash2,
+  X,
+  type LucideIcon,
+} from 'lucide-react'
+import { tablePlacement, tableShapeLabels, tableShapes, type Placed } from '@restaurant-platform/shared'
+import { Button, Field, IconButton, Input, Toggle, iconButtonClass } from '@restaurant-platform/ui'
 import type { FloorTable, TablePatch } from '@/queries/floor'
+import { changesTo, nudged, type NudgeKind, type Step } from './placement'
 import { cardClass } from './styles'
 import { TableGlyph } from './TableGlyph'
 
 /**
- * Lo que se cambia desde el panel. La ubicación y el tamaño no: se cambian en
- * el plano, arrastrando o con el teclado.
+ * Los datos de la mesa que se cambian desde el panel. La ubicación y el tamaño
+ * van aparte (`onPlace`): pasan por la misma validación que arrastrarla.
  */
 export type TableEdit = Pick<TablePatch, 'label' | 'seats' | 'shape' | 'is_active' | 'is_visible'>
 
@@ -17,6 +29,8 @@ type TableInspectorProps = {
   /** El sector donde está la mesa, o «Sin sector»: se lee debajo de su nombre. */
   sectionName: string
   onEdit: (edit: TableEdit) => void
+  /** Lleva la mesa a otro lugar o tamaño con las flechas del panel: quien edita valida y escribe. */
+  onPlace: (placed: Placed) => void
   /** Pide borrarla: la confirmación es del editor, que también la abre con Suprimir. */
   onDelete: () => void
   /** Suelta la mesa: el panel vuelve a la lista del sector. */
@@ -25,6 +39,61 @@ type TableInspectorProps = {
 }
 
 const SEATS = { min: 1, max: 40 } as const
+
+/**
+ * Las flechas del panel hacen lo mismo que las del teclado, para quien no tiene
+ * teclado ni puede arrastrar (WCAG 2.5.7). Un quinto botón cambia lo que hacen,
+ * como Mayús: mover la mesa, o estirarla desde su borde de la derecha o el de abajo.
+ */
+const NUDGES: readonly { step: Step; icon: LucideIcon; label: Record<NudgeKind, string> }[] = [
+  { step: { dx: -1, dy: 0 }, icon: ArrowLeft, label: { move: 'Mover a la izquierda', stretch: 'Achicar el ancho' } },
+  { step: { dx: 0, dy: -1 }, icon: ArrowUp, label: { move: 'Mover hacia arriba', stretch: 'Achicar el alto' } },
+  { step: { dx: 0, dy: 1 }, icon: ArrowDown, label: { move: 'Mover hacia abajo', stretch: 'Agrandar el alto' } },
+  { step: { dx: 1, dy: 0 }, icon: ArrowRight, label: { move: 'Mover a la derecha', stretch: 'Agrandar el ancho' } },
+]
+
+function NudgePad({ table, onPlace }: { table: FloorTable; onPlace: (placed: Placed) => void }) {
+  const [kind, setKind] = useState<NudgeKind>('move')
+  const labelId = useId()
+  const placed = tablePlacement(table)
+
+  return (
+    <div role="group" aria-labelledby={labelId}>
+      <span id={labelId} className="mb-1 block text-sm font-medium text-neutral-700">
+        {kind === 'move' ? 'Mover' : 'Estirar'}
+      </span>
+      <div className="flex items-center gap-2">
+        {NUDGES.map(({ step, icon: Icon, label }) => {
+          const next = nudged(placed, step, kind)
+          return (
+            <IconButton
+              key={label.move}
+              label={label[kind]}
+              size="touch"
+              shape="pill"
+              variant="secondary"
+              // Contra el borde del plano, o en el tamaño mínimo o máximo, la flecha no haría nada.
+              disabled={changesTo(table, next) === null}
+              onClick={() => onPlace(next)}
+            >
+              <Icon size={18} aria-hidden="true" />
+            </IconButton>
+          )
+        })}
+        <button
+          type="button"
+          aria-pressed={kind === 'stretch'}
+          aria-label="Estirar en lugar de mover"
+          title="Estirar en lugar de mover"
+          onClick={() => setKind(kind === 'move' ? 'stretch' : 'move')}
+          className={`ml-auto ${iconButtonClass({ size: 'touch', shape: 'pill', variant: 'secondary' })} aria-pressed:border-primary aria-pressed:bg-primary-soft aria-pressed:text-primary-ink`}
+        >
+          <Scaling size={18} aria-hidden="true" />
+        </button>
+      </div>
+    </div>
+  )
+}
 
 /**
  * Borrador de un campo del inspector. Se guarda al salir del campo o con Enter,
@@ -143,7 +212,7 @@ function NumberField({
  * Propiedades de la mesa seleccionada en el plano. El editor lo monta con
  * `key={table.id}`, así que un borrador nunca pasa de una mesa a otra.
  */
-export function TableInspector({ table, sectionName, onEdit, onDelete, onClose, busy }: TableInspectorProps) {
+export function TableInspector({ table, sectionName, onEdit, onPlace, onDelete, onClose, busy }: TableInspectorProps) {
   const label = useDraftField(
     table.label,
     (text) => text.trim() || null,
@@ -199,6 +268,8 @@ export function TableInspector({ table, sectionName, onEdit, onDelete, onClose, 
           })}
         </div>
       </fieldset>
+
+      <NudgePad table={table} onPlace={onPlace} />
 
       <div className="space-y-2">
         <Toggle

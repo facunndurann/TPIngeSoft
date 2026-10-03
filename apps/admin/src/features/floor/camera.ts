@@ -66,6 +66,33 @@ export function pinched(camera: Camera, before: readonly [Point, Point], after: 
   return panned(zoomedAround(camera, camera.zoom * factor, from), to.x - from.x, to.y - from.y)
 }
 
+/** Aire alrededor de lo que se revela, en píxeles de pantalla: que se vean también las sillas y el contorno del foco. */
+const REVEAL_MARGIN = 24
+
+/** Lo que hay que correr un eje para que [start, end] quede dentro de [0, size]; si no entra, que se vea el principio. */
+const shiftInto = (start: number, end: number, size: number) =>
+  start < 0 || end - start > size ? -start : end > size ? size - end : 0
+
+/**
+ * La cámara corrida lo justo para que `placed` se vea entero en el recuadro, con
+ * aire. Si ya se ve, la misma cámara: así quien la pide sabe que no hay nada que
+ * mover. Si no entra entero, se ve su esquina de arriba a la izquierda.
+ */
+export function revealed(camera: Camera, placed: Placed, view: ViewSize): Camera {
+  const cell = FLOOR_CELL * camera.zoom
+  const dx = shiftInto(
+    camera.x + placed.x * cell - REVEAL_MARGIN,
+    camera.x + (placed.x + placed.footprint.w) * cell + REVEAL_MARGIN,
+    view.width,
+  )
+  const dy = shiftInto(
+    camera.y + placed.y * cell - REVEAL_MARGIN,
+    camera.y + (placed.y + placed.footprint.h) * cell + REVEAL_MARGIN,
+    view.height,
+  )
+  return dx === 0 && dy === 0 ? camera : panned(camera, dx, dy)
+}
+
 /** La cámara que muestra todas las mesas, centradas en el recuadro; sin mesas, `HOME`. */
 export function framing(tables: readonly Placed[], view: ViewSize): Camera {
   const extent = floorExtent(tables)

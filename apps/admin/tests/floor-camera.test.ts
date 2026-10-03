@@ -1,7 +1,7 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import { FLOOR_CELL } from '@restaurant-platform/shared'
-import { HOME, ZOOM, cellAt, framing, pinched, zoomedAround } from '../src/features/floor/camera'
+import { HOME, ZOOM, cellAt, framing, pinched, revealed, zoomedAround } from '../src/features/floor/camera'
 
 const view = { width: 800, height: 400 }
 const center = { x: view.width / 2, y: view.height / 2 }
@@ -47,4 +47,17 @@ test('framing centers every table in the box, without blowing a small sector up'
   const huge = framing([{ x: -100, y: 0, footprint: { w: 3, h: 3 } }, { x: 100, y: 0, footprint: { w: 3, h: 3 } }], view)
   assert.equal(huge.zoom, ZOOM.min)
   near(cellAt(huge, center), { x: 1.5, y: 1.5 })
+})
+
+test('revealing a table moves the camera only as much as needed, and not at all if it already shows', () => {
+  const box = (x: number, y: number, w = 3, h = 3) => ({ x, y, footprint: { w, h } })
+  // Ya se ve entera, con aire: la misma cámara, así quien la pide sabe que no hay nada que mover.
+  assert.equal(revealed(HOME, box(2, 2), view), HOME)
+  // Se sale por la derecha: la cámara se corre justo para que entre con 24 px de aire.
+  assert.deepEqual(revealed(HOME, box(20, 0), view), { x: HOME.x - 264, y: HOME.y, zoom: 1 })
+  // Se sale por la izquierda.
+  assert.deepEqual(revealed(HOME, box(-5, 0), view), { x: HOME.x + 216, y: HOME.y, zoom: 1 })
+  // Más grande que el recuadro: se ve su esquina de arriba a la izquierda.
+  const close = { x: HOME.x, y: HOME.y, zoom: 1.5 }
+  assert.deepEqual(revealed(close, box(0, 0, 12, 12), view), { x: 24, y: 24, zoom: 1.5 })
 })

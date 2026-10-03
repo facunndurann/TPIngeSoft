@@ -134,6 +134,11 @@ function SectionEditor({
               sectionName={floor.sections.find((entry) => entry.id === selected.section_id)?.name ?? 'Sin sector'}
               busy={editor.removeTable.isPending}
               onEdit={(edit) => editor.editTable(selected, edit)}
+              onPlace={(placed) => {
+                editor.placeTable(selected, placed)
+                // Que se vea adónde fue, aunque haya salido del recuadro.
+                camera.reveal(placed)
+              }}
               onClose={() => setSelectedId(null)}
               onDelete={() => void confirmDelete(selected)}
             />

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { tablePlacement } from '@restaurant-platform/shared'
+import { tablePlacement, type Placed } from '@restaurant-platform/shared'
 import type { FloorTable } from '@/queries/floor'
-import { HOME, cellAt, framing, panned, pinched, zoomedAround, type Camera, type Point, type ViewSize } from './camera'
+import { HOME, cellAt, framing, panned, pinched, revealed, zoomedAround, type Camera, type Point, type ViewSize } from './camera'
 import { keyBelongsElsewhere } from './keys'
 
 /** Píxeles por renglón cuando la rueda no los manda en píxeles (por página, el alto del recuadro). */
@@ -185,6 +185,17 @@ export function useFloorCamera(tables: readonly FloorTable[]) {
     moveCamera((current) => zoomedAround(current, current.zoom + step, center))
   }
 
+  /**
+   * Corre la cámara lo justo para que se vea entera una mesa: la que recibe el
+   * foco con el teclado, o la que se acaba de mover con flechas (WCAG 2.4.11).
+   * Si ya se ve, no toca nada, ni apaga el encuadre automático.
+   */
+  function reveal(placed: Placed) {
+    if (!view) return
+    const next = revealed(camera, placed, view)
+    if (next !== camera) moveCamera(() => next)
+  }
+
   /** «Ajustar al salón»: vuelve a encuadrar las mesas, y a hacerlo solo cuando cambie el recuadro. */
   function fit() {
     setAutoFit(true)
@@ -202,6 +213,7 @@ export function useFloorCamera(tables: readonly FloorTable[]) {
     release,
     zoomBy,
     fit,
+    reveal,
     /** La celda que se ve en el medio del recuadro: ahí se ubica lo nuevo. */
     centerCell: () => cellAt(camera, { x: (view?.width ?? 0) / 2, y: (view?.height ?? 0) / 2 }),
     /** La celda bajo el puntero, con decimales: la usan los gestos sobre las mesas. */
