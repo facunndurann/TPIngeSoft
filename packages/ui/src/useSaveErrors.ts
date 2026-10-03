@@ -43,6 +43,16 @@ export type SaveErrors = {
 
 type SaveError = { message: string; row: string | null }
 
+type SaveErrorsOptions = {
+  /**
+   * Avisar cada error en lugar de guardarlo para dibujarlo en la página: con esto
+   * `message` y `messageFor` quedan siempre en `null`, y el error va, por ejemplo,
+   * a un aviso flotante que no corre nada de lugar. Conviene que sea estable
+   * (`useCallback`): las opciones que arma `saving` dependen de él.
+   */
+  notify?: (message: string) => void
+}
+
 /**
  * Un solo lugar de error por pantalla, compartido por todas sus mutaciones: es
  * el cuarteto `useState` + limpiar al empezar + `onError` + ternario
@@ -52,10 +62,11 @@ type SaveError = { message: string; row: string | null }
  * El mensaje se limpia desde `mutationFn` y no desde `onMutate` para no
  * pisarle a quien llama su propio `onMutate` ni su contexto de rollback.
  */
-export function useSaveErrors(): SaveErrors {
+export function useSaveErrors({ notify }: SaveErrorsOptions = {}): SaveErrors {
   const [error, setError] = useState<SaveError | null>(null)
   const clear = useCallback(() => setError(null), [])
-  const report = useCallback((message: string) => setError({ message, row: null }), [])
+  const publish = useCallback((next: SaveError) => (notify ? notify(next.message) : setError(next)), [notify])
+  const report = useCallback((message: string) => publish({ message, row: null }), [publish])
 
   const saving = useCallback(
     <TData, TVariables, TContext>(
@@ -70,11 +81,11 @@ export function useSaveErrors(): SaveErrors {
       },
       onError: (...args) => {
         const [thrown, variables] = args
-        setError({ message: errorMessage(thrown, fallback), row: rowOf ? rowOf(variables) : null })
+        publish({ message: errorMessage(thrown, fallback), row: rowOf ? rowOf(variables) : null })
         return options.onError?.(...args)
       },
     }),
-    [],
+    [publish],
   )
 
   return {

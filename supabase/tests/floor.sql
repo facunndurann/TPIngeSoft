@@ -115,9 +115,15 @@ begin
   if pg_temp.fails(format(
     'update public.tables set width = 9, height = 2 where id = %L', dining_table)) then
     raise exception 'A free width/height combination was rejected'; end if;
+  -- El plano no tiene bordes: a la izquierda o arriba del origen también se
+  -- puede. Solo un dato absurdo queda afuera.
+  if pg_temp.fails(format(
+    'update public.tables set position_x = -1, position_y = -6 where id = %L', dining_table)) then
+    raise exception 'A position left of or above the origin was rejected'; end if;
   if not pg_temp.fails(format(
-    'update public.tables set position_x = -1 where id = %L', dining_table)) then
-    raise exception 'Negative position accepted'; end if;
+    'update public.tables set position_x = 10001 where id = %L', dining_table)) then
+    raise exception 'Absurd position accepted'; end if;
+  update public.tables set position_x = 3, position_y = 4 where id = dining_table;
 
   -- ---------- Valores por defecto y banderas ----------
   if (select position_x from public.tables where id = dining_table) <> 3

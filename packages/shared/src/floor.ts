@@ -8,12 +8,24 @@
  * el que se editó.
  */
 
+/**
+ * El plano no tiene bordes: una mesa va donde se la deje, también en columnas o
+ * filas negativas. `cols` y `rows` son solo el área que el POS dibuja como
+ * mínimo; si las mesas pasan de ahí, el plano se agranda hasta abarcarlas.
+ */
 export const FLOOR_GRID = {
   cols: 24,
   rows: 16,
   /** Lado de celda en píxeles con zoom 1. */
   cell: 44,
 } as const
+
+/**
+ * Rango de posiciones que acepta la base (`tables_position_range`). No es un
+ * borde del plano sino un tope sano: un dato roto no manda una mesa a millones
+ * de celdas.
+ */
+export const FLOOR_BOUNDS = { min: -10000, max: 10000 } as const
 
 /** Cada mesa declara su ancho y alto; no hay tamaños predefinidos. */
 export const TABLE_SPAN = { min: 1, max: 12 } as const
@@ -36,46 +48,37 @@ export type Footprint = { w: number; h: number }
 
 export type TableSpan = { width: number; height: number }
 
-/** Lo mínimo para ubicar una mesa guardada en la grilla. */
+/** Lo mínimo para ubicar una mesa guardada en el plano. */
 export type GridTable = TableSpan & { position_x: number; position_y: number }
 
 /** Lugar que ocupa una mesa en el plano, en celdas. */
 export type Placed = { x: number; y: number; footprint: Footprint }
 
-/** Recorta un lado a algo dibujable dentro de la grilla. */
-export function clampSpan(value: number, axisLimit: number) {
-  const max = Math.min(TABLE_SPAN.max, axisLimit)
+/** Recorta un lado a un tamaño de mesa válido. */
+export function clampSpan(value: number) {
   if (!Number.isFinite(value)) return TABLE_SPAN.min
-  return Math.min(Math.max(Math.round(value), TABLE_SPAN.min), max)
+  return Math.min(Math.max(Math.round(value), TABLE_SPAN.min), TABLE_SPAN.max)
 }
 
-/** Celdas que ocupa una mesa, ya recortadas a la grilla. */
+/** Celdas que ocupa una mesa, con su tamaño recortado a uno válido. */
 export function tableFootprint(table: TableSpan): Footprint {
-  return {
-    w: clampSpan(table.width, FLOOR_GRID.cols),
-    h: clampSpan(table.height, FLOOR_GRID.rows),
-  }
+  return { w: clampSpan(table.width), h: clampSpan(table.height) }
 }
 
-/** Mantiene la mesa entera dentro de la grilla. */
-export function clampToGrid(x: number, y: number, footprint: Footprint) {
-  const maxX = Math.max(0, FLOOR_GRID.cols - footprint.w)
-  const maxY = Math.max(0, FLOOR_GRID.rows - footprint.h)
-  return {
-    x: Math.min(Math.max(Math.round(x), 0), maxX),
-    y: Math.min(Math.max(Math.round(y), 0), maxY),
-  }
+/** Una posición entera dentro del rango que acepta la base. */
+export function clampToFloor(x: number, y: number) {
+  const clamp = (value: number) =>
+    Number.isFinite(value) ? Math.min(Math.max(Math.round(value), FLOOR_BOUNDS.min), FLOOR_BOUNDS.max) : 0
+  return { x: clamp(x), y: clamp(y) }
 }
 
 /**
- * Dónde está una mesa tal como se dibuja: huella y posición recortadas a la
- * grilla. Es la única lectura de la posición guardada, así que el plano que se
- * ve, las colisiones y los huecos libres usan la misma: si la grilla se
- * achicara, una mesa vieja choca donde se la ve, no donde dice el número.
+ * Dónde está una mesa tal como se dibuja. Es la única lectura de la posición
+ * guardada, así que el plano que se ve, las colisiones y los huecos libres usan
+ * la misma: un tamaño fuera de rango choca con el tamaño con que se lo ve.
  */
 export function tablePlacement(table: GridTable): Placed {
-  const footprint = tableFootprint(table)
-  return { footprint, ...clampToGrid(table.position_x, table.position_y, footprint) }
+  return { footprint: tableFootprint(table), ...clampToFloor(table.position_x, table.position_y) }
 }
 
 /**
@@ -86,21 +89,14 @@ export function occupiedBy(tables: readonly (GridTable & { id: string })[], exce
   return tables.filter((table) => table.id !== exceptId).map(tablePlacement)
 }
 
-/**
- * Huella nueva + posición recortada. Solo esas cuatro columnas: un intent de
- * resize trae `kind` y eso no puede ir al UPDATE.
- */
-export function resizePlacement(
-  table: { position_x: number; position_y: number },
-  span: TableSpan,
-) {
-  const position = clampToGrid(table.position_x, table.position_y, tableFootprint(span))
-  return {
-    width: span.width,
-    height: span.height,
-    position_x: position.x,
-    position_y: position.y,
-  }
+/** La caja, en celdas, que abarca a todas las mesas; `null` si no hay ninguna. */
+export function floorExtent(placed: readonly Placed[]) {
+  if (placed.length === 0) return null
+  const left = Math.min(...placed.map((table) => table.x))
+  const top = Math.min(...placed.map((table) => table.y))
+  const right = Math.max(...placed.map((table) => table.x + table.footprint.w))
+  const bottom = Math.max(...placed.map((table) => table.y + table.footprint.h))
+  return { x: left, y: top, w: right - left, h: bottom - top }
 }
 
 function overlaps(a: Placed, b: Placed) {
@@ -117,16 +113,28 @@ export function collidesWithAny(candidate: Placed, others: Placed[]) {
 }
 
 /**
- * Primer hueco libre recorriendo la grilla, para ubicar una mesa nueva sin que
- * el administrador tenga que buscar espacio a mano.
+ * El hueco libre más cercano a `near` (la esquina que se querría), para ubicar
+ * una mesa nueva sin que el administrador tenga que buscar espacio a mano. Se
+ * busca en anillos cada vez más grandes alrededor de ese punto; como las mesas
+ * son finitas y el plano no, siempre hay uno.
  */
-export function findFreeCell(footprint: Footprint, taken: Placed[]) {
-  for (let y = 0; y <= FLOOR_GRID.rows - footprint.h; y += 1) {
-    for (let x = 0; x <= FLOOR_GRID.cols - footprint.w; x += 1) {
-      if (!collidesWithAny({ x, y, footprint }, taken)) return { x, y }
+export function findFreeCell(footprint: Footprint, taken: Placed[], near = { x: 0, y: 0 }) {
+  const start = clampToFloor(near.x, near.y)
+  // Más allá de las mesas que hay, todo está libre: ese es el anillo más lejano posible.
+  const reach =
+    taken.reduce((far, table) => Math.max(far, Math.abs(table.x - start.x), Math.abs(table.y - start.y)), 0) +
+    Math.max(footprint.w, footprint.h) +
+    TABLE_SPAN.max
+  for (let ring = 0; ring <= reach; ring += 1) {
+    for (let dy = -ring; dy <= ring; dy += 1) {
+      for (let dx = -ring; dx <= ring; dx += 1) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue
+        const spot = clampToFloor(start.x + dx, start.y + dy)
+        if (!collidesWithAny({ ...spot, footprint }, taken)) return spot
+      }
     }
   }
-  return { x: 0, y: 0 }
+  return start
 }
 
 /**

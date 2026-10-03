@@ -28,17 +28,23 @@ function render(editable: boolean) {
 /** Las clases del elemento cuya apertura cumple `pattern`. */
 const classOf = (html: string, pattern: RegExp) => /class="([^"]*)"/.exec(pattern.exec(html)?.[0] ?? '')?.[1] ?? ''
 
-test('editing, a finger that starts on a table drags it and one that starts on the empty grid pans the floor', () => {
+test('the floor owns every touch gesture: one finger moves it, two pinch it', () => {
+  // Sin bordes no hay scroll nativo que desplace: el recuadro toma los toques y
+  // los traduce a la cámara, en los dos modos.
+  for (const editable of [true, false]) {
+    assert.match(classOf(render(editable), /<div data-floor-viewport="true" class="[^"]*"/), /\btouch-none\b/)
+  }
+})
+
+test('editing, a finger that starts on a table or a handle drags it instead of the floor', () => {
   const html = render(true)
 
-  // La superficie deja desplazar: con `touch-none` ahí, en una tablet no se llegaba
-  // a la parte del plano que no entra en pantalla.
-  assert.match(classOf(html, /<div class="relative [^"]*"/), /\btouch-manipulation\b/)
-  // La mesa y su manija de tamaño se quedan con el gesto para arrastrarlas.
+  // Lo que lleva `data-floor-item` no arrastra el plano: la mesa y sus manijas.
+  assert.match(html, /<button[^>]*data-floor-item="true"[^>]*aria-label="Mesa 1,/)
   assert.match(classOf(html, /<button[^>]*aria-label="Mesa 1,[^"]*"[^>]*>/), /\btouch-none\b/)
   assert.match(classOf(html, /<span aria-hidden="true" class="[^"]*cursor-se-resize[^"]*"/), /\btouch-none\b/)
 })
 
-test('in view mode no table blocks panning', () => {
-  assert.doesNotMatch(render(false), /\btouch-none\b/)
+test('in view mode no table grabs the finger: anywhere it lands, it moves the floor', () => {
+  assert.doesNotMatch(render(false), /data-floor-item/)
 })

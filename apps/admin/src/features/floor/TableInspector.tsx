@@ -1,28 +1,25 @@
 import { useId, useState, type ChangeEvent, type KeyboardEvent } from 'react'
-import { Trash2 } from 'lucide-react'
-import { FLOOR_GRID, TABLE_SPAN, tablePlacement, tableShapeLabels, tableShapes } from '@restaurant-platform/shared'
-import { Button, Field, Input, Select, Toggle, useConfirm } from '@restaurant-platform/ui'
+import { Minus, Plus, Trash2, X } from 'lucide-react'
+import { tableShapeLabels, tableShapes } from '@restaurant-platform/shared'
+import { Field, Input, Toggle } from '@restaurant-platform/ui'
 import type { FloorSection, FloorTable, TablePatch } from '@/queries/floor'
-import { OVERLAP_MESSAGE, overlapsAt } from './placement'
+import { cardClass, pillClass, roundIconClass } from './styles'
+import { TableGlyph } from './TableGlyph'
 
 /**
- * Lo que el inspector le pide al plano. Son tres operaciones con semántica
- * propia — redimensionar recalcula la posición, mudar de sector busca un hueco
- * libre, editar es un update plano — así que viajan discriminadas en vez de
- * como un `Partial<>` suelto cuyas claves haya que olfatear del otro lado.
+ * Lo que se cambia desde el panel. La ubicación y el tamaño no: se cambian en
+ * el plano, arrastrando o con el teclado.
  */
-export type TableIntent =
-  | { kind: 'edit'; patch: Omit<TablePatch, 'section_id' | 'width' | 'height'> }
-  | { kind: 'resize'; width: number; height: number }
-  | { kind: 'move-to-section'; sectionId: string | null }
+export type TableEdit = Pick<TablePatch, 'label' | 'seats' | 'shape' | 'is_active' | 'is_visible'>
 
 type TableInspectorProps = {
   table: FloorTable
-  /** Las mesas del sector de esta mesa: una posición que las pise no se guarda. */
-  neighbors: FloorTable[]
   sections: FloorSection[]
-  onIntent: (intent: TableIntent) => void
+  onEdit: (edit: TableEdit) => void
+  /** Pide borrarla: la confirmación es del editor, que también la abre con Suprimir. */
   onDelete: () => void
+  /** Suelta la mesa: el panel vuelve a la lista del sector. */
+  onClose: () => void
   busy: boolean
 }
 
@@ -108,26 +105,32 @@ function NumberField({
       <label htmlFor={id} className="mb-1 block text-sm font-medium text-neutral-700">
         {label}
       </label>
-      <div className="flex items-center gap-1">
-        <Button
+      <div className="flex items-center gap-2">
+        <button
           type="button"
-          variant="secondary"
+          className={roundIconClass}
           aria-label={`${label}: restar uno`}
           disabled={value <= min}
           onClick={() => onCommit(value - 1)}
         >
-          −
-        </Button>
-        <Input id={id} inputMode="numeric" className="min-w-0 text-center" {...field} />
-        <Button
+          <Minus size={18} aria-hidden="true" />
+        </button>
+        <Input
+          id={id}
+          size="touch"
+          inputMode="numeric"
+          className="w-18 min-w-0 text-center text-base font-bold tabular-nums"
+          {...field}
+        />
+        <button
           type="button"
-          variant="secondary"
+          className={roundIconClass}
           aria-label={`${label}: sumar uno`}
           disabled={value >= max}
           onClick={() => onCommit(value + 1)}
         >
-          +
-        </Button>
+          <Plus size={18} aria-hidden="true" />
+        </button>
       </div>
     </div>
   )
@@ -137,147 +140,74 @@ function NumberField({
  * Propiedades de la mesa seleccionada en el plano. El editor lo monta con
  * `key={table.id}`, así que un borrador nunca pasa de una mesa a otra.
  */
-export function TableInspector({ table, neighbors, sections, onIntent, onDelete, busy }: TableInspectorProps) {
-  const { confirm, dialog } = useConfirm()
+export function TableInspector({ table, sections, onEdit, onDelete, onClose, busy }: TableInspectorProps) {
   const label = useDraftField(
     table.label,
     (text) => text.trim() || null,
-    (next) => onIntent({ kind: 'edit', patch: { label: next } }),
+    (next) => onEdit({ label: next }),
   )
-
-  // Donde se dibuja la mesa: la posición guardada, recortada a la grilla.
-  const placed = tablePlacement(table)
-  const here = `${placed.x},${placed.y}`
-  // Desde dónde se pidió la última posición rechazada. El aviso vale mientras la
-  // mesa siga ahí: moverla desde el plano lo descarta, sin un efecto que lo limpie.
-  const [rejectedFrom, setRejectedFrom] = useState<string | null>(null)
-  const positionError = rejectedFrom === here ? OVERLAP_MESSAGE : null
-
-  /** Mueve la mesa sin arrastrarla, con la misma regla que el plano. */
-  function moveTo(x: number, y: number) {
-    if (overlapsAt(table, x, y, neighbors)) {
-      setRejectedFrom(here)
-      return false
-    }
-    setRejectedFrom(null)
-    onIntent({ kind: 'edit', patch: { position_x: x, position_y: y } })
-    return true
-  }
+  const sectionName = sections.find((section) => section.id === table.section_id)?.name ?? 'Sin sector'
 
   return (
-    <aside className="space-y-4 rounded-xl border border-neutral-200 bg-white p-4">
-      <div>
-        <h2 className="text-sm font-semibold text-neutral-900">Mesa seleccionada</h2>
-        <p className="text-xs text-muted">
-          Movela arrastrándola en el plano, con las flechas del teclado o desde acá.
-        </p>
+    <aside aria-label="Mesa seleccionada" className={`flex min-h-0 flex-col gap-5 overflow-y-auto p-6 ${cardClass}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-lg leading-tight font-bold break-words text-neutral-900">{table.label}</h2>
+          <p className="text-sm text-muted">{sectionName}</p>
+        </div>
+        <button type="button" className={roundIconClass} aria-label="Cerrar" title="Cerrar" onClick={onClose}>
+          <X size={18} aria-hidden="true" />
+        </button>
       </div>
 
-      <Field label="Identificador">
-        <Input {...label} />
+      <Field label="Nombre">
+        <Input size="touch" {...label} />
       </Field>
 
-      <Field label="Sector">
-        <Select
-          value={table.section_id ?? ''}
-          onChange={(event) => onIntent({ kind: 'move-to-section', sectionId: event.target.value || null })}
-        >
-          <option value="">Sin sector</option>
-          {sections.map((section) => (
-            <option key={section.id} value={section.id}>
-              {section.name}
-            </option>
-          ))}
-        </Select>
-      </Field>
+      <NumberField
+        label="Lugares"
+        value={table.seats}
+        min={SEATS.min}
+        max={SEATS.max}
+        onCommit={(seats) => onEdit({ seats })}
+      />
 
-      <div className="grid grid-cols-2 gap-3">
-        <NumberField
-          label="Capacidad"
-          value={table.seats}
-          min={SEATS.min}
-          max={SEATS.max}
-          onCommit={(seats) => onIntent({ kind: 'edit', patch: { seats } })}
-        />
-        <Field label="Forma">
-          <Select value={table.shape} onChange={(event) => onIntent({ kind: 'edit', patch: { shape: event.target.value } })}>
-            {tableShapes.map((shape) => (
-              <option key={shape} value={shape}>
+      <fieldset className="min-w-0">
+        <legend className="mb-1 text-sm font-medium text-neutral-700">Forma</legend>
+        <div className="grid grid-cols-2 gap-2">
+          {tableShapes.map((shape) => {
+            // Una forma vieja que no es redonda se dibuja rectangular: se marca esa.
+            const pressed = (shape === 'round') === (table.shape === 'round')
+            return (
+              <button
+                key={shape}
+                type="button"
+                aria-pressed={pressed}
+                onClick={() => onEdit({ shape })}
+                className={`flex min-h-19 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 p-2.5 text-sm transition-colors ${
+                  pressed
+                    ? 'border-primary bg-primary-soft font-semibold text-primary-ink'
+                    : 'border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50'
+                }`}
+              >
+                <TableGlyph round={shape === 'round'} width={shape === 'round' ? 1 : 2} height={1} />
                 {tableShapeLabels[shape]}
-              </option>
-            ))}
-          </Select>
-        </Field>
-      </div>
-
-      {/* Moverla con un solo toque, sin arrastrar (WCAG 2.5.7). Una mesa sin sector
-          no está en ningún plano, así que no tiene posición que editar. Se cuenta
-          desde 1, como se leen filas y columnas; se guarda desde 0. */}
-      {table.section_id && (
-        <div>
-          <div className="grid grid-cols-2 gap-3">
-            <NumberField
-              label="Columna"
-              value={placed.x + 1}
-              min={1}
-              max={FLOOR_GRID.cols - placed.footprint.w + 1}
-              onCommit={(column) => moveTo(column - 1, placed.y)}
-            />
-            <NumberField
-              label="Fila"
-              value={placed.y + 1}
-              min={1}
-              max={FLOOR_GRID.rows - placed.footprint.h + 1}
-              onCommit={(row) => moveTo(placed.x, row - 1)}
-            />
-          </div>
-          {positionError ? (
-            <p role="alert" className="mt-1 text-xs text-red-700">
-              {positionError}
-            </p>
-          ) : (
-            <p className="mt-1 text-xs text-muted">
-              Contadas desde la esquina de arriba a la izquierda.
-            </p>
-          )}
+              </button>
+            )
+          })}
         </div>
-      )}
+      </fieldset>
 
-      <div>
-        {/* Un lado nuevo siempre viaja con el otro: el plano necesita la huella
-            entera para reubicar la mesa si el cambio la saca de la grilla. */}
-        <div className="grid grid-cols-2 gap-3">
-          <NumberField
-            label="Ancho (celdas)"
-            value={table.width}
-            min={TABLE_SPAN.min}
-            max={TABLE_SPAN.max}
-            onCommit={(width) => onIntent({ kind: 'resize', width, height: table.height })}
-          />
-          <NumberField
-            label="Alto (celdas)"
-            value={table.height}
-            min={TABLE_SPAN.min}
-            max={TABLE_SPAN.max}
-            onCommit={(height) => onIntent({ kind: 'resize', width: table.width, height })}
-          />
-        </div>
-        <p className="mt-1 text-xs text-muted">
-          Cada celda del plano equivale a un lugar de paso. Ancho distinto de alto da una mesa
-          alargada.
-        </p>
-      </div>
-
-      <div className="space-y-2 border-t border-neutral-200 pt-3">
-        <Toggle
-          checked={table.is_visible}
-          onChange={(is_visible) => onIntent({ kind: 'edit', patch: { is_visible } })}
-          label="Visible en el plano operativo"
-        />
+      <div className="space-y-2">
         <Toggle
           checked={table.is_active}
-          onChange={(is_active) => onIntent({ kind: 'edit', patch: { is_active } })}
-          label="En servicio (el QR abre sesión)"
+          onChange={(is_active) => onEdit({ is_active })}
+          label="En uso (el QR abre sesión)"
+        />
+        <Toggle
+          checked={table.is_visible}
+          onChange={(is_visible) => onEdit({ is_visible })}
+          label="Visible en el plano del POS"
         />
         {(!table.is_visible || !table.is_active) && (
           <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
@@ -286,23 +216,17 @@ export function TableInspector({ table, neighbors, sections, onIntent, onDelete,
         )}
       </div>
 
-      <Button
-        variant="danger"
-        className="w-full"
-        disabled={busy}
-        onClick={async () => {
-          const confirmed = await confirm({
-            title: `¿Eliminar "${table.label}"?`,
-            message: 'Se pierde su QR: el que está impreso en la mesa deja de funcionar.',
-            confirmLabel: 'Eliminar mesa',
-          })
-          if (confirmed) onDelete()
-        }}
-      >
-        <Trash2 size={15} />
-        Eliminar mesa
-      </Button>
-      {dialog}
+      <div className="border-t border-neutral-200 pt-4">
+        <button
+          type="button"
+          className={pillClass('danger')}
+          disabled={busy}
+          onClick={onDelete}
+        >
+          <Trash2 size={16} aria-hidden="true" />
+          Eliminar mesa
+        </button>
+      </div>
     </aside>
   )
 }

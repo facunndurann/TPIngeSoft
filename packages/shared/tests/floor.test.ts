@@ -1,50 +1,49 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import {
-  FLOOR_GRID,
+  FLOOR_BOUNDS,
   TABLE_SPAN,
   clampSpan,
-  clampToGrid,
+  clampToFloor,
   collidesWithAny,
   findFreeCell,
+  floorExtent,
   isOperable,
   occupiedBy,
-  resizePlacement,
   tableFootprint,
   tablePlacement,
   tableShapes,
 } from '../src/floor.ts'
 import { arrayValues, definitionOf } from './schema-snapshot.ts'
 
-const lastColumn = FLOOR_GRID.cols - 3
-
-test('tablePlacement lee la mesa como se dibuja: recortada a la grilla', () => {
-  // Guardada más allá del borde, como quedaría si la grilla se achicara.
-  const placed = tablePlacement({ position_x: 30, position_y: 2, width: 3, height: 3 })
-  assert.deepEqual(placed, { x: lastColumn, y: 2, footprint: { w: 3, h: 3 } })
+test('the floor has no edges: a table stays wherever it was put, even left of or above the origin', () => {
+  assert.deepEqual(tablePlacement({ position_x: 30, position_y: 2, width: 3, height: 3 }), {
+    x: 30,
+    y: 2,
+    footprint: { w: 3, h: 3 },
+  })
+  assert.deepEqual(tablePlacement({ position_x: -7, position_y: -40, width: 2, height: 1 }), {
+    x: -7,
+    y: -40,
+    footprint: { w: 2, h: 1 },
+  })
+  // Solo el rango sano de la base pone un tope, y se redondea a celdas enteras.
+  assert.deepEqual(clampToFloor(4.4, -6.6), { x: 4, y: -7 })
+  assert.deepEqual(clampToFloor(1e9, -1e9), { x: FLOOR_BOUNDS.max, y: FLOOR_BOUNDS.min })
+  assert.deepEqual(clampToFloor(Number.NaN, 2), { x: 0, y: 2 })
 })
 
-test('occupiedBy choca donde se ve la mesa y no cuenta a la que se mueve', () => {
+test('occupiedBy no cuenta a la mesa que se mueve', () => {
   const tables = [
-    { id: 'fuera', position_x: 30, position_y: 0, width: 3, height: 3 },
+    { id: 'lejos', position_x: 30, position_y: -5, width: 3, height: 3 },
     { id: 'movida', position_x: 0, position_y: 0, width: 3, height: 3 },
   ]
   const taken = occupiedBy(tables, 'movida')
-  assert.deepEqual(taken, [{ x: lastColumn, y: 0, footprint: { w: 3, h: 3 } }])
-  // Con la posición guardada (x = 30) este lugar parecía libre, aunque ahí se ve la mesa.
-  assert.equal(collidesWithAny({ x: lastColumn, y: 0, footprint: { w: 3, h: 3 } }, taken), true)
+  assert.deepEqual(taken, [{ x: 30, y: -5, footprint: { w: 3, h: 3 } }])
+  assert.equal(collidesWithAny({ x: 31, y: -4, footprint: { w: 3, h: 3 } }, taken), true)
 })
 
-test('resizePlacement solo manda columnas de la fila, aunque el intent traiga kind', () => {
-  const intent = { kind: 'resize' as const, width: 5, height: 2 }
-  const patch = resizePlacement({ position_x: 0, position_y: 0 }, intent)
-  assert.deepEqual(Object.keys(patch).sort(), ['height', 'position_x', 'position_y', 'width'])
-  assert.equal(patch.width, 5)
-  assert.equal(patch.height, 2)
-  assert.equal('kind' in patch, false)
-})
-
-test('table sizes are free but always drawable inside the grid', () => {
+test('table sizes are free but always valid', () => {
   assert.deepEqual(tableFootprint({ width: 5, height: 2 }), { w: 5, h: 2 })
   assert.deepEqual(tableFootprint({ width: 1, height: 1 }), { w: 1, h: 1 })
 
@@ -57,17 +56,27 @@ test('table sizes are free but always drawable inside the grid', () => {
     w: TABLE_SPAN.max,
     h: TABLE_SPAN.max,
   })
-  assert.equal(clampSpan(3.6, FLOOR_GRID.cols), 4)
-  // El límite del eje manda sobre el tope general.
-  assert.equal(clampSpan(99, 5), 5)
+  assert.equal(clampSpan(3.6), 4)
+})
 
-  const big = tableFootprint({ width: 5, height: 4 })
-  assert.deepEqual(clampToGrid(-5, -5, big), { x: 0, y: 0 })
-  assert.deepEqual(clampToGrid(999, 999, big), {
-    x: FLOOR_GRID.cols - big.w,
-    y: FLOOR_GRID.rows - big.h,
-  })
-  assert.deepEqual(clampToGrid(4.4, 6.6, big), { x: 4, y: 7 })
+test('floorExtent is the box around every table, wherever they are', () => {
+  assert.equal(floorExtent([]), null)
+  const extent = floorExtent([
+    { x: -4, y: 2, footprint: { w: 3, h: 3 } },
+    { x: 10, y: -1, footprint: { w: 2, h: 1 } },
+  ])
+  assert.deepEqual(extent, { x: -4, y: -1, w: 16, h: 6 })
+})
+
+test('a new table goes to the free spot closest to where it was asked for', () => {
+  const footprint = tableFootprint({ width: 3, height: 3 })
+  // Libre, va justo ahí, aunque sea lejos del origen.
+  assert.deepEqual(findFreeCell(footprint, [], { x: -20, y: 40 }), { x: -20, y: 40 })
+  // Ocupado, al hueco más cercano: un anillo de distancia, no el otro extremo del plano.
+  const taken = [{ x: 0, y: 0, footprint }]
+  const spot = findFreeCell(footprint, taken, { x: 1, y: 1 })
+  assert.equal(collidesWithAny({ ...spot, footprint }, taken), false)
+  assert.ok(Math.max(Math.abs(spot.x - 1), Math.abs(spot.y - 1)) <= 2)
 })
 
 test('tables collide when they overlap and fit when they only touch', () => {
@@ -102,12 +111,22 @@ test('a hidden table, one out of service, or one in a closed section is never op
   assert.equal(isOperable({ is_active: true, is_visible: true }, null), true)
 })
 
-test('the database accepts exactly the shapes the floor editor offers, and every size it allows', () => {
+test('the database accepts exactly the shapes the floor editor offers, every size it allows and the same positions', () => {
   const tables = definitionOf('TABLE', 'tables')
 
   const shapes = tables.match(/CONSTRAINT "tables_shape_valid" CHECK (.*)$/m)
   assert.ok(shapes, 'tables tiene que limitar las formas')
   assert.deepEqual(arrayValues(shapes[1]).sort(), [...tableShapes].sort())
+
+  // El rango de posiciones de la base es el mismo que usa el plano: ni una mesa
+  // que el editor deja en un lugar que la base rechaza, ni al revés.
+  const positions = tables.match(/CONSTRAINT "tables_position_range" CHECK (.*)$/m)
+  assert.ok(positions, 'tables tiene que acotar las posiciones')
+  for (const axis of ['position_x', 'position_y']) {
+    const range = positions[1].match(new RegExp(`\\("${axis}" >= '?(-?\\d+)'?(?:::integer)?\\) AND \\("${axis}" <= (-?\\d+)\\)`))
+    assert.ok(range, `tables tiene que acotar ${axis}`)
+    assert.deepEqual([Number(range[1]), Number(range[2])], [FLOOR_BOUNDS.min, FLOOR_BOUNDS.max], axis)
+  }
 
   // El tope de la base no puede quedar por debajo del que ofrece el editor, en ningún eje.
   for (const axis of ['width', 'height']) {

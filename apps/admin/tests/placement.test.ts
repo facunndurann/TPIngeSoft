@@ -1,6 +1,5 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
-import { FLOOR_GRID } from '@restaurant-platform/shared'
 import { overlapsAt } from '../src/features/floor/placement'
 
 const table = (id: string, x: number, y: number, width = 3, height = 3) => ({
@@ -25,9 +24,11 @@ test('overlapsAt choca con la huella entera de las demás, con el tamaño de la 
   assert.equal(overlapsAt(moving, 7, 2, [moving, other]), true) // la esquina de abajo a la derecha
 })
 
-test('overlapsAt mira a las demás donde se dibujan, recortadas a la grilla', () => {
+test('overlapsAt choca en cualquier parte del plano, también lejos o en celdas negativas', () => {
   const moving = table('a', 0, 0)
-  // Guardada fuera de la grilla: se dibuja pegada al borde derecho.
-  const other = table('b', 40, 0)
-  assert.equal(overlapsAt(moving, FLOOR_GRID.cols - 3, 0, [moving, other]), true)
+  // El plano no tiene bordes: una mesa lejos no se dibuja pegada a ningún borde.
+  const far = table('b', 40, -12)
+  assert.equal(overlapsAt(moving, 21, 0, [moving, far]), false)
+  assert.equal(overlapsAt(moving, 39, -13, [moving, far]), true)
+  assert.equal(overlapsAt(moving, 43, -12, [moving, far]), false) // pegada a la derecha
 })
