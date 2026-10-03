@@ -2,7 +2,7 @@ import { useId, useState, type ChangeEvent, type KeyboardEvent } from 'react'
 import { Minus, Plus, Trash2, X } from 'lucide-react'
 import { tableShapeLabels, tableShapes } from '@restaurant-platform/shared'
 import { Button, Field, IconButton, Input, Toggle } from '@restaurant-platform/ui'
-import type { FloorSection, FloorTable, TablePatch } from '@/queries/floor'
+import type { FloorTable, TablePatch } from '@/queries/floor'
 import { cardClass } from './styles'
 import { TableGlyph } from './TableGlyph'
 
@@ -14,7 +14,8 @@ export type TableEdit = Pick<TablePatch, 'label' | 'seats' | 'shape' | 'is_activ
 
 type TableInspectorProps = {
   table: FloorTable
-  sections: FloorSection[]
+  /** El sector donde está la mesa, o «Sin sector»: se lee debajo de su nombre. */
+  sectionName: string
   onEdit: (edit: TableEdit) => void
   /** Pide borrarla: la confirmación es del editor, que también la abre con Suprimir. */
   onDelete: () => void
@@ -142,13 +143,12 @@ function NumberField({
  * Propiedades de la mesa seleccionada en el plano. El editor lo monta con
  * `key={table.id}`, así que un borrador nunca pasa de una mesa a otra.
  */
-export function TableInspector({ table, sections, onEdit, onDelete, onClose, busy }: TableInspectorProps) {
+export function TableInspector({ table, sectionName, onEdit, onDelete, onClose, busy }: TableInspectorProps) {
   const label = useDraftField(
     table.label,
     (text) => text.trim() || null,
     (next) => onEdit({ label: next }),
   )
-  const sectionName = sections.find((section) => section.id === table.section_id)?.name ?? 'Sin sector'
 
   return (
     <aside aria-label="Mesa seleccionada" className={`flex min-h-0 flex-col gap-5 overflow-y-auto p-6 ${cardClass}`}>

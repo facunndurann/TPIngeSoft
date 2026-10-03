@@ -16,6 +16,7 @@ import {
   deleteSection,
   deleteTable,
   floorKey,
+  tablePatchColumns,
   tablesQuery,
   updateSection,
   updateTable,
@@ -57,11 +58,16 @@ type TableWrite = { id: string; patch: TablePatch }
 
 export type FloorEditorActions = ReturnType<typeof useFloorEditor>
 
-/** Los valores actuales de la mesa en las columnas que toca `patch`. */
+/** Las propiedades `keys` de `source`, con sus tipos. */
+function pick<T, K extends keyof T>(source: T, keys: readonly K[]): Partial<Pick<T, K>> {
+  const picked: Partial<Pick<T, K>> = {}
+  for (const key of keys) picked[key] = source[key]
+  return picked
+}
+
+/** Los valores actuales de la mesa en las columnas que toca `patch`: lo que deshacer vuelve a escribir. */
 function snapshot(table: FloorTable, patch: TablePatch): TablePatch {
-  return Object.fromEntries(
-    Object.keys(patch).map((key) => [key, table[key as keyof TablePatch]]),
-  ) as TablePatch
+  return pick(table, tablePatchColumns.filter((column) => column in patch))
 }
 
 /**

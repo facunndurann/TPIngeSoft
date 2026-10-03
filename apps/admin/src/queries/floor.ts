@@ -58,21 +58,24 @@ export async function createTable(table: TablesInsert<'tables'>) {
   return unwrap(await supabase.from('tables').insert(table).select('id').single()).id
 }
 
-export type TablePatch = Partial<
-  Pick<
-    FloorTable,
-    | 'section_id'
-    | 'position_x'
-    | 'position_y'
-    | 'seats'
-    | 'shape'
-    | 'width'
-    | 'height'
-    | 'is_visible'
-    | 'is_active'
-    | 'label'
-  >
->
+/**
+ * Las columnas de una mesa que el panel escribe. `TablePatch` sale de esta lista,
+ * así quien necesita recorrerlas (deshacer, por ejemplo) lo hace con sus tipos.
+ */
+export const tablePatchColumns = [
+  'section_id',
+  'position_x',
+  'position_y',
+  'seats',
+  'shape',
+  'width',
+  'height',
+  'is_visible',
+  'is_active',
+  'label',
+] as const
+
+export type TablePatch = Partial<Pick<FloorTable, (typeof tablePatchColumns)[number]>>
 
 export async function updateTable(tableId: string, patch: TablePatch) {
   unwrap(await supabase.from('tables').update(patch).eq('id', tableId))

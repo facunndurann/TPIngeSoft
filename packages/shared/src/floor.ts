@@ -122,8 +122,12 @@ export function findFreeCell(footprint: Footprint, taken: Placed[], near = { x: 
     TABLE_SPAN.max
   for (let ring = 0; ring <= reach; ring += 1) {
     for (let dy = -ring; dy <= ring; dy += 1) {
-      for (let dx = -ring; dx <= ring; dx += 1) {
-        if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue
+      // Del anillo solo cuenta el borde: los renglones de arriba y de abajo se
+      // recorren enteros y, de los del medio, solo sus dos puntas. Es el mismo
+      // orden de siempre (de arriba abajo, de izquierda a derecha), sin pasar por
+      // el interior, que ya se miró en los anillos anteriores.
+      const step = Math.abs(dy) === ring ? 1 : 2 * ring
+      for (let dx = -ring; dx <= ring; dx += step) {
         const spot = clampToFloor(start.x + dx, start.y + dy)
         if (!collidesWithAny({ ...spot, footprint }, taken)) return spot
       }

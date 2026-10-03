@@ -53,8 +53,8 @@ function SectionEditor({
   editor: FloorEditorActions
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  // Se busca en todo el salón: una mesa mudada de sector desde el panel sigue
-  // abierta en él.
+  // Se busca en todo el salón y no solo en el sector: una mesa sin sector que se
+  // trae a este queda elegida antes de que su sector nuevo se vea en el plano.
   const selected = floor.tables.find((table) => table.id === selectedId) ?? null
   const tables = floor.tablesIn(section.id)
   const { confirm, dialog } = useConfirm()
@@ -131,7 +131,7 @@ function SectionEditor({
               // Otra mesa, otro panel: un borrador a medio escribir no pasa de una a otra.
               key={selected.id}
               table={selected}
-              sections={floor.sections}
+              sectionName={floor.sections.find((entry) => entry.id === selected.section_id)?.name ?? 'Sin sector'}
               busy={editor.removeTable.isPending}
               onEdit={(edit) => editor.editTable(selected, edit)}
               onClose={() => setSelectedId(null)}

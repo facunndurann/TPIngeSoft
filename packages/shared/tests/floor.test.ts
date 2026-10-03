@@ -94,6 +94,23 @@ test('tables collide when they overlap and fit when they only touch', () => {
   assert.equal(collidesWithAny({ ...free, footprint }, taken), false)
 })
 
+test('the search goes ring by ring: the top row, both ends of each middle row, then the bottom row', () => {
+  const cell = tableFootprint({ width: 1, height: 1 })
+  const at = (x: number, y: number) => ({ x, y, footprint: cell })
+  const center = { x: 0, y: 0 }
+
+  // Ocupado el lugar pedido, el primer hueco del primer anillo es su esquina de arriba a la izquierda.
+  assert.deepEqual(findFreeCell(cell, [at(0, 0)], center), { x: -1, y: -1 })
+  // Con el renglón de arriba lleno, sigue por la punta izquierda del renglón del medio…
+  const topRow = [at(0, 0), at(-1, -1), at(0, -1), at(1, -1)]
+  assert.deepEqual(findFreeCell(cell, topRow, center), { x: -1, y: 0 })
+  // …y por la derecha, sin volver a mirar el interior del anillo.
+  assert.deepEqual(findFreeCell(cell, [...topRow, at(-1, 0)], center), { x: 1, y: 0 })
+  // Lleno el primer anillo, salta al segundo, también desde su esquina de arriba a la izquierda.
+  const firstRing = [...topRow, at(-1, 0), at(1, 0), at(-1, 1), at(0, 1), at(1, 1)]
+  assert.deepEqual(findFreeCell(cell, firstRing, center), { x: -2, y: -2 })
+})
+
 test('a hidden table, one out of service, or one in a closed section is never operable', () => {
   const open = { is_active: true }
   const closed = { is_active: false }
