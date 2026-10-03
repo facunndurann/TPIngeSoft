@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  collidesWithAny,
   findFreeCell,
   occupiedBy,
   tableFootprint,
   tablePlacement,
   type Footprint,
+  type Placed,
   type TableSpan,
 } from '@restaurant-platform/shared'
 import { errorMessage, useToast } from '@restaurant-platform/ui'
@@ -25,10 +25,9 @@ import {
 } from '@/queries/floor'
 import { optimistic, patchRow } from '@/lib/optimistic'
 import { useRestaurant } from '@/restaurant/restaurant-context'
-import type { TableBox } from './FloorCanvas'
 import type { TableEdit } from './TableInspector'
 import { nextTableLabel, type Floor } from './floor'
-import { OVERLAP_MESSAGE } from './placement'
+import { OVERLAP_MESSAGE, changesTo, fitsAt } from './placement'
 
 const SAVE_FAILED = 'No pudimos guardar el cambio.'
 
@@ -180,17 +179,25 @@ export function useFloorEditor(branchId: string, floor: Floor) {
   }
 
   /**
+   * Si la mesa, con estos cambios, queda en un lugar libre de su sector; si no,
+   * avisa. Es la única validación de dónde puede ir una mesa: pasan por acá
+   * soltarla, las flechas, deshacer y rehacer. Una mesa sin sector no está en
+   * ningún plano, así que no choca con nada.
+   */
+  function roomFor(table: FloorTable, changes: TablePatch) {
+    const next = { ...table, ...changes }
+    if (!next.section_id || fitsAt(table, tablePlacement(next), floor.tablesIn(next.section_id))) return true
+    reportError(OVERLAP_MESSAGE)
+    return false
+  }
+
+  /**
    * Vuelve a escribir un estado anterior (o posterior) de una mesa sin anotarlo.
    * Si mientras tanto otra mesa ocupó ese lugar, no lo pisa: avisa y no hace nada.
    */
   function restore(id: string, values: TablePatch) {
     const table = floor.tables.find((entry) => entry.id === id)
-    if (!table) return false
-    const next = { ...table, ...values }
-    if (next.section_id && collidesWithAny(tablePlacement(next), occupiedBy(floor.tablesIn(next.section_id), id))) {
-      reportError(OVERLAP_MESSAGE)
-      return false
-    }
+    if (!table || !roomFor(table, values)) return false
     patchTable.mutate({ id, patch: values })
     return true
   }
@@ -207,23 +214,14 @@ export function useFloorEditor(branchId: string, floor: Floor) {
     setHistory((current) => ({ done: [...current.done, change], undone: current.undone.slice(0, -1) }))
   }
 
-  function moveTable(tableId: string, x: number, y: number) {
-    patch(tableId, { position_x: x, position_y: y })
-  }
-
   /**
-   * Estirar desde una esquina del plano, o con Mayús y las flechas. Se escribe
-   * solo lo que cambió: dos teclas seguidas llegan antes de que la primera se vea,
-   * y mandar la caja entera dejaba el ancho de la primera pisado por el viejo.
+   * Lleva una mesa a otro lugar o tamaño: lo que propone el plano al soltarla y
+   * con las flechas. Moverla y estirarla son lo mismo, una caja nueva; se escribe
+   * solo lo que cambió, y nada si pisaría a otra.
    */
-  function reshapeTable(table: FloorTable, box: TableBox) {
-    const now = tablePlacement(table)
-    const changes: TablePatch = {}
-    if (box.x !== now.x) changes.position_x = box.x
-    if (box.y !== now.y) changes.position_y = box.y
-    if (box.width !== now.footprint.w) changes.width = box.width
-    if (box.height !== now.footprint.h) changes.height = box.height
-    if (Object.keys(changes).length > 0) patch(table.id, changes)
+  function placeTable(table: FloorTable, placed: Placed) {
+    const changes = changesTo(table, placed)
+    if (changes && roomFor(table, changes)) patch(table.id, changes)
   }
 
   /**
@@ -242,14 +240,12 @@ export function useFloorEditor(branchId: string, floor: Floor) {
   }
 
   return {
-    reportError,
     addSection,
     patchSection,
     removeSection,
     addTable,
     removeTable,
-    moveTable,
-    reshapeTable,
+    placeTable,
     placeInSection,
     editTable,
     undo,

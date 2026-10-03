@@ -11,35 +11,20 @@ import {
   type ReactNode,
   type Ref,
 } from 'react'
-import {
-  FLOOR_CELL,
-  clampSpan,
-  clampToFloor,
-  collidesWithAny,
-  floorExtent,
-  occupiedBy,
-  tablePlacement,
-  type Placed,
-} from '@restaurant-platform/shared'
+import { FLOOR_CELL, clampSpan, clampToFloor, floorExtent, tablePlacement, type Placed } from '@restaurant-platform/shared'
 import { Minus, Plus, Users } from 'lucide-react'
 import { floorTile, type FloorTile } from '@restaurant-platform/ui'
 import type { FloorTable } from '@/queries/floor'
 import { CHAIR_SIZE, chairsAround } from './chairs'
 import { keyBelongsElsewhere } from './keys'
-import { OVERLAP_MESSAGE, overlapsAt } from './placement'
+import { fitsAt, followPointer, type Corner, type Grip } from './placement'
 import { cardClass, pillClass, roundIconClass } from './styles'
-
-/** Caja de una mesa en celdas: esquina y tamaño. */
-export type TableBox = { x: number; y: number; width: number; height: number }
 
 /** Lo que el editor le puede preguntar al plano. */
 export type FloorCanvasHandle = {
   /** La celda que se ve en el medio del recuadro: ahí se ubica lo nuevo. */
   centerCell: () => { x: number; y: number }
 }
-
-/** Hacia dónde crece la mesa al tirar de una esquina: 1 a la derecha o abajo, -1 al revés. */
-type Corner = { dx: 1 | -1; dy: 1 | -1 }
 
 const CORNERS: readonly (Corner & { cursor: string })[] = [
   { dx: -1, dy: -1, cursor: 'cursor-nw-resize' },
@@ -48,29 +33,26 @@ const CORNERS: readonly (Corner & { cursor: string })[] = [
   { dx: 1, dy: 1, cursor: 'cursor-se-resize' },
 ]
 
-type Gesture =
-  | {
-      kind: 'move'
-      tableId: string
-      /** Distancia entre el punto agarrado y la esquina de la mesa, en celdas. */
-      offsetX: number
-      offsetY: number
-      x: number
-      y: number
-      valid: boolean
-    }
-  | ({ kind: 'resize'; tableId: string; corner: Corner; valid: boolean } & TableBox)
+/** Una mesa agarrada: de dónde, dónde quedaría si se la suelta ahora y si ahí entra. */
+type Gesture = { tableId: string; grip: Grip; placed: Placed; valid: boolean }
+
+/** Lo que el plano necesita para editar. Sin esto es de solo lectura. */
+export type FloorEditing = {
+  selectedId: string | null
+  /** Elige una mesa; con `null` la suelta (un toque en el piso vacío). */
+  onSelect: (tableId: string | null) => void
+  /**
+   * Propone otro lugar o tamaño para una mesa: al soltarla después de arrastrarla
+   * o estirarla, y con las flechas. Quien edita valida y escribe; el plano solo
+   * pinta de rojo, mientras dura el gesto, un lugar donde no entraría.
+   */
+  onPlace: (table: FloorTable, placed: Placed) => void
+}
 
 type FloorCanvasProps = {
   tables: FloorTable[]
-  selectedId?: string | null
-  /** Con `null`, un toque en el plano vacío suelta la mesa elegida. */
-  onSelect?: (tableId: string | null) => void
-  /** Ausente en modo vista: el plano queda de solo lectura y las mesas no son botones. */
-  onMove?: (tableId: string, x: number, y: number) => void
-  /** Estirar desde una esquina puede mover la mesa además de agrandarla. */
-  onResize?: (table: FloorTable, box: TableBox) => void
-  onReject?: (message: string) => void
+  /** Sin `editing`, el plano es de solo lectura: las mesas no son botones ni se eligen. */
+  editing?: FloorEditing
   /** Barra de arriba de la tarjeta: las acciones y el estado del sector. */
   toolbar?: ReactNode
   /** Lo que va a la izquierda del zoom, abajo: deshacer y rehacer. */
@@ -126,17 +108,6 @@ const checker = ({ x, y, zoom }: Camera) => ({
   backgroundPosition: `${x}px ${y}px`,
 })
 
-/**
- * Un lado de la mesa que se estira: el borde opuesto queda quieto y el que se
- * agarra sigue al puntero.
- */
-function stretch(pointer: number, start: number, size: number, grow: 1 | -1) {
-  if (grow > 0) return { start, size: clampSpan(pointer - start) }
-  const end = start + size
-  const next = clampSpan(end - pointer)
-  return { start: end - next, size: next }
-}
-
 /** La cámara con otro zoom, sin que se mueva lo que hay en `at` (un punto del recuadro). */
 function zoomedAround(camera: Camera, zoom: number, at: Point): Camera {
   const next = clampZoom(zoom)
@@ -160,17 +131,7 @@ const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y)
  * vacío (con el mouse o un dedo), o Espacio y arrastrar desde cualquier lado.
  * Ctrl o ⌘ con la rueda, o pellizcar, acerca y aleja.
  */
-export function FloorCanvas({
-  tables,
-  selectedId = null,
-  onSelect,
-  onMove,
-  onResize,
-  onReject,
-  toolbar,
-  footerStart,
-  ref,
-}: FloorCanvasProps) {
+export function FloorCanvas({ tables, editing, toolbar, footerStart, ref }: FloorCanvasProps) {
   const viewport = useRef<HTMLDivElement>(null)
   const [camera, setCamera] = useState<Camera>({ x: PADDING, y: PADDING, zoom: 1 })
   const cameraNow = useRef(camera)
@@ -195,7 +156,6 @@ export function FloorCanvas({
   const hovering = useRef(false)
   /** El clic que cierra un arrastre del plano no es un toque en el piso: no suelta la mesa. */
   const swallowClick = useRef(false)
-  const editable = !!onMove
 
   /** Un punto de la pantalla, en píxeles del recuadro. */
   const inViewport = useCallback((client: { clientX: number; clientY: number }): Point => {
@@ -372,80 +332,32 @@ export function FloorCanvas({
     if (panPointers.current.size === 0) setPanning(false)
   }
 
-  /** Dónde se dibuja una mesa: en la caja del gesto en curso o, sin gesto, donde está guardada. */
-  const placementOf = (table: FloorTable): Placed => {
-    if (gesture?.tableId !== table.id) return tablePlacement(table)
-    if (gesture.kind === 'move') return { footprint: tablePlacement(table).footprint, x: gesture.x, y: gesture.y }
-    return { footprint: { w: gesture.width, h: gesture.height }, x: gesture.x, y: gesture.y }
-  }
+  /** Dónde se dibuja una mesa: donde la lleva el gesto en curso o, sin gesto, donde está guardada. */
+  const placementOf = (table: FloorTable) => (gesture?.tableId === table.id ? gesture.placed : tablePlacement(table))
 
-  function startMove(event: ReactPointerEvent<HTMLElement>, table: FloorTable) {
-    onSelect?.(table.id)
-    const origin = tablePlacement(table)
-    const pointer = cellFromPointer(event)
+  /** Agarra una mesa: el puntero queda capturado por ella hasta que la suelta. */
+  function grab(event: ReactPointerEvent<HTMLElement>, table: FloorTable, grip: Grip) {
     event.currentTarget.setPointerCapture(event.pointerId)
-    setGesture({
-      kind: 'move',
-      tableId: table.id,
-      offsetX: pointer.x - origin.x,
-      offsetY: pointer.y - origin.y,
-      x: origin.x,
-      y: origin.y,
-      valid: true,
-    })
+    setGesture({ tableId: table.id, grip, placed: tablePlacement(table), valid: true })
   }
 
-  function moveTo(event: ReactPointerEvent<HTMLElement>, table: FloorTable) {
-    if (gesture?.kind !== 'move' || gesture.tableId !== table.id) return
+  /** Para moverla, se la agarra por el punto donde se apoyó el puntero. */
+  function moveGrip(event: ReactPointerEvent<HTMLElement>, table: FloorTable): Grip {
     const pointer = cellFromPointer(event)
-    const next = clampToFloor(pointer.x - gesture.offsetX, pointer.y - gesture.offsetY)
-    setGesture({
-      ...gesture,
-      ...next,
-      valid: !overlapsAt(table, next.x, next.y, tables),
-    })
+    const { x, y } = tablePlacement(table)
+    return { kind: 'move', offset: { x: pointer.x - x, y: pointer.y - y } }
   }
 
-  function startResize(event: ReactPointerEvent<HTMLElement>, table: FloorTable, corner: Corner) {
-    event.stopPropagation()
-    const { footprint, x, y } = tablePlacement(table)
-    event.currentTarget.setPointerCapture(event.pointerId)
-    setGesture({ kind: 'resize', tableId: table.id, corner, x, y, width: footprint.w, height: footprint.h, valid: true })
-  }
-
-  function resizeTo(event: ReactPointerEvent<HTMLElement>, table: FloorTable) {
-    if (gesture?.kind !== 'resize' || gesture.tableId !== table.id) return
-    event.stopPropagation()
-    const pointer = cellFromPointer(event)
-    const origin = tablePlacement(table)
-    const across = stretch(pointer.x, origin.x, origin.footprint.w, gesture.corner.dx)
-    const down = stretch(pointer.y, origin.y, origin.footprint.h, gesture.corner.dy)
-    const box = { x: across.start, y: down.start, width: across.size, height: down.size }
-    setGesture({ ...gesture, ...box, valid: fits(table, box) })
-  }
-
-  /** Si la mesa entra en esa caja sin pisar a otra del sector. */
-  function fits(table: FloorTable, box: TableBox) {
-    return !collidesWithAny(
-      { x: box.x, y: box.y, footprint: { w: box.width, h: box.height } },
-      occupiedBy(tables, table.id),
-    )
-  }
-
-  function endGesture(table: FloorTable) {
+  function drag(event: ReactPointerEvent<HTMLElement>, table: FloorTable) {
     if (gesture?.tableId !== table.id) return
-    const origin = tablePlacement(table)
+    const placed = followPointer(tablePlacement(table), gesture.grip, cellFromPointer(event))
+    setGesture({ ...gesture, placed, valid: fitsAt(table, placed, tables) })
+  }
 
-    if (gesture.kind === 'move') {
-      const moved = gesture.x !== origin.x || gesture.y !== origin.y
-      if (moved && gesture.valid) onMove?.(table.id, gesture.x, gesture.y)
-      if (moved && !gesture.valid) onReject?.(OVERLAP_MESSAGE)
-    } else {
-      const { x, y, width, height } = gesture
-      const resized = x !== origin.x || y !== origin.y || width !== origin.footprint.w || height !== origin.footprint.h
-      if (resized && gesture.valid) onResize?.(table, { x, y, width, height })
-      if (resized && !gesture.valid) onReject?.(OVERLAP_MESSAGE)
-    }
+  /** Suelta la mesa y propone dónde quedó; si no cambió nada, quien edita no escribe. */
+  function drop(table: FloorTable, onPlace: FloorEditing['onPlace']) {
+    if (gesture?.tableId !== table.id) return
+    onPlace(table, gesture.placed)
     setGesture(null)
   }
 
@@ -453,32 +365,17 @@ export function FloorCanvas({
    * Las flechas mueven la mesa una celda; con Mayús, la agrandan o achican desde
    * el borde de la derecha o el de abajo. Es la vía sin arrastrar (WCAG 2.5.7).
    */
-  function handleKeyDown(event: KeyboardEvent<HTMLElement>, table: FloorTable) {
+  function nudge(event: KeyboardEvent<HTMLElement>, table: FloorTable, onPlace: FloorEditing['onPlace']) {
     const step = ARROW_STEPS[event.key]
     if (!step) return
     event.preventDefault()
-    const origin = tablePlacement(table)
-
-    if (event.shiftKey) {
-      const box = {
-        x: origin.x,
-        y: origin.y,
-        width: clampSpan(origin.footprint.w + step.dx),
-        height: clampSpan(origin.footprint.h + step.dy),
-      }
-      if (box.width === origin.footprint.w && box.height === origin.footprint.h) return
-      if (fits(table, box)) onResize?.(table, box)
-      else onReject?.(OVERLAP_MESSAGE)
-      return
-    }
-
-    const next = clampToFloor(origin.x + step.dx, origin.y + step.dy)
-    if (next.x === origin.x && next.y === origin.y) return
-    if (overlapsAt(table, next.x, next.y, tables)) {
-      onReject?.(OVERLAP_MESSAGE)
-      return
-    }
-    onMove?.(table.id, next.x, next.y)
+    const { x, y, footprint } = tablePlacement(table)
+    onPlace(
+      table,
+      event.shiftKey
+        ? { x, y, footprint: { w: clampSpan(footprint.w + step.dx), h: clampSpan(footprint.h + step.dy) } }
+        : { footprint, ...clampToFloor(x + step.dx, y + step.dy) },
+    )
   }
 
   /** Un toque en el piso vacío (no en una mesa ni en una manija) suelta la mesa elegida. */
@@ -487,9 +384,9 @@ export function FloorCanvas({
       swallowClick.current = false
       return
     }
-    if (!editable || !selectedId) return
+    if (!editing?.selectedId) return
     if (event.target instanceof Element && event.target.closest('[data-floor-item]')) return
-    onSelect?.(null)
+    editing.onSelect(null)
   }
 
   return (
@@ -528,11 +425,9 @@ export function FloorCanvas({
           {tables.map((table) => {
             const tile = floorTile(table, placementOf(table))
             const active = gesture?.tableId === table.id
-            const look = tableLook({
-              invalid: active && !gesture.valid,
-              selected: editable && selectedId === table.id,
-              muted: !table.is_active || !table.is_visible,
-            })
+            const selected = editing?.selectedId === table.id
+            const muted = !table.is_active || !table.is_visible
+            const look = tableLook({ invalid: active && !gesture.valid, selected, muted })
 
             return (
               <div key={table.id} className="contents">
@@ -545,51 +440,56 @@ export function FloorCanvas({
                   />
                 ))}
 
-                {editable ? (
-                  <button
-                    type="button"
-                    data-floor-item
-                    aria-pressed={look.selected}
-                    onPointerDown={(event) => startMove(event, table)}
-                    onPointerMove={(event) => moveTo(event, table)}
-                    onPointerUp={() => endGesture(table)}
-                    onPointerCancel={() => setGesture(null)}
-                    onKeyDown={(event) => handleKeyDown(event, table)}
-                    // Editando, el toque que empieza sobre una mesa es para arrastrarla
-                    // (`touch-none`); el que empieza en la grilla vacía desplaza el plano.
-                    className={`${tableBaseClass} cursor-grab touch-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none active:cursor-grabbing ${tile.shapeClass} ${look.table}`}
-                    style={{ ...tile.box, zIndex: active ? 10 : 1 }}
-                    aria-label={`${table.label}, ${table.seats} lugares${look.muted ? ', fuera de uso' : ''}. Flechas para mover, Mayús y flechas para cambiar el tamaño, Suprimir para eliminar.`}
-                  >
-                    <TableLabel table={table} tile={tile} muted={look.muted} />
-                  </button>
+                {editing ? (
+                  <>
+                    <button
+                      type="button"
+                      data-floor-item
+                      aria-pressed={selected}
+                      onPointerDown={(event) => {
+                        editing.onSelect(table.id)
+                        grab(event, table, moveGrip(event, table))
+                      }}
+                      onPointerMove={(event) => drag(event, table)}
+                      onPointerUp={() => drop(table, editing.onPlace)}
+                      onPointerCancel={() => setGesture(null)}
+                      onKeyDown={(event) => nudge(event, table, editing.onPlace)}
+                      // Editando, el toque que empieza sobre una mesa es para arrastrarla
+                      // (`touch-none`); el que empieza en la grilla vacía desplaza el plano.
+                      className={`${tableBaseClass} cursor-grab touch-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none active:cursor-grabbing ${tile.shapeClass} ${look.table}`}
+                      style={{ ...tile.box, zIndex: active ? 10 : 1 }}
+                      aria-label={`${table.label}, ${table.seats} lugares${muted ? ', fuera de uso' : ''}. Flechas para mover, Mayús y flechas para cambiar el tamaño, Suprimir para eliminar.`}
+                    >
+                      <TableLabel table={table} tile={tile} muted={muted} />
+                    </button>
+
+                    {/* Manijas de tamaño: solo en la mesa elegida, para no ensuciar el plano.
+                        Son un atajo para el mouse y el dedo, sin rol ni foco: el tamaño con
+                        teclado se cambia con Mayús y las flechas. */}
+                    {selected &&
+                      CORNERS.map((corner) => (
+                        <span
+                          key={corner.cursor}
+                          aria-hidden="true"
+                          className={`absolute h-3.5 w-3.5 touch-none rounded-sm border-2 border-primary bg-white ${corner.cursor}`}
+                          data-floor-item
+                          onPointerDown={(event) => grab(event, table, { kind: 'resize', corner })}
+                          onPointerMove={(event) => drag(event, table)}
+                          onPointerUp={() => drop(table, editing.onPlace)}
+                          onPointerCancel={() => setGesture(null)}
+                          style={{
+                            left: tile.box.left + (corner.dx > 0 ? tile.box.width : 0) + corner.dx * HANDLE_REACH - 7,
+                            top: tile.box.top + (corner.dy > 0 ? tile.box.height : 0) + corner.dy * HANDLE_REACH - 7,
+                            zIndex: active ? 11 : 2,
+                          }}
+                        />
+                      ))}
+                  </>
                 ) : (
                   <div className={`${tableBaseClass} ${tile.shapeClass} ${look.table}`} style={{ ...tile.box, zIndex: 1 }}>
-                    <TableLabel table={table} tile={tile} muted={look.muted} />
+                    <TableLabel table={table} tile={tile} muted={muted} />
                   </div>
                 )}
-
-                {/* Manijas de tamaño: solo en la mesa elegida, para no ensuciar el plano.
-                    Son un atajo para el mouse y el dedo, sin rol ni foco: el tamaño con
-                    teclado se cambia con Mayús y las flechas. */}
-                {look.selected &&
-                  CORNERS.map((corner) => (
-                    <span
-                      key={corner.cursor}
-                      aria-hidden="true"
-                      className={`absolute h-3.5 w-3.5 touch-none rounded-sm border-2 border-primary bg-white ${corner.cursor}`}
-                      data-floor-item
-                      onPointerDown={(event) => startResize(event, table, corner)}
-                      onPointerMove={(event) => resizeTo(event, table)}
-                      onPointerUp={() => endGesture(table)}
-                      onPointerCancel={() => setGesture(null)}
-                      style={{
-                        left: tile.box.left + (corner.dx > 0 ? tile.box.width : 0) + corner.dx * HANDLE_REACH - 7,
-                        top: tile.box.top + (corner.dy > 0 ? tile.box.height : 0) + corner.dy * HANDLE_REACH - 7,
-                        zIndex: active ? 11 : 2,
-                      }}
-                    />
-                  ))}
               </div>
             )
           })}
@@ -656,17 +556,13 @@ const tableBaseClass =
 /** Colores de una mesa y sus sillas según su estado. El gesto rechazado le gana a todo. */
 function tableLook({ invalid, selected, muted }: { invalid: boolean; selected: boolean; muted: boolean }) {
   const selection = selected ? 'outline-3 outline-offset-4 outline-primary' : ''
-  if (invalid) return { selected, muted, table: `border-red-500 bg-red-50 text-red-700 ${selection}`, chair: 'bg-red-300' }
+  if (invalid) return { table: `border-red-500 bg-red-50 text-red-700 ${selection}`, chair: 'bg-red-300' }
   if (muted)
     return {
-      selected,
-      muted,
       table: `border-dashed border-neutral-300 bg-neutral-50 text-faint ${selection}`,
       chair: selected ? 'bg-primary' : 'bg-neutral-200',
     }
   return {
-    selected,
-    muted,
     table: `border-neutral-300 bg-white text-neutral-900 hover:border-primary/70 ${selection}`,
     chair: selected ? 'bg-primary' : 'bg-neutral-400',
   }

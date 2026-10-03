@@ -97,11 +97,7 @@ function SectionEditor({
             <FloorCanvas
               ref={canvas}
               tables={tables}
-              selectedId={selectedId}
-              onSelect={setSelectedId}
-              onMove={editor.moveTable}
-              onResize={editor.reshapeTable}
-              onReject={editor.reportError}
+              editing={{ selectedId, onSelect: setSelectedId, onPlace: editor.placeTable }}
               toolbar={
                 <SectionToolbar
                   section={section}

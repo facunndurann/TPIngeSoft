@@ -17,12 +17,10 @@ const table = {
   is_visible: true,
 } as FloorTable
 
-/** El plano del sector con la mesa elegida: editable si recibe `onMove`, de solo lectura si no. */
+/** El plano del sector con la mesa elegida: editable si recibe `editing`, de solo lectura si no. */
 function render(editable: boolean) {
-  const noop = () => {}
-  return renderToStaticMarkup(
-    <FloorCanvas tables={[table]} selectedId={table.id} onSelect={noop} {...(editable ? { onMove: noop } : {})} />,
-  )
+  const editing = { selectedId: table.id, onSelect: () => {}, onPlace: () => {} }
+  return renderToStaticMarkup(<FloorCanvas tables={[table]} editing={editable ? editing : undefined} />)
 }
 
 /** Las clases del elemento cuya apertura cumple `pattern`. */
