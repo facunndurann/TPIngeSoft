@@ -25,9 +25,17 @@ const table = {
 } as FloorTable
 
 /** El plano con su cámara, como lo arman el editor y la vista. */
-function Plan({ tables = [table], editing }: { tables?: FloorTable[]; editing?: FloorEditing }) {
+function Plan({
+  tables = [table],
+  editing,
+  onOpenTable,
+}: {
+  tables?: FloorTable[]
+  editing?: FloorEditing
+  onOpenTable?: (table: FloorTable) => void
+}) {
   const camera = useFloorCamera(tables)
-  return <FloorCanvas tables={tables} camera={camera} editing={editing} />
+  return <FloorCanvas tables={tables} camera={camera} editing={editing} onOpenTable={onOpenTable} />
 }
 
 /** Un editor que anota lo que se elige y lo que se propone, sin escribir nada. */
@@ -61,10 +69,10 @@ async function mount(node: ReactNode) {
   return { container, viewport, layer: viewport.firstElementChild as HTMLElement, render }
 }
 
-/** Un puntero que aprieta, se mueve o suelta en un punto de la pantalla. */
-async function pointer(target: Element, type: 'pointerdown' | 'pointermove' | 'pointerup', x = 0, y = 0) {
+/** Un puntero que aprieta, se mueve o suelta en un punto de la pantalla; por defecto, con el botón principal. */
+async function pointer(target: Element, type: 'pointerdown' | 'pointermove' | 'pointerup', x = 0, y = 0, button = 0) {
   await act(async () => {
-    target.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 1, button: 0, clientX: x, clientY: y }))
+    target.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 1, button, clientX: x, clientY: y }))
   })
 }
 
@@ -164,6 +172,36 @@ test('in view mode a table doesn’t grab the finger: dragging over it moves the
 
   assert.equal(container.querySelector('button[aria-label^="Mesa 1,"]'), null)
   assert.deepEqual(cameraOf(layer), { ...before, y: before.y + 30 })
+})
+
+test('in view mode a tap opens the table under it, even if the finger slips a little; a drag, the empty floor or the middle button open nothing', async () => {
+  const opened: string[] = []
+  const { container, viewport } = await mount(<Plan onOpenTable={(entry) => opened.push(entry.id)} />)
+  const tile = [...container.querySelectorAll('span')].find((span) => span.textContent === 'Mesa 1')!.parentElement!
+  assert.match(tile.className, /\bcursor-pointer\b/)
+
+  // Sin medir el recuadro, la cámara arranca en (28, 28) a tamaño real: la mesa
+  // de 2 × 2 en (0, 0) ocupa de 28 a 116 px. Un dedo que se corre 6 px sigue tocando.
+  await pointer(tile, 'pointerdown', 60, 60)
+  await pointer(tile, 'pointermove', 65, 63)
+  await pointer(tile, 'pointerup', 65, 63)
+  assert.deepEqual(opened, ['table-a'])
+
+  // Más allá de la tolerancia es un arrastre: mueve el plano y no abre la mesa.
+  await pointer(tile, 'pointerdown', 60, 60)
+  await pointer(tile, 'pointermove', 70, 60)
+  await pointer(tile, 'pointerup', 70, 60)
+  await pointer(viewport, 'pointerdown', 300, 300)
+  await pointer(viewport, 'pointerup', 300, 300)
+  await pointer(tile, 'pointerdown', 60, 60, 1)
+  await pointer(tile, 'pointerup', 60, 60, 1)
+  assert.deepEqual(opened, ['table-a'])
+})
+
+test('a table that the plan can’t open doesn’t look clickable', async () => {
+  const { container } = await mount(<Plan />)
+  const tile = [...container.querySelectorAll('span')].find((span) => span.textContent === 'Mesa 1')!.parentElement!
+  assert.doesNotMatch(tile.className, /\bcursor-pointer\b/)
 })
 
 test('tapping a corner handle without dragging grows the table one cell toward that corner', async () => {

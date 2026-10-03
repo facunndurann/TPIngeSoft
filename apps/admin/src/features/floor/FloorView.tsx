@@ -1,6 +1,10 @@
+import { useState } from 'react'
+import { QrCode } from 'lucide-react'
 import { countLabel, isOperable } from '@restaurant-platform/shared'
 import { EmptyState } from '@restaurant-platform/ui'
+import { QrModal } from '@/features/QrModal'
 import type { FloorSection, FloorTable } from '@/queries/floor'
+import { useRestaurant } from '@/restaurant/restaurant-context'
 import { FloorCanvas } from './FloorCanvas'
 import { FloorLayout } from './FloorLayout'
 import { FloorLegend } from './FloorTableTile'
@@ -9,7 +13,10 @@ import { SectionTabs } from './SectionTabs'
 import type { Floor, FloorScreenProps } from './floor'
 import { useFloorCamera } from './useFloorCamera'
 
-/** El plano en modo vista: el mismo que ve el personal, de solo lectura. */
+/**
+ * El plano en modo vista: el mismo que ve el personal, de solo lectura. Tocar una
+ * mesa, en el plano o en la lista, muestra su QR, como en Mesas y QR.
+ */
 export function FloorView({ floor, section, onChooseSection }: FloorScreenProps) {
   if (!section) {
     return <EmptyState message="Todavía no hay sectores. Pasá a editar para crear el primero." />
@@ -24,30 +31,50 @@ export function FloorView({ floor, section, onChooseSection }: FloorScreenProps)
 }
 
 function SectionView({ floor, section }: { floor: Floor; section: FloorSection }) {
+  const restaurant = useRestaurant()
   const tables = floor.tablesIn(section.id)
   const camera = useFloorCamera(tables)
   const unassigned = floor.tablesIn(null).length
+  // El id y no la mesa: si la mesa cambia con el QR abierto, el modal muestra lo
+  // último; si se borra, se cierra.
+  const [qrTableId, setQrTableId] = useState<string | null>(null)
+  const qrTable = tables.find((table) => table.id === qrTableId)
+  const openQr = (table: FloorTable) => setQrTableId(table.id)
 
   return (
-    <FloorLayout
-      plan={
-        <>
-          <FloorCanvas tables={tables} camera={camera} toolbar={<SectionStatus section={section} />} />
-          <FloorLegend editing={false} />
-        </>
-      }
-      panel={
-        <SectionTables tables={tables} summary={summaryOf(tables, section)}>
-          {/* En el panel y no debajo del plano: ahí empujaría la página más allá de la pantalla. */}
-          {unassigned > 0 && (
-            <p className="mt-1 border-t border-neutral-200 px-2 pt-4 text-xs text-muted">
-              {countLabel(unassigned, 'mesa sin sector no aparece', 'mesas sin sector no aparecen')} en ningún
-              plano. Pasá a editar para ubicarlas.
-            </p>
-          )}
-        </SectionTables>
-      }
-    />
+    <>
+      <FloorLayout
+        plan={
+          <>
+            <FloorCanvas
+              tables={tables}
+              camera={camera}
+              onOpenTable={openQr}
+              toolbar={<SectionStatus section={section} />}
+            />
+            <FloorLegend editing={false} />
+          </>
+        }
+        panel={
+          <SectionTables
+            tables={tables}
+            onChoose={openQr}
+            chooseIcon={QrCode}
+            empty="Este sector todavía no tiene mesas."
+            summary={summaryOf(tables, section)}
+          >
+            {/* En el panel y no debajo del plano: ahí empujaría la página más allá de la pantalla. */}
+            {unassigned > 0 && (
+              <p className="mt-1 border-t border-neutral-200 px-2 pt-4 text-xs text-muted">
+                {countLabel(unassigned, 'mesa sin sector no aparece', 'mesas sin sector no aparecen')} en ningún
+                plano. Pasá a editar para ubicarlas.
+              </p>
+            )}
+          </SectionTables>
+        }
+      />
+      {qrTable && <QrModal table={qrTable} restaurantName={restaurant.name} onClose={() => setQrTableId(null)} />}
+    </>
   )
 }
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
-import { Check, Ellipsis, Pencil, Plus, Redo2, Trash2, Undo2, X } from 'lucide-react'
+import { Check, ChevronRight, Ellipsis, Pencil, Plus, Redo2, Trash2, Undo2, X } from 'lucide-react'
 import { Button, EmptyState, IconButton, Input, Toggle, iconButtonClass, useConfirm } from '@restaurant-platform/ui'
 import { countLabel } from '@restaurant-platform/shared'
 import type { FloorSection, FloorTable } from '@/queries/floor'
@@ -149,7 +149,12 @@ function SectionEditor({
               onDelete={() => void confirmDelete(selected)}
             />
           ) : (
-            <SectionTables tables={tables} onChoose={(table) => setSelectedId(table.id)}>
+            <SectionTables
+              tables={tables}
+              onChoose={(table) => setSelectedId(table.id)}
+              chooseIcon={ChevronRight}
+              empty="Todavía no hay mesas. Agregá la primera desde el plano."
+            >
               <UnassignedTables
                 tables={floor.tablesIn(null)}
                 onPlace={(table) => {

@@ -22,6 +22,22 @@ const membership = { restaurant: { id: restaurantId, name: 'La Esquina' }, role:
 const cleanups: (() => void)[] = []
 afterEach(() => cleanups.splice(0).forEach((cleanup) => cleanup()))
 
+/** La única mesa: en el Salón de Centro, en el origen del plano. */
+const mesa = {
+  id: 'mesa-1',
+  label: 'Mesa 1',
+  section_id: 'salon',
+  seats: 4,
+  shape: 'rect',
+  position_x: 0,
+  position_y: 0,
+  width: 2,
+  height: 2,
+  is_active: true,
+  is_visible: true,
+  qr_token: 'token-mesa-1',
+}
+
 /**
  * El Salón de un restaurante con dos sucursales, abierto en `url` después de
  * pasar por Productos: así se ve adónde lleva «atrás».
@@ -40,7 +56,8 @@ async function openFloor(url: string) {
     { id: 'patio', name: 'Patio', branch_id: 'norte', is_active: true },
     { id: 'barra', name: 'Barra', branch_id: 'norte', is_active: true },
   ] as never)
-  for (const branch of ['centro', 'norte']) client.setQueryData(tablesQuery(branch).queryKey, [])
+  client.setQueryData(tablesQuery('centro').queryKey, [mesa] as never)
+  client.setQueryData(tablesQuery('norte').queryKey, [])
 
   const router = createMemoryRouter(
     [
@@ -142,4 +159,32 @@ test('choosing another branch writes it and drops the sector, which was the othe
   assert.deepEqual(searchOf(router), { modo: 'editar', sucursal: 'norte' })
   assert.equal(router.state.historyAction, 'REPLACE')
   assert.match(pressedIn(container, 'Sectores'), /^Patio/)
+})
+
+test('in Vista, tapping a table on the plan, or its row in the list, shows its QR, as in Mesas y QR', async () => {
+  const { container } = await openFloor('/salon')
+  const qrTitle = () => container.querySelector('dialog h2')?.textContent
+
+  // Sin medir el recuadro, la cámara arranca en (28, 28) a tamaño real: la mesa
+  // de 2 × 2 en el origen ocupa de 28 a 116 px.
+  const tile = [...container.querySelectorAll('[data-floor-viewport] span')].find(
+    (span) => span.textContent === 'Mesa 1',
+  )!
+  await act(async () => {
+    for (const type of ['pointerdown', 'pointerup']) {
+      tile.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 1, button: 0, clientX: 60, clientY: 60 }))
+    }
+  })
+  assert.equal(qrTitle(), 'QR de Mesa 1')
+  assert.match(container.querySelector('dialog code')?.textContent ?? '', /\/m\/token-mesa-1$/)
+
+  await act(async () => container.querySelector<HTMLButtonElement>('dialog button[aria-label="Cerrar"]')!.click())
+  assert.equal(container.querySelector('dialog'), null)
+
+  // Con el teclado o un lector de pantalla, la lista lleva al mismo QR.
+  const row = [...container.querySelectorAll<HTMLButtonElement>('aside li button')].find((button) =>
+    button.textContent?.startsWith('Mesa 1'),
+  )!
+  await act(async () => row.click())
+  assert.equal(qrTitle(), 'QR de Mesa 1')
 })

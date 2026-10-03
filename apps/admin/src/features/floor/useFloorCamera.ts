@@ -14,6 +14,12 @@ const WHEEL_LINE = 16
  */
 const WHEEL_ZOOM = { rate: 0.005, maxDelta: 60 } as const
 
+/**
+ * Lo que puede correrse un toque sin dejar de serlo, en píxeles de pantalla: un
+ * dedo nunca se apoya del todo quieto, y el mouse a veces tiembla al hacer clic.
+ */
+const TAP_SLOP = 8
+
 type ClientPoint = { clientX: number; clientY: number }
 
 /** Un punto de la pantalla, en píxeles del recuadro. */
@@ -57,8 +63,8 @@ export function useFloorCamera(tables: readonly FloorTable[]) {
   const [panning, setPanning] = useState(false)
   /** Punteros que arrastran el plano, en píxeles del recuadro: uno lo desplaza, dos lo pellizcan. */
   const pointers = useRef(new Map<number, Point>())
-  /** El arrastre en curso: si empezó como un toque en el piso y si después se movió. */
-  const press = useRef({ tap: false, moved: false })
+  /** El arrastre en curso: si empezó como un toque, desde dónde, y si ya se alejó de ahí. */
+  const press = useRef({ tap: false, from: { x: 0, y: 0 }, moved: false })
   /** El puntero está sobre el plano: recién ahí Espacio es para arrastrarlo. */
   const hovering = useRef(false)
 
@@ -154,16 +160,21 @@ export function useFloorCamera(tables: readonly FloorTable[]) {
     if (event.button !== 0 && event.button !== 1) return
     event.preventDefault()
     event.currentTarget.setPointerCapture(event.pointerId)
+    const point = pointIn(viewport.current, event)
     // Un segundo dedo vuelve el gesto un pellizco: ya no es un toque.
-    if (pointers.current.size === 0) press.current = { tap, moved: false }
+    if (pointers.current.size === 0) press.current = { tap, from: point, moved: false }
     else press.current.tap = false
-    pointers.current.set(event.pointerId, pointIn(viewport.current, event))
+    pointers.current.set(event.pointerId, point)
     setPanning(true)
   }
 
-  /** Un apretón que llegó hasta el piso agarra el plano: las mesas no lo dejan pasar. */
+  /**
+   * Un apretón que llegó hasta el piso agarra el plano: editando, las mesas se
+   * quedan con el suyo; en la vista lo dejan pasar. Con el botón principal o un
+   * dedo, soltarlo sin arrastrar es un toque (ver `release`).
+   */
   function grab(event: ReactPointerEvent<HTMLElement>) {
-    startDrag(event, true)
+    startDrag(event, event.button === 0)
   }
 
   /**
@@ -183,7 +194,8 @@ export function useFloorCamera(tables: readonly FloorTable[]) {
     const before = [...pointers.current.values()]
     const now = pointIn(viewport.current, event)
     pointers.current.set(event.pointerId, now)
-    if (now.x !== last.x || now.y !== last.y) press.current.moved = true
+    const { from } = press.current
+    if (Math.hypot(now.x - from.x, now.y - from.y) > TAP_SLOP) press.current.moved = true
     const after = [...pointers.current.values()]
     follow((current) =>
       after.length === 1
@@ -193,7 +205,7 @@ export function useFloorCamera(tables: readonly FloorTable[]) {
     )
   }
 
-  /** Suelta el plano. Devuelve si fue un toque en el piso que no lo movió. */
+  /** Suelta el plano. Devuelve si fue un toque: no se alejó más que `TAP_SLOP` de donde se apoyó. */
   function release(event: ReactPointerEvent<HTMLElement>) {
     if (!pointers.current.delete(event.pointerId) || pointers.current.size > 0) return false
     setPanning(false)

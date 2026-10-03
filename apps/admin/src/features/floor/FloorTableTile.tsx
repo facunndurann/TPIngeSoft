@@ -41,6 +41,8 @@ type FloorTableTileProps = {
   invalid: boolean
   /** Sin esto, la mesa es de solo lectura: no es un botón ni tiene manijas. */
   editing?: TileEditing
+  /** En la vista: tocarla la abre (lo resuelve el plano, ver `FloorCanvas`), y el puntero lo anuncia. */
+  openable?: boolean
 }
 
 const CORNERS: readonly (Corner & { cursor: string })[] = [
@@ -70,7 +72,7 @@ const tableBaseClass =
  * se estira desde sus manijas y se mueve con las flechas; en la vista, un dibujo
  * de solo lectura.
  */
-export function FloorTableTile({ table, tile, zoom, active, invalid, editing }: FloorTableTileProps) {
+export function FloorTableTile({ table, tile, zoom, active, invalid, editing, openable = false }: FloorTableTileProps) {
   const selected = editing?.selected ?? false
   const muted = !table.is_active || !table.is_visible
   const look = tableLook({ invalid, selected, muted })
@@ -150,7 +152,10 @@ export function FloorTableTile({ table, tile, zoom, active, invalid, editing }: 
           )}
         </>
       ) : (
-        <div className={`${tableBaseClass} ${tile.shapeClass} ${look.table}`} style={{ ...tile.box, zIndex: 1 }}>
+        <div
+          className={`${tableBaseClass} ${tile.shapeClass} ${look.table} ${openable ? 'cursor-pointer' : ''}`}
+          style={{ ...tile.box, zIndex: 1 }}
+        >
           <TableLabel table={table} tile={tile} zoom={zoom} muted={muted} />
         </div>
       )}

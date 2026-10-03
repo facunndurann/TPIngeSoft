@@ -1,5 +1,5 @@
 import { useId, type ReactNode } from 'react'
-import { ChevronRight } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { tablePlacement } from '@restaurant-platform/shared'
 import { Badge } from '@restaurant-platform/ui'
 import type { FloorTable } from '@/queries/floor'
@@ -8,8 +8,12 @@ import { TableGlyph } from './TableGlyph'
 
 type SectionTablesProps = {
   tables: FloorTable[]
-  /** Editando, cada fila elige su mesa en el plano; en vista, la lista es de lectura. */
-  onChoose?: (table: FloorTable) => void
+  /** Tocar una fila: editando, elige su mesa en el plano; en la vista, abre su QR. */
+  onChoose: (table: FloorTable) => void
+  /** Al final de cada fila, adónde lleva tocarla: el panel de la mesa, o su QR. */
+  chooseIcon: LucideIcon
+  /** Lo que se lee si el sector no tiene mesas. */
+  empty: string
   /** Lo que se lee debajo del título: un resumen del sector. */
   summary?: string
   /** Lo que va al pie del panel, como las mesas sin sector. */
@@ -18,9 +22,17 @@ type SectionTablesProps = {
 
 /**
  * Panel lateral sin mesa elegida: las mesas del sector, en el orden del POS. Es
- * también la forma de llegar a una mesa sin tocar el plano.
+ * también la forma de llegar a una mesa sin tocar el plano: con el teclado, o
+ * con un lector de pantalla.
  */
-export function SectionTables({ tables, onChoose, summary, children }: SectionTablesProps) {
+export function SectionTables({
+  tables,
+  onChoose,
+  chooseIcon: ChooseIcon,
+  empty,
+  summary,
+  children,
+}: SectionTablesProps) {
   const headingId = useId()
 
   return (
@@ -33,27 +45,19 @@ export function SectionTables({ tables, onChoose, summary, children }: SectionTa
       </div>
 
       {tables.length === 0 ? (
-        <p className="px-2 text-sm text-muted">
-          {onChoose ? 'Todavía no hay mesas. Agregá la primera desde el plano.' : 'Este sector todavía no tiene mesas.'}
-        </p>
+        <p className="px-2 text-sm text-muted">{empty}</p>
       ) : (
         <ul className="divide-y divide-neutral-100">
           {tables.map((table) => (
             <li key={table.id}>
-              {onChoose ? (
-                <button
-                  type="button"
-                  onClick={() => onChoose(table)}
-                  className="flex min-h-15 w-full cursor-pointer items-center gap-3 rounded-xl px-2 text-left transition-colors hover:bg-neutral-50"
-                >
-                  <TableRow table={table} />
-                  <ChevronRight size={20} aria-hidden="true" className="shrink-0 text-faint" />
-                </button>
-              ) : (
-                <div className="flex min-h-15 items-center gap-3 px-2">
-                  <TableRow table={table} />
-                </div>
-              )}
+              <button
+                type="button"
+                onClick={() => onChoose(table)}
+                className="flex min-h-15 w-full cursor-pointer items-center gap-3 rounded-xl px-2 text-left transition-colors hover:bg-neutral-50"
+              >
+                <TableRow table={table} />
+                <ChooseIcon size={20} aria-hidden="true" className="shrink-0 text-faint" />
+              </button>
             </li>
           ))}
         </ul>

@@ -1,9 +1,9 @@
 import { useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
-import { FLOOR_CELL, tablePlacement, type Placed } from '@restaurant-platform/shared'
+import { FLOOR_CELL, covers, tablePlacement, type Placed } from '@restaurant-platform/shared'
 import { Minus, Plus } from 'lucide-react'
 import { Button, IconButton, floorTile } from '@restaurant-platform/ui'
 import type { FloorTable } from '@/queries/floor'
-import { ZOOM, type Camera } from './camera'
+import { ZOOM, type Camera, type Point } from './camera'
 import { FloorTableTile } from './FloorTableTile'
 import { changesTo, fitsAt, followPointer, grownToward, nudged, type Grip, type Refusal, type Step } from './placement'
 import { cardClass } from './styles'
@@ -41,6 +41,11 @@ type FloorCanvasProps = {
   camera: FloorCamera
   /** Sin `editing`, el plano es de solo lectura: las mesas no son botones ni se eligen. */
   editing?: FloorEditing
+  /**
+   * En la vista: tocar una mesa sin arrastrar el plano la abre (en el Salón, su
+   * QR). Editando no llega: el apretón sobre una mesa es para moverla.
+   */
+  onOpenTable?: (table: FloorTable) => void
   /** Barra de arriba de la tarjeta: las acciones y el estado del sector. */
   toolbar?: ReactNode
   /** Lo que va a la izquierda del zoom, abajo: deshacer y rehacer. */
@@ -83,7 +88,7 @@ const checker = ({ x, y, zoom }: Camera) => ({
  * una grilla. Se guarda la celda, no el píxel, así se ve igual en cualquier
  * pantalla.
  */
-export function FloorCanvas({ tables, camera, editing, toolbar, footerStart }: FloorCanvasProps) {
+export function FloorCanvas({ tables, camera, editing, onOpenTable, toolbar, footerStart }: FloorCanvasProps) {
   const [gesture, setGesture] = useState<Gesture | null>(null)
 
   /** Dónde se dibuja una mesa: donde la lleva el gesto en curso o, sin gesto, donde está guardada. */
@@ -142,6 +147,20 @@ export function FloorCanvas({ tables, camera, editing, toolbar, footerStart }: F
     camera.reveal(next)
   }
 
+  /**
+   * Un toque que no movió el plano. Editando solo llega desde el piso vacío (el
+   * apretón sobre una mesa es de la mesa) y suelta la elegida; en la vista, las
+   * mesas lo dejan pasar, y la que estaba debajo se abre.
+   */
+  function tapAt(cell: Point) {
+    if (editing) {
+      editing.onSelect(null)
+      return
+    }
+    const table = tables.find((entry) => covers(tablePlacement(entry), cell))
+    if (table) onOpenTable?.(table)
+  }
+
   return (
     <div className={`flex min-h-0 flex-1 flex-col overflow-hidden ${cardClass}`}>
       {toolbar && (
@@ -165,8 +184,7 @@ export function FloorCanvas({ tables, camera, editing, toolbar, footerStart }: F
         onPointerDown={camera.grab}
         onPointerMove={camera.drag}
         onPointerUp={(event) => {
-          // Un toque en el piso que no lo movió suelta la mesa elegida.
-          if (camera.release(event)) editing?.onSelect(null)
+          if (camera.release(event)) tapAt(camera.cellFromPointer(event))
         }}
         onPointerCancel={camera.release}
       >
@@ -186,6 +204,7 @@ export function FloorCanvas({ tables, camera, editing, toolbar, footerStart }: F
                 zoom={camera.zoom}
                 active={active}
                 invalid={active && !gesture.valid}
+                openable={onOpenTable !== undefined}
                 editing={
                   editing && {
                     selected: editing.selectedId === table.id,

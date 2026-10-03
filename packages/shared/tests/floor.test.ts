@@ -6,6 +6,7 @@ import {
   clampSpan,
   clampToFloor,
   collidesWithAny,
+  covers,
   findFreeCell,
   floorExtent,
   isOperable,
@@ -92,6 +93,17 @@ test('tables collide when they overlap and fit when they only touch', () => {
   const taken = [anchor, { x: 0, y: 0, footprint }]
   const free = findFreeCell(footprint, taken)
   assert.equal(collidesWithAny({ ...free, footprint }, taken), false)
+})
+
+test('a point of the floor is inside a table from its top-left edge up to, not including, the next cell', () => {
+  const table = { x: -2, y: 1, footprint: { w: 3, h: 2 } }
+
+  assert.equal(covers(table, { x: -2, y: 1 }), true)
+  assert.equal(covers(table, { x: 0.99, y: 2.99 }), true)
+  // El borde de la derecha y el de abajo ya son de la celda vecina.
+  assert.equal(covers(table, { x: 1, y: 2 }), false)
+  assert.equal(covers(table, { x: 0, y: 3 }), false)
+  assert.equal(covers(table, { x: -2.01, y: 1.5 }), false)
 })
 
 test('the search goes ring by ring: the top row, both ends of each middle row, then the bottom row', () => {

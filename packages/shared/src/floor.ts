@@ -108,6 +108,20 @@ export function collidesWithAny(candidate: Placed, others: Placed[]) {
 }
 
 /**
+ * Si un punto del plano, en celdas y con decimales (donde cae un puntero), está
+ * dentro de lo que ocupa `placed`. El borde de la derecha y el de abajo ya son
+ * de la celda vecina, como en `overlaps`.
+ */
+export function covers(placed: Placed, point: { x: number; y: number }) {
+  return (
+    point.x >= placed.x &&
+    point.x < placed.x + placed.footprint.w &&
+    point.y >= placed.y &&
+    point.y < placed.y + placed.footprint.h
+  )
+}
+
+/**
  * El hueco libre más cercano a `near` (la esquina que se querría), para ubicar
  * una mesa nueva sin que el administrador tenga que buscar espacio a mano. Se
  * busca en anillos cada vez más grandes alrededor de ese punto; como las mesas
