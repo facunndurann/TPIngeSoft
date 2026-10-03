@@ -1,4 +1,5 @@
-import { useState, type ComponentType } from 'react'
+import type { ComponentType } from 'react'
+import { useSearchParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { Page } from '@/features/Page'
 import { useRestaurant } from '@/restaurant/restaurant-context'
@@ -15,21 +16,57 @@ type Mode = (typeof MODE_IDS)[number]
 
 /**
  * Todo lo que cambia con el modo, en un solo lugar: ningún JSX de la página
- * pregunta en qué modo está.
+ * pregunta en qué modo está. `param` es como se escribe en la URL (`?modo=editar`).
  */
-const MODES: Record<Mode, { label: string; Screen: ComponentType<FloorScreenProps> }> = {
-  edit: { label: 'Editar', Screen: FloorEditor },
-  view: { label: 'Vista', Screen: FloorView },
+const MODES: Record<Mode, { label: string; param: string; Screen: ComponentType<FloorScreenProps> }> = {
+  edit: { label: 'Editar', param: 'editar', Screen: FloorEditor },
+  view: { label: 'Vista', param: 'vista', Screen: FloorView },
+}
+
+/**
+ * Lo que se eligió en el Salón vive en la URL (`?modo=editar&sucursal=…&sector=…`):
+ * recargar no lo pierde y el link lleva al mismo lugar. Elegir reemplaza la
+ * entrada del historial en lugar de sumar una, así «atrás» sale del Salón en vez
+ * de recorrer cada elección. Lo que falta o ya no existe cae en lo de siempre:
+ * Vista, la primera sucursal y su primer sector.
+ */
+function useFloorChoices() {
+  const [params, setParams] = useSearchParams()
+
+  /** Cambia la URL a partir de la actual, sin sumar una entrada al historial. */
+  const update = (change: (next: URLSearchParams) => void) =>
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current)
+        change(next)
+        return next
+      },
+      { replace: true },
+    )
+
+  return {
+    mode: MODE_IDS.find((id) => MODES[id].param === params.get('modo')) ?? 'view',
+    branchId: params.get('sucursal'),
+    sectionId: params.get('sector'),
+    chooseMode: (mode: Mode) => update((next) => next.set('modo', MODES[mode].param)),
+    chooseBranch: (branchId: string) =>
+      update((next) => {
+        next.set('sucursal', branchId)
+        // Otra sucursal es otro plano: el sector elegido era de la anterior.
+        next.delete('sector')
+      }),
+    chooseSection: (sectionId: string) => update((next) => next.set('sector', sectionId)),
+  }
 }
 
 /** Elige sucursal y modo; el plano de cada sucursal vive en `BranchFloor`. */
 export function FloorPlanPage() {
   const restaurant = useRestaurant()
-  const [mode, setMode] = useState<Mode>('view')
-  const [branchChoice, setBranchChoice] = useState<string | null>(null)
+  const choices = useFloorChoices()
 
   const branches = useQuery(branchesQuery(restaurant.id))
-  const chosenBranch = (list: { id: string }[]) => branchChoice ?? list[0].id
+  // La de la URL si es de este restaurante; si no (un link viejo, otra cuenta), la primera.
+  const chosenBranch = (list: { id: string }[]) => (list.find((branch) => branch.id === choices.branchId) ?? list[0]).id
 
   return (
     <Page
@@ -44,7 +81,7 @@ export function FloorPlanPage() {
               size="touch"
               className="w-56"
               value={chosenBranch(branches.data)}
-              onChange={(event) => setBranchChoice(event.target.value)}
+              onChange={(event) => choices.chooseBranch(event.target.value)}
               aria-label="Sucursal"
             >
               {branches.data.map((branch) => (
@@ -54,32 +91,50 @@ export function FloorPlanPage() {
               ))}
             </Select>
           )}
-          <ModeSwitch mode={mode} onChange={setMode} />
+          <ModeSwitch mode={choices.mode} onChange={choices.chooseMode} />
         </>
       }
     >
       <QueryView query={branches} empty="Todavía no hay sucursales. Creá una en Restaurante.">
         {(branches) => {
           const branchId = chosenBranch(branches)
-          // Otra sucursal es otro plano: la key vuelve al primer sector y descarta
-          // la selección, sin resetear nada a mano.
-          return <BranchFloor key={branchId} branchId={branchId} mode={mode} />
+          // Otra sucursal es otro plano: la key lo monta de cero, así la selección
+          // y el historial de deshacer no pasan de una a otra.
+          return (
+            <BranchFloor
+              key={branchId}
+              branchId={branchId}
+              mode={choices.mode}
+              sectionChoice={choices.sectionId}
+              onChooseSection={choices.chooseSection}
+            />
+          )
         }}
       </QueryView>
     </Page>
   )
 }
 
-function BranchFloor({ branchId, mode }: { branchId: string; mode: Mode }) {
+function BranchFloor({
+  branchId,
+  mode,
+  sectionChoice,
+  onChooseSection,
+}: {
+  branchId: string
+  mode: Mode
+  /** El sector de la URL, tal cual: puede no ser de esta sucursal o no existir más. */
+  sectionChoice: string | null
+  onChooseSection: (sectionId: string) => void
+}) {
   const sections = useQuery(sectionsQuery(branchId))
   const tables = useQuery(tablesQuery(branchId))
-  const [sectionChoice, setSectionChoice] = useState<string | null>(null)
   const { Screen } = MODES[mode]
 
   return (
     <QueryView query={[sections, tables]}>
       {([sections, tables]) => {
-        // Si el sector elegido deja de existir (se borró), se abre el primero.
+        // Si el sector elegido no está (se borró, o el link es viejo), se abre el primero.
         const section = sections.find((entry) => entry.id === sectionChoice) ?? sections[0] ?? null
         // Cambiar de modo o de sector remonta la pantalla: selección, formularios,
         // errores e historial de deshacer arrancan de cero.
@@ -89,7 +144,7 @@ function BranchFloor({ branchId, mode }: { branchId: string; mode: Mode }) {
             branchId={branchId}
             floor={floorOf(sections, tables)}
             section={section}
-            onChooseSection={setSectionChoice}
+            onChooseSection={onChooseSection}
           />
         )
       }}
