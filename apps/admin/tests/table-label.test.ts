@@ -1,6 +1,6 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
-import { labelLayout } from '../src/features/floor/tableLabel'
+import { labelLayout } from '@restaurant-platform/ui'
 
 /** La caja de una mesa de `w` × `h` celdas, en píxeles del plano: 44 por celda, menos 6 de aire. */
 const box = (w: number, h: number) => ({ width: w * 44 - 6, height: h * 44 - 6 })

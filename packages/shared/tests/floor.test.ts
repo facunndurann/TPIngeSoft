@@ -12,6 +12,7 @@ import {
   isOperable,
   occupiedBy,
   tableFootprint,
+  tableAt,
   tablePlacement,
   tableShapes,
 } from '../src/floor.ts'
@@ -104,6 +105,18 @@ test('a point of the floor is inside a table from its top-left edge up to, not i
   assert.equal(covers(table, { x: 1, y: 2 }), false)
   assert.equal(covers(table, { x: 0, y: 3 }), false)
   assert.equal(covers(table, { x: -2.01, y: 1.5 }), false)
+})
+
+test('tableAt finds the table under a point of the floor, or none over the empty floor', () => {
+  const at = (x: number, y: number) => ({ position_x: x, position_y: y, width: 2, height: 1 })
+  const tables = [
+    { id: 'a', ...at(0, 0) },
+    { id: 'b', ...at(-3, 2) },
+  ]
+
+  assert.equal(tableAt(tables, { x: 1.5, y: 0.5 })?.id, 'a')
+  assert.equal(tableAt(tables, { x: -2.2, y: 2.9 })?.id, 'b')
+  assert.equal(tableAt(tables, { x: 2, y: 0.5 }), undefined)
 })
 
 test('the search goes ring by ring: the top row, both ends of each middle row, then the bottom row', () => {

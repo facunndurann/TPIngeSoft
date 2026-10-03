@@ -1,9 +1,8 @@
 import { useId, type ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { tablePlacement } from '@restaurant-platform/shared'
-import { Badge } from '@restaurant-platform/ui'
+import { Badge, floorCardClass } from '@restaurant-platform/ui'
 import type { FloorTable } from '@/queries/floor'
-import { cardClass } from './styles'
 import { TableGlyph } from './TableGlyph'
 
 type SectionTablesProps = {
@@ -36,7 +35,7 @@ export function SectionTables({
   const headingId = useId()
 
   return (
-    <aside aria-labelledby={headingId} className={`flex min-h-0 flex-col gap-3 overflow-y-auto px-4 pt-6 pb-4 ${cardClass}`}>
+    <aside aria-labelledby={headingId} className={`flex min-h-0 flex-col gap-3 overflow-y-auto px-4 pt-6 pb-4 ${floorCardClass}`}>
       <div className="px-2">
         <h2 id={headingId} className="text-lg leading-tight font-bold text-neutral-900">
           Mesas del sector

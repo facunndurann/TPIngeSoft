@@ -1,18 +1,24 @@
 /**
- * Cómo se escribe una mesa en el plano: qué tamaño de letra y qué entra. Va
- * aparte de `FloorTableTile` porque un archivo de componentes que también
- * exporta funciones rompe el fast refresh de Vite, y así se prueba sin un DOM.
+ * Cómo se escribe una mesa en el plano: qué tamaño de letra y qué entra. Lo usan
+ * las mesas del editor del admin y las del POS; va sin componentes, así se prueba
+ * sin un DOM.
  */
 
-/** Ningún texto del plano se lee a menos de esto en pantalla: el mínimo de todo el panel. */
+/** Ningún texto del plano se lee a menos de esto en pantalla: el mínimo del admin y del POS. */
 const MIN_TEXT = 12
+
+/**
+ * Un tamaño de letra del plano, en píxeles del plano, que en pantalla nunca baja
+ * de `MIN_TEXT`: el zoom de la cámara lo achicaría, y acá se lo compensa.
+ */
+export const readableSize = (size: number, zoom: number) => Math.max(size, MIN_TEXT / zoom)
 
 /** Lo que mide cada texto a zoom 1: el nombre (`text-sm`) y el detalle (`text-xs`). */
 const NAME_SIZE = 14
 const DETAIL_SIZE = 12
 
 /** El interlineado (`leading-tight`). */
-const LINE = 1.25
+export const LINE = 1.25
 
 /**
  * Ancho promedio de un carácter, en `em`, para estimar si un texto entra. Algo de
@@ -42,8 +48,8 @@ export function labelLayout(
   zoom: number,
   text: { name: string; detail: string; compact: string | null },
 ): LabelLayout {
-  const nameSize = Math.max(NAME_SIZE, MIN_TEXT / zoom)
-  const detailSize = Math.max(DETAIL_SIZE, MIN_TEXT / zoom)
+  const nameSize = readableSize(NAME_SIZE, zoom)
+  const detailSize = readableSize(DETAIL_SIZE, zoom)
   const nameLine = nameSize * LINE
   const detailLine = detailSize * LINE
   const room = box.width - SIDE

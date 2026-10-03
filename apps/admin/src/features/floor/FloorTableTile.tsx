@@ -1,10 +1,8 @@
 import type { CSSProperties, KeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
 import { Users, X } from 'lucide-react'
-import type { FloorTile } from '@restaurant-platform/ui'
+import { CHAIR_COLOR, ChairsLegendItem, TableChairs, labelLayout, type FloorTile } from '@restaurant-platform/ui'
 import type { FloorTable } from '@/queries/floor'
-import { CHAIR_SIZE, chairsAround } from './chairs'
 import type { Corner } from './placement'
-import { labelLayout } from './tableLabel'
 
 type PointerHandler = (event: ReactPointerEvent<HTMLElement>) => void
 
@@ -81,14 +79,13 @@ export function FloorTableTile({ table, tile, zoom, active, invalid, editing, op
 
   return (
     <>
-      {chairsAround(tile.box, table.shape === 'round', table.seats).map((chair, index) => (
-        <span
-          key={index}
-          aria-hidden="true"
-          className={`absolute rounded-full ${look.chair}`}
-          style={{ ...chair, width: CHAIR_SIZE, height: CHAIR_SIZE, zIndex: active ? 9 : 0 }}
-        />
-      ))}
+      <TableChairs
+        tile={tile}
+        round={table.shape === 'round'}
+        seats={table.seats}
+        color={look.chair}
+        zIndex={active ? 9 : 0}
+      />
 
       {editing ? (
         <>
@@ -174,7 +171,7 @@ function tableLook({ invalid, selected, muted }: { invalid: boolean; selected: b
     }
   return {
     table: `border-neutral-300 bg-white text-neutral-900 hover:border-primary/70 ${selection}`,
-    chair: selected ? 'bg-primary' : 'bg-neutral-400',
+    chair: selected ? 'bg-primary' : CHAIR_COLOR,
   }
 }
 
@@ -266,10 +263,7 @@ function TableLabel({ table, tile, zoom, muted }: { table: FloorTable; tile: Flo
 export function FloorLegend({ editing }: { editing: boolean }) {
   return (
     <ul className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-muted">
-      <li className="flex items-center gap-2">
-        <span aria-hidden="true" className="h-3 w-3 rounded-full bg-neutral-400" />
-        Cada silla es un lugar
-      </li>
+      <ChairsLegendItem />
       <li className="flex items-center gap-2">
         <span aria-hidden="true" className="h-3 w-5.5 rounded border-2 border-dashed border-neutral-300 bg-neutral-50" />
         Fuera de uso

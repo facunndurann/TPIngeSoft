@@ -12,10 +12,9 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { tablePlacement, tableShapeLabels, tableShapes, type Placed } from '@restaurant-platform/shared'
-import { Button, Field, IconButton, Input, Toggle, iconButtonClass } from '@restaurant-platform/ui'
+import { Button, Field, IconButton, Input, Toggle, floorCardClass, iconButtonClass } from '@restaurant-platform/ui'
 import type { FloorTable, TablePatch } from '@/queries/floor'
 import { changesTo, nudged, type NudgeKind, type Step } from './placement'
-import { cardClass } from './styles'
 import { TableGlyph } from './TableGlyph'
 
 /**
@@ -220,7 +219,10 @@ export function TableInspector({ table, sectionName, onEdit, onPlace, onDelete, 
   )
 
   return (
-    <aside aria-label="Mesa seleccionada" className={`flex min-h-0 flex-col gap-5 overflow-y-auto p-6 ${cardClass}`}>
+    <aside
+      aria-label="Mesa seleccionada"
+      className={`flex min-h-0 flex-col gap-5 overflow-y-auto p-6 ${floorCardClass}`}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-lg leading-tight font-bold break-words text-neutral-900">{table.label}</h2>

@@ -1,6 +1,6 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
-import { chairsAround, seatsPerSide } from '../src/features/floor/chairs'
+import { chairsAround, seatsPerSide } from '@restaurant-platform/ui'
 import { nextTableLabel } from '../src/features/floor/floor'
 
 test('a square table spreads its seats evenly around its four sides', () => {

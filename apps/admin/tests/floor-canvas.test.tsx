@@ -5,8 +5,8 @@ import { act, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { Placed } from '@restaurant-platform/shared'
+import { useFloorCamera } from '@restaurant-platform/ui'
 import { FloorCanvas, type FloorEditing } from '../src/features/floor/FloorCanvas'
-import { useFloorCamera } from '../src/features/floor/useFloorCamera'
 import type { FloorTable } from '../src/queries/floor'
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
@@ -354,7 +354,7 @@ test('a table that didn’t fit is marked on itself: it shakes unless motion is 
 
   // La misma mesa, otra vez contra la otra: una marca nueva, que vuelve a sacudirse.
   await render(<Plan tables={[table, neighbor]} editing={refusedTwice(2)} />)
-  assert.notEqual(noFitMarks(container)[0], mark)
+  assert.ok(noFitMarks(container)[0] !== mark, 'Otro rechazo es una marca nueva')
 })
 
 test('a table left of or above the origin is drawn there: the camera, not the floor, brings it into view', () => {

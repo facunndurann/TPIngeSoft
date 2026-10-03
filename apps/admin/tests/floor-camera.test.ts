@@ -1,7 +1,7 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import { FLOOR_CELL } from '@restaurant-platform/shared'
-import { HOME, ZOOM, cellAt, framing, pinched, revealed, zoomedAround } from '../src/features/floor/camera'
+import { HOME, ZOOM, cellAt, framing, pinched, revealed, zoomedAround } from '@restaurant-platform/ui'
 
 const view = { width: 800, height: 400 }
 const center = { x: view.width / 2, y: view.height / 2 }

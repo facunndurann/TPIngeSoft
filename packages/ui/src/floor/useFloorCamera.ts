@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { tablePlacement, type Placed } from '@restaurant-platform/shared'
-import type { FloorTable } from '@/queries/floor'
+import { tablePlacement, type GridTable, type Placed } from '@restaurant-platform/shared'
 import { HOME, cellAt, framing, panned, pinched, revealed, zoomedAround, type Camera, type Point, type ViewSize } from './camera'
 import { keyBelongsElsewhere } from './keys'
 
@@ -38,7 +37,7 @@ export type FloorCamera = ReturnType<typeof useFloorCamera>
  * Es de la pantalla que dibuja el plano y no del plano: el editor también
  * necesita saber qué se está mirando, para ubicar ahí lo nuevo (`centerCell`).
  */
-export function useFloorCamera(tables: readonly FloorTable[]) {
+export function useFloorCamera(tables: readonly GridTable[]) {
   const viewport = useRef<HTMLDivElement | null>(null)
   const [camera, setCamera] = useState<Camera>(HOME)
   /**

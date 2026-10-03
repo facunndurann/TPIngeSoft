@@ -1,4 +1,4 @@
-import type { FloorTile } from '@restaurant-platform/ui'
+import type { FloorTile } from './floorTile'
 
 /** Lado de una silla del plano, en píxeles con zoom 1. */
 export const CHAIR_SIZE = 12

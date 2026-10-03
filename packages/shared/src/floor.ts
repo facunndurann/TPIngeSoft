@@ -121,6 +121,11 @@ export function covers(placed: Placed, point: { x: number; y: number }) {
   )
 }
 
+/** La mesa que ocupa un punto del plano (en celdas, con decimales), si hay alguna: la que se tocó. */
+export function tableAt<T extends GridTable>(tables: readonly T[], point: { x: number; y: number }) {
+  return tables.find((table) => covers(tablePlacement(table), point))
+}
+
 /**
  * El hueco libre más cercano a `near` (la esquina que se querría), para ubicar
  * una mesa nueva sin que el administrador tenga que buscar espacio a mano. Se

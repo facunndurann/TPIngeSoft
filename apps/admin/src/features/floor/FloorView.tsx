@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { QrCode } from 'lucide-react'
 import { countLabel, isOperable } from '@restaurant-platform/shared'
-import { EmptyState } from '@restaurant-platform/ui'
+import { EmptyState, useFloorCamera } from '@restaurant-platform/ui'
 import { QrModal } from '@/features/QrModal'
 import type { FloorSection, FloorTable } from '@/queries/floor'
 import { useRestaurant } from '@/restaurant/restaurant-context'
@@ -11,7 +11,6 @@ import { FloorLegend } from './FloorTableTile'
 import { SectionTables } from './SectionTables'
 import { SectionTabs } from './SectionTabs'
 import type { Floor, FloorScreenProps } from './floor'
-import { useFloorCamera } from './useFloorCamera'
 
 /**
  * El plano en modo vista: el mismo que ve el personal, de solo lectura. Tocar una

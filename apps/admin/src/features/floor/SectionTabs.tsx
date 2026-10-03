@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
-import { Check, Plus, X } from 'lucide-react'
-import { Badge, Button, IconButton, Input } from '@restaurant-platform/ui'
+import { Plus, X } from 'lucide-react'
+import { Button, IconButton, Input, SectionPills } from '@restaurant-platform/ui'
 import type { Floor } from './floor'
 
 type SectionTabsProps = {
@@ -11,42 +11,22 @@ type SectionTabsProps = {
   children?: ReactNode
 }
 
-/**
- * Los sectores de la sucursal como píldoras. Lo elegido no se dice solo con
- * color: `aria-pressed` lo anuncia y el ✓ lo muestra.
- */
+/** Los sectores de la sucursal como píldoras (las mismas del POS), cada uno con sus mesas. */
 export function SectionTabs({ floor, activeId, onChoose, children }: SectionTabsProps) {
   return (
-    <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Sectores">
-      {floor.sections.map((entry) => {
-        const pressed = entry.id === activeId
-        const count = floor.tablesIn(entry.id).length
-        return (
-          <button
-            key={entry.id}
-            type="button"
-            aria-pressed={pressed}
-            onClick={() => onChoose(entry.id)}
-            className={`inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-full border px-4 text-sm transition-colors ${
-              pressed
-                ? 'border-primary bg-primary-soft font-semibold text-primary-ink'
-                : 'border-neutral-200 bg-white font-medium text-muted hover:bg-neutral-50'
-            }`}
-          >
-            {pressed && <Check size={15} aria-hidden="true" />}
-            {entry.name}
-            {/* Se distingue por tamaño y peso, no con opacidad: atenuada no llegaba
-                a 4,5:1 sobre el fondo del sector elegido. Se lee «4 mesas». */}
-            <span className="text-xs font-normal tabular-nums">
-              {count}
-              <span className="sr-only"> {count === 1 ? 'mesa' : 'mesas'}</span>
-            </span>
-            {!entry.is_active && <Badge color="red">Sin uso</Badge>}
-          </button>
-        )
-      })}
+    <SectionPills
+      label="Sectores"
+      sections={floor.sections.map((entry) => ({
+        id: entry.id,
+        name: entry.name,
+        tables: floor.tablesIn(entry.id).length,
+        inUse: entry.is_active,
+      }))}
+      activeId={activeId}
+      onChoose={onChoose}
+    >
       {children}
-    </div>
+    </SectionPills>
   )
 }
 

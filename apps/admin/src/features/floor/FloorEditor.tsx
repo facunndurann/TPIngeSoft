@@ -1,17 +1,25 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { Check, ChevronRight, Ellipsis, Pencil, Plus, Redo2, Trash2, Undo2, X } from 'lucide-react'
-import { Button, EmptyState, IconButton, Input, Toggle, iconButtonClass, useConfirm } from '@restaurant-platform/ui'
+import {
+  Button,
+  EmptyState,
+  IconButton,
+  Input,
+  Toggle,
+  iconButtonClass,
+  keyBelongsElsewhere,
+  useConfirm,
+  useFloorCamera,
+} from '@restaurant-platform/ui'
 import { countLabel } from '@restaurant-platform/shared'
 import type { FloorSection, FloorTable } from '@/queries/floor'
 import { FloorCanvas } from './FloorCanvas'
 import { FloorLayout } from './FloorLayout'
 import { FloorLegend } from './FloorTableTile'
-import { keyBelongsElsewhere } from './keys'
 import { NewSectionButton, SectionTabs } from './SectionTabs'
 import { SectionTables } from './SectionTables'
 import { TableInspector } from './TableInspector'
 import type { FloorScreenProps } from './floor'
-import { useFloorCamera } from './useFloorCamera'
 import { useFloorEditor, type FloorEditorActions } from './useFloorEditor'
 
 /** El plano en modo editar: sectores, mesas, gestos y el panel de la mesa elegida. */
