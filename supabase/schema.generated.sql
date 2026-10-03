@@ -1848,6 +1848,76 @@ $$;
 ALTER FUNCTION "public"."save_employee_account"("p_actor" "uuid", "p_restaurant" "uuid", "p_user" "uuid", "p_full_name" "text", "p_roles" "public"."member_role"[], "p_branches" "uuid"[], "p_active" boolean, "p_username" "text", "p_legacy" "uuid") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."save_floor"("p_branch_id" "uuid", "p_changes" "jsonb") RETURNS "void"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_restaurant uuid;
+begin
+  select restaurant_id into v_restaurant from public.branches where id = p_branch_id;
+  if v_restaurant is null then raise exception 'BRANCH_NOT_FOUND'; end if;
+  -- Con RLS, un update o un delete sin permiso no falla: no toca nada. Se dice antes.
+  if not public.is_restaurant_admin(v_restaurant) then raise exception 'FORBIDDEN'; end if;
+
+  set constraints floor_sections_branch_id_name_key, tables_label_unique_per_branch deferred;
+
+  -- Sectores nuevos y modificados, antes que las mesas que los usan.
+  insert into public.floor_sections(id, restaurant_id, branch_id, name, sort_order, is_active)
+  select (s->>'id')::uuid, v_restaurant, p_branch_id, s->>'name',
+         coalesce((s->>'sort_order')::integer, 0), coalesce((s->>'is_active')::boolean, true)
+  from jsonb_array_elements(coalesce(p_changes->'sections'->'create', '[]')) s;
+
+  update public.floor_sections f set
+    name = case when s ? 'name' then s->>'name' else f.name end,
+    sort_order = case when s ? 'sort_order' then (s->>'sort_order')::integer else f.sort_order end,
+    is_active = case when s ? 'is_active' then (s->>'is_active')::boolean else f.is_active end
+  from jsonb_array_elements(coalesce(p_changes->'sections'->'update', '[]')) s
+  where f.id = (s->>'id')::uuid and f.branch_id = p_branch_id;
+
+  delete from public.tables
+  where branch_id = p_branch_id
+    and id in (select (value)::uuid from jsonb_array_elements_text(coalesce(p_changes->'tables'->'delete', '[]')));
+
+  insert into public.tables(
+    id, restaurant_id, branch_id, label, section_id, position_x, position_y, width, height, seats, shape,
+    is_active, is_visible
+  )
+  select (t->>'id')::uuid, v_restaurant, p_branch_id, t->>'label', (t->>'section_id')::uuid,
+         (t->>'position_x')::integer, (t->>'position_y')::integer, (t->>'width')::integer, (t->>'height')::integer,
+         (t->>'seats')::integer, t->>'shape', (t->>'is_active')::boolean, (t->>'is_visible')::boolean
+  from jsonb_array_elements(coalesce(p_changes->'tables'->'create', '[]')) t;
+
+  update public.tables m set
+    label = case when t ? 'label' then t->>'label' else m.label end,
+    section_id = case when t ? 'section_id' then (t->>'section_id')::uuid else m.section_id end,
+    position_x = case when t ? 'position_x' then (t->>'position_x')::integer else m.position_x end,
+    position_y = case when t ? 'position_y' then (t->>'position_y')::integer else m.position_y end,
+    width = case when t ? 'width' then (t->>'width')::integer else m.width end,
+    height = case when t ? 'height' then (t->>'height')::integer else m.height end,
+    seats = case when t ? 'seats' then (t->>'seats')::integer else m.seats end,
+    shape = case when t ? 'shape' then t->>'shape' else m.shape end,
+    is_active = case when t ? 'is_active' then (t->>'is_active')::boolean else m.is_active end,
+    is_visible = case when t ? 'is_visible' then (t->>'is_visible')::boolean else m.is_visible end
+  from jsonb_array_elements(coalesce(p_changes->'tables'->'update', '[]')) t
+  where m.id = (t->>'id')::uuid and m.branch_id = p_branch_id;
+
+  -- Al final: sus mesas ya quedaron sin sector (o en otro) con las modificaciones.
+  delete from public.floor_sections
+  where branch_id = p_branch_id
+    and id in (select (value)::uuid from jsonb_array_elements_text(coalesce(p_changes->'sections'->'delete', '[]')));
+
+  -- Los nombres se controlan acá y no al confirmar la transacción: un nombre
+  -- repetido hace fallar el guardado entero, también si quien llama sigue adentro
+  -- de una transacción más larga.
+  set constraints floor_sections_branch_id_name_key, tables_label_unique_per_branch immediate;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."save_floor"("p_branch_id" "uuid", "p_changes" "jsonb") OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."save_modifier_group"("p_restaurant_id" "uuid", "p_name" "text", "p_min_select" integer, "p_max_select" integer, "p_is_available" boolean, "p_options" "jsonb", "p_group_id" "uuid" DEFAULT NULL::"uuid") RETURNS "uuid"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -3234,7 +3304,7 @@ ALTER TABLE ONLY "public"."branches"
 
 
 ALTER TABLE ONLY "public"."floor_sections"
-    ADD CONSTRAINT "floor_sections_branch_id_name_key" UNIQUE ("branch_id", "name");
+    ADD CONSTRAINT "floor_sections_branch_id_name_key" UNIQUE ("branch_id", "name") DEFERRABLE;
 
 
 
@@ -3444,7 +3514,7 @@ ALTER TABLE ONLY "public"."table_sessions"
 
 
 ALTER TABLE ONLY "public"."tables"
-    ADD CONSTRAINT "tables_label_unique_per_branch" UNIQUE ("branch_id", "label");
+    ADD CONSTRAINT "tables_label_unique_per_branch" UNIQUE ("branch_id", "label") DEFERRABLE;
 
 
 
@@ -4501,6 +4571,12 @@ GRANT ALL ON FUNCTION "public"."resolve_payment_provider_for_session"("p_session
 
 REVOKE ALL ON FUNCTION "public"."save_employee_account"("p_actor" "uuid", "p_restaurant" "uuid", "p_user" "uuid", "p_full_name" "text", "p_roles" "public"."member_role"[], "p_branches" "uuid"[], "p_active" boolean, "p_username" "text", "p_legacy" "uuid") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."save_employee_account"("p_actor" "uuid", "p_restaurant" "uuid", "p_user" "uuid", "p_full_name" "text", "p_roles" "public"."member_role"[], "p_branches" "uuid"[], "p_active" boolean, "p_username" "text", "p_legacy" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."save_floor"("p_branch_id" "uuid", "p_changes" "jsonb") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."save_floor"("p_branch_id" "uuid", "p_changes" "jsonb") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."save_floor"("p_branch_id" "uuid", "p_changes" "jsonb") TO "service_role";
 
 
 

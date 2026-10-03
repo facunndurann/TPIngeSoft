@@ -46,6 +46,9 @@ declare
   dining_table uuid;
   hidden_table uuid;
   hidden_default uuid;
+  new_section uuid := gen_random_uuid();
+  new_table uuid := gen_random_uuid();
+  foreign_table uuid;
 begin
   insert into auth.users(id, aud, role) values
     (admin_user, 'authenticated', 'authenticated'),
@@ -169,7 +172,72 @@ begin
     restaurant, branch, 'Terraza')) then
     raise exception 'Administrator cannot create sections'; end if;
 
-  raise notice 'Floor layout SQL assertions passed (sections, uniqueness, branch integrity, flags, RLS)';
+  -- ---------- Guardar una edición del salón de una vez ----------
+  select id into foreign_table from public.tables where branch_id = other_branch and label = 'Mesa 1';
+
+  if not pg_temp.can_write_as(admin_user, format('select public.save_floor(%L, %L)', branch, jsonb_build_object(
+    'sections', jsonb_build_object('create', jsonb_build_array(
+      jsonb_build_object('id', new_section, 'name', 'Galería', 'sort_order', 5, 'is_active', true)
+    )),
+    'tables', jsonb_build_object(
+      -- Una mesa nueva en un sector nuevo: los ids los pone el editor.
+      'create', jsonb_build_array(jsonb_build_object(
+        'id', new_table, 'label', 'Mesa 30', 'section_id', new_section, 'position_x', -2, 'position_y', 1,
+        'width', 2, 'height', 2, 'seats', 6, 'shape', 'round', 'is_active', true, 'is_visible', true
+      )),
+      -- Dos mesas intercambian nombres: solo pasa si la unicidad se controla al final.
+      'update', jsonb_build_array(
+        jsonb_build_object('id', dining_table, 'label', 'Barra', 'position_x', 7),
+        jsonb_build_object('id', hidden_table, 'label', 'Mesa 1')
+      ),
+      -- Una mesa de otra sucursal no se borra desde esta.
+      'delete', jsonb_build_array(hidden_default, foreign_table)
+    )
+  ))) then
+    raise exception 'Administrator cannot save a floor edit'; end if;
+
+  if not exists (select 1 from public.floor_sections
+                 where id = new_section and branch_id = branch and restaurant_id = restaurant and sort_order = 5) then
+    raise exception 'The new section was not created in its branch'; end if;
+  if not exists (select 1 from public.tables
+                 where id = new_table and section_id = new_section and position_x = -2 and shape = 'round'
+                   and seats = 6 and qr_token is not null and restaurant_id = restaurant) then
+    raise exception 'The new table was not created with its layout and a QR'; end if;
+  if (select label from public.tables where id = dining_table) <> 'Barra'
+    or (select label from public.tables where id = hidden_table) <> 'Mesa 1' then
+    raise exception 'Two tables could not swap labels in one save'; end if;
+  -- Una modificación escribe solo lo que trae: la fila conserva lo demás.
+  if (select position_x from public.tables where id = dining_table) <> 7
+    or (select position_y from public.tables where id = dining_table) <> 4 then
+    raise exception 'An update touched columns it did not bring'; end if;
+  if exists (select 1 from public.tables where id = hidden_default) then
+    raise exception 'The deleted table survived the save'; end if;
+  if not exists (select 1 from public.tables where id = foreign_table) then
+    raise exception 'A save deleted a table from another branch'; end if;
+
+  -- Un nombre repetido hace fallar el guardado entero, sin dejar nada a medias.
+  if pg_temp.can_write_as(admin_user, format('select public.save_floor(%L, %L)', branch, jsonb_build_object(
+    'sections', jsonb_build_object('create', jsonb_build_array(jsonb_build_object('id', gen_random_uuid(), 'name', 'Otra'))),
+    'tables', jsonb_build_object('update', jsonb_build_array(jsonb_build_object('id', new_table, 'label', 'Barra')))
+  ))) then
+    raise exception 'A save with a repeated table label was accepted'; end if;
+  if exists (select 1 from public.floor_sections where branch_id = branch and name = 'Otra') then
+    raise exception 'A failed save left part of its changes'; end if;
+
+  -- Borrar un sector deja sus mesas sin sector, como desde la tabla.
+  if not pg_temp.can_write_as(admin_user, format('select public.save_floor(%L, %L)', branch,
+    jsonb_build_object('sections', jsonb_build_object('delete', jsonb_build_array(new_section))))) then
+    raise exception 'Administrator cannot delete a section in a save'; end if;
+  if (select section_id from public.tables where id = new_table) is not null then
+    raise exception 'Deleting a section in a save left its tables pointing at it'; end if;
+
+  if pg_temp.can_write_as(staff_user, format('select public.save_floor(%L, %L)', branch,
+    jsonb_build_object('tables', jsonb_build_object('update', jsonb_build_array(
+      jsonb_build_object('id', dining_table, 'position_x', 1))))))
+    or (select position_x from public.tables where id = dining_table) <> 7 then
+    raise exception 'Operative member can save the floor'; end if;
+
+  raise notice 'Floor layout SQL assertions passed (sections, uniqueness, branch integrity, flags, RLS, save_floor)';
 end;
 $$;
 

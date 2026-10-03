@@ -18,9 +18,9 @@ type Mode = (typeof MODE_IDS)[number]
  * Todo lo que cambia con el modo, en un solo lugar: ningún JSX de la página
  * pregunta en qué modo está. `param` es como se escribe en la URL (`?modo=editar`).
  */
-const MODES: Record<Mode, { label: string; param: string; Screen: ComponentType<FloorScreenProps> }> = {
-  edit: { label: 'Editar', param: 'editar', Screen: FloorEditor },
-  view: { label: 'Vista', param: 'vista', Screen: FloorView },
+const MODES: Record<Mode, { param: string; Screen: ComponentType<FloorScreenProps> }> = {
+  edit: { param: 'editar', Screen: FloorEditor },
+  view: { param: 'vista', Screen: FloorView },
 }
 
 /**
@@ -74,25 +74,25 @@ export function FloorPlanPage() {
       wide
       fill
       actions={
-        <>
-          {/* Con una sola sucursal, o mientras cargan, no hay nada que elegir. */}
-          {branches.data && branches.data.length > 1 && (
-            <Select
-              size="touch"
-              className="w-56"
-              value={chosenBranch(branches.data)}
-              onChange={(event) => choices.chooseBranch(event.target.value)}
-              aria-label="Sucursal"
-            >
-              {branches.data.map((branch) => (
-                <option key={branch.id} value={branch.id}>
-                  {branch.name}
-                </option>
-              ))}
-            </Select>
-          )}
-          <ModeSwitch mode={choices.mode} onChange={choices.chooseMode} />
-        </>
+        // Con una sola sucursal, o mientras cargan, no hay nada que elegir. Editando
+        // tampoco: lo que se edita es el salón de una sucursal, y cambiarla lo perdería.
+        choices.mode === 'view' &&
+        branches.data &&
+        branches.data.length > 1 && (
+          <Select
+            size="touch"
+            className="w-56"
+            value={chosenBranch(branches.data)}
+            onChange={(event) => choices.chooseBranch(event.target.value)}
+            aria-label="Sucursal"
+          >
+            {branches.data.map((branch) => (
+              <option key={branch.id} value={branch.id}>
+                {branch.name}
+              </option>
+            ))}
+          </Select>
+        )
       }
     >
       <QueryView query={branches} empty="Todavía no hay sucursales. Creá una en Restaurante.">
@@ -107,6 +107,7 @@ export function FloorPlanPage() {
               mode={choices.mode}
               sectionChoice={choices.sectionId}
               onChooseSection={choices.chooseSection}
+              onSwitchMode={() => choices.chooseMode(choices.mode === 'edit' ? 'view' : 'edit')}
             />
           )
         }}
@@ -120,12 +121,14 @@ function BranchFloor({
   mode,
   sectionChoice,
   onChooseSection,
+  onSwitchMode,
 }: {
   branchId: string
   mode: Mode
   /** El sector de la URL, tal cual: puede no ser de esta sucursal o no existir más. */
   sectionChoice: string | null
   onChooseSection: (sectionId: string) => void
+  onSwitchMode: () => void
 }) {
   const sections = useQuery(sectionsQuery(branchId))
   const tables = useQuery(tablesQuery(branchId))
@@ -133,42 +136,17 @@ function BranchFloor({
 
   return (
     <QueryView query={[sections, tables]}>
-      {([sections, tables]) => {
-        // Si el sector elegido no está (se borró, o el link es viejo), se abre el primero.
-        const section = sections.find((entry) => entry.id === sectionChoice) ?? sections[0] ?? null
-        // Cambiar de modo o de sector remonta la pantalla: selección, formularios,
-        // errores e historial de deshacer arrancan de cero.
-        return (
-          <Screen
-            key={section?.id}
-            branchId={branchId}
-            floor={floorOf(sections, tables)}
-            section={section}
-            onChooseSection={onChooseSection}
-          />
-        )
-      }}
+      {/* Cambiar de modo remonta la pantalla: el editor empieza su borrador con el
+          salón como está, y la vista abre con lo que se guardó. */}
+      {([sections, tables]) => (
+        <Screen
+          branchId={branchId}
+          floor={floorOf(sections, tables)}
+          sectionId={sectionChoice}
+          onChooseSection={onChooseSection}
+          onSwitchMode={onSwitchMode}
+        />
+      )}
     </QueryView>
-  )
-}
-
-/** Editar o Vista, como un interruptor de dos posiciones. */
-function ModeSwitch({ mode, onChange }: { mode: Mode; onChange: (mode: Mode) => void }) {
-  return (
-    <div className="flex gap-1 rounded-full border border-neutral-200 bg-white p-1" role="group" aria-label="Modo del plano">
-      {MODE_IDS.map((id) => (
-        <button
-          key={id}
-          type="button"
-          onClick={() => onChange(id)}
-          aria-pressed={mode === id}
-          className={`min-h-11 cursor-pointer rounded-full px-5 text-sm transition-colors ${
-            mode === id ? 'bg-primary font-semibold text-white' : 'font-medium text-muted hover:bg-neutral-100'
-          }`}
-        >
-          {MODES[id].label}
-        </button>
-      ))}
-    </div>
   )
 }

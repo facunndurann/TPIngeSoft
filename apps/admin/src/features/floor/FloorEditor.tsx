@@ -12,61 +12,102 @@ import {
   useFloorCamera,
 } from '@restaurant-platform/ui'
 import { countLabel } from '@restaurant-platform/shared'
+import { UnsavedChangesGuard } from '@/features/UnsavedChangesGuard'
 import type { FloorSection, FloorTable } from '@/queries/floor'
 import { FloorCanvas } from './FloorCanvas'
-import { FloorLayout } from './FloorLayout'
+import { FloorHeader, FloorLayout } from './FloorLayout'
 import { NewSectionButton, SectionTabs } from './SectionTabs'
 import { SectionTables } from './SectionTables'
 import { TableInspector } from './TableInspector'
 import { FloorLegend } from './TableTile'
-import type { FloorScreenProps } from './floor'
+import { sectionOf, type FloorScreenProps } from './floor'
 import { useFloorEditor, type FloorEditorActions } from './useFloorEditor'
 
-/** El plano en modo editar: sectores, mesas, gestos y el panel de la mesa elegida. */
-export function FloorEditor({ branchId, floor, section, onChooseSection }: FloorScreenProps) {
-  const editor = useFloorEditor(branchId, floor)
+/**
+ * El plano en modo editar: sectores, mesas, gestos y el panel de la mesa elegida.
+ * Todo cambia un borrador (`useFloorEditor`), que nadie más ve: «Guardar» lo
+ * escribe de una vez y vuelve a la vista, y «Cancelar» lo descarta.
+ */
+export function FloorEditor({ branchId, floor: saved, sectionId, onChooseSection, onSwitchMode }: FloorScreenProps) {
+  const editor = useFloorEditor(branchId, saved)
+  const section = sectionOf(editor.floor, sectionId)
+  const { confirm, dialog } = useConfirm()
+
+  async function cancel() {
+    if (editor.dirty) {
+      const discard = await confirm({
+        title: '¿Descartar los cambios?',
+        message: 'Lo que cambiaste en el salón no se guarda.',
+        confirmLabel: 'Descartar cambios',
+      })
+      if (!discard) return
+    }
+    onSwitchMode()
+  }
 
   return (
     <>
-      <SectionTabs floor={floor} activeId={section?.id ?? null} onChoose={onChooseSection}>
-        {/* Un sector nuevo se abre apenas se crea: es para dibujarlo. */}
-        <NewSectionButton
-          pending={editor.addSection.isPending}
-          onAdd={(name, onSaved) =>
-            editor.addSection.mutate(name, {
-              onSuccess: (id) => {
-                onSaved()
-                onChooseSection(id)
-              },
-            })
-          }
-        />
-      </SectionTabs>
+      {/* Salir del Salón o recargar con cambios sin guardar también pregunta. */}
+      <UnsavedChangesGuard when={editor.dirty} />
+      <FloorHeader
+        sections={
+          <SectionTabs floor={editor.floor} activeId={section?.id ?? null} onChoose={onChooseSection}>
+            {/* Un sector nuevo se abre apenas se crea: es para dibujarlo. */}
+            <NewSectionButton
+              onAdd={(name) => {
+                const id = editor.addSection(name)
+                if (id) onChooseSection(id)
+                return id !== null
+              }}
+            />
+          </SectionTabs>
+        }
+        actions={
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              size="touch"
+              shape="pill"
+              disabled={editor.save.isPending}
+              onClick={() => void cancel()}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              size="touch"
+              shape="pill"
+              disabled={!editor.dirty || editor.save.isPending}
+              onClick={() => editor.save.mutate(undefined, { onSuccess: onSwitchMode })}
+            >
+              <Check size={16} aria-hidden="true" />
+              {editor.save.isPending ? 'Guardando…' : 'Guardar'}
+            </Button>
+          </>
+        }
+      />
       {section ? (
-        <SectionEditor section={section} floor={floor} editor={editor} />
+        // Otro sector, otra pantalla: la mesa elegida y la cámara no pasan de uno a
+        // otro. El borrador sí, porque es de toda la sucursal.
+        <SectionEditor key={section.id} section={section} editor={editor} />
       ) : (
         <EmptyState message="Creá el primer sector para empezar a dibujar el salón." />
       )}
+      {dialog}
     </>
   )
 }
 
-function SectionEditor({
-  section,
-  floor,
-  editor,
-}: {
-  section: FloorSection
-  floor: FloorScreenProps['floor']
-  editor: FloorEditorActions
-}) {
+function SectionEditor({ section, editor }: { section: FloorSection; editor: FloorEditorActions }) {
+  const { floor } = editor
   const [selectedId, setSelectedId] = useState<string | null>(null)
   // Se busca en todo el salón y no solo en el sector: una mesa sin sector que se
   // trae a este queda elegida antes de que su sector nuevo se vea en el plano.
   const selected = floor.tables.find((table) => table.id === selectedId) ?? null
   const tables = floor.tablesIn(section.id)
   const { confirm, dialog } = useConfirm()
-  const removeTable = editor.removeTable
+  const { removeTable } = editor
   // Lo nuevo (una mesa, una mesa sin sector que se trae) aparece donde se está
   // mirando: por eso la cámara es de acá y no del plano.
   const camera = useFloorCamera(tables)
@@ -74,13 +115,14 @@ function SectionEditor({
   /** Lo mismo desde el botón del panel que desde el teclado: borrar se pregunta siempre. */
   const confirmDelete = useCallback(
     async (table: FloorTable) => {
-      if (removeTable.isPending) return
       const confirmed = await confirm({
         title: `¿Eliminar "${table.label}"?`,
         message: 'Se pierde su QR: el que está impreso en la mesa deja de funcionar.',
         confirmLabel: 'Eliminar mesa',
       })
-      if (confirmed) removeTable.mutate(table.id, { onSuccess: () => setSelectedId(null) })
+      if (!confirmed) return
+      removeTable(table.id)
+      setSelectedId(null)
     },
     [confirm, removeTable],
   )
@@ -118,20 +160,12 @@ function SectionEditor({
                 <SectionToolbar
                   section={section}
                   tableCount={tables.length}
-                  adding={editor.addTable.isPending}
                   // La mesa nueva queda elegida: lo próximo es ponerle nombre y lugares.
-                  onAddTable={() =>
-                    editor.addTable.mutate(
-                      { sectionId: section.id, near: camera.centerCell() },
-                      { onSuccess: setSelectedId },
-                    )
-                  }
-                  onRename={(name, onSaved) =>
-                    editor.patchSection.mutate({ id: section.id, patch: { name } }, { onSuccess: onSaved })
-                  }
-                  onActiveChange={(is_active) => editor.patchSection.mutate({ id: section.id, patch: { is_active } })}
-                  // Sin reset a mano: cuando el sector deja de existir, la página abre el primero.
-                  onDelete={() => editor.removeSection.mutate(section.id)}
+                  onAddTable={() => setSelectedId(editor.addTable(section.id, camera.centerCell()))}
+                  onRename={(name) => editor.renameSection(section.id, name)}
+                  onActiveChange={(isActive) => editor.setSectionActive(section.id, isActive)}
+                  // Sin reset a mano: cuando el sector deja de existir, la pantalla abre el primero.
+                  onDelete={() => editor.removeSection(section.id)}
                 />
               }
               footerStart={<UndoRedo editor={editor} />}
@@ -146,7 +180,6 @@ function SectionEditor({
               key={selected.id}
               table={selected}
               sectionName={floor.sections.find((entry) => entry.id === selected.section_id)?.name ?? 'Sin sector'}
-              busy={editor.removeTable.isPending}
               onEdit={(edit) => editor.editTable(selected, edit)}
               onPlace={(placed) => {
                 editor.placeTable(selected, placed)
@@ -183,7 +216,6 @@ function SectionEditor({
 function SectionToolbar({
   section,
   tableCount,
-  adding,
   onAddTable,
   onRename,
   onActiveChange,
@@ -191,9 +223,9 @@ function SectionToolbar({
 }: {
   section: FloorSection
   tableCount: number
-  adding: boolean
   onAddTable: () => void
-  onRename: (name: string, onSaved: () => void) => void
+  /** Devuelve si se renombró: no, si otro sector ya se llama así. */
+  onRename: (name: string) => boolean
   onActiveChange: (isActive: boolean) => void
   onDelete: () => void
 }) {
@@ -218,10 +250,12 @@ function SectionToolbar({
         <RenameSectionForm
           section={section}
           onCancel={() => setRenaming(false)}
-          onSave={(name) => onRename(name, () => setRenaming(false))}
+          onSave={(name) => {
+            if (onRename(name)) setRenaming(false)
+          }}
         />
       ) : (
-        <Button type="button" size="touch" shape="pill" disabled={adding} onClick={onAddTable}>
+        <Button type="button" size="touch" shape="pill" onClick={onAddTable}>
           <Plus size={18} aria-hidden="true" />
           Agregar mesa
         </Button>
@@ -364,7 +398,7 @@ function RenameSectionForm({
   )
 }
 
-/** Deshacer y rehacer los cambios de mesas guardados mientras se edita este sector. */
+/** Deshacer y rehacer lo que se cambió en esta edición, sin guardar todavía. */
 function UndoRedo({ editor }: { editor: FloorEditorActions }) {
   const buttonClass =
     'inline-flex h-11 w-12 cursor-pointer items-center justify-center bg-white text-neutral-700 transition-colors hover:bg-neutral-50 disabled:cursor-default disabled:text-neutral-300 disabled:hover:bg-white'

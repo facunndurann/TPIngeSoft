@@ -35,20 +35,7 @@ export const tablesQuery = (branchId: string) =>
       unwrap(await supabase.from('tables').select('*').eq('branch_id', branchId).order('label')),
   })
 
-/** Devuelve el id del sector creado, para abrirlo. */
-export async function createSection(section: TablesInsert<'floor_sections'>) {
-  return unwrap(await supabase.from('floor_sections').insert(section).select('id').single()).id
-}
-
 export type SectionPatch = Partial<Pick<FloorSection, 'name' | 'is_active' | 'sort_order'>>
-
-export async function updateSection(sectionId: string, patch: SectionPatch) {
-  unwrap(await supabase.from('floor_sections').update(patch).eq('id', sectionId))
-}
-
-export async function deleteSection(sectionId: string) {
-  unwrap(await supabase.from('floor_sections').delete().eq('id', sectionId))
-}
 
 /**
  * Sin `section_id` ni posición, la mesa queda sin sector hasta que se la ubica en
@@ -76,6 +63,32 @@ export const tablePatchColumns = [
 ] as const
 
 export type TablePatch = Partial<Pick<FloorTable, (typeof tablePatchColumns)[number]>>
+
+/** Las columnas de un sector que se editan en el Salón. */
+export const sectionPatchColumns = ['name', 'sort_order', 'is_active'] as const
+
+/**
+ * Lo que cambió en una edición del Salón, como lo recibe `save_floor`: lo nuevo
+ * entero (con el id que le puso el editor), de lo modificado solo las columnas
+ * que cambiaron, y los ids de lo borrado.
+ */
+export type FloorChanges = {
+  sections: {
+    create: Pick<FloorSection, 'id' | (typeof sectionPatchColumns)[number]>[]
+    update: (SectionPatch & { id: string })[]
+    delete: string[]
+  }
+  tables: {
+    create: Pick<FloorTable, 'id' | (typeof tablePatchColumns)[number]>[]
+    update: (TablePatch & { id: string })[]
+    delete: string[]
+  }
+}
+
+/** Guarda de una vez, en una sola transacción, todo lo que cambió en el Salón de una sucursal. */
+export async function saveFloor(branchId: string, changes: FloorChanges) {
+  unwrap(await supabase.rpc('save_floor', { p_branch_id: branchId, p_changes: changes }))
+}
 
 export async function updateTable(tableId: string, patch: TablePatch) {
   unwrap(await supabase.from('tables').update(patch).eq('id', tableId))

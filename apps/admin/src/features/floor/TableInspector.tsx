@@ -34,7 +34,6 @@ type TableInspectorProps = {
   onDelete: () => void
   /** Suelta la mesa: el panel vuelve a la lista del sector. */
   onClose: () => void
-  busy: boolean
 }
 
 const SEATS = { min: 1, max: 40 } as const
@@ -211,7 +210,7 @@ function NumberField({
  * Propiedades de la mesa seleccionada en el plano. El editor lo monta con
  * `key={table.id}`, así que un borrador nunca pasa de una mesa a otra.
  */
-export function TableInspector({ table, sectionName, onEdit, onPlace, onDelete, onClose, busy }: TableInspectorProps) {
+export function TableInspector({ table, sectionName, onEdit, onPlace, onDelete, onClose }: TableInspectorProps) {
   const label = useDraftField(
     table.label,
     (text) => text.trim() || null,
@@ -291,7 +290,6 @@ export function TableInspector({ table, sectionName, onEdit, onPlace, onDelete, 
           // Destructiva pero no la principal: rojo sin relleno, con borde para que
           // se lea como botón al pie del panel. El rojo lleno es el de confirmarla.
           className="border border-red-200"
-          disabled={busy}
           onClick={onDelete}
         >
           <Trash2 size={16} aria-hidden="true" />

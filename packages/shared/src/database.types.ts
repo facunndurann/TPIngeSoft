@@ -1831,6 +1831,10 @@ export type Database = {
         }
         Returns: string
       }
+      save_floor: {
+        Args: { p_branch_id: string; p_changes: Json }
+        Returns: undefined
+      }
       save_modifier_group: {
         Args: {
           p_group_id?: string

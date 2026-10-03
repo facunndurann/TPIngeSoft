@@ -32,14 +32,13 @@ export function SectionTabs({ floor, activeId, onChoose, children }: SectionTabs
 
 /**
  * «Nuevo sector»: una píldora punteada que se abre en un campo para el nombre.
- * Se cierra sola si se guardó; si falló, queda abierta con lo escrito.
+ * Se cierra sola si se creó; si no, queda abierta con lo escrito.
  */
 export function NewSectionButton({
-  pending,
   onAdd,
 }: {
-  pending: boolean
-  onAdd: (name: string, onSaved: () => void) => void
+  /** Devuelve si se creó: no, si ya hay un sector con ese nombre (queda abierto con lo escrito). */
+  onAdd: (name: string) => boolean
 }) {
   const [adding, setAdding] = useState(false)
   const [name, setName] = useState('')
@@ -71,7 +70,7 @@ export function NewSectionButton({
       onSubmit={(event) => {
         event.preventDefault()
         const trimmed = name.trim()
-        if (trimmed) onAdd(trimmed, close)
+        if (trimmed && onAdd(trimmed)) close()
       }}
       onKeyDown={(event) => {
         if (event.key === 'Escape') close()
@@ -86,7 +85,7 @@ export function NewSectionButton({
         aria-label="Nombre del nuevo sector"
         autoFocus
       />
-      <Button type="submit" size="touch" shape="pill" disabled={pending}>
+      <Button type="submit" size="touch" shape="pill">
         Crear
       </Button>
       <IconButton label="Cancelar" size="touch" shape="pill" variant="secondary" onClick={close}>

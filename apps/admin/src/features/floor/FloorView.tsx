@@ -1,29 +1,47 @@
 import { useState } from 'react'
-import { QrCode } from 'lucide-react'
+import { Pencil, QrCode } from 'lucide-react'
 import { countLabel, isOperable, tablePlacement } from '@restaurant-platform/shared'
-import { EmptyState, FloorPlan, floorTile, useFloorCamera } from '@restaurant-platform/ui'
+import { Button, EmptyState, FloorPlan, floorTile, useFloorCamera } from '@restaurant-platform/ui'
 import { QrModal } from '@/features/QrModal'
 import type { FloorSection, FloorTable } from '@/queries/floor'
 import { useRestaurant } from '@/restaurant/restaurant-context'
-import { FloorLayout } from './FloorLayout'
+import { FloorHeader, FloorLayout } from './FloorLayout'
 import { SectionTables } from './SectionTables'
 import { SectionTabs } from './SectionTabs'
 import { FloorLegend, TableTile } from './TableTile'
-import type { Floor, FloorScreenProps } from './floor'
+import { sectionOf, type Floor, type FloorScreenProps } from './floor'
 
 /**
  * El plano en modo vista: el mismo que ve el personal, de solo lectura. Tocar una
- * mesa, en el plano o en la lista, muestra su QR, como en Mesas y QR.
+ * mesa, en el plano o en la lista, muestra su QR, como en Mesas y QR. Para
+ * cambiar algo se entra a editar, con un solo botón.
  */
-export function FloorView({ floor, section, onChooseSection }: FloorScreenProps) {
+export function FloorView({ floor, sectionId, onChooseSection, onSwitchMode }: FloorScreenProps) {
+  const section = sectionOf(floor, sectionId)
+  const edit = (
+    <Button type="button" size="touch" shape="pill" onClick={onSwitchMode}>
+      <Pencil size={16} aria-hidden="true" />
+      Editar
+    </Button>
+  )
+
   if (!section) {
-    return <EmptyState message="Todavía no hay sectores. Pasá a editar para crear el primero." />
+    return (
+      <>
+        <FloorHeader actions={edit} />
+        <EmptyState message="Todavía no hay sectores. Pasá a editar para crear el primero." />
+      </>
+    )
   }
 
   return (
     <>
-      <SectionTabs floor={floor} activeId={section.id} onChoose={onChooseSection} />
-      <SectionView floor={floor} section={section} />
+      <FloorHeader
+        sections={<SectionTabs floor={floor} activeId={section.id} onChoose={onChooseSection} />}
+        actions={edit}
+      />
+      {/* Otro sector, otra vista: su cámara se encuadra de cero y el QR abierto se cierra. */}
+      <SectionView key={section.id} floor={floor} section={section} />
     </>
   )
 }

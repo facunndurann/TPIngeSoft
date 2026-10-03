@@ -4,9 +4,11 @@ import type { FloorSection, FloorTable } from '@/queries/floor'
 export type FloorScreenProps = {
   branchId: string
   floor: Floor
-  /** Sector abierto; `null` si la sucursal todavía no tiene ninguno. */
-  section: FloorSection | null
+  /** El sector elegido en la URL, tal cual: cada pantalla lo busca entre los suyos (`sectionOf`). */
+  sectionId: string | null
   onChooseSection: (sectionId: string) => void
+  /** Pasa al otro modo: de la vista al editor, o del editor a la vista al guardar o cancelar. */
+  onSwitchMode: () => void
 }
 
 /** El salón de una sucursal ya cargado, tal como lo leen la vista y el editor. */
@@ -16,6 +18,14 @@ export type Floor = {
   /** Mesas de un sector; con `null`, las que no tienen sector. */
   tablesIn: (sectionId: string | null) => FloorTable[]
 }
+
+/**
+ * El sector que se abre: el elegido si está entre los de este salón; si no (se
+ * borró, el link es viejo, o era de un borrador que se descartó), el primero.
+ * `null` si todavía no hay ninguno.
+ */
+export const sectionOf = (floor: Floor, sectionId: string | null) =>
+  floor.sections.find((section) => section.id === sectionId) ?? floor.sections[0] ?? null
 
 export function floorOf(sections: FloorSection[], tables: FloorTable[]): Floor {
   return {

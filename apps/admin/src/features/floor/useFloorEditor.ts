@@ -10,27 +10,24 @@ import {
   type TableSpan,
 } from '@restaurant-platform/shared'
 import { errorMessage, useToast } from '@restaurant-platform/ui'
-import {
-  createSection,
-  createTable,
-  deleteSection,
-  deleteTable,
-  floorKey,
-  tablePatchColumns,
-  tablesQuery,
-  updateSection,
-  updateTable,
-  type FloorTable,
-  type SectionPatch,
-  type TablePatch,
-} from '@/queries/floor'
-import { optimistic, patchRow } from '@/lib/optimistic'
+import { floorKey, saveFloor, type FloorTable, type TablePatch } from '@/queries/floor'
 import { useRestaurant } from '@/restaurant/restaurant-context'
 import type { TableEdit } from './TableInspector'
-import { nextTableLabel, type Floor } from './floor'
+import { floorOf, nextTableLabel, type Floor } from './floor'
+import {
+  floorChanges,
+  hasChanges,
+  patchSection,
+  patchTable,
+  withSection,
+  withTable,
+  withoutSection,
+  withoutTable,
+  type FloorDraft,
+} from './floorDraft'
 import { OVERLAP_MESSAGE, changesTo, fitsAt, type Refusal } from './placement'
 
-const SAVE_FAILED = 'No pudimos guardar el cambio.'
+const SAVE_FAILED = 'No pudimos guardar los cambios del salón.'
 
 /** Tamaño de una mesa nueva, en celdas. */
 const NEW_TABLE_SPAN: TableSpan = { width: 3, height: 3 }
@@ -48,46 +45,31 @@ const cornerAround = (footprint: Footprint, center?: Cell) =>
 /** Cuántos cambios se pueden deshacer. */
 const HISTORY_LIMIT = 50
 
-/** Un cambio guardado de una mesa: lo que tenía antes y lo que se le escribió. */
-type TableChange = { id: string; before: TablePatch; after: TablePatch }
-
-type History = { done: TableChange[]; undone: TableChange[] }
-
-/** Una escritura de una mesa: qué columnas cambian y a qué. */
-type TableWrite = { id: string; patch: TablePatch }
+/** El borrador y lo que se puede deshacer y rehacer de él. */
+type History = { past: FloorDraft[]; present: FloorDraft; future: FloorDraft[] }
 
 export type FloorEditorActions = ReturnType<typeof useFloorEditor>
 
-/** Las propiedades `keys` de `source`, con sus tipos. */
-function pick<T, K extends keyof T>(source: T, keys: readonly K[]): Partial<Pick<T, K>> {
-  const picked: Partial<Pick<T, K>> = {}
-  for (const key of keys) picked[key] = source[key]
-  return picked
-}
-
-/** Los valores actuales de la mesa en las columnas que toca `patch`: lo que deshacer vuelve a escribir. */
-function snapshot(table: FloorTable, patch: TablePatch): TablePatch {
-  return pick(table, tablePatchColumns.filter((column) => column in patch))
-}
-
 /**
- * Las escrituras del plano. Solo las usa el editor; sus errores salen como
- * aviso flotante. El historial de deshacer vive lo que vive él: es del sector
- * abierto mientras se lo edita.
+ * Una edición del Salón de una sucursal. Arranca con el salón como estaba al
+ * entrar a editar, y todo lo que se hace cambia un borrador: el POS y la base no
+ * ven nada hasta guardar (`save`), que escribe todo junto. Salir sin guardar lo
+ * descarta. Deshacer y rehacer recorren el borrador, sectores incluidos.
  */
-export function useFloorEditor(branchId: string, floor: Floor) {
+export function useFloorEditor(branchId: string, initial: Floor) {
   const restaurant = useRestaurant()
   const queryClient = useQueryClient()
   const toast = useToast()
-  const tablesKey = tablesQuery(branchId).queryKey
-  const [history, setHistory] = useState<History>({ done: [], undone: [] })
+  // Lo que había al entrar: contra eso se calcula qué guardar. Si el salón se
+  // relee mientras tanto, el borrador no cambia.
+  const [base] = useState<FloorDraft>(() => ({ sections: initial.sections, tables: initial.tables }))
+  const [history, setHistory] = useState<History>(() => ({ past: [], present: base, future: [] }))
   /** La última mesa que no entró, hasta que el plano termina de marcarla. */
   const [refusal, setRefusal] = useState<Refusal | null>(null)
 
-  /** Sectores y mesas juntos: borrar un sector también cambia sus mesas. */
-  function refresh() {
-    void queryClient.invalidateQueries({ queryKey: floorKey(branchId) })
-  }
+  const draft = history.present
+  const floor = floorOf(draft.sections, draft.tables)
+  const changes = floorChanges(base, draft)
 
   /**
    * Los errores del plano salen como aviso flotante: un recuadro arriba del plano
@@ -95,102 +77,116 @@ export function useFloorEditor(branchId: string, floor: Floor) {
    */
   const reportError = (message: string) => toast(message, { tone: 'error' })
 
-  /** Una escritura que falló: el mensaje del catálogo si lo trae, o el genérico. */
-  const reportFailure = (error: Error) => reportError(errorMessage(error, SAVE_FAILED))
+  /** Un cambio más al borrador: se puede deshacer, y lo que se había deshecho ya no se rehace. */
+  function commit(next: FloorDraft) {
+    setHistory((current) => ({
+      past: [...current.past, current.present].slice(-HISTORY_LIMIT),
+      present: next,
+      future: [],
+    }))
+  }
 
-  /** Casi toda escritura del plano: si se guardó, relee el salón; si falló, avisa. */
-  const run = <TData, TArgs>(mutationFn: (args: TArgs) => Promise<TData>) => ({
-    mutationFn,
-    onSuccess: refresh,
-    onError: reportFailure,
+  function undo() {
+    setHistory((current) =>
+      current.past.length === 0
+        ? current
+        : {
+            past: current.past.slice(0, -1),
+            present: current.past[current.past.length - 1],
+            future: [current.present, ...current.future],
+          },
+    )
+  }
+
+  function redo() {
+    setHistory((current) =>
+      current.future.length === 0
+        ? current
+        : { past: [...current.past, current.present], present: current.future[0], future: current.future.slice(1) },
+    )
+  }
+
+  // Se relee el salón antes de salir del editor: la vista abre con lo guardado.
+  const save = useMutation({
+    mutationFn: () => saveFloor(branchId, changes),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: floorKey(branchId) }),
+    onError: (error) => reportError(errorMessage(error, SAVE_FAILED)),
   })
 
-  const addSection = useMutation(
-    run((name: string) =>
-      createSection({
+  /** Si otro sector, que no sea `exceptId`, ya se llama así: la base no deja repetir nombres en una sucursal. */
+  function sectionNameTaken(name: string, exceptId?: string) {
+    const taken = draft.sections.some((section) => section.name === name && section.id !== exceptId)
+    if (taken) reportError('Ya hay un sector con ese nombre.')
+    return taken
+  }
+
+  /** Crea un sector al final de la fila y devuelve su id, para abrirlo; `null` si el nombre ya existe. */
+  function addSection(name: string) {
+    if (sectionNameTaken(name)) return null
+    const id = crypto.randomUUID()
+    commit(
+      withSection(draft, {
+        id,
         restaurant_id: restaurant.id,
         branch_id: branchId,
         name,
-        sort_order: floor.sections.length,
+        sort_order: draft.sections.length,
+        is_active: true,
+        created_at: new Date().toISOString(),
       }),
-    ),
-  )
-  const patchSection = useMutation(
-    run(({ id, patch }: { id: string; patch: SectionPatch }) => updateSection(id, patch)),
-  )
-  const removeSection = useMutation(run((id: string) => deleteSection(id)))
+    )
+    return id
+  }
+
+  /** Devuelve si se pudo: no, si otro sector ya se llama así. */
+  function renameSection(id: string, name: string) {
+    if (sectionNameTaken(name, id)) return false
+    commit(patchSection(draft, id, { name }))
+    return true
+  }
+
+  const setSectionActive = (id: string, isActive: boolean) => commit(patchSection(draft, id, { is_active: isActive }))
+
+  const removeSection = (id: string) => commit(withoutSection(draft, id))
 
   /**
    * Una mesa nueva entra en el hueco libre más cercano a lo que se está mirando
    * (`near`, el centro del recuadro) y con el próximo «Mesa N»: el nombre se
-   * cambia después en el panel, como todo lo demás.
+   * cambia después en el panel, como todo lo demás. Devuelve su id, para elegirla.
    */
-  const addTable = useMutation(
-    run(({ sectionId, near }: { sectionId: string; near?: Cell }) => {
-      const footprint = tableFootprint(NEW_TABLE_SPAN)
-      const { x, y } = findFreeCell(footprint, occupiedBy(floor.tablesIn(sectionId)), cornerAround(footprint, near))
-      // Se guarda con el mismo tamaño con el que se buscó el hueco.
-      return createTable({
+  function addTable(sectionId: string, near?: Cell) {
+    const footprint = tableFootprint(NEW_TABLE_SPAN)
+    const { x, y } = findFreeCell(footprint, occupiedBy(floor.tablesIn(sectionId)), cornerAround(footprint, near))
+    const id = crypto.randomUUID()
+    commit(
+      withTable(draft, {
+        id,
         restaurant_id: restaurant.id,
         branch_id: branchId,
         section_id: sectionId,
-        label: nextTableLabel(floor.tables),
+        label: nextTableLabel(draft.tables),
         position_x: x,
         position_y: y,
         ...NEW_TABLE_SPAN,
-      })
-    }),
-  )
-
-  const removeTable = useMutation({
-    ...run((id: string) => deleteTable(id)),
-    // Además de releer el salón, una mesa borrada sale del historial: no hay nada
-    // que devolverle.
-    onSuccess: (_data: void, id: string) => {
-      refresh()
-      const keep = (change: TableChange) => change.id !== id
-      setHistory((current) => ({ done: current.done.filter(keep), undone: current.undone.filter(keep) }))
-    },
-  })
-
-  // Optimista: al soltar una mesa tiene que quedar donde la soltaste, no saltar
-  // a la posición vieja hasta que vuelva el refetch.
-  const tablesCache = optimistic(queryClient, tablesKey, (tables, { id, patch }: TableWrite) =>
-    patchRow(tables, { id, ...patch }),
-  )
-  const patchTable = useMutation({
-    ...tablesCache,
-    mutationFn: ({ id, patch }: TableWrite) => updateTable(id, patch),
-    onError: (error, write, cached) => {
-      // Primero la mesa vuelve a donde estaba; después se avisa por qué.
-      tablesCache.onError(error, write, cached)
-      reportFailure(error)
-    },
-  })
-
-  /**
-   * Escribe y, si se guardó, lo anota para deshacer. Se anota al guardarse y no
-   * al pedirlo: un cambio que falló ya volvió atrás solo y no hay que deshacerlo.
-   */
-  function patch(id: string, changes: TablePatch) {
-    const table = floor.tables.find((entry) => entry.id === id)
-    patchTable.mutate(
-      { id, patch: changes },
-      {
-        onSuccess: () => {
-          if (!table) return
-          const change = { id, before: snapshot(table, changes), after: changes }
-          setHistory((current) => ({ done: [...current.done, change].slice(-HISTORY_LIMIT), undone: [] }))
-        },
-      },
+        seats: 4,
+        shape: 'rect',
+        is_active: true,
+        is_visible: true,
+        // El QR lo pone la base al guardar; el editor no lo muestra.
+        qr_token: '',
+        created_at: new Date().toISOString(),
+      }),
     )
+    return id
   }
+
+  const removeTable = (id: string) => commit(withoutTable(draft, id))
 
   /**
    * Si la mesa, con estos cambios, queda en un lugar libre de su sector; si no,
    * avisa. Es la única validación de dónde puede ir una mesa: pasan por acá
-   * soltarla, las flechas, deshacer y rehacer. Una mesa sin sector no está en
-   * ningún plano, así que no choca con nada.
+   * soltarla, las flechas y el panel. Una mesa sin sector no está en ningún
+   * plano, así que no choca con nada.
    */
   function roomFor(table: FloorTable, changes: TablePatch) {
     const next = { ...table, ...changes }
@@ -203,36 +199,13 @@ export function useFloorEditor(branchId: string, floor: Floor) {
   }
 
   /**
-   * Vuelve a escribir un estado anterior (o posterior) de una mesa sin anotarlo.
-   * Si mientras tanto otra mesa ocupó ese lugar, no lo pisa: avisa y no hace nada.
-   */
-  function restore(id: string, values: TablePatch) {
-    const table = floor.tables.find((entry) => entry.id === id)
-    if (!table || !roomFor(table, values)) return false
-    patchTable.mutate({ id, patch: values })
-    return true
-  }
-
-  function undo() {
-    const change = history.done[history.done.length - 1]
-    if (!change || !restore(change.id, change.before)) return
-    setHistory((current) => ({ done: current.done.slice(0, -1), undone: [...current.undone, change] }))
-  }
-
-  function redo() {
-    const change = history.undone[history.undone.length - 1]
-    if (!change || !restore(change.id, change.after)) return
-    setHistory((current) => ({ done: [...current.done, change], undone: current.undone.slice(0, -1) }))
-  }
-
-  /**
    * Lleva una mesa a otro lugar o tamaño: lo que propone el plano al soltarla y
-   * con las flechas. Moverla y estirarla son lo mismo, una caja nueva; se escribe
+   * con las flechas. Moverla y estirarla son lo mismo, una caja nueva; se anota
    * solo lo que cambió, y nada si pisaría a otra.
    */
   function placeTable(table: FloorTable, placed: Placed) {
     const changes = changesTo(table, placed)
-    if (changes && roomFor(table, changes)) patch(table.id, changes)
+    if (changes && roomFor(table, changes)) commit(patchTable(draft, table.id, changes))
   }
 
   /**
@@ -242,17 +215,24 @@ export function useFloorEditor(branchId: string, floor: Floor) {
   function placeInSection(table: FloorTable, sectionId: string, near?: Cell) {
     const footprint = tableFootprint(table)
     const { x, y } = findFreeCell(footprint, occupiedBy(floor.tablesIn(sectionId), table.id), cornerAround(footprint, near))
-    patch(table.id, { section_id: sectionId, position_x: x, position_y: y })
+    commit(patchTable(draft, table.id, { section_id: sectionId, position_x: x, position_y: y }))
   }
 
-  /** Lo que se cambia desde el panel: nombre, lugares, forma y uso. */
+  /** Lo que se cambia desde el panel: nombre, lugares, forma y uso. El nombre no se repite en la sucursal. */
   function editTable(table: FloorTable, edit: TableEdit) {
-    patch(table.id, edit)
+    if (edit.label !== undefined && draft.tables.some((entry) => entry.label === edit.label && entry.id !== table.id)) {
+      reportError('Ya hay una mesa con ese nombre.')
+      return
+    }
+    commit(patchTable(draft, table.id, edit))
   }
 
   return {
+    /** El salón como queda con lo editado hasta ahora. */
+    floor,
     addSection,
-    patchSection,
+    renameSection,
+    setSectionActive,
     removeSection,
     addTable,
     removeTable,
@@ -261,9 +241,12 @@ export function useFloorEditor(branchId: string, floor: Floor) {
     editTable,
     undo,
     redo,
+    canUndo: history.past.length > 0,
+    canRedo: history.future.length > 0,
     refusal,
     dismissRefusal: () => setRefusal(null),
-    canUndo: history.done.length > 0,
-    canRedo: history.undone.length > 0,
+    /** Si hay algo sin guardar. */
+    dirty: hasChanges(changes),
+    save,
   }
 }
