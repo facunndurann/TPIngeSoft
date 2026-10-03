@@ -3,14 +3,16 @@ import { Check, Ellipsis, Pencil, Plus, Redo2, Trash2, Undo2, X } from 'lucide-r
 import { EmptyState, Input, Toggle, useConfirm } from '@restaurant-platform/ui'
 import { countLabel } from '@restaurant-platform/shared'
 import type { FloorSection, FloorTable } from '@/queries/floor'
-import { FloorCanvas, FloorLegend, type FloorCanvasHandle } from './FloorCanvas'
+import { FloorCanvas } from './FloorCanvas'
 import { FloorLayout } from './FloorLayout'
+import { FloorLegend } from './FloorTableTile'
 import { keyBelongsElsewhere } from './keys'
 import { NewSectionButton, SectionTabs } from './SectionTabs'
 import { SectionTables } from './SectionTables'
 import { TableInspector } from './TableInspector'
 import type { FloorScreenProps } from './floor'
 import { ghostIconClass, pillClass, roundIconClass } from './styles'
+import { useFloorCamera } from './useFloorCamera'
 import { useFloorEditor, type FloorEditorActions } from './useFloorEditor'
 
 /** El plano en modo editar: sectores, mesas, gestos y el panel de la mesa elegida. */
@@ -58,8 +60,9 @@ function SectionEditor({
   const tables = floor.tablesIn(section.id)
   const { confirm, dialog } = useConfirm()
   const removeTable = editor.removeTable
-  /** Lo nuevo (una mesa, una mesa sin sector que se trae) aparece donde se está mirando. */
-  const canvas = useRef<FloorCanvasHandle>(null)
+  // Lo nuevo (una mesa, una mesa sin sector que se trae) aparece donde se está
+  // mirando: por eso la cámara es de acá y no del plano.
+  const camera = useFloorCamera(tables)
 
   /** Lo mismo desde el botón del panel que desde el teclado: borrar se pregunta siempre. */
   const confirmDelete = useCallback(
@@ -95,8 +98,8 @@ function SectionEditor({
         plan={
           <>
             <FloorCanvas
-              ref={canvas}
               tables={tables}
+              camera={camera}
               editing={{ selectedId, onSelect: setSelectedId, onPlace: editor.placeTable }}
               toolbar={
                 <SectionToolbar
@@ -106,7 +109,7 @@ function SectionEditor({
                   // La mesa nueva queda elegida: lo próximo es ponerle nombre y lugares.
                   onAddTable={() =>
                     editor.addTable.mutate(
-                      { sectionId: section.id, near: canvas.current?.centerCell() },
+                      { sectionId: section.id, near: camera.centerCell() },
                       { onSuccess: setSelectedId },
                     )
                   }
@@ -140,7 +143,7 @@ function SectionEditor({
               <UnassignedTables
                 tables={floor.tablesIn(null)}
                 onPlace={(table) => {
-                  editor.placeInSection(table, section.id, canvas.current?.centerCell())
+                  editor.placeInSection(table, section.id, camera.centerCell())
                   setSelectedId(table.id)
                 }}
               />
