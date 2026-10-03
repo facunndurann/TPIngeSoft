@@ -32,7 +32,6 @@ function SectionView({ floor, section }: { floor: Floor; section: FloorSection }
   const restaurant = useRestaurant()
   const tables = floor.tablesIn(section.id)
   const camera = useFloorCamera(tables)
-  const unassigned = floor.tablesIn(null).length
   // El id y no la mesa: si la mesa cambia con el QR abierto, el modal muestra lo
   // último; si se borra, se cierra.
   const [qrTableId, setQrTableId] = useState<string | null>(null)
@@ -74,15 +73,7 @@ function SectionView({ floor, section }: { floor: Floor; section: FloorSection }
             chooseIcon={QrCode}
             empty="Este sector todavía no tiene mesas."
             summary={summaryOf(tables, section)}
-          >
-            {/* En el panel y no debajo del plano: ahí empujaría la página más allá de la pantalla. */}
-            {unassigned > 0 && (
-              <p className="mt-1 border-t border-neutral-200 px-2 pt-4 text-xs text-muted">
-                {countLabel(unassigned, 'mesa sin sector no aparece', 'mesas sin sector no aparecen')} en ningún
-                plano. Pasá a editar para ubicarlas.
-              </p>
-            )}
-          </SectionTables>
+          />
         }
       />
       {qrTable && <QrModal table={qrTable} restaurantName={restaurant.name} onClose={() => setQrTableId(null)} />}
@@ -101,7 +92,7 @@ function SectionStatus({ section }: { section: FloorSection }) {
         aria-hidden="true"
         className={`h-2.5 w-2.5 rounded-full ${section.is_active ? 'bg-green-600' : 'bg-neutral-400'}`}
       />
-      {section.is_active ? 'Sector en uso' : 'Sector sin uso: el POS no ofrece sus mesas'}
+      {section.is_active ? 'Sector en uso' : 'Sector sin uso'}
     </p>
   )
 }

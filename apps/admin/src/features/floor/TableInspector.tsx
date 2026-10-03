@@ -274,21 +274,12 @@ export function TableInspector({ table, sectionName, onEdit, onPlace, onDelete, 
       <NudgePad table={table} onPlace={onPlace} />
 
       <div className="space-y-2">
-        <Toggle
-          checked={table.is_active}
-          onChange={(is_active) => onEdit({ is_active })}
-          label="En uso (el QR abre sesión)"
-        />
+        <Toggle checked={table.is_active} onChange={(is_active) => onEdit({ is_active })} label="En uso" />
         <Toggle
           checked={table.is_visible}
           onChange={(is_visible) => onEdit({ is_visible })}
           label="Visible en el plano del POS"
         />
-        {(!table.is_visible || !table.is_active) && (
-          <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
-            El POS no va a ofrecer esta mesa para operar.
-          </p>
-        )}
       </div>
 
       <div className="border-t border-neutral-200 pt-4">

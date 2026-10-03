@@ -79,10 +79,7 @@ export function PaymentPanel({ sessionId, pendingAmount, enabledMethods }: Payme
 
   return (
     <section className="space-y-3 rounded-xl border border-neutral-200 bg-white p-4" aria-label="Pagos de la cuenta">
-      <div>
-        <h2 className="text-sm font-semibold text-neutral-800">Pagos de la cuenta</h2>
-        <p className="text-xs text-muted">Sólo los pagos aprobados descuentan del pendiente.</p>
-      </div>
+      <h2 className="text-sm font-semibold text-neutral-800">Pagos de la cuenta</h2>
 
       {can('payments.write') && pending > 0 && recordable.length > 0 && (
         <form

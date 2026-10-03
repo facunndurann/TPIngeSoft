@@ -145,14 +145,14 @@ function withStoredContext(value: string | null, run: () => string) {
 }
 test('a stored context survives a reload without asking again', () => {
   const html = withStoredContext('restaurant-a:branch-b', () => app(employee, twoContexts, '/'))
-  assert.match(html, /Pedidos en vivo/)
+  assert.match(html, /<h1[^>]*>Comandas<\/h1>/)
   assert.match(html, /Branch B/)
   assert.doesNotMatch(html, /Elegí dónde vas a trabajar/)
 })
 
 test('a stored context that is no longer authorized never grants access', () => {
   const stale = () => app(employee, twoContexts, '/')
-  assert.doesNotMatch(withStoredContext('restaurant-b:branch-z', stale), /Pedidos en vivo|Branch Z/)
+  assert.doesNotMatch(withStoredContext('restaurant-b:branch-z', stale), /<h1[^>]*>Comandas<\/h1>|Branch Z/)
   const selector = () => app(employee, twoContexts, '/select-context')
   assert.match(withStoredContext('restaurant-b:branch-z', selector), /Elegí dónde vas a trabajar/)
 })

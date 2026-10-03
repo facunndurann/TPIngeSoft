@@ -393,10 +393,7 @@ function UnassignedTables({
 
   return (
     <div className="mt-1 border-t border-neutral-200 px-2 pt-4">
-      <h3 className="text-sm font-semibold text-neutral-900">Mesas sin sector</h3>
-      <p className="mb-2 text-xs text-muted">
-        Existen y tienen QR, pero no aparecen en ningún plano. Tocá una para sumarla a este sector.
-      </p>
+      <h3 className="mb-2 text-sm font-semibold text-neutral-900">Mesas sin sector</h3>
       <ul className="flex flex-wrap gap-2">
         {tables.map((table) => (
           <li key={table.id}>

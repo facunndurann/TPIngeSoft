@@ -60,9 +60,6 @@ function CreateRestaurantScreen() {
             <Store size={22} />
           </div>
           <h1 className="text-xl font-bold text-neutral-900">Creá tu restaurante</h1>
-          <p className="text-center text-sm text-muted">
-            Tu cuenta todavía no administra ningún restaurante.
-          </p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <Field label="Nombre del restaurante">
@@ -79,11 +76,7 @@ function CreateRestaurantScreen() {
           <Field label="Nombre de la primera sucursal">
             <Input value={branchName} onChange={(e) => setBranchName(e.target.value)} required />
           </Field>
-          <DesignPicker
-            value={menuDesign}
-            onChange={setMenuDesign}
-            hint="Podés cambiarlo después desde Restaurante."
-          />
+          <DesignPicker value={menuDesign} onChange={setMenuDesign} />
           <ErrorText error={create.error} fallback="No pudimos crear el restaurante." />
           <Button type="submit" disabled={create.isPending} className="w-full">
             {create.isPending ? 'Creando…' : 'Crear restaurante'}

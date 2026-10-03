@@ -37,7 +37,6 @@ export function MoveTableSession({
   return (
     <Modal title={`Mover comanda de ${source.label}`} onClose={() => { if (!move.isPending) onClose() }}>
       <div className="space-y-4 text-sm text-neutral-700">
-        <p>Elegí una mesa libre de esta sucursal. Se conservan los pedidos, los comensales y la cuenta.</p>
         <QueryView
           query={[tables, sessions]}
           fallback="No pudimos cargar las mesas disponibles. Cerrá y volvé a intentar."

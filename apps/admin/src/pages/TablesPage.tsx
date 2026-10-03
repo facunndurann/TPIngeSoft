@@ -1,7 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, QrCode, Trash2 } from 'lucide-react'
-import { Link } from 'react-router'
 import { Page } from '@/features/Page'
 import { QrModal } from '@/features/QrModal'
 import { optimistic, patchRow } from '@/lib/optimistic'
@@ -23,19 +22,7 @@ export function TablesPage() {
   const branches = useQuery(branchesQuery(restaurant.id))
 
   return (
-    <Page
-      title="Mesas y códigos QR"
-      description={
-        <>
-          Cada mesa tiene un QR único que identifica al restaurante, la sucursal y la mesa. El sector
-          y la ubicación se editan en{' '}
-          <Link to="/salon" className="text-primary hover:underline">
-            Salón
-          </Link>
-          .
-        </>
-      }
-    >
+    <Page title="Mesas y códigos QR">
       <QueryView query={branches} empty="Todavía no hay sucursales. Creá una en Restaurante.">
         {(branches) => {
           const branchId = selectedBranchId ?? branches[0].id

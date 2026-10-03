@@ -66,7 +66,7 @@ test('when the project asks to confirm the email, signing up says so and goes ba
   const notice = container.querySelector('[role="status"]')!.textContent ?? ''
   assert.match(notice, /Te mandamos un email a duena@esquina\.com/)
   // De vuelta al ingreso, con el email escrito y la contraseña vacía.
-  assert.match(container.textContent ?? '', /Ingresá con tu cuenta/)
+  assert.equal(container.querySelector('button[type="submit"]')?.textContent, 'Ingresar')
   const [emailInput, passwordInput] = container.querySelectorAll('input')
   assert.equal(emailInput.value, 'duena@esquina.com')
   assert.equal(passwordInput.value, '')

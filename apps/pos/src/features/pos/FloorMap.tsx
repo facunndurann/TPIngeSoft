@@ -34,12 +34,7 @@ export function FloorMap() {
 
   return (
     <div className="min-w-0 space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-neutral-900">Salón</h1>
-        <p className="text-sm text-muted">
-          Plano operativo de las mesas disponibles, organizado por sector.
-        </p>
-      </div>
+      <h1 className="text-xl font-bold text-neutral-900">Salón</h1>
 
       <QueryView
         query={[sections, tables, sessions]}

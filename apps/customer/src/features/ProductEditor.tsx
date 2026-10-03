@@ -144,8 +144,8 @@ function defaultItem(product: Product): CartItem {
 }
 
 /** La regla y, después de un intento, el error: los dos describen al bloque que se enfoca. */
-function describedBy(id: string, rule: boolean, error?: string) {
-  return [rule && `${id}-rule`, error && `${id}-error`].filter(Boolean).join(' ') || undefined
+function describedBy(id: string, error?: string) {
+  return [`${id}-rule`, error && `${id}-error`].filter(Boolean).join(' ')
 }
 
 function IngredientsFieldset({
@@ -159,21 +159,14 @@ function IngredientsFieldset({
   error?: string
   onToggle: (ingredientId: string, included: boolean) => void
 }) {
-  const choosable = ingredients.some((ingredient) => ingredient.is_removable && ingredient.is_available)
-
   return (
     <fieldset
       id={INGREDIENTS_ID}
       tabIndex={-1}
       className={error ? 'is-invalid' : undefined}
-      aria-describedby={describedBy(INGREDIENTS_ID, choosable, error)}
+      aria-describedby={error ? `${INGREDIENTS_ID}-error` : undefined}
     >
       <legend>Ingredientes</legend>
-      {choosable && (
-        <p className="muted" id={`${INGREDIENTS_ID}-rule`}>
-          Destildá lo que no quieras.
-        </p>
-      )}
       {error && (
         <p className="field-error" id={`${INGREDIENTS_ID}-error`}>
           {error}
@@ -227,7 +220,7 @@ function GroupFieldset({
       id={id}
       tabIndex={-1}
       className={error ? 'is-invalid' : undefined}
-      aria-describedby={describedBy(id, true, error)}
+      aria-describedby={describedBy(id, error)}
     >
       <legend>{group.name}</legend>
       <p className="muted" id={`${id}-rule`}>

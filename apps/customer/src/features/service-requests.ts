@@ -11,21 +11,16 @@ import {
  * solicitada». La confirmación es el texto importante: es lo que responde
  * «¿ya está, me puedo ir?».
  */
-export const serviceRequestCopy: Record<
-  SessionRequestKind,
-  { action: string; waiting: string; attended: string; help: string }
-> = {
+export const serviceRequestCopy: Record<SessionRequestKind, { action: string; waiting: string; attended: string }> = {
   bill: {
     action: 'Pedir la cuenta',
     waiting: 'Pediste la cuenta',
     attended: '¡Listo! Te acercamos la cuenta.',
-    help: 'El restaurante la prepara y te la acerca a la mesa.',
   },
   in_person_payment: {
     action: 'Llamar mozo',
     waiting: 'Pediste cobrar en la mesa',
     attended: '¡Listo! Tu pago fue procesado. Ya podés retirarte.',
-    help: 'Un mozo se acerca a cobrar.',
   },
 }
 

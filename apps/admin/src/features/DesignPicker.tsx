@@ -13,25 +13,17 @@ import { customerAppUrl } from '@/lib/customer-app'
 type DesignPickerProps = {
   value: MenuDesignId
   onChange: (id: MenuDesignId) => void
-  /** Texto de ayuda bajo el título; cambia según dónde se elige el diseño. */
-  hint: string
 }
 
-export function DesignPicker({ value, onChange, hint }: DesignPickerProps) {
+export function DesignPicker({ value, onChange }: DesignPickerProps) {
   const [previewDesign, setPreviewDesign] = useState<MenuDesign | null>(null)
   const id = useId()
-  const [groupName, labelId, hintId] = [`${id}-design`, `${id}-label`, `${id}-hint`]
+  const [groupName, labelId] = [`${id}-design`, `${id}-label`]
 
   return (
     <div>
       <p id={labelId} className="mb-2 text-sm font-medium text-neutral-700">Diseño de la carta</p>
-      <p id={hintId} className="mb-3 text-xs text-muted">{hint}</p>
-      <div
-        className="grid gap-3 md:grid-cols-3"
-        role="radiogroup"
-        aria-labelledby={labelId}
-        aria-describedby={hintId}
-      >
+      <div className="grid gap-3 md:grid-cols-3" role="radiogroup" aria-labelledby={labelId}>
         {MENU_DESIGN_IDS.map((designId) => {
           const design = MENU_DESIGNS[designId]
           const selected = designId === value
@@ -122,9 +114,6 @@ export function DesignPicker({ value, onChange, hint }: DesignPickerProps) {
             title={`Carta de ejemplo con el diseño ${previewDesign.name}`}
             className="mx-auto block h-[70vh] max-h-[720px] w-[390px] max-w-full rounded-xl border border-neutral-200"
           />
-          <p className="mt-2 text-center text-xs text-muted">
-            Así ven la carta los comensales en el celular.
-          </p>
         </Modal>
       )}
     </div>

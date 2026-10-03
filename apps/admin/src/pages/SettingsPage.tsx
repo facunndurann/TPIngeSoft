@@ -69,12 +69,9 @@ export function SettingsPage() {
         : ''
 
   return (
-    <Page title="Restaurante" description="Información general, sucursales y medios de pago.">
+    <Page title="Restaurante">
       <section className="space-y-4 rounded-xl border border-neutral-200 bg-white p-5">
-        <div>
-          <h2 className="font-semibold text-neutral-900">Información general</h2>
-          <p className="text-sm text-muted">Se guarda con el botón de abajo.</p>
-        </div>
+        <h2 className="font-semibold text-neutral-900">Información general</h2>
         <Field label="Nombre">
           <Input value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
@@ -84,11 +81,7 @@ export function SettingsPage() {
         <p className="text-xs text-muted">
           Identificador público: <code className="rounded bg-neutral-100 px-1">{restaurant.slug}</code>
         </p>
-        <DesignPicker
-          value={menuDesign}
-          onChange={setMenuDesign}
-          hint="Elegí cómo se ve el menú que abren los comensales desde el QR."
-        />
+        <DesignPicker value={menuDesign} onChange={setMenuDesign} />
         <ErrorText error={errors.message} />
         <div className="flex items-center gap-3">
           <Button onClick={() => saveMutation.mutate()} disabled={!dirty || saveMutation.isPending}>
@@ -165,13 +158,7 @@ function BranchesSection({ restaurantId }: { restaurantId: string }) {
 
   return (
     <section className="space-y-4 rounded-xl border border-neutral-200 bg-white p-5">
-      <div>
-        <h2 className="font-semibold text-neutral-900">Sucursales</h2>
-        <p className="text-sm text-muted">
-          Cada sucursal decide con qué se le puede pagar: el comensal solo ve los medios habilitados en la suya. Estos
-          cambios se guardan al tocarlos.
-        </p>
-      </div>
+      <h2 className="font-semibold text-neutral-900">Sucursales</h2>
 
       {/* Dos campos: con el texto ya escrito, el placeholder no dice cuál es cuál,
           así que llevan rótulo visible. En pantallas chicas se apilan. */}

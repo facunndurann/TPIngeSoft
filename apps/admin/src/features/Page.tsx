@@ -7,7 +7,6 @@ import { useRestaurant } from '@/restaurant/restaurant-context'
 type PageProps = {
   /** El h1 y el título de la pestaña: cada ruta se reconoce entre las pestañas abiertas. */
   title: string
-  description?: ReactNode
   /** Lo que va a la derecha del título: la acción principal o los selectores de la página. */
   actions?: ReactNode
   /** Adónde vuelve la flecha, para las páginas que se abren desde una lista. */
@@ -28,7 +27,7 @@ type PageProps = {
  * Antes cada página armaba el suyo y el ancho variaba entre max-w-2xl, 3xl y
  * ninguno; ahora hay dos, el de lectura y el de Salón.
  */
-export function Page({ title, description, actions, back, wide = false, fill = false, children }: PageProps) {
+export function Page({ title, actions, back, wide = false, fill = false, children }: PageProps) {
   const restaurant = useRestaurant()
 
   // `w-full`: en la columna de `main`, `mx-auto` encogería la página a su contenido.
@@ -43,10 +42,7 @@ export function Page({ title, description, actions, back, wide = false, fill = f
               <ArrowLeft size={20} aria-hidden="true" />
             </Link>
           )}
-          <div className="min-w-0">
-            <h1 className="text-xl font-bold text-neutral-900">{title}</h1>
-            {description && <p className="text-sm text-muted">{description}</p>}
-          </div>
+          <h1 className="min-w-0 text-xl font-bold text-neutral-900">{title}</h1>
         </div>
         {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
       </header>

@@ -45,9 +45,6 @@ export function ServiceRequests() {
         primary={!paymentMethods.includes('mobile')}
         onAsk={() => ask.mutate(session.id)}
       />
-      {!paid && paymentMethods.includes('external') && (
-        <p className="muted">También podés pagar en caja.</p>
-      )}
       <ErrorText variant="menu" error={ask.error} />
     </section>
   )
@@ -70,12 +67,9 @@ function RequestStatus({
   switch (state.status) {
     case 'idle':
       return (
-        <>
-          <p className="muted">{copy.help}</p>
-          <button className={primary ? 'primary wide' : 'wide'} disabled={asking} onClick={onAsk}>
-            {asking ? 'Avisando…' : copy.action}
-          </button>
-        </>
+        <button className={primary ? 'primary wide' : 'wide'} disabled={asking} onClick={onAsk}>
+          {asking ? 'Avisando…' : copy.action}
+        </button>
       )
     case 'waiting':
       return (

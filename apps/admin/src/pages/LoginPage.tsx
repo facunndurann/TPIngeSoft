@@ -60,9 +60,6 @@ export function LoginPage() {
             {mode === 'login' ? <UtensilsCrossed size={22} /> : <Store size={22} />}
           </div>
           <h1 className="text-xl font-bold text-neutral-900">Panel del restaurante</h1>
-          <p className="text-sm text-muted">
-            {mode === 'login' ? 'Ingresá con tu cuenta' : 'Creá una cuenta para tu restaurante'}
-          </p>
         </div>
         {/* Siempre montado: un lector de pantalla anuncia el aviso cuando aparece. */}
         <div role="status">

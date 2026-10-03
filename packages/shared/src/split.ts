@@ -26,12 +26,6 @@ export const splitTypeLabels: Record<SplitType, string> = {
   percentages: 'Porcentajes',
 }
 
-export const splitTypeDescriptions: Record<SplitType, string> = {
-  none: 'Cada uno paga lo que pidió; lo compartido se divide entre todos.',
-  equal: 'El pendiente se divide en partes iguales.',
-  percentages: 'Cada comensal paga el porcentaje que le asignaron.',
-}
-
 export const SPLIT_PERCENTAGE_TOTAL = 100
 export const MIN_EQUAL_PARTS = 2
 export const MAX_EQUAL_PARTS = 50

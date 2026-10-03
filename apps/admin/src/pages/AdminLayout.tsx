@@ -123,10 +123,7 @@ function Brand() {
       <div className="rounded-lg bg-primary p-2 text-white">
         <LayoutGrid size={16} aria-hidden="true" />
       </div>
-      <div className="min-w-0">
-        <p className="truncate text-sm font-semibold text-neutral-900">{restaurant.name}</p>
-        <p className="text-xs text-muted">Panel de administración</p>
-      </div>
+      <p className="min-w-0 truncate text-sm font-semibold text-neutral-900">{restaurant.name}</p>
     </div>
   )
 }

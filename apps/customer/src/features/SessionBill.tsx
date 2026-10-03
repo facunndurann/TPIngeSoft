@@ -58,7 +58,7 @@ export function SessionBill() {
   return (
     <section aria-label="Cuenta de la mesa">
       <h2>Cuenta</h2>
-      {closed && <p className="muted">La mesa ya cerró su cuenta; podés seguir consultando el detalle.</p>}
+      {closed && <p className="muted">La mesa ya cerró su cuenta.</p>}
       <FreshnessNote
         label="la cuenta"
         updatedAt={oldestUpdate(bill.dataUpdatedAt, orders.dataUpdatedAt, payments.dataUpdatedAt)}
@@ -179,7 +179,6 @@ function PaymentHistory({
           </li>
         ))}
       </ul>
-      <p className="muted">Los pagos pendientes o rechazados se muestran, pero no reducen el saldo.</p>
     </section>
   )
 }

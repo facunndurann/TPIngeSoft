@@ -31,19 +31,13 @@ export function MercadoPagoSettings({ restaurantId }: { restaurantId: string }) 
 
   return (
     <section className="space-y-4 rounded-xl border border-neutral-200 bg-white p-5">
-      <div>
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="font-semibold text-neutral-900">Mercado Pago</h2>
-          {config.data && (
-            <Badge color={config.data.configured ? 'green' : 'neutral'}>
-              {config.data.configured ? 'Configurado' : 'Sin configurar'}
-            </Badge>
-          )}
-        </div>
-        <p className="text-sm text-muted">
-          La cuenta receptora es del restaurante. Cada sucursal sigue habilitando “Pago desde el celular” en sus medios
-          de pago; acá elegís cuáles usan esta cuenta de Mercado Pago.
-        </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="font-semibold text-neutral-900">Mercado Pago</h2>
+        {config.data && (
+          <Badge color={config.data.configured ? 'green' : 'neutral'}>
+            {config.data.configured ? 'Configurado' : 'Sin configurar'}
+          </Badge>
+        )}
       </div>
 
       <QueryView query={config} fallback="No pudimos cargar la configuración de Mercado Pago.">
@@ -130,10 +124,7 @@ function MercadoPagoForm({
 
   return (
     <form className="space-y-4" onSubmit={submit}>
-      <Field
-        label="Ambiente"
-        hint="Para pruebas usá las credenciales de un vendedor de prueba; para producción, las de la cuenta del restaurante."
-      >
+      <Field label="Ambiente">
         <Select
           value={environment}
           disabled={busy}
@@ -149,11 +140,8 @@ function MercadoPagoForm({
 
       <Field
         label={tokenRequired ? 'Access Token' : 'Reemplazar Access Token (opcional)'}
-        hint={
-          saved.accessTokenHint
-            ? `Guardado de forma cifrada; termina en ${saved.accessTokenHint}. Dejalo vacío para conservarlo.`
-            : 'Copialo desde Tus integraciones de Mercado Pago. Se envía al backend y no vuelve al panel.'
-        }
+        // Cuál quedó guardado: es un dato, no una explicación.
+        hint={saved.accessTokenHint ? `Termina en ${saved.accessTokenHint}.` : undefined}
       >
         <Input
           type="password"
@@ -167,14 +155,7 @@ function MercadoPagoForm({
         />
       </Field>
 
-      <Field
-        label={webhookRequired ? 'Secreto de webhook' : 'Reemplazar secreto de webhook (opcional)'}
-        hint={
-          saved.webhookConfigured
-            ? 'Hay un secreto guardado de forma cifrada. Dejalo vacío para conservarlo.'
-            : 'Cargá la firma secreta de Webhooks de Tus integraciones antes de habilitar Checkout Pro.'
-        }
-      >
+      <Field label={webhookRequired ? 'Secreto de webhook' : 'Reemplazar secreto de webhook (opcional)'}>
         <Input
           type="password"
           autoComplete="new-password"

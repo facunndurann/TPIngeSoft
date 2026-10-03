@@ -39,7 +39,6 @@ export function EmployeesPage() {
   return (
     <Page
       title="Empleados"
-      description="Cuentas personales, permisos y sucursales de trabajo."
       actions={<Button onClick={() => setEditing('new')}>Agregar empleado</Button>}
     >
       <QueryView query={employees} fallback="No pudimos cargar los empleados.">
@@ -262,7 +261,7 @@ function EmployeeForm({
           <>
             <Field
               label="Usuario global"
-              hint="Con él ingresa al POS. De 3 a 32 caracteres: letras, números, puntos, guiones o guiones bajos."
+              hint="De 3 a 32 caracteres: letras, números, puntos, guiones o guiones bajos."
             >
               <Input
                 autoComplete="off"
@@ -361,10 +360,6 @@ function EmployeeForm({
           <input type="checkbox" checked={active} onChange={(event) => setActive(event.target.checked)} />
           Acceso habilitado en este restaurante
         </label>
-        <p className="text-xs text-muted">
-          Desactivar conserva la cuenta y su historial. El nombre es compartido por todos sus
-          restaurantes.
-        </p>
         <ErrorText error={save.error ?? (loadFailed ? 'No pudimos cargar los datos del formulario.' : null)} />
         <Button disabled={save.isPending}>{save.isPending ? 'Guardando…' : 'Guardar'}</Button>
       </form>
@@ -415,9 +410,6 @@ function ResetPasswordModal({
             required
           />
         </Field>
-        <p className="text-sm text-muted">
-          La contraseña cambia para todos los restaurantes de esta cuenta.
-        </p>
         <ErrorText error={reset.error} fallback="No pudimos restablecer la contraseña." />
         <Button disabled={reset.isPending}>Restablecer</Button>
       </form>

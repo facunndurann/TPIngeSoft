@@ -243,9 +243,7 @@ export function TableCartPage() {
         key={cartKey}
         refreshMenu={() => menu.refetch({ throwOnError: true })}
         onSubmitted={() => {
-          announce(
-            'Tu pedido fue enviado. Podés seguir su estado y consultar la cuenta de la mesa.',
-          )
+          announce('Tu pedido fue enviado.')
           // Reemplaza al carrito recién vaciado: volver atrás desde Pedidos lleva a la carta.
           navigate(ordersPath(token), { replace: true })
           void refreshTable()

@@ -199,7 +199,7 @@ function ClosedSessionNotice({
 
   return (
     <div className="notice">
-      <p>La mesa cerró su cuenta. Podés seguir consultando sus pedidos. {message}</p>
+      <p>La mesa cerró su cuenta. {message}</p>
       <button
         ref={startOverButton}
         disabled={hasPendingSubmission}

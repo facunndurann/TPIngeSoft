@@ -53,12 +53,7 @@ export function OrderHistory() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-neutral-900">Historial del día</h1>
-        <p className="text-sm text-muted">
-          Pedidos del {formatLongDate(dateKey)}, con detalle de modificaciones y totales.
-        </p>
-      </div>
+      <h1 className="text-xl font-bold text-neutral-900">Historial del día</h1>
 
       <div className="flex flex-wrap gap-2">
         <Input
@@ -188,13 +183,4 @@ function HistoryDetail({ order }: { order: PosOrder }) {
       {order.notes && <p className="rounded-lg bg-amber-50 px-3 py-2 text-amber-950">Nota: {order.notes}</p>}
     </div>
   )
-}
-
-function formatLongDate(dateKey: string) {
-  const [year, month, day] = dateKey.split('-').map(Number)
-  return new Intl.DateTimeFormat('es-AR', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  }).format(new Date(year, month - 1, day))
 }

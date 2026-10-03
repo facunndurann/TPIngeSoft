@@ -25,12 +25,7 @@ export function MercadoPagoPayments({ restaurantId }: { restaurantId: string }) 
       className="space-y-4 rounded-xl border border-neutral-200 bg-white p-5"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="font-semibold text-neutral-900">Pagos de Mercado Pago</h2>
-          <p className="text-sm text-muted">
-            Hasta 50 pagos, ordenados por su última actualización. Se actualizan cada 30 segundos.
-          </p>
-        </div>
+        <h2 className="font-semibold text-neutral-900">Pagos de Mercado Pago</h2>
         <Button
           variant="secondary"
           disabled={payments.isFetching}
