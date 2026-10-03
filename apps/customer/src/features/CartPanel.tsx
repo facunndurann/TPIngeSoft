@@ -110,10 +110,6 @@ export function CartPanel({ refreshMenu, onSubmitted }: CartPanelProps) {
     <section aria-label="Tu carrito">
       <p className="eyebrow">ANTES DE PEDIR</p>
       <h2>Tu carrito</h2>
-      <p className="muted">
-        Este carrito es tuyo. Cada comensal arma el suyo y todos los pedidos van a la cuenta de
-        la mesa.
-      </p>
 
       {phase.kind === 'empty' && (
         <p className="empty">Tu carrito está vacío. Explorá la carta para agregar algo rico.</p>
@@ -188,10 +184,6 @@ export function CartPanel({ refreshMenu, onSubmitted }: CartPanelProps) {
             <span>Total estimado</span>
             <strong>{menu ? formatPrice(total) : '—'}</strong>
           </div>
-          <p className="muted">
-            Productos sin enviar. Al enviarlos, el restaurante recibe el pedido y valida precios y
-            disponibilidad.
-          </p>
           <SendBlockers
             tooManyLines={items.length > MAX_ORDER_LINES}
             sessionOpen={sessionOpen}
@@ -350,10 +342,6 @@ function PendingSubmission({
         <span>Total enviado</span>
         <strong>{formatPrice(total)}</strong>
       </div>
-      <p>
-        Conservamos este envío y bloqueamos su edición hasta conocer el resultado. Podés
-        reintentarlo sin duplicar el pedido, o cancelarlo si todavía no llegó al restaurante.
-      </p>
       <div className="cart-actions">
         <button onClick={onCancel} disabled={busy}>
           {status === 'cancelling' ? 'Cancelando…' : 'Cancelar y editar'}

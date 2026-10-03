@@ -38,26 +38,19 @@ export function PaymentMethodsField({
   }
 
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap gap-2" role="group" aria-label="Medios de pago habilitados">
-        {paymentMethods.map((method) => (
-          <ChoiceChip
-            key={method}
-            tone="outline"
-            pressed={enabled.includes(method)}
-            aria-disabled={busy || undefined}
-            title={paymentMethodDescriptions[method]}
-            onClick={() => toggle(method)}
-          >
-            {paymentMethodLabels[method]}
-          </ChoiceChip>
-        ))}
-      </div>
-      <p className="text-xs text-muted">
-        {enabled.length === 0
-          ? 'Sin medios habilitados el comensal solo puede pedir la cuenta.'
-          : enabled.map((method) => paymentMethodDescriptions[method]).join(' ')}
-      </p>
+    <div className="flex flex-wrap gap-2" role="group" aria-label="Medios de pago habilitados">
+      {paymentMethods.map((method) => (
+        <ChoiceChip
+          key={method}
+          tone="outline"
+          pressed={enabled.includes(method)}
+          aria-disabled={busy || undefined}
+          title={paymentMethodDescriptions[method]}
+          onClick={() => toggle(method)}
+        >
+          {paymentMethodLabels[method]}
+        </ChoiceChip>
+      ))}
     </div>
   )
 }

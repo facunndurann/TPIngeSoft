@@ -73,7 +73,6 @@ function GuestForm({
   return (
     <section className="bill-panel" aria-label="Agregar invitado">
       <h3>Agregar invitado a la cuenta</h3>
-      <p className="muted">Agregá a alguien que no escaneó el QR y asignale lo que consumió.</p>
 
       <input
         className="wide"

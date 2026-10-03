@@ -138,11 +138,11 @@ export function MobilePayment({ sessionId, ...account }: MobilePaymentProps) {
               <strong>{formatPrice(item.total_price)}</strong>
             </label>
           ))}
-          <p className="muted">
-            {plan.share.mode === 'custom'
-              ? `${countLabel(plan.share.itemIds.length, 'ítem')} · Subtotal ${formatPrice(plan.share.amount)}`
-              : 'Seleccioná uno o más ítems, o pagá según la división de la cuenta.'}
-          </p>
+          {plan.share.mode === 'custom' && (
+            <p className="muted">
+              {countLabel(plan.share.itemIds.length, 'ítem')} · Subtotal {formatPrice(plan.share.amount)}
+            </p>
+          )}
         </fieldset>
       )}
       {copy.help && <p className="muted">{copy.help}</p>}
@@ -154,12 +154,9 @@ export function MobilePayment({ sessionId, ...account }: MobilePaymentProps) {
         </p>
       )}
       {attempt && !pendingId ? (
-        <>
-          <p className="muted">Tu intento de pago está guardado. Reintentá para continuar con el mismo pago.</p>
-          <button className="primary wide" disabled={start.isPending} onClick={() => start.mutate(attempt.request)}>
-            {start.isPending ? 'Iniciando pago…' : 'Reintentar pago'}
-          </button>
-        </>
+        <button className="primary wide" disabled={start.isPending} onClick={() => start.mutate(attempt.request)}>
+          {start.isPending ? 'Iniciando pago…' : 'Reintentar pago'}
+        </button>
       ) : pendingId && plan.step.kind !== 'pending' ? (
         <div role="status">
           <p className="muted">Consultando tu pago anterior…</p>
@@ -238,7 +235,6 @@ function PaymentStepView({
           <p>
             Pago pendiente por <strong>{formatPrice(step.payment.amount)}</strong>.
           </p>
-          <p className="muted">Completá el pago en Mercado Pago. La cuenta se actualiza cuando se confirma.</p>
           <div className="cart-actions">
             <button disabled={checking} onClick={onCheck}>
               {checking ? 'Consultando…' : 'Actualizar estado'}
@@ -259,12 +255,9 @@ function PaymentStepView({
       )
     case 'payable':
       return (
-        <>
-          <p className="muted">Vas a continuar en Mercado Pago para elegir cómo pagar.</p>
-          <button className="primary wide" disabled={starting} onClick={() => onPay(step.request)}>
-            {starting ? 'Iniciando pago…' : payLabel}
-          </button>
-        </>
+        <button className="primary wide" disabled={starting} onClick={() => onPay(step.request)}>
+          {starting ? 'Iniciando pago…' : payLabel}
+        </button>
       )
     case 'partsReserved':
       return <p className="muted">Todas las partes disponibles ya tienen un pago esperando confirmación.</p>

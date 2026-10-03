@@ -1,48 +1,48 @@
-import { useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
-import {
-  FLOOR_GRID,
-  clampSpan,
-  clampToGrid,
-  collidesWithAny,
-  occupiedBy,
-  tablePlacement,
-  type TableSpan,
-} from '@restaurant-platform/shared'
-import { Users } from 'lucide-react'
-import { FloorGrid } from '@restaurant-platform/ui'
+import { useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { tablePlacement, type Placed } from '@restaurant-platform/shared'
+import { FloorPlan, floorTile, type FloorCamera } from '@restaurant-platform/ui'
 import type { FloorTable } from '@/queries/floor'
-import { OVERLAP_MESSAGE, overlapsAt } from './placement'
+import { changesTo, fitsAt, followPointer, grownToward, nudged, type Grip, type Refusal, type Step } from './placement'
+import { EditableTableTile } from './TableTile'
 
-type Gesture =
-  | {
-      kind: 'move'
-      tableId: string
-      /** Distancia entre el punto agarrado y la esquina de la mesa, en celdas. */
-      offsetX: number
-      offsetY: number
-      x: number
-      y: number
-      valid: boolean
-    }
-  | {
-      kind: 'resize'
-      tableId: string
-      width: number
-      height: number
-      valid: boolean
-    }
+/**
+ * Una mesa agarrada: de dónde, dónde quedaría si se la suelta ahora, si ahí entra
+ * y si llegó a moverse (soltarla sin moverla es un toque, no un arrastre).
+ */
+type Gesture = { tableId: string; grip: Grip; placed: Placed; valid: boolean; moved: boolean }
+
+/** Lo que el editor del plano necesita de quien edita: la mesa elegida, y dónde se escribe. */
+export type FloorEditing = {
+  selectedId: string | null
+  /** Elige una mesa; con `null` la suelta (un toque en el piso vacío). */
+  onSelect: (tableId: string | null) => void
+  /**
+   * Propone otro lugar o tamaño para una mesa: al soltarla después de arrastrarla
+   * o estirarla, y con las flechas. Quien edita valida y escribe; el plano solo
+   * marca, mientras dura el gesto, un lugar donde no entraría.
+   */
+  onPlace: (table: FloorTable, placed: Placed) => void
+  /**
+   * La última mesa que no entró donde se la quiso llevar, desde el plano, el
+   * panel o deshacer: el plano la marca sobre ella. Cuando la marca terminó de
+   * verse, `onRefusalShown`, y quien edita la olvida.
+   */
+  refusal: Refusal | null
+  onRefusalShown: () => void
+}
 
 type FloorCanvasProps = {
   tables: FloorTable[]
-  selectedId: string | null
-  onSelect: (tableId: string) => void
-  /** Ausente en modo visualizar: el plano queda de solo lectura. */
-  onMove?: (tableId: string, x: number, y: number) => void
-  onResize?: (table: FloorTable, span: TableSpan) => void
-  onReject?: (message: string) => void
+  /** Qué parte del plano se ve. Es de quien dibuja el plano (ver `useFloorCamera`). */
+  camera: FloorCamera
+  editing: FloorEditing
+  /** Barra de arriba de la tarjeta: las acciones y el estado del sector. */
+  toolbar?: ReactNode
+  /** Lo que va a la izquierda del zoom, abajo: deshacer y rehacer. */
+  footerStart?: ReactNode
 }
 
-const ARROW_STEPS: Record<string, { dx: number; dy: number }> = {
+const ARROW_STEPS: Record<string, Step> = {
   ArrowLeft: { dx: -1, dy: 0 },
   ArrowRight: { dx: 1, dy: 0 },
   ArrowUp: { dx: 0, dy: -1 },
@@ -50,207 +50,108 @@ const ARROW_STEPS: Record<string, { dx: number; dy: number }> = {
 }
 
 /**
- * Plano del sector. Las mesas se arrastran y se estiran sobre una grilla: se
- * guarda la celda, no el píxel, así el plano se ve igual en cualquier pantalla.
- *
- * Las posiciones y tamaños se recortan a la grilla al dibujar, no solo al
- * editar: si la grilla se achicara, una mesa vieja seguiría siendo visible y
- * editable en vez de quedar fuera de la vista.
+ * El plano del editor: el mismo de la vista y del POS (`FloorPlan`, con su cámara
+ * y su zoom), con mesas que se eligen (`EditableTableTile`) y los gestos que las
+ * mueven y las estiran. El plano no tiene bordes: las mesas van a cualquier lado,
+ * sobre una grilla. Se guarda la celda, no el píxel, así se ve igual en cualquier
+ * pantalla.
  */
-export function FloorCanvas({
-  tables,
-  selectedId,
-  onSelect,
-  onMove,
-  onResize,
-  onReject,
-}: FloorCanvasProps) {
-  const surface = useRef<HTMLDivElement>(null)
+export function FloorCanvas({ tables, camera, editing, toolbar, footerStart }: FloorCanvasProps) {
   const [gesture, setGesture] = useState<Gesture | null>(null)
-  const editable = !!onMove
 
-  const cellFromPointer = (event: { clientX: number; clientY: number }) => {
-    const grid = surface.current?.firstElementChild?.getBoundingClientRect()
-    if (!grid) return { x: 0, y: 0 }
-    const cell = grid.width / FLOOR_GRID.cols
-    return { x: (event.clientX - grid.left) / cell, y: (event.clientY - grid.top) / cell }
-  }
+  /** Dónde se dibuja una mesa: donde la lleva el gesto en curso o, sin gesto, donde está guardada. */
+  const placementOf = (table: FloorTable) => (gesture?.tableId === table.id ? gesture.placed : tablePlacement(table))
 
-  /** Caja del gesto en curso; sin gesto, FloorGrid dibuja la posición guardada. */
-  const previewOf = (table: FloorTable) => {
-    if (gesture?.tableId !== table.id) return null
-    const saved = tablePlacement(table)
-    return gesture.kind === 'move'
-      ? { footprint: saved.footprint, x: gesture.x, y: gesture.y }
-      : { footprint: { w: gesture.width, h: gesture.height }, x: saved.x, y: saved.y }
-  }
-
-  function startMove(event: ReactPointerEvent<HTMLElement>, table: FloorTable) {
-    onSelect(table.id)
-    if (!editable) return
-    const origin = tablePlacement(table)
-    const pointer = cellFromPointer(event)
-    event.currentTarget.setPointerCapture(event.pointerId)
-    setGesture({
-      kind: 'move',
-      tableId: table.id,
-      offsetX: pointer.x - origin.x,
-      offsetY: pointer.y - origin.y,
-      x: origin.x,
-      y: origin.y,
-      valid: true,
-    })
-  }
-
-  function moveTo(event: ReactPointerEvent<HTMLElement>, table: FloorTable) {
-    if (gesture?.kind !== 'move' || gesture.tableId !== table.id) return
-    const pointer = cellFromPointer(event)
-    const { footprint } = tablePlacement(table)
-    const next = clampToGrid(pointer.x - gesture.offsetX, pointer.y - gesture.offsetY, footprint)
-    setGesture({
-      ...gesture,
-      ...next,
-      valid: !overlapsAt(table, next.x, next.y, tables),
-    })
-  }
-
-  function startResize(event: ReactPointerEvent<HTMLElement>, table: FloorTable) {
+  /**
+   * Agarra una mesa. El apretón es solo de ella: no sigue hasta el piso, que si
+   * no también arrastraría el plano o soltaría la mesa elegida. El puntero queda
+   * capturado por la mesa hasta que la suelta.
+   */
+  function grab(event: ReactPointerEvent<HTMLElement>, table: FloorTable, grip: Grip) {
     event.stopPropagation()
-    const { footprint } = tablePlacement(table)
     event.currentTarget.setPointerCapture(event.pointerId)
-    setGesture({
-      kind: 'resize',
-      tableId: table.id,
-      width: footprint.w,
-      height: footprint.h,
-      valid: true,
-    })
+    setGesture({ tableId: table.id, grip, placed: tablePlacement(table), valid: true, moved: false })
   }
 
-  function resizeTo(event: ReactPointerEvent<HTMLElement>, table: FloorTable) {
-    if (gesture?.kind !== 'resize' || gesture.tableId !== table.id) return
-    event.stopPropagation()
-    const pointer = cellFromPointer(event)
-    const origin = tablePlacement(table)
-    // La esquina superior izquierda no se mueve: el lado es la distancia hasta
-    // el puntero, recortada a lo que queda de grilla.
-    const width = clampSpan(pointer.x - origin.x, FLOOR_GRID.cols - origin.x)
-    const height = clampSpan(pointer.y - origin.y, FLOOR_GRID.rows - origin.y)
-    setGesture({
-      ...gesture,
-      width,
-      height,
-      valid: !collidesWithAny(
-        { x: origin.x, y: origin.y, footprint: { w: width, h: height } },
-        occupiedBy(tables, table.id),
-      ),
-    })
+  /** Para moverla, se la agarra por el punto donde se apoyó el puntero. */
+  function moveGrip(event: ReactPointerEvent<HTMLElement>, table: FloorTable): Grip {
+    const pointer = camera.cellFromPointer(event)
+    const { x, y } = tablePlacement(table)
+    return { kind: 'move', offset: { x: pointer.x - x, y: pointer.y - y } }
   }
 
-  function endGesture(table: FloorTable) {
+  function drag(event: ReactPointerEvent<HTMLElement>, table: FloorTable) {
     if (gesture?.tableId !== table.id) return
-    const origin = tablePlacement(table)
+    const placed = followPointer(tablePlacement(table), gesture.grip, camera.cellFromPointer(event))
+    setGesture({
+      ...gesture,
+      placed,
+      valid: fitsAt(table, placed, tables),
+      moved: gesture.moved || changesTo(table, placed) !== null,
+    })
+  }
 
-    if (gesture.kind === 'move') {
-      const moved = gesture.x !== origin.x || gesture.y !== origin.y
-      if (moved && gesture.valid) onMove?.(table.id, gesture.x, gesture.y)
-      if (moved && !gesture.valid) onReject?.(OVERLAP_MESSAGE)
-    } else {
-      const resized = gesture.width !== origin.footprint.w || gesture.height !== origin.footprint.h
-      if (resized && gesture.valid) onResize?.(table, { width: gesture.width, height: gesture.height })
-      if (resized && !gesture.valid) onReject?.(OVERLAP_MESSAGE)
-    }
+  /** Suelta la mesa y propone dónde quedó; si no cambió nada, quien edita no escribe. */
+  function drop(table: FloorTable) {
+    if (gesture?.tableId !== table.id) return
+    const { grip, placed, moved } = gesture
+    // Tocar una manija sin arrastrarla estira la mesa una celda hacia esa esquina:
+    // agrandarla no exige arrastrar (WCAG 2.5.7).
+    editing.onPlace(table, grip.kind === 'resize' && !moved ? grownToward(tablePlacement(table), grip.corner) : placed)
     setGesture(null)
   }
 
-  /** Mover con flechas: precisión fina sin salir del plano. La otra vía sin arrastrar son los campos del inspector. */
-  function handleKeyDown(event: KeyboardEvent<HTMLElement>, table: FloorTable) {
-    if (!editable) return
+  /**
+   * Las flechas mueven la mesa una celda; con Mayús, la agrandan o achican desde
+   * el borde de la derecha o el de abajo. Es la vía sin arrastrar (WCAG 2.5.7).
+   */
+  function nudge(event: KeyboardEvent<HTMLElement>, table: FloorTable) {
     const step = ARROW_STEPS[event.key]
     if (!step) return
     event.preventDefault()
-    const origin = tablePlacement(table)
-    const next = clampToGrid(origin.x + step.dx, origin.y + step.dy, origin.footprint)
-    if (next.x === origin.x && next.y === origin.y) return
-    if (overlapsAt(table, next.x, next.y, tables)) {
-      onReject?.(OVERLAP_MESSAGE)
-      return
-    }
-    onMove?.(table.id, next.x, next.y)
+    const next = nudged(tablePlacement(table), step, event.shiftKey ? 'stretch' : 'move')
+    editing.onPlace(table, next)
+    // La mesa sigue con el foco: que no se vaya de la vista (WCAG 2.4.11).
+    camera.reveal(next)
   }
 
   return (
-    <div ref={surface} className="overflow-auto rounded-xl border border-neutral-200 bg-white p-3">
-      <FloorGrid
-        tables={tables}
-        ariaLabel="Plano del sector"
-        emptyMessage="Este sector todavía no tiene mesas."
-        preview={previewOf}
-        renderTable={(table, tile) => {
-          const active = gesture?.tableId === table.id
-          const invalid = active && !gesture.valid
-          const selected = selectedId === table.id
-          const muted = !table.is_active || !table.is_visible
-
-          return (
-            <div key={table.id} className="contents">
-              <button
-                type="button"
-                onPointerDown={(event) => startMove(event, table)}
-                onPointerMove={(event) => moveTo(event, table)}
-                onPointerUp={() => endGesture(table)}
-                onPointerCancel={() => setGesture(null)}
-                onKeyDown={(event) => handleKeyDown(event, table)}
-                // Editando, el toque que empieza sobre una mesa es para arrastrarla
-                // (`touch-none`); el que empieza en la grilla vacía desplaza el plano.
-                className={`absolute flex flex-col items-center justify-center overflow-hidden border-2 text-center transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
-                  editable ? 'cursor-grab touch-none active:cursor-grabbing' : 'cursor-pointer'
-                } ${tile.shapeClass} ${
-                  invalid
-                    ? 'border-red-500 bg-red-50 text-red-700'
-                    : selected
-                      ? 'border-primary bg-primary-soft text-primary-ink'
-                      : muted
-                        ? 'border-dashed border-neutral-300 bg-neutral-50 text-faint'
-                        : 'border-neutral-300 bg-white text-neutral-700 hover:border-primary/70'
-                }`}
-                style={{ ...tile.box, zIndex: active ? 10 : 1 }}
-                aria-label={`${table.label}, ${table.seats} lugares${muted ? ', no operable' : ''}${
-                  editable ? '. Flechas para mover.' : ''
-                }`}
-              >
-                <span className="px-1 text-xs leading-tight font-semibold">{table.label}</span>
-                {/* Los lugares con ícono, como en el plano del POS: «12 lug.» a 12px no entra
-                    en una mesa de una celda (38px). A contraste pleno y sin opacidad: se
-                    distingue del nombre por el peso. El número entero ya está en el aria-label. */}
-                <span className="inline-flex items-center gap-0.5 text-xs leading-tight">
-                  <Users size={12} aria-hidden="true" />
-                  {table.seats}
-                </span>
-              </button>
-
-              {/* Manija de tamaño: solo sobre la mesa elegida, para no ensuciar el plano.
-                  Es un atajo para el mouse y el dedo, sin rol ni foco: el tamaño con
-                  teclado o con un solo toque se cambia en el inspector (Ancho y Alto). */}
-              {editable && selected && (
-                <span
-                  aria-hidden="true"
-                  onPointerDown={(event) => startResize(event, table)}
-                  onPointerMove={(event) => resizeTo(event, table)}
-                  onPointerUp={() => endGesture(table)}
-                  onPointerCancel={() => setGesture(null)}
-                  className="absolute h-3.5 w-3.5 cursor-se-resize touch-none rounded-sm border-2 border-white bg-primary shadow"
-                  style={{
-                    left: tile.box.left + tile.box.width - 4,
-                    top: tile.box.top + tile.box.height - 4,
-                    zIndex: active ? 11 : 2,
-                  }}
-                />
-              )}
-            </div>
-          )
-        }}
-      />
-    </div>
+    <FloorPlan
+      camera={camera}
+      tables={tables}
+      emptyMessage="Este sector todavía no tiene mesas."
+      // Al piso solo llegan los toques del piso vacío (el apretón sobre una mesa es
+      // de la mesa, para moverla): sueltan la mesa elegida.
+      onTap={() => editing.onSelect(null)}
+      toolbar={toolbar}
+      footerStart={footerStart}
+      renderTable={(table, events) => {
+        const active = gesture?.tableId === table.id
+        return (
+          <EditableTableTile
+            table={table}
+            tile={floorTile(table, placementOf(table))}
+            zoom={camera.zoom}
+            events={events}
+            active={active}
+            invalid={active && !gesture.valid}
+            editing={{
+              selected: editing.selectedId === table.id,
+              onGrab: (event) => {
+                editing.onSelect(table.id)
+                grab(event, table, moveGrip(event, table))
+              },
+              onGrabCorner: (event, corner) => grab(event, table, { kind: 'resize', corner }),
+              onDrag: (event) => drag(event, table),
+              onDrop: () => drop(table),
+              onCancel: () => setGesture(null),
+              onNudge: (event) => nudge(event, table),
+              refusalKey: editing.refusal?.tableId === table.id ? editing.refusal.key : null,
+              onRefusalShown: editing.onRefusalShown,
+            }}
+          />
+        )
+      }}
+    />
   )
 }

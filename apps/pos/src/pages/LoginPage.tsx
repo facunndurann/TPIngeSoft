@@ -92,10 +92,6 @@ export function LoginPage() {
         <Button className="w-full" disabled={busy}>
           {busy ? 'Ingresando…' : 'Ingresar'}
         </Button>
-
-        <p className="text-sm text-muted">
-          Si olvidaste tu contraseña, pedí a tu administrador que la restablezca.
-        </p>
       </form>
     </main>
   )

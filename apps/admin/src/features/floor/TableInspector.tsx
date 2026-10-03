@@ -1,32 +1,98 @@
 import { useId, useState, type ChangeEvent, type KeyboardEvent } from 'react'
-import { Trash2 } from 'lucide-react'
-import { FLOOR_GRID, TABLE_SPAN, tablePlacement, tableShapeLabels, tableShapes } from '@restaurant-platform/shared'
-import { Button, Field, Input, Select, Toggle, useConfirm } from '@restaurant-platform/ui'
-import type { FloorSection, FloorTable, TablePatch } from '@/queries/floor'
-import { OVERLAP_MESSAGE, overlapsAt } from './placement'
+import {
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
+  Minus,
+  Plus,
+  Scaling,
+  Trash2,
+  X,
+  type LucideIcon,
+} from 'lucide-react'
+import { tablePlacement, tableShapeLabels, tableShapes, type Placed } from '@restaurant-platform/shared'
+import { Button, Field, IconButton, Input, Toggle, floorCardClass, iconButtonClass } from '@restaurant-platform/ui'
+import type { FloorTable, TablePatch } from '@/queries/floor'
+import { changesTo, nudged, type NudgeKind, type Step } from './placement'
+import { TableGlyph } from './TableGlyph'
 
 /**
- * Lo que el inspector le pide al plano. Son tres operaciones con semántica
- * propia — redimensionar recalcula la posición, mudar de sector busca un hueco
- * libre, editar es un update plano — así que viajan discriminadas en vez de
- * como un `Partial<>` suelto cuyas claves haya que olfatear del otro lado.
+ * Los datos de la mesa que se cambian desde el panel. La ubicación y el tamaño
+ * van aparte (`onPlace`): pasan por la misma validación que arrastrarla.
  */
-export type TableIntent =
-  | { kind: 'edit'; patch: Omit<TablePatch, 'section_id' | 'width' | 'height'> }
-  | { kind: 'resize'; width: number; height: number }
-  | { kind: 'move-to-section'; sectionId: string | null }
+export type TableEdit = Pick<TablePatch, 'label' | 'seats' | 'shape' | 'is_active' | 'is_visible'>
 
 type TableInspectorProps = {
   table: FloorTable
-  /** Las mesas del sector de esta mesa: una posición que las pise no se guarda. */
-  neighbors: FloorTable[]
-  sections: FloorSection[]
-  onIntent: (intent: TableIntent) => void
+  /** El sector donde está la mesa, o «Sin sector»: se lee debajo de su nombre. */
+  sectionName: string
+  onEdit: (edit: TableEdit) => void
+  /** Lleva la mesa a otro lugar o tamaño con las flechas del panel: quien edita valida y escribe. */
+  onPlace: (placed: Placed) => void
+  /** Pide borrarla: la confirmación es del editor, que también la abre con Suprimir. */
   onDelete: () => void
+  /** Suelta la mesa: el panel vuelve a la lista del sector. */
+  onClose: () => void
   busy: boolean
 }
 
 const SEATS = { min: 1, max: 40 } as const
+
+/**
+ * Las flechas del panel hacen lo mismo que las del teclado, para quien no tiene
+ * teclado ni puede arrastrar (WCAG 2.5.7). Un quinto botón cambia lo que hacen,
+ * como Mayús: mover la mesa, o estirarla desde su borde de la derecha o el de abajo.
+ */
+const NUDGES: readonly { step: Step; icon: LucideIcon; label: Record<NudgeKind, string> }[] = [
+  { step: { dx: -1, dy: 0 }, icon: ArrowLeft, label: { move: 'Mover a la izquierda', stretch: 'Achicar el ancho' } },
+  { step: { dx: 0, dy: -1 }, icon: ArrowUp, label: { move: 'Mover hacia arriba', stretch: 'Achicar el alto' } },
+  { step: { dx: 0, dy: 1 }, icon: ArrowDown, label: { move: 'Mover hacia abajo', stretch: 'Agrandar el alto' } },
+  { step: { dx: 1, dy: 0 }, icon: ArrowRight, label: { move: 'Mover a la derecha', stretch: 'Agrandar el ancho' } },
+]
+
+function NudgePad({ table, onPlace }: { table: FloorTable; onPlace: (placed: Placed) => void }) {
+  const [kind, setKind] = useState<NudgeKind>('move')
+  const labelId = useId()
+  const placed = tablePlacement(table)
+
+  return (
+    <div role="group" aria-labelledby={labelId}>
+      <span id={labelId} className="mb-1 block text-sm font-medium text-neutral-700">
+        {kind === 'move' ? 'Mover' : 'Estirar'}
+      </span>
+      <div className="flex items-center gap-2">
+        {NUDGES.map(({ step, icon: Icon, label }) => {
+          const next = nudged(placed, step, kind)
+          return (
+            <IconButton
+              key={label.move}
+              label={label[kind]}
+              size="touch"
+              shape="pill"
+              variant="secondary"
+              // Contra el borde del plano, o en el tamaño mínimo o máximo, la flecha no haría nada.
+              disabled={changesTo(table, next) === null}
+              onClick={() => onPlace(next)}
+            >
+              <Icon size={18} aria-hidden="true" />
+            </IconButton>
+          )
+        })}
+        <button
+          type="button"
+          aria-pressed={kind === 'stretch'}
+          aria-label="Estirar en lugar de mover"
+          title="Estirar en lugar de mover"
+          onClick={() => setKind(kind === 'move' ? 'stretch' : 'move')}
+          className={`ml-auto ${iconButtonClass({ size: 'touch', shape: 'pill', variant: 'secondary' })} aria-pressed:border-primary aria-pressed:bg-primary-soft aria-pressed:text-primary-ink`}
+        >
+          <Scaling size={18} aria-hidden="true" />
+        </button>
+      </div>
+    </div>
+  )
+}
 
 /**
  * Borrador de un campo del inspector. Se guarda al salir del campo o con Enter,
@@ -108,26 +174,34 @@ function NumberField({
       <label htmlFor={id} className="mb-1 block text-sm font-medium text-neutral-700">
         {label}
       </label>
-      <div className="flex items-center gap-1">
-        <Button
-          type="button"
+      <div className="flex items-center gap-2">
+        <IconButton
+          label={`${label}: restar uno`}
+          size="touch"
+          shape="pill"
           variant="secondary"
-          aria-label={`${label}: restar uno`}
           disabled={value <= min}
           onClick={() => onCommit(value - 1)}
         >
-          −
-        </Button>
-        <Input id={id} inputMode="numeric" className="min-w-0 text-center" {...field} />
-        <Button
-          type="button"
+          <Minus size={18} aria-hidden="true" />
+        </IconButton>
+        <Input
+          id={id}
+          size="touch"
+          inputMode="numeric"
+          className="w-18 min-w-0 text-center text-base font-bold tabular-nums"
+          {...field}
+        />
+        <IconButton
+          label={`${label}: sumar uno`}
+          size="touch"
+          shape="pill"
           variant="secondary"
-          aria-label={`${label}: sumar uno`}
           disabled={value >= max}
           onClick={() => onCommit(value + 1)}
         >
-          +
-        </Button>
+          <Plus size={18} aria-hidden="true" />
+        </IconButton>
       </div>
     </div>
   )
@@ -137,172 +211,93 @@ function NumberField({
  * Propiedades de la mesa seleccionada en el plano. El editor lo monta con
  * `key={table.id}`, así que un borrador nunca pasa de una mesa a otra.
  */
-export function TableInspector({ table, neighbors, sections, onIntent, onDelete, busy }: TableInspectorProps) {
-  const { confirm, dialog } = useConfirm()
+export function TableInspector({ table, sectionName, onEdit, onPlace, onDelete, onClose, busy }: TableInspectorProps) {
   const label = useDraftField(
     table.label,
     (text) => text.trim() || null,
-    (next) => onIntent({ kind: 'edit', patch: { label: next } }),
+    (next) => onEdit({ label: next }),
   )
 
-  // Donde se dibuja la mesa: la posición guardada, recortada a la grilla.
-  const placed = tablePlacement(table)
-  const here = `${placed.x},${placed.y}`
-  // Desde dónde se pidió la última posición rechazada. El aviso vale mientras la
-  // mesa siga ahí: moverla desde el plano lo descarta, sin un efecto que lo limpie.
-  const [rejectedFrom, setRejectedFrom] = useState<string | null>(null)
-  const positionError = rejectedFrom === here ? OVERLAP_MESSAGE : null
-
-  /** Mueve la mesa sin arrastrarla, con la misma regla que el plano. */
-  function moveTo(x: number, y: number) {
-    if (overlapsAt(table, x, y, neighbors)) {
-      setRejectedFrom(here)
-      return false
-    }
-    setRejectedFrom(null)
-    onIntent({ kind: 'edit', patch: { position_x: x, position_y: y } })
-    return true
-  }
-
   return (
-    <aside className="space-y-4 rounded-xl border border-neutral-200 bg-white p-4">
-      <div>
-        <h2 className="text-sm font-semibold text-neutral-900">Mesa seleccionada</h2>
-        <p className="text-xs text-muted">
-          Movela arrastrándola en el plano, con las flechas del teclado o desde acá.
-        </p>
+    <aside
+      aria-label="Mesa seleccionada"
+      className={`flex min-h-0 flex-col gap-5 overflow-y-auto p-6 ${floorCardClass}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-lg leading-tight font-bold break-words text-neutral-900">{table.label}</h2>
+          <p className="text-sm text-muted">{sectionName}</p>
+        </div>
+        <IconButton label="Cerrar" size="touch" shape="pill" variant="secondary" onClick={onClose}>
+          <X size={18} aria-hidden="true" />
+        </IconButton>
       </div>
 
-      <Field label="Identificador">
-        <Input {...label} />
+      <Field label="Nombre">
+        <Input size="touch" {...label} />
       </Field>
 
-      <Field label="Sector">
-        <Select
-          value={table.section_id ?? ''}
-          onChange={(event) => onIntent({ kind: 'move-to-section', sectionId: event.target.value || null })}
-        >
-          <option value="">Sin sector</option>
-          {sections.map((section) => (
-            <option key={section.id} value={section.id}>
-              {section.name}
-            </option>
-          ))}
-        </Select>
-      </Field>
+      <NumberField
+        label="Lugares"
+        value={table.seats}
+        min={SEATS.min}
+        max={SEATS.max}
+        onCommit={(seats) => onEdit({ seats })}
+      />
 
-      <div className="grid grid-cols-2 gap-3">
-        <NumberField
-          label="Capacidad"
-          value={table.seats}
-          min={SEATS.min}
-          max={SEATS.max}
-          onCommit={(seats) => onIntent({ kind: 'edit', patch: { seats } })}
-        />
-        <Field label="Forma">
-          <Select value={table.shape} onChange={(event) => onIntent({ kind: 'edit', patch: { shape: event.target.value } })}>
-            {tableShapes.map((shape) => (
-              <option key={shape} value={shape}>
+      <fieldset className="min-w-0">
+        <legend className="mb-1 text-sm font-medium text-neutral-700">Forma</legend>
+        <div className="grid grid-cols-2 gap-2">
+          {tableShapes.map((shape) => {
+            // Una forma vieja que no es redonda se dibuja rectangular: se marca esa.
+            const pressed = (shape === 'round') === (table.shape === 'round')
+            return (
+              <button
+                key={shape}
+                type="button"
+                aria-pressed={pressed}
+                onClick={() => onEdit({ shape })}
+                className={`flex min-h-19 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 p-2.5 text-sm transition-colors ${
+                  pressed
+                    ? 'border-primary bg-primary-soft font-semibold text-primary-ink'
+                    : 'border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50'
+                }`}
+              >
+                <TableGlyph round={shape === 'round'} width={shape === 'round' ? 1 : 2} height={1} />
                 {tableShapeLabels[shape]}
-              </option>
-            ))}
-          </Select>
-        </Field>
-      </div>
-
-      {/* Moverla con un solo toque, sin arrastrar (WCAG 2.5.7). Una mesa sin sector
-          no está en ningún plano, así que no tiene posición que editar. Se cuenta
-          desde 1, como se leen filas y columnas; se guarda desde 0. */}
-      {table.section_id && (
-        <div>
-          <div className="grid grid-cols-2 gap-3">
-            <NumberField
-              label="Columna"
-              value={placed.x + 1}
-              min={1}
-              max={FLOOR_GRID.cols - placed.footprint.w + 1}
-              onCommit={(column) => moveTo(column - 1, placed.y)}
-            />
-            <NumberField
-              label="Fila"
-              value={placed.y + 1}
-              min={1}
-              max={FLOOR_GRID.rows - placed.footprint.h + 1}
-              onCommit={(row) => moveTo(placed.x, row - 1)}
-            />
-          </div>
-          {positionError ? (
-            <p role="alert" className="mt-1 text-xs text-red-700">
-              {positionError}
-            </p>
-          ) : (
-            <p className="mt-1 text-xs text-muted">
-              Contadas desde la esquina de arriba a la izquierda.
-            </p>
-          )}
+              </button>
+            )
+          })}
         </div>
-      )}
+      </fieldset>
 
-      <div>
-        {/* Un lado nuevo siempre viaja con el otro: el plano necesita la huella
-            entera para reubicar la mesa si el cambio la saca de la grilla. */}
-        <div className="grid grid-cols-2 gap-3">
-          <NumberField
-            label="Ancho (celdas)"
-            value={table.width}
-            min={TABLE_SPAN.min}
-            max={TABLE_SPAN.max}
-            onCommit={(width) => onIntent({ kind: 'resize', width, height: table.height })}
-          />
-          <NumberField
-            label="Alto (celdas)"
-            value={table.height}
-            min={TABLE_SPAN.min}
-            max={TABLE_SPAN.max}
-            onCommit={(height) => onIntent({ kind: 'resize', width: table.width, height })}
-          />
-        </div>
-        <p className="mt-1 text-xs text-muted">
-          Cada celda del plano equivale a un lugar de paso. Ancho distinto de alto da una mesa
-          alargada.
-        </p>
-      </div>
+      <NudgePad table={table} onPlace={onPlace} />
 
-      <div className="space-y-2 border-t border-neutral-200 pt-3">
+      <div className="space-y-2">
+        <Toggle checked={table.is_active} onChange={(is_active) => onEdit({ is_active })} label="En uso" />
         <Toggle
           checked={table.is_visible}
-          onChange={(is_visible) => onIntent({ kind: 'edit', patch: { is_visible } })}
-          label="Visible en el plano operativo"
+          onChange={(is_visible) => onEdit({ is_visible })}
+          label="Visible en el plano del POS"
         />
-        <Toggle
-          checked={table.is_active}
-          onChange={(is_active) => onIntent({ kind: 'edit', patch: { is_active } })}
-          label="En servicio (el QR abre sesión)"
-        />
-        {(!table.is_visible || !table.is_active) && (
-          <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
-            El POS no va a ofrecer esta mesa para operar.
-          </p>
-        )}
       </div>
 
-      <Button
-        variant="danger"
-        className="w-full"
-        disabled={busy}
-        onClick={async () => {
-          const confirmed = await confirm({
-            title: `¿Eliminar "${table.label}"?`,
-            message: 'Se pierde su QR: el que está impreso en la mesa deja de funcionar.',
-            confirmLabel: 'Eliminar mesa',
-          })
-          if (confirmed) onDelete()
-        }}
-      >
-        <Trash2 size={15} />
-        Eliminar mesa
-      </Button>
-      {dialog}
+      <div className="border-t border-neutral-200 pt-4">
+        <Button
+          type="button"
+          variant="danger-ghost"
+          size="touch"
+          shape="pill"
+          // Destructiva pero no la principal: rojo sin relleno, con borde para que
+          // se lea como botón al pie del panel. El rojo lleno es el de confirmarla.
+          className="border border-red-200"
+          disabled={busy}
+          onClick={onDelete}
+        >
+          <Trash2 size={16} aria-hidden="true" />
+          Eliminar mesa
+        </Button>
+      </div>
     </aside>
   )
 }

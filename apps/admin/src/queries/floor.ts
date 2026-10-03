@@ -35,8 +35,9 @@ export const tablesQuery = (branchId: string) =>
       unwrap(await supabase.from('tables').select('*').eq('branch_id', branchId).order('label')),
   })
 
+/** Devuelve el id del sector creado, para abrirlo. */
 export async function createSection(section: TablesInsert<'floor_sections'>) {
-  unwrap(await supabase.from('floor_sections').insert(section))
+  return unwrap(await supabase.from('floor_sections').insert(section).select('id').single()).id
 }
 
 export type SectionPatch = Partial<Pick<FloorSection, 'name' | 'is_active' | 'sort_order'>>
@@ -49,26 +50,32 @@ export async function deleteSection(sectionId: string) {
   unwrap(await supabase.from('floor_sections').delete().eq('id', sectionId))
 }
 
-/** Sin `section_id` ni posición, la mesa queda sin sector hasta que se la ubica en el plano. */
+/**
+ * Sin `section_id` ni posición, la mesa queda sin sector hasta que se la ubica en
+ * el plano. Devuelve el id de la mesa creada, para elegirla en el plano.
+ */
 export async function createTable(table: TablesInsert<'tables'>) {
-  unwrap(await supabase.from('tables').insert(table))
+  return unwrap(await supabase.from('tables').insert(table).select('id').single()).id
 }
 
-export type TablePatch = Partial<
-  Pick<
-    FloorTable,
-    | 'section_id'
-    | 'position_x'
-    | 'position_y'
-    | 'seats'
-    | 'shape'
-    | 'width'
-    | 'height'
-    | 'is_visible'
-    | 'is_active'
-    | 'label'
-  >
->
+/**
+ * Las columnas de una mesa que el panel escribe. `TablePatch` sale de esta lista,
+ * así quien necesita recorrerlas (deshacer, por ejemplo) lo hace con sus tipos.
+ */
+export const tablePatchColumns = [
+  'section_id',
+  'position_x',
+  'position_y',
+  'seats',
+  'shape',
+  'width',
+  'height',
+  'is_visible',
+  'is_active',
+  'label',
+] as const
+
+export type TablePatch = Partial<Pick<FloorTable, (typeof tablePatchColumns)[number]>>
 
 export async function updateTable(tableId: string, patch: TablePatch) {
   unwrap(await supabase.from('tables').update(patch).eq('id', tableId))

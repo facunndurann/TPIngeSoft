@@ -100,10 +100,7 @@ function FreeTable({ tableId }: { tableId: string }) {
 
   return (
     <div className="space-y-3 rounded-xl border border-neutral-200 bg-white p-6 text-center">
-      <p className="text-sm text-muted">
-        La mesa está libre. Al abrir la comanda queda ocupada en el plano y los comensales pueden
-        sumarse escaneando el QR.
-      </p>
+      <p className="text-sm text-muted">La mesa está libre.</p>
       <ErrorText error={errors.message} />
       {can('sessions.open') ? (
         <Button
@@ -115,7 +112,7 @@ function FreeTable({ tableId }: { tableId: string }) {
           {openSession.isPending ? 'Abriendo…' : 'Abrir comanda'}
         </Button>
       ) : (
-        <p className="text-sm text-muted">Tu rol no abre comandas. Pedíselo a un mozo o supervisor.</p>
+        <p className="text-sm text-muted">Tu rol no abre comandas.</p>
       )}
     </div>
   )

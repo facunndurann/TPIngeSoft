@@ -16,14 +16,7 @@ export function ActiveTables() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-neutral-900">Mesas activas</h1>
-        {/* Para quien atiende el salón: qué hay que hacer, sin hablar de fases del proyecto. */}
-        <p className="text-sm text-muted">
-          Las mesas que llamaron, lo que lleva consumido cada una y su saldo. Los cobros que no se
-          pagan desde el celular se registran en la comanda de la mesa.
-        </p>
-      </div>
+      <h1 className="text-xl font-bold text-neutral-900">Mesas activas</h1>
 
       <QueryView query={[sessions, tables]} fallback="No pudimos actualizar el estado de las mesas.">
         {([sessions, tables]) => {

@@ -58,7 +58,6 @@ export function ProductsPage() {
   return (
     <Page
       title="Productos"
-      description="El menú que ven tus clientes: precios, fotos, ingredientes y personalización."
       actions={
         <Link to="/productos/nuevo" className={buttonClass()}>
           <Plus size={16} /> Nuevo producto

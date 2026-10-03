@@ -3034,7 +3034,7 @@ CREATE TABLE IF NOT EXISTS "public"."tables" (
     "is_visible" boolean DEFAULT true NOT NULL,
     "width" integer DEFAULT 3 NOT NULL,
     "height" integer DEFAULT 3 NOT NULL,
-    CONSTRAINT "tables_position_range" CHECK (((("position_x" >= 0) AND ("position_x" <= 99)) AND (("position_y" >= 0) AND ("position_y" <= 99)))),
+    CONSTRAINT "tables_position_range" CHECK (((("position_x" >= '-10000'::integer) AND ("position_x" <= 10000)) AND (("position_y" >= '-10000'::integer) AND ("position_y" <= 10000)))),
     CONSTRAINT "tables_seats_range" CHECK ((("seats" >= 1) AND ("seats" <= 40))),
     CONSTRAINT "tables_shape_valid" CHECK (("shape" = ANY (ARRAY['rect'::"text", 'round'::"text"]))),
     CONSTRAINT "tables_span_range" CHECK (((("width" >= 1) AND ("width" <= 24)) AND (("height" >= 1) AND ("height" <= 24))))
@@ -3042,6 +3042,14 @@ CREATE TABLE IF NOT EXISTS "public"."tables" (
 
 
 ALTER TABLE "public"."tables" OWNER TO "postgres";
+
+
+COMMENT ON COLUMN "public"."tables"."position_x" IS 'Columna de la esquina de arriba a la izquierda de la mesa, en celdas del plano. Puede ser negativa.';
+
+
+
+COMMENT ON COLUMN "public"."tables"."position_y" IS 'Fila de la esquina de arriba a la izquierda de la mesa, en celdas del plano. Puede ser negativa.';
+
 
 
 COMMENT ON COLUMN "public"."tables"."shape" IS 'Solo estilo visual: rect (esquinas redondeadas) o round (elipse). El tamaño lo dan width y height.';

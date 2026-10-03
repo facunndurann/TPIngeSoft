@@ -66,7 +66,6 @@ export function ModifiersPage() {
   return (
     <Page
       title="Grupos de modificadores"
-      description="Reglas de personalización reutilizables entre productos (ej: Extras, Guarnición, Salsa)."
       actions={
         <Button onClick={() => setEditing('new')}>
           <Plus size={16} /> Nuevo grupo

@@ -245,13 +245,7 @@ function ProductForm({ productId, initial, categories, groups }: ProductFormProp
       </section>
 
       <section className="space-y-3 rounded-xl border border-neutral-200 bg-white p-5">
-        <div>
-          <h2 className="font-semibold text-neutral-900">Ingredientes</h2>
-          <p className="text-sm text-muted">
-            Declarar la composición permite que el cliente quite lo que no quiere (solo lo marcado como
-            removible).
-          </p>
-        </div>
+        <h2 className="font-semibold text-neutral-900">Ingredientes</h2>
         <div className="space-y-2">
           {draft.ingredients.map((ingredient, index) => {
             // Las filas no van en un Field (no tienen rótulo visible), así que el
@@ -307,12 +301,7 @@ function ProductForm({ productId, initial, categories, groups }: ProductFormProp
       </section>
 
       <section className="space-y-3 rounded-xl border border-neutral-200 bg-white p-5">
-        <div>
-          <h2 className="font-semibold text-neutral-900">Personalización</h2>
-          <p className="text-sm text-muted">
-            Grupos de modificadores que aplican a este producto (se crean en la sección Modificadores).
-          </p>
-        </div>
+        <h2 className="font-semibold text-neutral-900">Personalización</h2>
         {groups.length === 0 ? (
           <p className="text-sm text-muted">
             Todavía no hay grupos.{' '}

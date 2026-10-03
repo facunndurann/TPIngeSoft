@@ -45,12 +45,7 @@ export function CommandBoard() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
-      <div>
-        <h1 className="text-xl font-bold text-neutral-900">Comandas</h1>
-        <p className="text-sm text-muted">
-          Pedidos en vivo. Los cambios se reflejan en la mesa del comensal.
-        </p>
-      </div>
+      <h1 className="text-xl font-bold text-neutral-900">Comandas</h1>
 
       <QueryView query={board} fallback="No pudimos cargar las comandas.">
         {(board) => {

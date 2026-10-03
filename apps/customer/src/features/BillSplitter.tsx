@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { allocationTotal, formatElapsed, formatPrice, MAX_EQUAL_PARTS, MIN_EQUAL_PARTS, remainingPercentage, type SessionSplit, sessionSplitSchema, SPLIT_PERCENTAGE_TOTAL, splitBill, splitEqualAmounts, splitPercentageAmounts, type SplitBill, splitTypeDescriptions, splitTypeLabels, splitTypes } from '@restaurant-platform/shared'
+import { allocationTotal, formatElapsed, formatPrice, MAX_EQUAL_PARTS, MIN_EQUAL_PARTS, remainingPercentage, type SessionSplit, sessionSplitSchema, SPLIT_PERCENTAGE_TOTAL, splitBill, splitEqualAmounts, splitPercentageAmounts, type SplitBill, splitTypeLabels, splitTypes } from '@restaurant-platform/shared'
 import { ErrorText, useNow } from '@restaurant-platform/ui'
 
 import { PartsField } from '@/components/PartsField'
@@ -99,7 +99,6 @@ export function BillSplitter({ split, bill, orders }: BillSplitterProps) {
   return (
     <section className="bill-panel" aria-label="División de la cuenta">
       <h3>{draft ? '¿Cómo quieren dividir la cuenta?' : 'División de la cuenta'}</h3>
-      <p className="muted">{splitTypeDescriptions[active.type]}</p>
       {!draft && lastChange && <p className="muted">{lastChange}</p>}
 
       {draft && (
@@ -134,7 +133,6 @@ export function BillSplitter({ split, bill, orders }: BillSplitterProps) {
                 : `Una parte de ${formatPrice(equalAmounts[0])} y ${equalAmounts.length - 1} de ${formatPrice(equalAmounts[equalAmounts.length - 1])}`}
             </p>
           )}
-          <p className="muted">Si sobra algún centavo, se suma a la primera parte para que el total cierre exacto.</p>
         </div>
       )}
 
@@ -180,12 +178,6 @@ export function BillSplitter({ split, bill, orders }: BillSplitterProps) {
         </p>
       )}
 
-      {!draft && active.type === 'percentages' && (
-        <p className="muted">
-          Cada parte se calcula sobre el total en cuenta ({formatPrice(bill.total_amount ?? 0)}).
-          Pendiente de pago ahora: {formatPrice(bill.pending_amount ?? 0)}.
-        </p>
-      )}
 
       {validation && !validation.success && (
         <p className="error-notice">{validation.error.issues[0].message}</p>

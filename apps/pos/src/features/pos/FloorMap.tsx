@@ -1,10 +1,12 @@
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
-import { countLabel, formatElapsed, formatPrice, getPosTableState, type PosTableState, posTableStateLabels, posTableStates } from '@restaurant-platform/shared'
+import { getPosTableState } from '@restaurant-platform/shared'
 import { ClipboardList, Clock3, Move, UserRound, Users, X } from 'lucide-react'
-import { Button, ChoiceChip, Elapsed, FloorGrid, IconButton, QueryView, SummaryItem, useNow } from '@restaurant-platform/ui'
+import { Button, Elapsed, IconButton, QueryView, SectionPills, SummaryItem } from '@restaurant-platform/ui'
 import { useCan, usePosScope } from '@/context/pos-context'
+import { visibleTotal, type FloorMapEntry } from './floorEntry'
+import { FloorSurface } from './FloorSurface'
 import { MoveTableSession } from './MoveTableSession'
 import {
   posFloorSectionsQuery,
@@ -15,13 +17,14 @@ import {
   type PosOpenSession,
 } from './queries'
 import { AttendRequestButtons, SessionRequestBadges } from './ServiceRequests'
-import { tableStateStyles } from './status-colors'
 import { TableStateBadge } from './StatusBadges'
 
 /**
- * Plano operativo del salón (MI-62/MI-63/MI-64). El layout viene de la
- * configuración administrativa y el estado de pedidos/cuenta se compone desde
- * la sesión abierta. Tocar una mesa abre su comanda (MI-64).
+ * Plano operativo del salón (MI-62/MI-63/MI-64): el mismo plano del admin, con
+ * su cámara, sus sillas y su zoom. El layout viene de la configuración
+ * administrativa y el estado de pedidos/cuenta se compone desde la sesión
+ * abierta. Tocar una mesa muestra su resumen, y desde ahí (o con dos toques
+ * seguidos) se abre su comanda (MI-64).
  */
 export function FloorMap() {
   const scope = usePosScope()
@@ -31,12 +34,7 @@ export function FloorMap() {
 
   return (
     <div className="min-w-0 space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-neutral-900">Salón</h1>
-        <p className="text-sm text-muted">
-          Plano operativo de las mesas disponibles, organizado por sector.
-        </p>
-      </div>
+      <h1 className="text-xl font-bold text-neutral-900">Salón</h1>
 
       <QueryView
         query={[sections, tables, sessions]}
@@ -72,6 +70,12 @@ function FloorSections({
   const sectionChoice = searchParams.get('sector')
 
   const chooseSection = (id: string) => setSearchParams({ sector: id }, { replace: true })
+  // La comanda conserva el sector: volver desde ella deja el plano donde estaba.
+  const openCommand = (tableId: string) =>
+    navigate({
+      pathname: `/salon/${tableId}`,
+      search: searchParams.toString(),
+    })
 
   const activeSection = sections.find((section) => section.id === sectionChoice) ?? sections[0]
   const sessionByTable = useMemo(
@@ -84,7 +88,6 @@ function FloorSections({
       const session = sessionByTable.get(table.id)
       return { ...table, session, state: getPosTableState(session) }
     })
-  const occupied = entries.filter((entry) => entry.state !== 'free').length
 
   return (
     <>
@@ -93,193 +96,36 @@ function FloorSections({
           onClose={() => setMoving(null)} />
       )}
 
-      {/* Elegir sector es elegir una opción de un grupo, no cambiar de pestaña:
-          botones con aria-pressed, sin el contrato de teclado de un tablist.
-          `*:shrink-0` evita que un nombre largo se parta al desplazar la fila. */}
-      <div className="flex gap-2 overflow-x-auto pb-1 *:shrink-0" role="group" aria-label="Sectores del salón">
-        {sections.map((section) => (
-          <ChoiceChip
-            key={section.id}
-            tone="outline"
-            pressed={section.id === activeSection.id}
-            onClick={() => chooseSection(section.id)}
-          >
-            {section.name}
-          </ChoiceChip>
-        ))}
-      </div>
+      <SectionPills
+        label="Sectores del salón"
+        sections={sections.map((section) => ({
+          id: section.id,
+          name: section.name,
+          tables: tables.filter((table) => table.section_id === section.id).length,
+          inUse: section.is_active,
+        }))}
+        activeId={activeSection.id}
+        onChoose={chooseSection}
+      />
 
-      <section aria-labelledby="floor-map-heading" className="min-w-0 space-y-2">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 id="floor-map-heading" className="text-sm font-semibold text-neutral-800">
-              {activeSection.name}
-            </h2>
-            <p className="text-xs text-muted">
-              {countLabel(entries.length, 'mesa operativa', 'mesas operativas')} ·{' '}
-              {countLabel(occupied, 'ocupada')}
-            </p>
-          </div>
-          <p className="inline-flex items-center gap-1.5 text-xs text-muted">
-            <Move size={14} aria-hidden="true" />
-            Deslizá para recorrer · tocá una mesa para ver su resumen
-          </p>
-        </div>
-        <StateLegend />
-        <FloorSurface
-          key={activeSection.id}
-          entries={entries}
-          onMoveTable={setMoving}
-          onOpenTable={(tableId) =>
-            navigate({
-              pathname: `/salon/${tableId}`,
-              search: searchParams.toString(),
-            })
-          }
-        />
-      </section>
+      {/* Otro sector es otro plano: su cámara se encuadra de cero y el resumen se cierra. */}
+      <FloorSurface
+        key={activeSection.id}
+        section={activeSection}
+        entries={entries}
+        onOpenTable={openCommand}
+        renderSummary={(entry, close) => (
+          <TableSummary entry={entry} onOpen={openCommand} onMove={setMoving} onClose={close} />
+        )}
+      />
     </>
   )
 }
 
 /**
- * Una mesa del plano con lo que el POS sabe de ella. Tiene la forma de una mesa,
- * así `FloorGrid` la recibe tal cual y cada mesa se dibuja con su sesión a mano.
+ * Lo que se sabe de la mesa elegida y lo que se puede hacer con ella: abrir o
+ * seguir su comanda, mover la comanda a otra mesa y atender lo que pidieron.
  */
-type FloorMapEntry = PosDiningTable & {
-  session?: PosOpenSession
-  state: PosTableState
-}
-
-/**
- * Total de la mesa listo para mostrar, o null si no hay sesión o si quien mira
- * no tiene `payments.read`: la vista trae ese importe en null, y la mesa no
- * muestra un «$ 0» que no es.
- */
-function visibleTotal(session: PosOpenSession | undefined): string | null {
-  if (!session || session.total_amount === null) return null
-  return formatPrice(session.total_amount)
-}
-
-function StateLegend() {
-  return (
-    <ul className="flex gap-x-4 gap-y-1 overflow-x-auto rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs text-muted">
-      {posTableStates.map((state) => (
-        <li key={state} className="flex shrink-0 items-center gap-1.5">
-          <span className={`h-2.5 w-2.5 rounded-full ${tableStateStyles[state].dot}`} aria-hidden="true" />
-          {posTableStateLabels[state]}
-        </li>
-      ))}
-    </ul>
-  )
-}
-
-function FloorSurface({
-  entries,
-  onOpenTable,
-  onMoveTable,
-}: {
-  entries: FloorMapEntry[]
-  onOpenTable: (tableId: string) => void
-  onMoveTable: (entry: FloorMapEntry) => void
-}) {
-  // Las mesas muestran cuánto hace que se abrieron: el plano es lo que el reloj
-  // tiene que redibujar, no la pantalla con sus pestañas y su leyenda.
-  const now = useNow()
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const selected = entries.find((entry) => entry.id === selectedId)
-  const planRef = useRef<HTMLDivElement>(null)
-
-  function closeSummary() {
-    // El botón que cerró el resumen desaparece con él: el foco vuelve a la mesa
-    // en lugar de caer al <body>.
-    planRef.current?.querySelector<HTMLElement>(`[data-table-id="${selectedId}"]`)?.focus()
-    setSelectedId(null)
-  }
-
-  return (
-    <div className="min-w-0 space-y-2">
-      <div
-        ref={planRef}
-        className="max-h-[calc(100dvh-18rem)] min-h-80 overflow-auto overscroll-contain rounded-xl border border-neutral-200 bg-white p-3 shadow-sm"
-        tabIndex={0}
-        aria-label="Plano desplazable del sector"
-      >
-        <FloorGrid
-          tables={entries}
-          ariaLabel="Mesas del sector"
-          emptyMessage="Este sector todavía no tiene mesas operativas."
-          renderTable={(table, tile) => {
-            const { session, state } = table
-            const selectedTable = selectedId === table.id
-            const operator = session?.assigned_employee_name ?? 'Sin asignar'
-            const total = visibleTotal(session)
-            const elapsed = session && formatElapsed(session.opened_at, now, 'exact')
-            const summary = session
-              ? `${elapsed}${total === null ? '' : `, ${total}`}, ${operator}`
-              : `${table.seats} lugares`
-
-            return (
-              <button
-                key={table.id}
-                type="button"
-                data-table-id={table.id}
-                onClick={() => setSelectedId(table.id)}
-                onDoubleClick={() => onOpenTable(table.id)}
-                aria-pressed={selectedTable}
-                aria-label={`${table.label}, ${posTableStateLabels[state]}, ${summary}`}
-                className={`absolute flex cursor-pointer flex-col items-center justify-center overflow-hidden border-2 text-center shadow-sm transition hover:brightness-95 focus-visible:ring-2 focus-visible:ring-indigo-600 focus-visible:ring-offset-2 focus-visible:outline-none ${tableStateStyles[state].tile} ${
-                  selectedTable ? 'ring-2 ring-indigo-600 ring-offset-2' : ''
-                } ${table.shape === 'round' ? 'rounded-full' : 'rounded-xl'}`}
-                style={tile.box}
-              >
-                {/* La mesa se lee de lejos: solo lo que entra en 12px y a contraste
-                    pleno. El total y el responsable siguen en el aria-label y en el
-                    resumen que abre el toque. */}
-                {/* Con lugar, el nombre usa dos renglones antes de cortarse. Cortado,
-                    el title lo muestra entero con el mouse y el resumen, al tocarla. */}
-                <span
-                  title={table.label}
-                  className={`max-w-full px-1 text-xs font-bold leading-tight ${
-                    tile.footprint.h > 1 ? 'line-clamp-2 break-words' : 'truncate'
-                  }`}
-                >
-                  {table.label}
-                </span>
-                <span className={`mt-0.5 max-w-[90%] truncate rounded px-1 py-0.5 text-xs font-semibold leading-none ${tableStateStyles[state].tileLabel}`}>
-                  {posTableStateLabels[state]}
-                </span>
-                {/* Una mesa de una sola celda de alto (38px) tiene lugar para dos
-                    líneas de 12px, no para tres. */}
-                {tile.footprint.h > 1 && (
-                  session ? (
-                    <span className="mt-1 max-w-[90%] truncate text-xs font-medium leading-none">{elapsed}</span>
-                  ) : (
-                    <span className="mt-1 inline-flex items-center gap-1 text-xs leading-none">
-                      <Users size={12} aria-hidden="true" />
-                      {table.seats}
-                    </span>
-                  )
-                )}
-              </button>
-            )
-          }}
-        />
-      </div>
-
-      {/* El resumen va después del plano y no antes: al aparecer no empuja las mesas,
-          así la mesa tocada queda bajo el dedo y el doble clic cae en la misma. Como
-          el plano llega al pie de la pantalla, se pega abajo (sticky) y flota sobre
-          su borde inferior; al bajar la página vuelve a su lugar, sin tapar nada. */}
-      {selected && (
-        <div className="sticky bottom-4 z-10">
-          <TableSummary entry={selected} onOpen={onOpenTable} onMove={onMoveTable} onClose={closeSummary} />
-        </div>
-      )}
-    </div>
-  )
-}
-
 function TableSummary({
   entry,
   onOpen,

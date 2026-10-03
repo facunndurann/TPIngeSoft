@@ -69,10 +69,7 @@ export function CategoriesPage() {
   }
 
   return (
-    <Page
-      title="Categorías del menú"
-      description="Creá, renombrá y ordená las categorías que ve el cliente."
-    >
+    <Page title="Categorías del menú">
       <form onSubmit={handleCreate} className="flex gap-2">
         <Input
           value={newName}

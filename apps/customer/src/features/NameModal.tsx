@@ -58,7 +58,6 @@ export function NameModal({ rename, canSave, onSaved, onCancel }: NameModalProps
         aria-labelledby="name-modal-title"
       >
         <h2 id="name-modal-title">¿Cómo te llamás?</h2>
-        <p className="muted">Así sabemos qué pidió cada uno.</p>
         <form className="name-form" onSubmit={handleSubmit}>
           <NameInput rename={rename} />
           <button className="primary" disabled={!canSave}>

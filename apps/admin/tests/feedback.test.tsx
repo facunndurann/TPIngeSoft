@@ -5,7 +5,7 @@ import { act, useState, type ReactNode } from 'react'
 import { flushSync } from 'react-dom'
 import { createRoot } from 'react-dom/client'
 import { createMemoryRouter, Link, RouterProvider, useNavigate } from 'react-router'
-import { TOAST_MS, ToastProvider, useConfirm, useToast } from '@restaurant-platform/ui'
+import { ERROR_TOAST_MS, TOAST_MS, ToastProvider, useConfirm, useToast } from '@restaurant-platform/ui'
 import { UnsavedChangesGuard } from '../src/features/UnsavedChangesGuard'
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
@@ -87,6 +87,38 @@ test('a success toast is announced, goes away on its own, and waits while the po
   await act(async () => region.querySelector('p')!.dispatchEvent(new MouseEvent('mouseout', { bubbles: true })))
   await act(async () => vi.advanceTimersByTime(TOAST_MS))
   assert.equal(region.textContent, '')
+})
+
+test('an error toast floats as an alert: it does not push the page, lasts longer and closes with its ×', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+  let toast!: ReturnType<typeof useToast>
+  function Probe() {
+    toast = useToast()
+    return null
+  }
+  const container = await render(
+    <ToastProvider>
+      <Probe />
+    </ToastProvider>,
+  )
+  const alert = container.querySelector('[role="alert"]')!
+  const status = container.querySelector('[role="status"]')!
+
+  await act(async () => toast('No pudimos guardar el cambio.', { tone: 'error' }))
+  assert.match(alert.textContent ?? '', /No pudimos guardar el cambio\./)
+  assert.equal(status.textContent, '')
+  // Flota encima de la página: no ocupa lugar en el flujo.
+  assert.match(alert.parentElement!.className, /\bfixed\b/)
+
+  // Pasado el tiempo de un aviso común sigue a la vista; se va al de un error.
+  await act(async () => vi.advanceTimersByTime(TOAST_MS))
+  assert.match(alert.textContent ?? '', /No pudimos/)
+  await act(async () => vi.advanceTimersByTime(ERROR_TOAST_MS - TOAST_MS))
+  assert.equal(alert.textContent, '')
+
+  await act(async () => toast('Ahí se superpone con otra mesa.', { tone: 'error' }))
+  await act(async () => alert.querySelector<HTMLButtonElement>('button[aria-label="Cerrar aviso"]')!.click())
+  assert.equal(alert.textContent, '')
 })
 
 /** Un formulario de página con el guard, como el de producto: editar, salir o guardar y volver a la lista. */

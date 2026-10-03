@@ -51,21 +51,39 @@ const buttonSizes: Record<ControlSize, string> = {
 }
 
 /**
+ * La forma de un botón: `rounded` es la de todo el panel; `pill`, la de una
+ * pantalla con otra estética, como el Salón. En un botón de solo ícono, `pill`
+ * es un círculo. Va acá y no en `className` por lo mismo que el padding: dos
+ * `rounded-*` no se pisan por orden de escritura.
+ */
+export type ButtonShape = 'rounded' | 'pill'
+
+const buttonShapes: Record<ButtonShape, string> = {
+  rounded: 'rounded-lg',
+  pill: 'rounded-full',
+}
+
+/**
  * Clases de `Button`. Se exportan para una navegación que tiene que verse como
  * botón: un `<Link>` con estas clases, no un `<Button>` adentro de un `<Link>`,
  * que es un control dentro de otro y dos paradas de tabulación para lo mismo.
  */
-export function buttonClass(variant: ButtonVariant = 'primary', size: ControlSize = 'default') {
-  return `inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-lg text-sm font-medium transition-colors disabled:cursor-not-allowed ${buttonSizes[size]} ${buttonStyles[variant]}`
+export function buttonClass(
+  variant: ButtonVariant = 'primary',
+  size: ControlSize = 'default',
+  shape: ButtonShape = 'rounded',
+) {
+  return `inline-flex cursor-pointer items-center justify-center gap-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed ${buttonShapes[shape]} ${buttonSizes[size]} ${buttonStyles[variant]}`
 }
 
 export function Button({
   variant = 'primary',
   size,
+  shape,
   className = '',
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; size?: ControlSize }) {
-  return <button className={`${buttonClass(variant, useControlSize(size))} ${className}`} {...props} />
+}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; size?: ControlSize; shape?: ButtonShape }) {
+  return <button className={`${buttonClass(variant, useControlSize(size), shape)} ${className}`} {...props} />
 }
 
 /**
@@ -214,13 +232,33 @@ export function Toggle({
 type IconTone = 'neutral' | 'danger'
 
 /**
- * Clases de un control de solo ícono: 32×32 px, más que los 24 que pide WCAG 2.2
- * porque el panel también se usa con el dedo, y 44×44 con tamaño táctil. El
- * ícono va en `faint`, y el fondo que aparece al pasar el mouse muestra el área
- * que se puede tocar. Se exportan para el mismo control hecho con un `<Link>`.
+ * `ghost` es el ícono suelto, con fondo solo al pasar el mouse. `secondary` lo
+ * enmarca como un botón secundario, para cuando va entre otros controles
+ * enmarcados: los − y + de un número, las flechas del panel de una mesa.
  */
-export function iconButtonClass(tone: IconTone = 'neutral', size: ControlSize = 'default') {
-  return `inline-flex ${size === 'touch' ? 'h-11 w-11' : 'h-8 w-8'} shrink-0 cursor-pointer items-center justify-center rounded-lg text-faint transition-colors hover:bg-neutral-100 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent ${
+export type IconVariant = 'ghost' | 'secondary'
+
+const iconVariants: Record<IconVariant, string> = {
+  ghost: 'text-faint hover:bg-neutral-100',
+  secondary: 'border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50',
+}
+
+type IconButtonLook = { tone?: IconTone; size?: ControlSize; shape?: ButtonShape; variant?: IconVariant }
+
+/**
+ * Clases de un control de solo ícono: 32×32 px, más que los 24 que pide WCAG 2.2
+ * porque el panel también se usa con el dedo, y 44×44 con tamaño táctil. Suelto
+ * (`ghost`), el ícono va en `faint` y el fondo que aparece al pasar el mouse
+ * muestra el área que se puede tocar. Se exportan para el mismo control hecho
+ * con un `<Link>`, o con un `type` que `IconButton` no deja elegir (un submit).
+ */
+export function iconButtonClass({
+  tone = 'neutral',
+  size = 'default',
+  shape = 'rounded',
+  variant = 'ghost',
+}: IconButtonLook = {}) {
+  return `inline-flex ${size === 'touch' ? 'h-11 w-11' : 'h-8 w-8'} shrink-0 cursor-pointer items-center justify-center ${buttonShapes[shape]} transition-colors disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent ${iconVariants[variant]} ${
     tone === 'danger' ? 'hover:text-red-600' : 'hover:text-neutral-700'
   }`
 }
@@ -234,13 +272,13 @@ export function IconButton({
   label,
   tone,
   size,
+  shape,
+  variant,
   ...props
 }: Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'aria-label' | 'title' | 'type' | 'className'> & {
   label: string
-  tone?: IconTone
-  size?: ControlSize
-}) {
-  const className = iconButtonClass(tone, useControlSize(size))
+} & IconButtonLook) {
+  const className = iconButtonClass({ tone, size: useControlSize(size), shape, variant })
   return <button {...props} type="button" aria-label={label} title={label} className={className} />
 }
 

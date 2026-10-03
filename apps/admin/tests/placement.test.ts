@@ -1,7 +1,6 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
-import { FLOOR_GRID } from '@restaurant-platform/shared'
-import { overlapsAt } from '../src/features/floor/placement'
+import { changesTo, fitsAt, followPointer, grownToward, nudged } from '../src/features/floor/placement'
 
 const table = (id: string, x: number, y: number, width = 3, height = 3) => ({
   id,
@@ -11,23 +10,75 @@ const table = (id: string, x: number, y: number, width = 3, height = 3) => ({
   height,
 })
 
-test('overlapsAt no cuenta a la mesa que se mueve', () => {
+/** Un lugar en el plano, en celdas: esquina y tamaño. */
+const at = (x: number, y: number, w = 3, h = 3) => ({ x, y, footprint: { w, h } })
+
+test('fitsAt no cuenta a la mesa que se mueve', () => {
   const moving = table('a', 0, 0)
   // Correrla una celda la deja encima de donde estaba: no es un choque.
-  assert.equal(overlapsAt(moving, 1, 0, [moving]), false)
+  assert.equal(fitsAt(moving, at(1, 0), [moving]), true)
 })
 
-test('overlapsAt choca con la huella entera de las demás, con el tamaño de la que se mueve', () => {
+test('fitsAt choca con la huella entera de las demás, con el tamaño propuesto', () => {
   const moving = table('a', 0, 0, 2, 2)
   const other = table('b', 5, 0)
-  assert.equal(overlapsAt(moving, 3, 0, [moving, other]), false) // ocupa 3 y 4: toca, no pisa
-  assert.equal(overlapsAt(moving, 4, 0, [moving, other]), true)
-  assert.equal(overlapsAt(moving, 7, 2, [moving, other]), true) // la esquina de abajo a la derecha
+  assert.equal(fitsAt(moving, at(3, 0, 2, 2), [moving, other]), true) // ocupa 3 y 4: toca, no pisa
+  assert.equal(fitsAt(moving, at(4, 0, 2, 2), [moving, other]), false)
+  assert.equal(fitsAt(moving, at(7, 2, 2, 2), [moving, other]), false) // la esquina de abajo a la derecha
+  // Estirarla sin moverla también puede pisar a la vecina: es la misma regla.
+  assert.equal(fitsAt(moving, at(0, 0, 6, 2), [moving, other]), false)
 })
 
-test('overlapsAt mira a las demás donde se dibujan, recortadas a la grilla', () => {
+test('fitsAt choca en cualquier parte del plano, también lejos o en celdas negativas', () => {
   const moving = table('a', 0, 0)
-  // Guardada fuera de la grilla: se dibuja pegada al borde derecho.
-  const other = table('b', 40, 0)
-  assert.equal(overlapsAt(moving, FLOOR_GRID.cols - 3, 0, [moving, other]), true)
+  // El plano no tiene bordes: una mesa lejos no se dibuja pegada a ningún borde.
+  const far = table('b', 40, -12)
+  assert.equal(fitsAt(moving, at(21, 0), [moving, far]), true)
+  assert.equal(fitsAt(moving, at(39, -13), [moving, far]), false)
+  assert.equal(fitsAt(moving, at(43, -12), [moving, far]), true) // pegada a la derecha
+})
+
+test('changesTo escribe solo las columnas que cambian, y nada si la mesa queda igual', () => {
+  const placed = table('a', 2, 3)
+  assert.equal(changesTo(placed, at(2, 3)), null)
+  assert.deepEqual(changesTo(placed, at(-1, 3)), { position_x: -1 })
+  // Estirarla con Mayús y →: solo el ancho. Mandar la caja entera pisaba el
+  // cambio de la tecla anterior, que todavía no se veía.
+  assert.deepEqual(changesTo(placed, at(2, 3, 4, 3)), { width: 4 })
+  assert.deepEqual(changesTo(placed, at(1, 2, 4, 4)), { position_x: 1, position_y: 2, width: 4, height: 4 })
+})
+
+test('moved, a table keeps its size and follows the point where it was grabbed', () => {
+  const grip = { kind: 'move' as const, offset: { x: 1.5, y: 0.5 } }
+  assert.deepEqual(followPointer(at(2, 2), grip, { x: -3.2, y: 4.6 }), at(-5, 4))
+})
+
+test('stretched from a corner, a table keeps the opposite edges still', () => {
+  // Desde abajo a la derecha: la esquina de arriba a la izquierda no se mueve.
+  const bottomRight = { kind: 'resize' as const, corner: { dx: 1 as const, dy: 1 as const } }
+  assert.deepEqual(followPointer(at(2, 2), bottomRight, { x: 7.4, y: 3.2 }), at(2, 2, 5, 1))
+
+  // Desde arriba a la izquierda: los bordes de la derecha (5) y de abajo (5) quedan donde estaban,
+  // y la mesa nunca baja de una celda por lado.
+  const topLeft = { kind: 'resize' as const, corner: { dx: -1 as const, dy: -1 as const } }
+  assert.deepEqual(followPointer(at(2, 2), topLeft, { x: 0.6, y: 4.7 }), at(1, 4, 4, 1))
+})
+
+test('an arrow moves the table one cell, or stretches it from its right or bottom edge', () => {
+  assert.deepEqual(nudged(at(2, 3), { dx: 1, dy: 0 }, 'move'), at(3, 3))
+  assert.deepEqual(nudged(at(2, 3), { dx: 0, dy: -1 }, 'move'), at(2, 2))
+  // Estirar: → y ↓ agrandan, ← y ↑ achican, sin mover la esquina de arriba a la izquierda.
+  assert.deepEqual(nudged(at(2, 3), { dx: 1, dy: 0 }, 'stretch'), at(2, 3, 4, 3))
+  assert.deepEqual(nudged(at(2, 3), { dx: 0, dy: -1 }, 'stretch'), at(2, 3, 3, 2))
+  // En el tamaño mínimo, achicar no hace nada.
+  assert.deepEqual(nudged(at(2, 3, 1, 1), { dx: -1, dy: 0 }, 'stretch'), at(2, 3, 1, 1))
+})
+
+test('tapping a corner handle grows the table one cell toward it, keeping the opposite edges still', () => {
+  assert.deepEqual(grownToward(at(2, 2), { dx: 1, dy: 1 }), at(2, 2, 4, 4))
+  assert.deepEqual(grownToward(at(2, 2), { dx: -1, dy: -1 }), at(1, 1, 4, 4))
+  assert.deepEqual(grownToward(at(2, 2), { dx: 1, dy: -1 }), at(2, 1, 4, 4))
+  assert.deepEqual(grownToward(at(2, 2), { dx: -1, dy: 1 }), at(1, 2, 4, 4))
+  // En el tamaño máximo no crece, ni se corre.
+  assert.deepEqual(grownToward(at(2, 2, 12, 12), { dx: -1, dy: -1 }), at(2, 2, 12, 12))
 })

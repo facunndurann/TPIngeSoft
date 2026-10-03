@@ -6,6 +6,52 @@
    viven en el paquete de UI (Spinner, SummaryItem) no llegan al CSS. */
 @source "../../../packages/ui/src";
 
+/* «Ahí no entra», sobre la propia mesa del Salón (NoFitMark, en TableTile.tsx):
+   la marca aparece, se sacude un instante y se va. Cada marca pone `--refuse-shake`
+   según el zoom de la cámara, así el sacudón mide lo mismo en pantalla. Con «menos
+   movimiento», aparece y se va sin sacudirse (`refuse-still`). */
+@theme {
+  --animate-refuse: refuse 600ms ease-out forwards;
+  --animate-refuse-still: refuse-still 600ms ease-out forwards;
+
+  @keyframes refuse {
+    0% {
+      opacity: 1;
+      translate: 0;
+    }
+    14% {
+      translate: calc(var(--refuse-shake, 6px) * -1) 0;
+    }
+    28% {
+      translate: var(--refuse-shake, 6px) 0;
+    }
+    42% {
+      translate: calc(var(--refuse-shake, 6px) * -0.5) 0;
+    }
+    56% {
+      translate: calc(var(--refuse-shake, 6px) * 0.5) 0;
+    }
+    70% {
+      opacity: 1;
+      translate: 0;
+    }
+    100% {
+      opacity: 0;
+      translate: 0;
+    }
+  }
+
+  @keyframes refuse-still {
+    0%,
+    70% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+}
+
 /* Al imprimir un QR, mostrar únicamente el contenido del modal */
 @media print {
   body * {
